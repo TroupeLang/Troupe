@@ -1,0 +1,6 @@
+import lists
+let fun p x = let val _ = printWithLabels x in sleep 10 end 
+    fun foo () = map p [1,2,3]
+    fun bar () = map p ["A", "B", "C"]
+in  (spawn foo, spawn bar)
+end

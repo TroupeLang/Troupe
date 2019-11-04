@@ -1,0 +1,17 @@
+import declassifyutil 
+
+let val secretAlice = 1 raisedTo {alice}
+    val secretBob = 1 raisedTo {bob}
+    val aliceAuth = attenuate (authority, {alice})
+    val bobAuth = attenuate (authority, {bob})
+
+    val _ = pinipush authority
+
+    val (a,b) = if secretAlice > 0 then (1,2) else (3,4)
+    val (x,y) = if secretBob > 0 then (5,6) else (7,8)
+    val (a1, b1) = declassifydeep ( (a,b), aliceAuth, {} )
+
+    (* val _ = pinipop ()  *)
+in 
+    adv a1
+end

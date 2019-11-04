@@ -1,0 +1,5 @@
+let fun mkFun x = fn () => x          
+in let val f = mkFun 2
+   in f ()
+   end
+end

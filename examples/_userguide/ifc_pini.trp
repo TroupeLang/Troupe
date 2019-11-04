@@ -1,0 +1,12 @@
+let val x = 10 raisedTo {alice}
+    val y = 0
+    val z = 
+        let pini authority
+          val _ = if x > 1000 then receive [] else ()
+          val z = y + 1 
+          val _ = debugpc () 
+        in z
+        end
+    val _ = debugpc()
+in z
+end

@@ -1,0 +1,23 @@
+(* leaks the value of `secret` through the internal timing leak  *)
+
+let fun skip 0 = ()
+      | skip n = skip (n - 1)
+
+    val mainPid = self ()
+
+    val secret = mkSecret 1
+
+    val _ = spawn (fn _ => let val _ =  if secret > 0 then skip 100000 else ()
+                            in send (mainPid, 1)
+                           end )
+
+    val _ = spawn (fn _ => let val _ = skip 5000 in send (mainPid, 0) end )
+
+    fun loop 0 = ()
+      | loop n = let val x = receive [ hn x => x ]
+                     val _ = adv x
+                     val _ = print x
+                  in loop (n - 1)
+                 end
+in loop 2
+end

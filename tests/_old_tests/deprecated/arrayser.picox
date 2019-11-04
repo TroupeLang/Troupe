@@ -1,0 +1,11 @@
+let val x = [1,2,3]
+    val y = (10, 20)
+    fun f () = let val _ =  receive [ hn x => print x ] in f () end 
+    val pid = spawn (0, f)
+    val _ = send (pid, x)
+    val _ = send (pid, y)
+in ()
+end
+
+
+

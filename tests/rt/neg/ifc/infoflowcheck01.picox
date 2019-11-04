@@ -1,0 +1,15 @@
+let fun f ()
+      = let val _ = receive [ hn 1 => () ]
+            val _ = printWithLabels "hi"
+        in adv (100)
+        end
+
+    val p = spawn (f)
+    val secret = mkSecret(42)
+
+    val _ = if secret > 0 then
+                            send(p, 1)
+                          else ()  (* taints the pc of p *)
+ in  ()
+ (* send (p, secret) *)
+ end

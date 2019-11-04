@@ -1,0 +1,3 @@
+let fun f x = x + 1 
+in  f raisedTo {alice}
+end

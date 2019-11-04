@@ -1,0 +1,6 @@
+let val x = 42 raisedTo {alice} 
+    val y = 11 raisedTo {bob} 
+    val s = toString (x,y)
+    val _ = printString ("The result of toString is " ^ s )
+in printString "Observe how the PC-level and blocking-level are now tainted because of the string concatenation (and the usage of printString) above"
+end

@@ -1,0 +1,12 @@
+datatype Atoms = Plus | Minus
+let val f = restore (0)
+    val g = restore (1)
+    val x = restore (3)
+    val _  = print x
+    val _ = print (x = Plus)
+
+    fun h x = if x > 20 then f x else g x
+    val _ = save (2, h)
+
+in (f (10), g (100))
+end

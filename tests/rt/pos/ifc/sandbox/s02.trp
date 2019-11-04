@@ -1,0 +1,5 @@
+let 
+   val s = 1 raisedTo {secret} 
+   fun loop i = let val _ = sleep(10) in loop (i + 1) end  
+in sandbox (2000, fn () => if s>0 then loop 0 else ())
+end

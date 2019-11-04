@@ -1,0 +1,6 @@
+2019-03-07T14:31:29.677Z [RTM] [32minfo[39m: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+"What is your name"@{}%{}
+("Hello"@{}%{}, "Alice"@{#TOP}%{})@{}%{}
+"What movie do you like?"@{}%{}
+("OK, we will remember that "@{}%{}, "Alice"@{#TOP}%{}, " likes the movie"@{}%{}, "The godfather"@{#TOP}%{})@{}%{}
+>>> Main thread finished with value: ()@{#TOP}%{#TOP}

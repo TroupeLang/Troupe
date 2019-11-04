@@ -1,0 +1,16 @@
+(* 2019-01-02: this test _correctly_ fails because of the *)
+(* side effects in the handler pattern matching *)
+
+let 
+    fun foo (pid) = let val _ = send (pid, 0)
+                    in true 
+                    end 
+                      
+    val pid =
+        spawn ( fn () => 
+                    receive [ hn (x,sender) when foo (sender) => x ]
+              )
+              
+    val _ = send (pid, (42, self()))
+in 0    
+end 

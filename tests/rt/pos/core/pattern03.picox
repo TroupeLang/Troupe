@@ -1,0 +1,4 @@
+datatype Atoms = ONE | TWO
+let fun f ONE = 1
+      | f TWO = 2
+in f TWO end

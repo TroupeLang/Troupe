@@ -1,0 +1,5 @@
+let fun f () = receive [ hn () => print "hi" ]
+    val pid = spawn ("QmQSEt8DBeumRh8ZupmUaW8rVvwnjFtpBE557vjSLccUBh" , f)
+in
+    send (pid, ())
+end    

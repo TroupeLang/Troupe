@@ -1,0 +1,54 @@
+datatype Atoms = Compute | Result | Shutdown
+
+let fun alice () =
+      receive [
+          hn (Compute, x, f, forwardId) when x > 1 =>
+             let
+                 val result = f x
+                 val s = send (forwardId, (Result, result))
+             in alice()
+             end
+
+        , hn (Shutdown,forwardId) =>
+             let val _ = () in send(forwardId, Shutdown) end
+      ]
+
+
+    fun bob () =
+      let val handler =
+           hn (Result, n) => let val _ = printWithLabels n
+                             in bob ()
+                             end
+      in  receive [
+              handler
+           ,  hn Shutdown => ()
+          ]
+      end
+
+
+   fun fib x =
+     if x > 2
+     then fib (x - 1) + fib (x - 2)
+     else 1
+
+
+
+in
+    let val pidAlice = spawn (alice)
+        val pidBob = spawn (bob)
+
+        val inputs = [1, 10, 15]
+        fun mapSend ls =
+          case ls of
+              [] => let val _ = send(pidAlice, (Shutdown, pidBob))
+                    in ()
+                    end
+            | (x::xs) =>
+              let val _ = send(pidAlice, (Compute, x, fib, pidBob))
+              in mapSend xs
+              end
+
+        val _ = mapSend inputs
+    in ()
+    end
+end

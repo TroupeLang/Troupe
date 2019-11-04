@@ -1,0 +1,13 @@
+let val x = 42 raisedTo {alice}
+    val y = 10 raisedTo {bob}
+    val c = 100 raisedTo {charlie}
+
+    val aa = if c > 10 then
+                            x + y
+                         else
+                            x - y
+
+    val _ = printWithLabels aa
+    val _ = x + y
+in debugpc()
+end

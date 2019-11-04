@@ -1,0 +1,22 @@
+let fun counter n =
+         receive [ hn senderid =>
+                      let val _ = send (senderid, n)
+                      in counter (n+1)
+                      end
+                 ]
+
+    val pid = spawn (fn () => counter 0)
+
+    (* send two messages to `pid` *)
+    val _ = send (pid, (self()))
+    val _ = send (pid, (self()))
+
+    val h = hn x => printWithLabels x
+
+    (* receive two messages *)
+
+    val _ = receive [ h ]
+    val _ = receive [ hn x when x > 0 => printWithLabels x]
+
+in ()
+end

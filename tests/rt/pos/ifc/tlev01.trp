@@ -1,0 +1,31 @@
+let val x = 42 raisedTo {alice}
+    val y = 10 raisedTo {bob}
+    val c = 100 raisedTo {charlie}
+    val d = 200 raisedTo {dorothy}
+    (* val z = let pini authority val x = if x + y > 100 then 10 else 20 in x end  *)
+
+    val a = 
+            let pini attenuate (authority, {charlie}) val a = 
+                  if c > 10 then 
+                            x + y
+                         else 
+                            x - y
+            in a end 
+
+    val _ = printWithLabels a   
+    val _ = x + y       
+    val _ = adv ()
+
+    
+
+    val p = if d > 100 then a + 1 else 0
+
+    val _ = printWithLabels p
+
+    (* val w = x + y  *)
+    (* val y = declassify (z, authority, {}) *)
+    (* val _ = printWithLabels y *)
+    (* val _ = printWithLabels z *)
+    (* val _ = printWithLabels w *)
+in ()
+end

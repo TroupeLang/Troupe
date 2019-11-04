@@ -1,0 +1,39 @@
+let 
+    (* set secret to either 0 or 1 *)
+    val secret = 1 raisedTo {secret}
+    fun wait () = receive [ hn x => () ]
+    val mainPid = self ()
+    val h1 = hn 1 => () 
+    val h2 = hn 2 => ()
+
+    fun leak i = 
+          let val (g1, g2) = 
+                if ( (secret > 0) andalso (i = 1))
+                   orelse ( (secret <= 0 ) andalso (i = 2))
+                   then (h1, h2) else (h2, h1)               
+              val _ = receive [g1]              
+              val _ = adv i
+              val _ = print i                     
+              val _ = send (mainPid, ())
+              val _ = receive [g2]
+          in print "DONE"
+          end       
+
+    (* uncomment to see that the secret is properly labelled *)
+    (* val _ = adv secret  *)
+
+    val p1 = spawn ( fn () => leak 1 )
+    val p2 = spawn ( fn () => leak 2 )    
+
+    fun batch x = 
+     let 
+         val _ = print x
+         val _ = send (p1, x) 
+         val _ = send (p2, x)
+     in wait ()
+     end
+
+    val _ = batch 1
+    val _ = batch 2 
+in () 
+end

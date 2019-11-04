@@ -1,0 +1,13 @@
+import declassifyutil 
+import lists
+
+let val x = 42 raisedTo {alice,bob}
+    val y = 100 raisedTo {alice,bob}
+
+    val t = x
+in case declassify (t, authority, {}) of
+      (_,_) =>  2
+    | (_,_,_) => 3
+    | (_ :: _ ) => 1
+    | _ => 0
+end

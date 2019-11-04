@@ -1,0 +1,9 @@
+let fun f () = let val _ = receive [hn x => ()]
+               in ()
+               end
+    val pid = spawn f
+    val _ = monitorlocal pid
+    val _ = send (pid, ())
+    val _ = receive [ hn x => print x]
+in () 
+end

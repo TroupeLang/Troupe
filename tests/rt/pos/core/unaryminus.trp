@@ -1,0 +1,5 @@
+let
+    val x = -3
+in
+    -x - 10
+end

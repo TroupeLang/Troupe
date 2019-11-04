@@ -1,0 +1,11 @@
+let val origin = self ()
+
+    fun f () = let val _ = print 2929
+                in send (origin, 42)
+               end
+
+    val pid = spawn(0, f)
+
+    val result = receive [ hn  x => x ]
+in print result
+end

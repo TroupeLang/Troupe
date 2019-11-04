@@ -1,0 +1,9 @@
+let val pid = spawn ( fn () =>
+                         receive [ hn 1 => adv 1 
+                                 , hn x => adv 2
+                                 ]
+                    )
+    val secret = 42 raisedTo {secret}
+in send (pid, secret)
+end
+                           

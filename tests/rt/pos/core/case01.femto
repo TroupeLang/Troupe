@@ -1,0 +1,6 @@
+let val x = 10
+    val y = 0 in
+      case (x + y )
+          of 5 => false
+           | 10 => y - x
+end

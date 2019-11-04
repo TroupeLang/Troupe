@@ -1,0 +1,18 @@
+let fun pingpong () =
+      let val h = hn x => x
+          val (x, sender) = receive [h]
+          val _ = send (sender, (x + 1, self()))
+          val _ = printWithLabels x
+      in pingpong()
+      end
+
+(* some comments *)
+
+in
+    let val alicePid = spawn pingpong
+        val bobPid = spawn pingpong  
+
+        val _  = send(alicePid,(1, bobPid))
+    in   ()
+    end
+end

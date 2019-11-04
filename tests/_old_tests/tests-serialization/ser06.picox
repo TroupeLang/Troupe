@@ -1,0 +1,6 @@
+datatype Atoms = Minus | Plus
+let fun f x = x = Plus
+    val _ = save (8, 10 raisedTo {alice,bob})
+    val g = restore (8)
+in g
+end 

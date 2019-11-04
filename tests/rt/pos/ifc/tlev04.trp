@@ -1,0 +1,11 @@
+let val x = 10 raisedTo {alice}
+    val y =
+        let pini authority 
+            val z =
+              if x > 10 then 100 else 101
+          in z
+        end
+
+    val _ = debugpc ()
+in y
+end

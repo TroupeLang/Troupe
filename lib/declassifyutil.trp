@@ -1,0 +1,70 @@
+(* Universal declassifier                       *) 
+(* Author: Aslan Askarov, aslan@askarov.net     *)
+(* Creation date: 2018-10-19                    *)
+
+import lists
+
+let 
+    (* these are our primitive declassifiers; obs: mutual recursion *)
+    
+    fun declassify2 ((x,y), a, lev)   = ( declassifydeep (x, a, lev)
+                                        , declassifydeep (y, a, lev))
+
+    and declassify3 ((x,y,z), a, lev) = ( declassifydeep (x, a, lev)
+                                        , declassifydeep (y, a, lev)
+                                        , declassifydeep (z, a, lev))
+
+    and declassify4 ((x,y,z,w), a, lev) = ( declassifydeep (x, a, lev)
+                                          , declassifydeep (y, a, lev)
+                                          , declassifydeep (z, a, lev)
+                                          , declassifydeep (w, a, lev))
+    and declassify5 ((x1,x2,x3,x4,x5), a, lev) 
+                                        = ( declassifydeep (x1, a, lev)
+                                          , declassifydeep (x2, a, lev)
+                                          , declassifydeep (x3, a, lev)
+                                          , declassifydeep (x4, a, lev)
+                                          , declassifydeep (x5, a, lev)                                          
+                                          )
+    and declassify6 ((x1,x2,x3,x4,x5,x6), a, lev) 
+                                        = ( declassifydeep (x1, a, lev)
+                                          , declassifydeep (x2, a, lev)
+                                          , declassifydeep (x3, a, lev)
+                                          , declassifydeep (x4, a, lev)
+                                          , declassifydeep (x5, a, lev)                                          
+                                          , declassifydeep (x6, a, lev)                                          
+                                          )
+    and declassify7 ((x1,x2,x3,x4,x5,x6,x7), a, lev) 
+                                        = ( declassifydeep (x1, a, lev)
+                                          , declassifydeep (x2, a, lev)
+                                          , declassifydeep (x3, a, lev)
+                                          , declassifydeep (x4, a, lev)
+                                          , declassifydeep (x5, a, lev)                                          
+                                          , declassifydeep (x6, a, lev)                                          
+                                          , declassifydeep (x7, a, lev)                                          
+                                          )                                          
+
+    and declassifylist (xs, a, lev) = 
+        map (fn x => declassifydeep (x, a, lev) ) xs
+    
+    and declassifydeep (x, a, lev)  = 
+      (* declassification is a 2-step process ; first we pattern match *) 
+      (* on the given value and figure out which function to apply;    *) 
+      (* the choice of the function needs to be declassified before we *)
+      (* proceed further with the application of that function         *)
+      let val y = declassify (x, a, lev)
+          val f =  
+            case y of 
+                (_,_) => declassify2 
+              | (_,_,_) => declassify3
+              | (_,_,_,_) => declassify4
+              | (_,_,_,_,_) => declassify5
+              | (_,_,_,_,_,_) => declassify6
+              | (_,_,_,_,_,_,_) => declassify7
+              
+              | (_::_) => declassifylist 
+              | _ => declassify
+      in f(y, a, lev )
+      end      
+
+in [("declassifydeep", declassifydeep)]
+end

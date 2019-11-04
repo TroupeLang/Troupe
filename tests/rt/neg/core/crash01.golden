@@ -1,0 +1,4 @@
+2019-03-27T19:47:41.810Z [RTM] [32minfo[39m: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+>>> Main thread finished with value: ()@{}%{}
+[31mRuntime error in thread 202c1337-4cee-4d5d-81c6-e2352465cb06@{}%{}[39m
+[31m>> pattern match failure in case expression at :2:23[39m

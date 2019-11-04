@@ -1,0 +1,17 @@
+let 
+    fun inputLineWithPini auth = 
+         let pini auth val s = inputLine ()
+         in s 
+         end 
+
+    (* this function takes as an argument the authority needed to  *)
+    (* declassify the program counter and the result *)
+    
+    fun inputLineAtLevel auth lev = 
+         let val s = inputLineWithPini auth 
+         in declassify (s, auth, lev)
+         end
+
+in [("inputLineWithPini", inputLineWithPini) 
+   ,("inputLineAtLevel", inputLineAtLevel)]
+end       

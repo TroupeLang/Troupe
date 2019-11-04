@@ -1,0 +1,10 @@
+let val mkInc = fn () =>
+          let val x = 1
+              fun inc y = y + x
+          in inc
+          end
+    fun addTwo x y = x + y
+in let val increment = mkInc()
+   in addTwo (mkInc() 42)  ( increment (0))
+   end
+end

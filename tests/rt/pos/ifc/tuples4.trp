@@ -1,0 +1,6 @@
+let val secret = 0 raisedTo {secret}
+
+    val (a,b) = if secret > 0 then (1,2) else (3,4)
+    
+in ()
+end

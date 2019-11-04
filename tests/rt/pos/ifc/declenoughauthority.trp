@@ -1,0 +1,4 @@
+let val x = 42 raisedTo {alice}
+    val y = declassify (x, authority, {} )
+in y 
+end

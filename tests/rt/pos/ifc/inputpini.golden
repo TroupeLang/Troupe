@@ -1,0 +1,3 @@
+2019-03-07T14:31:36.006Z [RTM] [32minfo[39m: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+Please input something: You have provided input: this is our test input
+>>> Main thread finished with value: "this is our test input"@{}%{}

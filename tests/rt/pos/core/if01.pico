@@ -1,0 +1,8 @@
+let val h = 1
+    fun foo x = x + 1
+
+in  let val _ =  if h then foo 21 else 0
+     in printWithLabels 42
+    end
+
+end

@@ -1,0 +1,4 @@
+let val _ = save (9, ())
+    val g = restore (9)
+in g
+end 

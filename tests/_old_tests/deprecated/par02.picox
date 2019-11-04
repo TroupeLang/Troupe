@@ -1,0 +1,11 @@
+let fun proc2 () =
+      let val (x, sender) = receive [ hn x | sender  when x < 333 => (x, sender) ]
+      in print (x, sender)
+      end
+
+in
+    let val pid2 = spawn (proc2)
+        val u = 1 + 41
+    in send(pid2, u)        
+    end
+end

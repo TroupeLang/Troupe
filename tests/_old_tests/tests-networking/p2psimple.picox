@@ -1,0 +1,9 @@
+let fun f () = 
+      let val (x, n ) = receive [hn x | n => (x,n) ]
+          val _ = print  (x, n) 
+      in f()
+      end
+    val  p = spawn ("QmQSEt8DBeumRh8ZupmUaW8rVvwnjFtpBE557vjSLccUBh", f)
+in  send (p, 42) 
+    
+end

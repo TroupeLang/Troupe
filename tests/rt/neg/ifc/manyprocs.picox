@@ -1,0 +1,21 @@
+let fun loop () = loop ()
+    val secret = mkSecret [ 0, 0 , 0, 0, 0, 1]
+
+    fun hd (x::_) = x
+    fun tl (_::xs) = xs
+
+    fun leak _ 0 = ()
+      | leak bits i =
+        let fun f () =
+              let val _ = adv i
+                  val _ = if (hd bits) then loop () else ()
+                  val _ = printWithLabels (i, "x")
+              in adv i
+              end
+            val _ = adv i
+            val _ = spawn (f)
+        in  leak (tl bits) (i - 1)
+        end
+
+in leak secret 6
+end

@@ -1,0 +1,5 @@
+let val p = whereis ("QmQSEt8DBeumRh8ZupmUaW8rVvwnjFtpBE557vjSLccUBh", "inc")
+    val _ = send (p, (self(), 42))
+    val x = receive [ hn x => x]
+in x 
+end    

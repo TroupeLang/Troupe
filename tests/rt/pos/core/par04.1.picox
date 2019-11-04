@@ -1,0 +1,26 @@
+datatype Atoms = Compute | Shutdown
+
+let fun alice () =
+        receive [
+          hn Shutdown => printWithLabels 111111,
+          hn (Compute, x, f, sender) =>
+             let
+                 val result = f x
+                 val s = send (sender, result)
+             in alice()
+             end
+        
+        ]
+
+
+in
+    let val pidAlice = spawn (alice)
+        val _ = send(pidAlice, (Compute, 10, fn x => x + 1, self()))
+     in
+        receive[
+            hn res => let val _ = print res
+                       in send (pidAlice, Shutdown)
+                      end
+        ]
+    end
+end

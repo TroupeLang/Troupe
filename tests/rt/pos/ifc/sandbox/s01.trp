@@ -1,0 +1,3 @@
+let val x = sandbox (1001, fn () => 42) 
+in x
+end

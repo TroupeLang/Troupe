@@ -1,0 +1,7 @@
+let fun inc () = 
+       let val (p, x) = receive [ hn x => x]
+           val _ = send (p, x + 1)
+       in inc ()
+       end
+in register ("inc", spawn (inc))
+end 

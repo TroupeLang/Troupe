@@ -1,0 +1,4 @@
+2019-03-26T19:45:35.207Z [RTM] [32minfo[39m: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+52@{alice,bob,charlie}%{charlie}
+[31mPID:606dca46-4ed5-4cb4-868c-b0726fe483fd@{}%{}    [39m [31mPC:{}               [39m [31mBL:{charlie}        [39m 
+>>> Main thread finished with value: ()@{charlie}%{charlie}

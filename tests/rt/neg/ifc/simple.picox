@@ -1,0 +1,3 @@
+let val secret = mkSecret 42
+in if secret > 0 then adv 1 else adv 0
+end

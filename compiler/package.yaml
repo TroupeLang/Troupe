@@ -1,0 +1,87 @@
+name:                Troupe-compiler
+version:             0.1.0.0
+github:              "aslanix/Troupe"
+license:             GPL3
+author:              "Aarhus University"
+maintainer:          "aslan@cs.au.dk"
+copyright:           "2018 Aarhus University"
+
+extra-source-files:
+- README.md
+- ChangeLog.md
+
+# Metadata used when publishing your package
+# synopsis:            Short description of your package
+# category:            Web
+
+# To avoid duplicated efforts in documentation and dealing with the
+# complications of embedding Haddock markup inside cabal files, it is
+# common to point users to the README.md file.
+description:         Please see the README on GitHub at <https://github.com/githubuser/Troupe-compiler#readme>
+
+dependencies:
+- base >= 4.7 && < 5
+- cereal
+- mtl
+- containers
+- pretty
+- array
+- transformers
+- bytestring
+- text
+- base64-bytestring
+- haskeline
+- process
+- filepath
+- directory
+- tasty
+- tasty-golden
+- strict
+
+library:
+  source-dirs: src
+
+# pico ml Info flow
+
+executables:
+  troupec:
+    main:                Main.hs
+    source-dirs:         app
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    - -W
+    dependencies:
+    - Troupe-compiler
+
+
+  irtester:
+    main: Main.hs
+    source-dirs: irtester
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - Troupe-compiler
+  golden:
+    main: Golden.hs
+    source-dirs: test
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - Troupe-compiler
+
+tests:
+  Troupe-golden-test:
+    main:                Golden.hs
+    source-dirs:         test
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - Troupe-compiler

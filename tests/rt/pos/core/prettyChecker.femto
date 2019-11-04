@@ -1,0 +1,4 @@
+let fun id x = x
+in
+  id id id
+end

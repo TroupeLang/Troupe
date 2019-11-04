@@ -1,0 +1,6 @@
+2019-03-07T12:08:26.405Z [RTM] [32minfo[39m: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+[31mRuntime error in thread 44c313e1-9d7a-43de-9a17-d6de4674e85f@{}%{}[39m
+[31m>> Illegal flow in adv function:[39m
+[31m |    pc: {}[39m
+[31m | block: {alice,bob}[39m
+[31m | value: 1@{}%{}[39m

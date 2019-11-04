@@ -1,0 +1,16 @@
+import lists
+let fun mapspawn f = 
+        map (fn x => spawn ( fn () => printWithLabels (f x) ))
+
+
+    val ls = [ 1 raisedTo {alice}, 
+               2 raisedTo {bob},
+               3 raisedTo {charlie} ]   
+
+    val _ = mapspawn (fn x => x + 1) ls
+    val _ = printWithLabels ls
+
+in  adv ()
+end
+
+    

@@ -1,0 +1,11 @@
+let val pid = whereis ("QmQSEt8DBeumRh8ZupmUaW8rVvwnjFtpBE557vjSLccUBh", "f")    
+    val _ = print (pid, node pid)
+    val _ = send (pid, self())
+    val l = receive [ hn x => x ]    
+    val _ = raisetrust ("QmQSEt8DBeumRh8ZupmUaW8rVvwnjFtpBE557vjSLccUBh", authority, l)
+    val _ = print ("raise trust ok?")
+    val _ = send (pid, ())
+    val _ = print ("unit send OK")
+    val x = receive [ hn x => x ]
+in  print x
+end

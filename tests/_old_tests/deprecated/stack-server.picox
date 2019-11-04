@@ -1,0 +1,63 @@
+datatype Atoms = PUSH | POP | NONE
+let
+    fun popAtLevel [] lvl = (NONE,[])
+      | popAtLevel (x::xs) lvl =
+        if ((levelOf x) flowsTo lvl)
+        then (x, xs)
+        else let val (y, ys) = popAtLevel xs lvl in (y, x::ys) end
+    fun pop [] = (NONE,[])
+      | pop (hd::lst) = (hd, lst)
+    fun push x s = x::s
+    fun matchIds s [] = (false, [])
+      | matchIds s ((id,l)::waiting) =
+        if (levelOf s) flowsTo l
+        then let val _ = send (id, s) in (true, waiting) end
+        else let val (success, waiting') = matchIds s waiting
+             in (success, (id,l)::waiting') end
+    fun processPending [] waiting = ([], waiting)
+      | processPending (s::ss) waiting =
+        let val (success, waiting') = matchIds s waiting
+        in if success
+           then processPending ss waiting'
+           else let val (ss', waiting) = processPending ss waiting
+                in (s::ss', waiting) end
+        end
+    fun loop stack waiting =
+        let val _ = print stack
+            val (stack, waiting) = processPending stack waiting
+            val h1 = hn (POP, sender, lvl) =>
+                     loop stack ((sender,lvl)::waiting)
+            val h2 = hn (PUSH, elem) =>
+                     let
+                         val stack = push elem stack
+                     in
+                         loop stack waiting
+                     end
+        in
+            receive [h1,h2]
+        end
+    fun mkEmptyStack () = loop [] []
+    val stackPid = spawn (0, mkEmptyStack)
+    fun producer lvl () =
+        let fun visit n =
+                if (n = 0)
+                then ()
+                else
+                    let
+                        val _ = send (stackPid, (PUSH, n raisedTo lvl))
+                    in
+                        visit (n-1)
+                    end
+        in
+            visit 10
+        end
+    fun consumer lvl () =
+        let val _ = send (stackPid, (POP, self(), lvl))
+            val _ = receive( [hn n => let val _ = print n in adv n end ] )
+        in consumer lvl () end
+    val _ = spawn (1, producer {public})
+    val _ = spawn (1, producer {secret})
+    val _ = spawn (1, consumer {public})
+in
+    print "DONE"
+end

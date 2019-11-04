@@ -1,0 +1,6 @@
+let val x = 10 raisedTo {secret}
+    val p = self()
+    val _ = spawn ( fn () => if x > 0 then send (p, 1) else send (p, 0))
+in receive [hn x => x ]
+end
+

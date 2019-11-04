@@ -1,0 +1,5 @@
+let val secret = 42 raisedTo {secret}
+    val x = sandbox ( 100, fn () => if secret > 1000 then 2 else 10)
+    val _ = printWithLabels x
+in 0 
+end

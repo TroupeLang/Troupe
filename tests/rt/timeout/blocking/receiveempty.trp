@@ -1,0 +1,2 @@
+(* this test blocks because there are no sends *)
+receive []

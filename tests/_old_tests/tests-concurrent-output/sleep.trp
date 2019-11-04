@@ -1,0 +1,19 @@
+let fun sleepSeconds (x) = 
+     let val _ = print ("First message, waiting for",  x,  "seconds")
+         val _ = sleep (x * 1000)
+         val _ = print "Second message, done"
+     in () 
+     end 
+    val _ = spawn ( fn () => sleepSeconds (1))
+    val _ = spawn ( fn () => sleepSeconds (2))
+    val _ = spawn ( fn () => sleepSeconds (3))
+    val _ = spawn ( fn () => sleepSeconds (4))
+    val _ = spawn ( fn () => sleepSeconds (5))
+    val _ = spawn ( fn () => sleepSeconds (6))
+    val _ = spawn ( fn () => sleepSeconds (7))
+    val _ = spawn ( fn () => sleepSeconds (8))
+    val _ = spawn ( fn () => sleepSeconds (9))
+    val _ = spawn ( fn () => sleepSeconds (10))
+
+in ()
+end

@@ -1,0 +1,21 @@
+let
+    val secret = mkSecret(2)
+
+    fun f ()
+      = let (* val _ = print (self()) *)
+            val _ = if secret > 0
+                    then
+                        receive [ hn x => x]
+                    else
+                        ()
+            val _ = receive [hn x => print x]
+        in print "DONE"
+        end
+
+
+    val p = spawn (f)
+              
+    val _ = send (p, 1)
+    val _ = send (p, 2)
+ in  ()
+ end 

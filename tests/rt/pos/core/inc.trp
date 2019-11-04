@@ -1,0 +1,4 @@
+let fun add2 x y = x + y 
+    val inc = add2 1 
+in inc 10
+end

@@ -1,0 +1,4 @@
+let fun f x = x + 1
+    val y = 10
+in (f y) * 20
+end

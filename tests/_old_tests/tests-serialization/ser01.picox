@@ -1,0 +1,15 @@
+datatype Atoms = Plus | Minus
+let val z = 42
+    fun f x = let val _ = print Plus
+               in x + z
+               end
+
+    fun g x = let val _ = print Minus
+              in x - z
+              end
+
+     val _ = save (0,f)
+     val _ = save (1,g)
+     val _ = save (3, Plus)
+in ()
+end

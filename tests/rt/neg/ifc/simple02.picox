@@ -1,0 +1,5 @@
+let val x = 10
+    val y = 20
+    val secret = mkSecret 42
+in if secret > 0 then adv x else adv y
+end

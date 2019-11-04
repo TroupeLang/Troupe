@@ -1,0 +1,18 @@
+let
+    fun loop x n =
+      let fun body n =
+            if n  > 0 then
+                let val dummy = printWithLabels x
+                in
+                    body (n-1)
+                end
+            else x
+      in body n
+      end
+
+
+    val proc1 = fn () => loop 111 5
+in
+   proc1 ()
+  
+end

@@ -1,0 +1,1 @@
+exit (attenuate (authority, {alice}), 0)

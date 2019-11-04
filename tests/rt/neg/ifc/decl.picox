@@ -1,0 +1,7 @@
+let val x = 42 raisedTo {alice,bob}
+    val z = {alice}
+    val aliceAuthority = attenuate (authority, {alice})
+    val bobAuthority = attenuate(authority, {bob})    
+    val y = declassify (x, aliceAuthority, z)
+in ()
+end

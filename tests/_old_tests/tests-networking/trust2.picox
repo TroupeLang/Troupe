@@ -1,0 +1,15 @@
+let fun f () =
+  let val pid = receive [ hn pid => pid ]
+      val x = 42 raisedTo {secret}
+
+      val _ = raisetrust (node pid, authority, {secret})
+      
+      val _ = send (pid, {secret})
+      val _ = receive [ hn _ => ()]
+      val _ = print ("unit received ok")
+      val _ = send (pid, x)
+      val _ = print "send to pid ok"
+  in f ()
+  end
+in register ("f", spawn f)
+end

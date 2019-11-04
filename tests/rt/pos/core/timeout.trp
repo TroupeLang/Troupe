@@ -1,0 +1,11 @@
+let fun timeout p r t = let val _ = sleep t
+                        in send (p, r)
+                        end
+    val p = self () 
+    val r = mkuuid () 
+    val _ = spawn ( fn () => timeout p r 1000)  
+    val _ = spawn ( fn () => let val _ = sleep 2000 in send (p, ("MESSAGE", 42)) end)
+in receive [ hn ("MESSAGE", x) => printWithLabels x
+           , hn s when s = r  => printWithLabels "timeout" 
+           ]
+end

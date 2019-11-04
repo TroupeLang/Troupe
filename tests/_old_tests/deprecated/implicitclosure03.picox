@@ -1,0 +1,13 @@
+let val secret = mkSecret 42
+    val mainPid = self ()
+    fun f1 () = send ( mainPid, fn x => x + 1)
+    fun f2 () = send ( mainPid, fn x => x - 1)
+    
+    val _ = if secret > 0 then spawn (0, f1 )
+                          else spawn (0, f2 )
+                          
+    val f = receive [ hn x => x ]
+    val y = f 0
+    val _ = adv y
+in print y
+end

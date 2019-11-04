@@ -1,0 +1,7 @@
+let
+   val h = 42 raisedTo {secret}
+   fun f () = adv 1
+   fun g () = adv 2
+in
+   if h then spawn(f) else spawn(g) 
+end

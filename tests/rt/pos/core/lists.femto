@@ -1,0 +1,35 @@
+let fun map f list = 
+    case list of 
+       [] => []
+      |  (x::xs) => (f x) :: (map f xs)
+
+    fun foldl f y [] = y
+      | foldl f y (x::xs) = foldl f (f (x,y)) xs
+
+    fun add (x, y) = x + y
+
+
+    fun reverse ls =
+      let fun rev [] a = a
+            | rev (x::xs) a = rev xs (x::a)
+
+      in rev ls []
+      end
+
+    fun range n =
+     let fun rng 0 = []
+          |  rng k = k :: (rng (k-1))
+      in reverse (rng n)
+     end
+
+
+    fun fib x =
+          if x > 2
+          then fib (x - 1) + fib (x - 2)
+          else 1
+
+
+in
+   foldl ( fn (x,y) => x + y) 0 
+   ( map fib (range 10))
+end

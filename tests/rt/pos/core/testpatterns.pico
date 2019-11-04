@@ -1,0 +1,6 @@
+let
+    val proc1 = fn () => printWithLabels 22
+    val _ = printWithLabels 32
+    val pid2 = spawn(proc1)
+in 0
+end

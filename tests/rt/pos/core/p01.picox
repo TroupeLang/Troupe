@@ -1,0 +1,6 @@
+import lists
+
+let val z = 42
+in
+   map (fn x => x + 1) (reverse  [1,2])
+end

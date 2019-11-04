@@ -1,0 +1,3 @@
+import lists 
+printWithLabels (map ( fn i => i + 1) [1,2,3])
+       

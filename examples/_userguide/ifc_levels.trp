@@ -1,0 +1,4 @@
+let val x = 2 raisedTo {alice} 
+    val y = 3 raisedTo {bob}
+in x + y
+end

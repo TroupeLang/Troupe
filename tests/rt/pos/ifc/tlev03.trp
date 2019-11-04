@@ -1,0 +1,6 @@
+let val x = 42 raisedTo {alice}
+    val y = 11 raisedTo {bob} 
+    val z = (x,y)
+    val (a,b) = z      
+in a
+end

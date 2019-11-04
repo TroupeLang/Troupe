@@ -1,0 +1,7 @@
+(* basic receive test *)
+let fun f () = let val _ = printWithLabels "start" 
+               in receive [ hn x => printWithLabels x ]
+               end
+    val p = spawn f
+in send (p, 42)
+end

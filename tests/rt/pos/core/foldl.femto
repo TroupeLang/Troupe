@@ -1,0 +1,9 @@
+let
+   fun foldl f y [] = y
+      | foldl f y (x::xs) = foldl f (f (x,y)) xs
+
+    val list = [10, 20, 30]
+    val res2 = foldl (fn (x,y) => x+y) 0 list
+in
+  res2
+end

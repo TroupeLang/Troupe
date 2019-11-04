@@ -1,0 +1,21 @@
+datatype Atoms = SET | VALUE | NOTREADY
+                                                      
+let 
+    fun ready x =
+      let val _ = 
+              receive [ hn (VALUE, pid) => send (pid, x)]
+      in ready x
+      end
+          
+    fun future() =
+      receive [ hn (SET, x) => ready x
+              , hn (VALUE, pid) =>
+                let val _ = send (pid, NOTREADY)
+                in future ()
+                end ]
+    val ft = spawn (future)
+    val _ = send (ft, (SET, 42)) 
+    val _ = send (ft, (VALUE, self()))
+    val x = receive [ hn x => x ]
+in printWithLabels x
+end

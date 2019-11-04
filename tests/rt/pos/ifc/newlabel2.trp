@@ -1,0 +1,5 @@
+let val l = newlabel ()
+    val l2 = newlabel () 
+    val x = ( 42 raisedTo l ) raisedTo l2 
+in x 
+end

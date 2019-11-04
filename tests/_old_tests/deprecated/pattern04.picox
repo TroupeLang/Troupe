@@ -1,0 +1,8 @@
+datatype Atoms = ONE | TWO
+let val h1 = hn ONE  => print 1
+    val h2 = hn TWO  => print 2    
+    val pid = spawn(0, fn () => receive([h1,h2]))
+    val pid2 = spawn(1, fn () => send(pid, TWO))
+in
+    print "Done"
+end

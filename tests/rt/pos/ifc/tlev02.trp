@@ -1,0 +1,7 @@
+import stdio
+
+
+let val _ = writeString "What's your name: "
+    val input = inputLineWithPini authority 
+in printString ("Hello" ^ " " ^ input )
+end

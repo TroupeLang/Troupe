@@ -1,0 +1,11 @@
+import declassifyutil 
+
+let val secret = 1 raisedTo {alice}
+    val aliceAuth = attenuate (authority, {alice})
+    (* val t = if secret > 0 then (1,2) else (3,4)  *)
+    val c = pinipush (aliceAuth)
+    val (a,b) = if secret > 0 then (1,2) else (3,4) 
+    val _ = pinipop c 
+in 
+    adv 0
+end

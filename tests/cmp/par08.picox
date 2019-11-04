@@ -1,0 +1,6 @@
+let fun alice() =
+      receive [
+          hn _   => someUndeclaredVar
+      ]
+in send (spawn alice, 42)
+end

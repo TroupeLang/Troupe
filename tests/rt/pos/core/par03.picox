@@ -1,0 +1,23 @@
+let
+    fun recv() = receive [ hn x => x ]
+
+    fun alice () =
+      let val bobId = recv ()
+          val x = 100
+          val y = 42
+          val _ = send (bobId, (x, fn z => x + z, self()))
+          val y = recv ()
+      in printWithLabels y
+      end
+
+    fun bob () =
+      let val (x, f, senderId) = recv ()
+      in send(senderId, f x )
+      end
+
+in
+    let val pidAlice = spawn (alice)
+        val pidBob   = spawn(bob)
+    in send(pidAlice, pidBob)
+    end
+end

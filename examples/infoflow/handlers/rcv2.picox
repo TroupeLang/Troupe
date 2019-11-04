@@ -1,0 +1,6 @@
+let val secret = 42 raisedTo {secret}
+    val _ = send (self(), "public message")
+    val _ = if secret > 0
+            then send (self(), "secret message")
+            else send (self(), "other secret message")
+in rcv ({secret}, {secret}, [hn x => print x]) end

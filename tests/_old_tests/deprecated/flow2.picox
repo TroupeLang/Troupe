@@ -1,0 +1,7 @@
+let
+   val h = mkSecret 42
+   fun f () = adv 2929
+   fun g () = adv 4949
+in
+   if h then spawn(0,f) else spawn(0,g) 
+end

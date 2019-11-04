@@ -1,0 +1,4 @@
+let fun isOne 1 = true
+    and isTwo 2 = true 
+in isTwo () 
+end

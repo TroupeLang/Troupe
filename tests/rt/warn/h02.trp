@@ -1,0 +1,12 @@
+(* 2019-01-03: testing errors in handlers. That the guard throws  *)
+(* an exception but it does not terminate the thread. *)
+
+let fun foo (x) = x + 1 > 0 
+    val pid =
+        spawn ( fn () => 
+                    receive [ hn (x,sender) when foo x => print x ]
+              )
+              
+    val _ = send (pid, (  "" , self()) )
+in 0    
+end 

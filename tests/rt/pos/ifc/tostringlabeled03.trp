@@ -1,0 +1,5 @@
+let val x = 42 raisedTo {alice} 
+    val y = 11 raisedTo {bob} 
+    val s = toStringL (x,y) 
+in print ( s )
+end

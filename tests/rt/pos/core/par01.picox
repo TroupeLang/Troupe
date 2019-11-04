@@ -1,0 +1,27 @@
+let
+    fun loop x n =
+      let fun body n =
+            if n  > 0 then 
+                let val dummy = printWithLabels x
+                in
+                    body (n-1)
+                end
+            else x
+      in body n
+      end
+
+
+    val proc1 = fn () => loop 111 5
+    
+    val proc3 = fn () => loop 333 3
+
+    val proc2 = fn () =>
+                   let val dummy = spawn (proc3)
+                   in loop 222 5
+                   end
+in let val pid2 = spawn (proc2)
+    in let val x = printWithLabels pid2
+        in proc1 ()
+        end
+    end
+end

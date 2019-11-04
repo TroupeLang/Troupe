@@ -1,0 +1,11 @@
+let fun crash () = let val x = [] 
+                   in case x of     
+                            (10::[]) => () 
+                   end 
+ 
+    fun loop i = let val _ = print i 
+                 in loop ( i + 1 ) 
+                 end 
+    val _ = spawn crash   
+in ()
+end 

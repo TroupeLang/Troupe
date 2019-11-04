@@ -1,0 +1,4 @@
+let val authAlice = attenuate (authority, {alice})
+    val x = 1 raisedTo {bob}
+in declassify (x, authAlice, {})
+end 

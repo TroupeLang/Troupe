@@ -1,0 +1,8 @@
+let val secret = 1 raisedTo {secret}
+    val c = pinipush authority
+    fun leaky x = if x > 0 then () 
+                           else receive [ hn x when x = 123456789 => () ]
+    val _ = leaky secret
+    val _ = pinipop c
+in ()
+end

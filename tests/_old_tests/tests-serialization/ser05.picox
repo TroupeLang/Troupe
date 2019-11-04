@@ -1,0 +1,9 @@
+datatype Atoms = Plus | Minus
+let fun f x = x = Plus
+    val _ = save (5, f)
+    val _ = save (6, Plus)
+
+    val g = restore (5)
+    val y = restore (6)
+in (f Plus, g y)
+end 

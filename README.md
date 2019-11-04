@@ -49,7 +49,7 @@ Check that the installation works by running the local test suite: `$TROUPE/bin/
 
 ## User guide
 
-LaTeX sources for the user guide are in the [user-guide](/user-guide) folder. A (possibly outdated) PDF version is   also accessible  [here](http://lbs-troupe.troupe-lang.org/download/troupe-user-guide.pdf).
+LaTeX sources for the user guide are in the [user-guide](https://github.com/TroupeLang/Troupe-user-guide) repo. A (possibly outdated) PDF version is   also accessible  [here](http://lbs-troupe.troupe-lang.org/download/troupe-user-guide.pdf).
 
 
 ## Running examples that do not require network

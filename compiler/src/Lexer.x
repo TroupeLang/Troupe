@@ -60,8 +60,6 @@ tokens :-
   andalso                        { \p s -> L p TokenAndAlso }
   orelse                         { \p s -> L p TokenOrElse }
   raisedTo                       { \p s -> L p TokenRaisedTo }
-  flowsTo                        { \p s -> L p TokenFlowsTo }
-  levelOf                        { \p s -> L p TokenLevelOf }
   pini                           { \p s -> L p TokenPini}
 
   when                           { \p s -> L p TokenWhen  }

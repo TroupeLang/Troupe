@@ -35,4 +35,4 @@ test.trust.run.dialer:
 compile.pingpong:
 	$(COMPILER) p2ppingpong.trp --output=$(OUT)/p2ppingpong.js -v
 run.pingpong.dialer:
-	$(TROUPERT) -f=$(OUT)/p2ppingpong.js --id=../rt/src/p2p/id-dialer.json # --debug --debugp2p
+	$(TROUPERT) -f=$(OUT)/p2ppingpong.js --id=../rt/src/p2p/id-dialer.json --debug --debugp2p

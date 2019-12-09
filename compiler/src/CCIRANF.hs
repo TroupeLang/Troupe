@@ -222,6 +222,7 @@ instance WellFormedIRCheck IRExpr where
                      , "rcv"
                      , "mkSecret"
                      , "adv"
+                     , "getTime"
                      , "register"
                      , "whereis"
                      , "declassify"
@@ -243,6 +244,8 @@ instance WellFormedIRCheck IRExpr where
                      , "exit"
                      , "debugpc"
                      , "newlabel"
+                     , "levelOf"
+                     , "flowsTo"
                      ]
         then return ()
         else fail $ "bad base function: " ++ fname

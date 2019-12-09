@@ -4,7 +4,8 @@ import { ThreadError } from './ThreadError.js';
 import colors = require('colors/safe');
 import { StackItem } from './StackItem';
 import { StackCallItem } from './StackCallItem';
-
+const logger = require('./logger.js').mkLogger('thread');
+const debug = x => logger.debug(x)
 let lub = levels.lub;
 
 
@@ -164,6 +165,8 @@ export class Thread {
 
 
     callStackPush (cb) {
+      
+       
        this.callStack.push (this.pc)
        this.callStack.push ( cb ) 
        this._sp += 2;
@@ -175,16 +178,12 @@ export class Thread {
                     ,  lub  (arg.lev, this.pc)
                     ,  lub  (arg.tlev, this.pc));
 
-//        let frame = this.callStack.pop();
+
         let ret = this.callStack.pop ();
-        this.callStack.pop();
+        this.pc = this.callStack.pop();
   
         this._sp -= 2; 
-       
-        // -- let ret = frame.ret ;
-
-        this.pc = this.callStack[this._sp - 1]
-
+        
         this.next = () => {
             ret (rv);
         }
@@ -192,7 +191,7 @@ export class Thread {
 
 
     pinipush (l, cap) {
-        this.blockingdepth ++;
+        this.blockingdepth ++;       
         this.blockinglev.unshift ( { lev : this.blockinglev[0].lev, auth : l, cap: cap } );
     }
 
@@ -201,7 +200,9 @@ export class Thread {
         if (this.blockingdepth <= 0) {
             this.threadError ("unmatched pinipop");
         }
-        let r = this.blockinglev.shift();
+
+        let r = this.blockinglev.shift();    
+        this.raiseBlockingThreadLev(this.pc); // maintaining the invariant that the blocking level is as high as the pc level       
         return r
     }
 

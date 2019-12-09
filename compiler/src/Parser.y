@@ -66,9 +66,9 @@ import Control.Monad.Except
     '<'   { L _ TokenLt }
     '>'   { L _ TokenGt }
     '<>'  { L _ TokenNe }
-    'flowsTo'  { L _ TokenFlowsTo }
+
     'raisedTo' { L _ TokenRaisedTo }
-    'levelOf'  { L _ TokenLevelOf }
+
     '('   { L _ TokenLParen }
     ')'   { L _ TokenRParen }
     ','   { L _ TokenComma }
@@ -86,9 +86,8 @@ import Control.Monad.Except
 %left '+' '-'
 %left '*' '/'
 %right '::'
-%nonassoc 'flowsTo' '@'
+
 %left 'raisedTo'
-%right 'levelOf'
 %left '^'
 %%
 
@@ -143,9 +142,8 @@ Form : Form '+' Form               { Bin Plus $1 $3 }
 
      | Form '::' Form              { ListCons $1 $3 }
      
-     | Form 'flowsTo' Form         { Bin FlowsTo $1 $3 }
+
      | Form 'raisedTo' Form        { Bin RaisedTo $1 $3 }
-     | 'levelOf' Form              { Un LevelOf $2 }
      | '-' Form                    { Un UnMinus $2 }
      | Fact                        { fromFact $1 }
 

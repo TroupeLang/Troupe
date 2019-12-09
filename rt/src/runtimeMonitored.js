@@ -587,6 +587,15 @@ let rt_exit = mkBase ((env,arg) =>  {
   process.exit(arg.val[1].val); 
 },"exit")
 
+
+let rt_getTime = mkBase ((env,arg)=>{
+  assertIsUnit(arg)
+  let d = new Date()
+  let t = d.getTime()
+  let v = new LVal (t, __sched.pc);
+  rt_ret (v)
+} )
+
 let rt_printWithLabels = mkBase((env, arg) => {
   console.log (
         __sched.__currentThread.mkCopy(arg).stringRep(false)
@@ -1227,9 +1236,10 @@ function RuntimeObject() {
   this.raisedTo = function (x, y) {
     return new LVal(x.val, lub(lub(x.lev, y.val), y.lev), lubs([x.tlev, y.tlev, __sched.pc]) )
   }
-  this.flowsTo = function (x, y) {
-    return new LVal(flowsTo(x.val, y.val), lub(x.lev, y.lev), lub(x.tlev, y.tlev))
-  }
+
+  // this.flowsTo = function (x, y) {
+  //   return new LVal(flowsTo(x.val, y.val), lub(x.lev, y.lev), lub(x.tlev, y.tlev))
+  // }
   /*
   this.levelOf = function (x) {
     return new LVal(x.lev, lub (pc, x.lev)); // 2018-10-15: AA; implementing a sticky level
@@ -1247,6 +1257,7 @@ function RuntimeObject() {
   this.declassify = rt_declassify;
   this.toStringL = rt_toStringLabeled;
   this.toString  = rt_toString;
+  this.getTime = rt_getTime;
   this.print = rt_print;
   this.printWithLabels = rt_printWithLabels;
   this.printString = rt_printString
@@ -1267,6 +1278,9 @@ function RuntimeObject() {
   this.register = rt_register;
   this.whereis = rt_whereis;
   this.exit = rt_exit;
+
+
+
 
   this.debugpc = mkBase ((env,arg)=>{
 //    assertIsString(arg);
@@ -1384,6 +1398,24 @@ function RuntimeObject() {
     raiseCurrentBlockingThreadLev (x.lev);
   }
 
+
+  this.levelOf = mkBase ((env, arg) => {
+    let l = arg.lev; 
+    rt_ret (new LVal (l, lub (__sched.pc, l)))
+  })
+
+
+  this.flowsTo = mkBase ((env, arg) => {
+    assertIsNTuple(arg, 2);
+    let x = arg.val[0];
+    let y = arg.val[1];
+
+    assertIsLevel(x);
+    assertIsLevel(y);
+
+    rt_ret( new LVal(flowsTo(x.val, y.val), lub (__sched.pc, lub(x.lev, y.lev))))
+  })
+
   this.pinipush = mkBase ((env, arg) => {
     assertNormalState("pinipush");
     __sched.raiseBlockingThreadLev(arg.lev); // 2018-11-30: AA; observe
@@ -1396,10 +1428,13 @@ function RuntimeObject() {
 
 
   this.pinipop = mkBase (( env, arg) => { 
+    
     assertNormalState("pinipop");
     assertIsString(arg)
-    
+
     let {lev, auth, cap} = __sched.pinipop(arg);
+
+    
 
     // check the scopes
 
@@ -1414,6 +1449,8 @@ function RuntimeObject() {
 
     let levFrom = lev;
     let levTo = __sched.blockingTopLev;
+
+    debug (`Level to declassify to at pinipop ${levTo.stringRep()}`)
     // check that the provided authority is sufficient to perform declassification to the next level
     let ok_to_declassify = 
       flowsTo (levFrom, lubs ([ auth.val.authorityLevel, levTo ]));
@@ -1425,6 +1462,8 @@ function RuntimeObject() {
                     ` | level of the authority: ${auth.val.authorityLevel.stringRep()}\n`  +
                     ` | to level of the blocking level: ${levTo.stringRep()}`);
     }
+    
+
   })
 
   /* Implementation note: 2019-01-02; AA: exit capabilities are implemented as

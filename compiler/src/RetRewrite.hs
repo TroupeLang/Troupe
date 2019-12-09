@@ -27,6 +27,7 @@ import Control.Monad.Identity
 import Data.Set (Set)
 import qualified Data.Set as Set
 import RetFreeVars as FreeVars
+import TroupePositionInfo
 
 
 -- substitution is a collection of both variable substitutions and
@@ -125,6 +126,7 @@ data Context -- note this is not an exhaustive set of possible contexts; 2018-01
   | CtxtLetSimple VarName SimpleTerm Context
   | CtxtLetCont ContDef Context
   | CtxtLetFunK [FunDef] Context
+  | CtxtAssert VarName VarName PosInf Context
 --  | CtxtLetRet KontName Context
   deriving (Eq)
 
@@ -133,7 +135,7 @@ retUnchanged CtxtHole  = True
 retUnchanged (CtxtLetSimple  _ _ ctxt) = retUnchanged ctxt
 retUnchanged (CtxtLetCont _ _) = True
 retUnchanged (CtxtLetFunK _ ctxt) =  retUnchanged ctxt
-
+retUnchanged (CtxtAssert _ _ _ ctxt) = retUnchanged ctxt
 
 
 data SearchPat = PatReturn
@@ -145,6 +147,8 @@ matchterm :: KTerm -> SearchPat -> Maybe (Context, KTerm)
 
 matchterm found@(LetRet _ _) (PatLetRet)  =
   return (CtxtHole, found)
+
+matchterm (LetRet _ _) PatReturn = Nothing  
 
 matchterm found@(KontReturn _) (PatReturn) =
   return (CtxtHole, found)
@@ -166,6 +170,11 @@ matchterm (LetRet kdef kt) searchTerm = do
   (ctxt, found) <- matchterm kt searchTerm
   return $ (CtxtLetCont kdef ctxt, found)
 
+matchterm (AssertElseError vn kt vn' pos) searchTerm = do 
+  (ctxt, found) <- matchterm kt searchTerm
+  return $ (CtxtAssert vn vn' pos ctxt, found)
+
+
 matchterm _ _ = Nothing
 
 
@@ -182,6 +191,8 @@ reconstructTerm (CtxtLetCont kdef ctxt) kt =
   LetRet kdef (reconstructTerm ctxt kt)
 reconstructTerm (CtxtLetFunK fdefs ctxt) kt =
   LetFun fdefs (reconstructTerm ctxt kt)
+reconstructTerm (CtxtAssert vn vn' pos ctxt) kt = 
+  AssertElseError vn (reconstructTerm ctxt kt) vn' pos
 
 
 class KWalkable a b where
@@ -245,6 +256,7 @@ instance FreeNames Context where
   freeVars (CtxtLetFunK fdefs ctxt) =
       (unionMany (map freeVars fdefs)) `unionFreeVars` (restrictFree ctxt  (map fname fdefs))
         where fname (Fun n _) = n
+  freeVars (CtxtAssert vn1 vn2 _ ctxt) = unionMany [freeVars ctxt, FreeVars $ Set.fromList [vn1, vn2]]
 
 -- todo: eliminate redundancy in code ; 2018-01-25 ; aa
 
@@ -291,7 +303,8 @@ deadContPred _ = False
 -- β-Fun (-Lin)
 --------------------------------------------------
 
-betaFunPred (LetFun [Fun fn (Unary vn kt')] kt) = True
+betaFunPred (LetFun [Fun fn (Unary vn kt')] kt) = True 
+betaFunPred (LetSimple fn (ValSimpleTerm (KAbs (Unary vn kt')))  kt) = True
 betaFunPred _ = False
 
 betaFun :: KTerm -> KTerm
@@ -312,6 +325,24 @@ betaFun (LetFun [Fun fn klam@(Unary xn kt)] kt') =
        _ -> noChange
 
 
+betaFun (LetSimple fn (ValSimpleTerm (KAbs klam@(Unary xn kt))) kt') = 
+  let klam' = walk betaFunPred betaFun klam
+      noChange = LetSimple fn (ValSimpleTerm (KAbs klam')) (walk betaFunPred betaFun kt')
+  in
+     case matchterm kt' (PatFunApply fn) of
+       Just (ctxt, ApplyFun _ yn) ->
+          let kt'' = let subst = Subst (Map.fromList [(xn, yn)])
+                     in reconstructTerm ctxt (apply subst kt)
+              FreeVars ( freeVsCtxt ) = freeVars ctxt
+              FreeVars ( freeVsKt ) = freeVars kt
+
+          in if (not (Set.member fn (freeVsCtxt `Set.union` freeVsKt))) && ( fn /= yn)
+             then kt''
+             else noChange
+       _ -> noChange
+
+
+
 betaFun _ = error "this should not be called"
 
 
@@ -321,7 +352,7 @@ betaFun _ = error "this should not be called"
 
 
 rewrites = [ (betaFunPred, betaFun)
-            ,(betaContPred, betaCont)
+           ,(betaContPred, betaCont)
            -- ,(deadContPred, deadCont)
            ]
 

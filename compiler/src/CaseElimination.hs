@@ -129,7 +129,8 @@ transDecl (S.FunDecs fundecs) succ =
           zipped = zip names lams'
           (fst, decls) = foldr (\(n, l) (fail, decls) -> 
                 ( (App (Var n) [args'])
-                , (FunDecs [FunDecl n (runReader l fail)]):decls)) 
+                , (ValDecl n (Abs (runReader l fail))) 
+                  :decls))                  
                         (Error (Lit (LString $ "pattern match failure in function " ++ f)) pos
                         , []) zipped
       in FunDecl f (Lambda args (Let (reverse decls) fst))

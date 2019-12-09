@@ -158,18 +158,45 @@ irExprPeval e =
                 _ -> def_
 
 
+        Bin op x y -> do 
+          u <- varPEval x 
+          v <- varPEval y
+          case (u, v) of 
+            (IntConst a, IntConst b) -> do
+                let ii f = let c = f a b in 
+                              r_ (IntConst c, Const (C.LInt c NoPos))  
+                let bb f = let c = f a b in 
+                              r_ (BoolConst c, Const (C.LBool c))
+                case op of 
+                            Basics.Plus ->  ii (+)
+                            Basics.Minus -> ii (-)
+                            Basics.Mult ->  ii (*)
+                            Basics.Div ->   ii div
+                            Basics.Mod ->   ii mod 
+                            Basics.Eq ->    bb (==)
+                            Basics.Neq ->   bb(/=)
+                            Basics.Le ->    bb (<=)
+                            Basics.Lt ->    bb (<)
+                            Basics.Ge ->    bb ( >= )
+                            Basics.Gt ->    bb ( > )
+                            _  -> fail "Type error discovered at compliation time"
+                            
+            _ -> do
+              markUsed' x 
+              markUsed' y
+              def_
+            
+
+
 
 -- irExprPeval e@(Bin Basics.Index x y) = do 
 --     v1 <- varPEval x 
 --     v2 <- varPEval y 
 --     case (v1, v2) of 
 --         (TupleVal xs, IntConst i) -> 
+ 
+ 
 
-
-        (Bin _ x y) -> do 
-            markUsed' x 
-            markUsed' y
-            r_ (Unknown, e)
 
         (List xs) -> do 
             mapM_ markUsed' xs
@@ -312,7 +339,7 @@ bbPeval (BB insts tr) = do
             case insRes of 
                 RIns i' -> do
                     BB insts'' tr'' <- bbPeval (BB insts tr)
-                    return $ BB (i:insts'') tr''
+                    return $ BB (i':insts'') tr''
                 RSubst subst -> do 
                     bb_ <- bbPeval (BB insts tr)
                     setChangeFlag
@@ -325,10 +352,10 @@ instance PEval IRBBTree where
         
         (BB insts_ tr_, used) <- listen $ bbPeval bb
 
-        let isDeadAssign (Assign x _) = Set.member x used 
-            isDeadAssign _   = True
+        let isNotDeadAssign (Assign x _) = Set.member x used 
+            isNotDeadAssign _   = True
 
-            instsFiltered = filter isDeadAssign insts_
+            instsFiltered = filter isNotDeadAssign insts_
         return $ BB instsFiltered tr_ 
 
 
@@ -336,11 +363,12 @@ instance PEval IRBBTree where
 funopt :: FunDef -> FunDef
 funopt (FunDef hfn argname bb) = 
     let initEnv = (Map.singleton argname Unknown, False)
-        (bb', s', _) = runRWS (peval bb) () initEnv
+        (bb', (_, hasChanges), _) = runRWS (peval bb) () initEnv
+
         new = FunDef hfn argname bb'
-    in if hasChanges s' then funopt new 
-                        else new 
-        where hasChanges (_, x) = x
+    in if (bb /= bb')  then funopt new 
+                       else new 
+
 
 
 iropt::IRProgram -> IRProgram

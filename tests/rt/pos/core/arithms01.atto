@@ -3,7 +3,7 @@ let val x = 10
     val z = 10 + (if true then 11 else 22)
     val w = if let val x = true in x end then (fn t => true) 0 else false
     fun f x y = x + y * 10
-in if x > 10 then
+in if x >= 10 then
     f (x - (f (y - 2) 2) ) ( 2 - 2 * 3)
    else
     120

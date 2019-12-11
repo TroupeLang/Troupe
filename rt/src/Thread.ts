@@ -4,6 +4,7 @@ import { ThreadError } from './ThreadError.js';
 import colors = require('colors/safe');
 import { StackItem } from './StackItem';
 import { StackCallItem } from './StackCallItem';
+const Authority = require ('./Authority.js').Authority;
 const logger = require('./logger.js').mkLogger('thread');
 const debug = x => logger.debug(x)
 let lub = levels.lub;
@@ -15,23 +16,23 @@ class Mailbox extends Array  {
     }
 }
 
-class StackFrame {
-    pc: any;
-    ret: any;
-    constructor (pc, ret) {
-        this.pc = pc;
-        this.ret = ret;
-    }
-}
+// class StackFrame {
+//     pc: any;
+//     ret: any;
+//     constructor (pc, ret) {
+//         this.pc = pc;
+//         this.ret = ret;
+//     }
+// }
 
 
 
 export class Thread {
-    tid: any;
-    // ret: any;
+    tid: any;    
     pc: any;
-    blockinglev: any;
-    blockingdepth: any;
+    bl: any;
+    pinistack: any;
+    pinidepth: any;
     handlerState: any;
     monitors: {};
     killCounter: number;
@@ -47,67 +48,60 @@ export class Thread {
 
     _sp : number;
 
+    
 
-    constructor(tid, ret, theFun, theArgs, nm, pc, blockinglev, handlerState, rtObj) {
-        this.tid = tid;
-        // this.ret = ret;
+
+    constructor(tid, ret, theFun, theArgs, namespace, pc, levblock, handlerState, rtObj) {
+        this.tid = tid;    
         this.pc = pc;
-        this.blockinglev = blockinglev;
-        this.blockingdepth = blockinglev.length;
-
+        this.bl = levblock;
+        this.pinistack = [];
+        this.pinidepth = 0;
         this.handlerState = handlerState;
         this.monitors = {};
         this.killCounter = 0;
         this.sleeping = false;
         this.timeoutObject = null;
         this.rtObj = rtObj;
-
         this._sp = 3;
-
-
         this.callStack = [ pc, null
                          , pc, ret ]   // auxiliary bottom element of the call stack; never called
                                        // but is convenient for keeping track of the PC 
-
-        if (!pc) {
-            console.trace();
-            throw "PC is null"
-        }
-        if (!blockinglev) {
-            console.trace();
-            throw "blocking level undefined"
-        }
-        if (!this.blockinglev.length) {
-            // console.log ("length of blocking lev", this.blockinglev.length);
-            console.trace();
-            throw "Blocking level is not an array";
-        }
-        if (handlerState == null ) {
-            console.trace();
-            throw "handler state is null"
-        }
-
         this.mailbox = new Mailbox();
-
         this.next = () => {
-            theFun.apply (nm, theArgs);
+            theFun.apply (namespace, theArgs);
         }        
+
+        // if (!pc) {
+        //     console.trace();
+        //     throw "PC is null"
+        // }
+        // if (!levblock) {
+        //     console.trace();
+        //     throw "blocking level undefined"
+        // }
+        // if (!this.blockinglev.length) {
+        //     // console.log ("length of blocking lev", this.blockinglev.length);
+        //     console.trace();
+        //     throw "Blocking level is not an array";
+        // }
+        // if (handlerState == null ) {
+        //     console.trace();
+        //     throw "handler state is null"
+        // }
+
     }
 
    
-
-    get ret () {
-        return this.callStack[this._sp];
-    }
-
 
 
     exportState ()  {
         //throw "ERROR - not implemented" // 2019-05-08 
         let state = {            
             pc  : this.pc,
-            blockinglev   : this.blockinglev.slice(0), // obs: important to not create an alias
-            blockingdepth : this.blockingdepth,
+            bl  : this.pc,
+            pinistack   : this.pinistack.slice(0), // obs: important to not create an alias
+            pinidepth : this.pinidepth,
             next : this.next,
             stackdepth : this.callStack.length
             // handlerState  : this.handlerState
@@ -118,16 +112,14 @@ export class Thread {
 
     importState (s) {              
         //throw "ERRROR" // 2019-05-08 
-        this.pc  = s.pc;
-        this.blockinglev = s.blockinglev.slice(0);        
-        this.blockingdepth = s.blockingdepth;
+        this.pc = s.pc;
+        this.bl = s.bl;
+        this.pinistack = s.pinistack.slice(0);        
+        this.pinidepth = s.pinidepth;
         this.next = s.next;
-
-        let n = this.callStack.length - s.stackdepth;
-        
+        let n = this.callStack.length - s.stackdepth;        
         this.callStack.splice( -n ,n );
         this._sp = s.stackdepth - 1;
-
         
         // this.handlerState  = s.handlerState
     }
@@ -150,11 +142,10 @@ export class Thread {
         }
     }
 
-
-    returnInThread (arg) {
-        this.callStackRet(arg);
+    
+    retstep(arg) {
+        this.rtObj.ret(arg);        
     }
-  
 
 
     block(cb) {
@@ -164,24 +155,20 @@ export class Thread {
     }
 
 
-    callStackPush (cb) {
-      
-       
-       this.callStack.push (this.pc)
-       this.callStack.push ( cb ) 
-       this._sp += 2;
+    callInThread (cb) {
+        this.callStack.push (this.pc)
+        this.callStack.push ( cb ) 
+        this._sp += 2;
     }
 
-    callStackRet (arg) {
-       
+    returnInThread (arg) {       
         let rv = new LVal (arg.val
                     ,  lub  (arg.lev, this.pc)
                     ,  lub  (arg.tlev, this.pc));
 
-
         let ret = this.callStack.pop ();
         this.pc = this.callStack.pop();
-  
+
         this._sp -= 2; 
         
         this.next = () => {
@@ -189,48 +176,125 @@ export class Thread {
         }
     }
 
-
-    pinipush (l, cap) {
-        this.blockingdepth ++;       
-        this.blockinglev.unshift ( { lev : this.blockinglev[0].lev, auth : l, cap: cap } );
+    
+    pcpush (l, cap) {
+        this.raiseBlockingThreadLev(l.lev);        
+        this.pinidepth ++;       
+        this.pinistack.unshift ( { lev : this.bl, pc: this.pc, auth : l, cap: cap, purpose: 1 } );
     }
 
-    pinipop (cap) {
-        this.blockingdepth -- ;
-        if (this.blockingdepth <= 0) {
+
+    pcpop (arg) {
+        if (this.pinidepth <= 0) {
+            this.threadError ("unmatched pcpop");
+        }
+        
+        this.pinidepth -- ;
+        let r = this.pinistack.shift();            
+        let {lev, pc, auth, cap, purpose} = r;        
+        // check the scopes
+        if (arg.val != cap.val || purpose != 1) {
+            this.threadError ("Ill-scoped pinipush/pinipop");
+            return; // does not schedule anything in this thread 
+                    // effectively terminating the thread
+        }
+
+        
+        // We declassify the current blocking level to the old blocking level. 
+        // and also the current pc to the old pc. 
+        // We check that there is sufficient authority to go from the current blocking level
+        // all the way down to the target pc 
+        let levFrom = this.bl;
+        let levTo = pc
+
+        debug (`Level to declassify to at pinipop ${levTo.stringRep()}`)
+        // check that the provided authority is sufficient for the declassification
+        let ok_to_declassify = 
+            levels.flowsTo (levFrom, levels.lub ( auth.val.authorityLevel, levTo ));
+        if (ok_to_declassify) {        
+            this.pc = pc;           
+            this.bl = lev; 
+            // declassify the call stack...             
+            let j = this._sp - 1; 
+            while (j >= 0 && !levels.flowsTo (this.callStack[j], pc)) {                                
+                this.callStack[j] = pc;
+                j -= 2;
+            }            
+            this.retstep (this.rtObj.__unit);                        
+        } else {
+            this.threadError ( "Not enough authority for pini declassification\n" + 
+                            ` | from level of the blocking level: ${levFrom.stringRep()}\n` +
+                            ` | level of the authority: ${auth.val.authorityLevel.stringRep()}\n`  +
+                            ` | to level of the blocking level: ${levTo.stringRep()}`);
+        }                
+    }
+    
+
+
+    pinipush (auth, cap) {
+        this.raiseBlockingThreadLev(auth.lev);        
+        this.pinidepth ++;       
+        let obj = { lev : this.bl, pc: this.pc, auth : auth, cap: cap, purpose: 0 };
+        this.pinistack.unshift ( obj );
+    }
+
+
+    pinipop (arg) {
+        if (this.pinidepth <= 0) {
             this.threadError ("unmatched pinipop");
         }
 
-        let r = this.blockinglev.shift();    
+        this.pinidepth -- ;        
+        let r = this.pinistack.shift();            
         this.raiseBlockingThreadLev(this.pc); // maintaining the invariant that the blocking level is as high as the pc level       
-        return r
+        let {lev, auth, cap, purpose} = r;
+        // check the scopes
+
+        if (arg.val != cap.val || purpose != 0) {            
+            this.threadError ("Ill-scoped pinipush/pinipop");
+            return; // does not schedule anything in this thread 
+                    // effectively terminating the thread
+        }
+
+        // If we are here then the pinipop is well-scoped
+        // so we check the declassifications now
+
+        let levFrom = this.bl;
+        let levTo = lev;
+
+        debug (`Level to declassify to at pinipop ${levTo.stringRep()}`)
+        // check that the provided authority is sufficient to perform declassification to the next level
+        let ok_to_declassify = 
+            levels.flowsTo (levFrom, levels.lub ( auth.val.authorityLevel, levTo ));
+        if (ok_to_declassify) {
+            this.bl = levTo ; 
+            this.retstep (this.rtObj.__unit);                        
+        } else {
+            this.threadError ( "Not enough authority for pini declassification\n" + 
+                            ` | from level of the blocking level: ${levFrom.stringRep()}\n` +
+                            ` | level of the authority: ${auth.val.authorityLevel.stringRep()}\n`  +
+                            ` | to level of the blocking level: ${levTo.stringRep()}`);
+        }        
     }
 
 
-    raiseBlockingThreadLev (l) {        
-        // OBS: 2019-02-27: important that we create a new object;
-        // otherwise we get into aliasing issues when saving/restoring
-        // thread state in sandboxing; AA 
-        this.blockinglev[0] = { lev : lub (this.blockinglev[0].lev, l), 
-                                auth: this.blockinglev[0].auth , 
-                                cap : this.blockinglev[0].cap
-                              }
+    raiseBlockingThreadLev (l) {                
+        this.bl = lub (this.bl, l)        
     }
 
     raiseCurrentThreadPCToBlockingLev (l) {        
-        this.pc = lub(this.pc, this.blockinglev[0].lev ) ;
+        this.pc = lub(this.pc, this.bl ) ;
     }
 
     raiseCurrentThreadPC (l)  {        
-        this.pc = lub( this.pc, l )
-        
+        this.pc = lub( this.pc, l )        
         this.raiseBlockingThreadLev(this.pc); 
             // 2018-11-29: AA; observe that we are raise the blocking level
             // automaticaly every time we raise the PC level.
     }
 
     get blockingTopLev () {
-        return this.blockinglev[0].lev;         
+        return this.bl;         
     }
 
     get joinedLev () {

@@ -1,0 +1,7 @@
+let val x = 1 raisedTo {secret} 
+    val c = pcpush authority 
+    val _ = if x > 0 then let val _ = pcpop c in debugpc () end 
+                     else () 
+    (* val _ = pcpop c  *)
+in debugpc ()
+end

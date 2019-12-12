@@ -246,6 +246,8 @@ instance WellFormedIRCheck IRExpr where
                      , "newlabel"
                      , "levelOf"
                      , "flowsTo"
+                     , "pcpush"
+                     , "pcpop"
                      ]
         then return ()
         else fail $ "bad base function: " ++ fname

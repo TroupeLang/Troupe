@@ -118,7 +118,7 @@ class MailboxProcessor {
                         }                        
                     }
                     
-                    theThread.callStackPush (guard);
+                    theThread.callInThread (guard);
 
                     theThread.handlerState = new SandboxStatus.INHANDLER ( mkBase ( (env, arg) => {
                         __rtObj.ret (theThread.mkVal (__rtObj.mkTuple ([theThread.mkVal (1), __sched.unit]) )); // trigger next iter

@@ -7,7 +7,7 @@ const BaseKont = require('./BaseKont.js')
 const LVal = require('./Lval.js').LVal;
 const Thread = require('./Thread.js').Thread;
 const SandboxStatus = require('./SandboxStatus.js').HandlerState;
-const Authority = require ('./Authority.js').Authority;
+
 const ThreadError = require('./ThreadError.js').ThreadError;
 
 const __unitbase = require('./UnitBase.js');
@@ -131,13 +131,6 @@ class Scheduler {
     }
 
 
-    get ret() {
-        return this.__currentThread.ret;
-    }
-
-    setret(r) {
-        this.__currentThread.ret = new LVal(r, this.pc);
-    }
 
     
     /** 
@@ -195,7 +188,7 @@ class Scheduler {
     
 
     returnInThread (arg) {        
-        this.__currentThread.callStackRet(arg);
+        this.__currentThread.returnInThread(arg);
         this.stepThread ();
     }
 
@@ -230,7 +223,7 @@ class Scheduler {
             , args
             , nm
             , levpc
-            , [{lev:levblock, auth:new Authority(levels.BOT)}]
+            , levblock
             , new SandboxStatus.NORMAL()
             , this.rtObj );
 

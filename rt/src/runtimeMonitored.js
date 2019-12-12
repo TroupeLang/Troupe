@@ -356,7 +356,7 @@ let rt_sandbox = mkBase ((env, arg) => {
   })
 
   // __sched.setret (barrierClosure);
-  __sched.__currentThread.callStackPush(guard);
+  __sched.__currentThread.callInThread(guard);
   theThread.handlerState = new SandboxStatus.INSANDBOX(trapper);
   theThread.barrierdepth = 0;
   rt_tailcall (arg.val[1], __unit);
@@ -1391,7 +1391,7 @@ function RuntimeObject() {
   }
 
   this.push = (x) => {
-    __sched.__currentThread.callStackPush (x);
+    __sched.__currentThread.callInThread (x);
   }
 
   this.assertOrError = function (x)  {
@@ -1416,54 +1416,35 @@ function RuntimeObject() {
     rt_ret( new LVal(flowsTo(x.val, y.val), lub (__sched.pc, lub(x.lev, y.lev))))
   })
 
-  this.pinipush = mkBase ((env, arg) => {
-    assertNormalState("pinipush");
-    __sched.raiseBlockingThreadLev(arg.lev); // 2018-11-30: AA; observe
-         // that we are raising only the blocking level here;
-         // it is also important that we do this before the push         
-    let cap = rt_mkuuid();
-    __sched.pinipush(arg, cap);
+
+  this.pcpush = mkBase ((env,arg) => {
+    assertNormalState("pcpush");
+    let cap = rt_mkuuid();    
+    __sched.__currentThread.pcpush(arg, cap);
     rt_ret (cap);
   })
 
 
-  this.pinipop = mkBase (( env, arg) => { 
-    
+  this.pcpop = mkBase ((env,arg) => {
+    assertNormalState("pcpop");
+    assertIsString (arg);
+    __sched.__currentThread.pcpop(arg)    
+  })
+
+
+  this.pinipush = mkBase ((env, arg) => {
+    assertNormalState("pinipush");
+    assertIsAuthority(arg);    
+    let cap = rt_mkuuid();
+    __sched.__currentThread.pinipush(arg, cap);
+    rt_ret (cap);
+  })
+
+
+  this.pinipop = mkBase (( env, arg) => {   
     assertNormalState("pinipop");
     assertIsString(arg)
-
-    let {lev, auth, cap} = __sched.pinipop(arg);
-
-    
-
-    // check the scopes
-
-    if (arg.val != cap.val) {
-      threadError ("Ill-scoped pinipush/pinipop");
-      return; // does not schedule anything in this thread 
-              // effectively terminating the thread
-    }
-
-    // If we are here thnen, the pinipop is well-scoped
-    // so we check the declassifications now
-
-    let levFrom = lev;
-    let levTo = __sched.blockingTopLev;
-
-    debug (`Level to declassify to at pinipop ${levTo.stringRep()}`)
-    // check that the provided authority is sufficient to perform declassification to the next level
-    let ok_to_declassify = 
-      flowsTo (levFrom, lubs ([ auth.val.authorityLevel, levTo ]));
-    if (ok_to_declassify) {
-      rt_ret (__unit);
-    } else {
-      threadError ( "Not enough authority for pini declassification\n" + 
-                    ` | from level of the blocking level: ${levFrom.stringRep()}\n` +
-                    ` | level of the authority: ${auth.val.authorityLevel.stringRep()}\n`  +
-                    ` | to level of the blocking level: ${levTo.stringRep()}`);
-    }
-    
-
+    __sched.pinipop(arg);
   })
 
   /* Implementation note: 2019-01-02; AA: exit capabilities are implemented as

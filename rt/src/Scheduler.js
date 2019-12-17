@@ -44,31 +44,32 @@ class Scheduler {
         this.__currentThread = null; // current thread object
 
         this.stackcounter = 0;
-
-        this.done = (arg) =>  {            
-            this.notifyMonitors();
-            delete this.__alive [this.currentThreadId.val.toString()];              
-        }
-
-
-        this.halt = (arg) => {
-            this.raiseCurrentThreadPCToBlockingLev();
-            let retVal = this.mkCopy(arg);
-            this.notifyMonitors ();
-
-            delete this.__alive[this.currentThreadId.val.toString()];            
-            console.log(">>> Main thread finished with value:", retVal.stringRep());
-        }
-
-
-
+                
         // the unit value 
-    
-        
-        let theUnit = new LVal (__unitbase, levels.BOT);
-        this.__unit = theUnit;        
+        this.__unit = new LVal (__unitbase, levels.BOT);
     }
 
+    done  (arg)  {            
+        this.notifyMonitors();
+        delete this.__alive [this.currentThreadId.val.toString()];              
+    }
+
+
+    halt  (arg, persist=null)  {
+        this.raiseCurrentThreadPCToBlockingLev();
+        let retVal = this.mkCopy(arg);
+        this.notifyMonitors ();
+
+        delete this.__alive[this.currentThreadId.val.toString()];            
+        console.log(">>> Main thread finished with value:", retVal.stringRep());
+        if (persist) {
+            this.rtObj.persist (retVal, persist )
+            console.log ("Saved the result value in file", persist)
+        }
+    }
+
+
+    
     notifyMonitors (status = TerminationStatus.OK, errstr ) {
         
         let ids = Object.keys (this.__currentThread.monitors);
@@ -210,10 +211,11 @@ class Scheduler {
         return new LVal(pidObj, pcArg);
     }
 
-    scheduleNewThreadAtLevel (thefun, args, nm, levpc, levblock, ismain = false) {
+    scheduleNewThreadAtLevel (thefun, args, nm, levpc, levblock, ismain = false, persist=null) {
         let newPid = this.createNewProcessIDAtLevel(levpc);
 
-        let halt = ismain ?  this.halt : this.done;
+        let halt = ismain ?  (arg)=> { this.halt (arg, persist) } : 
+                             (arg) => { this.done (arg) };
         
         
         let t = new Thread 

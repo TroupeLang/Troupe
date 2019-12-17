@@ -400,13 +400,18 @@ let rt_spawn = mkBase((env, larg) => {
   }
 }, "spawn");
 
+
+function persist (obj, path) {
+  let jsonObj = SS.serialize(obj, __sched.pc).data;
+  fs.writeFileSync(path, JSON.stringify(jsonObj));  
+}
+
 let rt_save = mkBase((env, larg) => {
   raiseCurrentThreadPC(larg.lev);
   let arg = larg.val;
   let file = arg[0].val;
-  let message = arg[1];
-  let jsonObj = SS.serialize(message, __sched.pc).data;
-  fs.writeFileSync("./out/saved." + file + ".json", JSON.stringify(jsonObj));
+  let data = arg[1];
+  persist (data, "./out/saved." + file + ".json" )
   rt_ret(__unit);
 }, "save")
 
@@ -1232,6 +1237,8 @@ function RuntimeObject() {
 
   this.levels = levels
 
+  this.persist = persist
+
   this.mkLabel = rt_mkLabel
   this.raisedTo = function (x, y) {
     return new LVal(x.val, lub(lub(x.lev, y.val), y.lev), lubs([x.tlev, y.tlev, __sched.pc]) )
@@ -1588,6 +1595,7 @@ async function start(f) {
           , levels.BOT
           , levels.BOT
           , true
+          , yargs.argv.persist
         )
       
       __sched.loop()
@@ -1628,7 +1636,7 @@ async function start(f) {
 
   process.on('unhandledRejection', up => { console.log ("Unhandled rejection error"); throw up })
 
-  if (!yargs.argv.localonly) {
+  if (!yargs.argv.localonly && !yargs.argv.persist) {
     __p2pRunning = true;
   }
 
@@ -1644,8 +1652,11 @@ async function start(f) {
     }
   } else {
    try {
-      if (yargs.argv.localonly) {
+      if (yargs.argv.localonly || yargs.argv.persist) {
         info("Skipping network creation. Observe that all external IO operations will yield a runtime error.")
+        if (yargs.argv.persist) {
+          info("Running with persist flag.")
+        }
         networkReady(null); // OBS: 2018-07-22: we are jumping over the network creation
       } else {        
         p2p.startp2p(null, rtHandlers);           

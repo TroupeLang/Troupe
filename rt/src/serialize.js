@@ -151,17 +151,14 @@ function compilerOutputReady(data) {
   for (let i = 0; i < serobj.namespaces.length; i++) {
     let ns = serobj.namespaces[i]
     let nsFun = "";
-    if (ns[0][0] = '$uuid') {
-       nsFun  = "this.uuid = \"" + ns[0][1] + "\"\n";
-       nsFun += "this.libSet = new Set () \n"
-       nsFun += "this.libs = [] \n"
-       nsFun += "this.addLib = function (lib, decl) { if (!this.libSet.has (lib +'.'+decl)) { this.libSet.add (lib +'.'+decl); this.libs.push ({lib:lib, decl:decl})} } \n"
-       nsFun += "this.loadlibs = function (cb) { rt.linkLibs (this.libs, this, cb) } \n"
-    } else {
-       deserializationError ();
-    }
+    
+    nsFun += "this.libSet = new Set () \n"
+    nsFun += "this.libs = [] \n"
+    nsFun += "this.addLib = function (lib, decl) { if (!this.libSet.has (lib +'.'+decl)) { this.libSet.add (lib +'.'+decl); this.libs.push ({lib:lib, decl:decl})} } \n"
+    nsFun += "this.loadlibs = function (cb) { rt.linkLibs (this.libs, this, cb) } \n"
 
-    for (let j = 1; j < ns.length; j++) {   // -1 to discount uuid
+    
+    for (let j = 0; j < ns.length; j++) {   
       if (j > 0) {
         nsFun += "\n\n" // looks neater this way
       }
@@ -169,7 +166,7 @@ function compilerOutputReady(data) {
     }
 
     let NS = new Function ('rt',nsFun)
-    // console.log (NS.toString());
+    console.log (NS.toString());
     ns.fun = new NS(rtObj)
   }
 
@@ -365,11 +362,11 @@ function deserialize(lev, jsonObj, cb) {
         let ns = serializedObj.namespaces[i];
         for (let j = 0; j < ns.length; j++) {
           // console.log("*s deserialize", ns[j]);
-          if (ns[j][0] != "$uuid") {
-            compiler.stdin.write( ns[j][1] );
-            compiler.stdin.write("\n")
-            // debuglog ("data out")
-          }
+          
+          compiler.stdin.write( ns[j][1] );
+          compiler.stdin.write("\n")
+          // debuglog ("data out")
+
         }
       }
       compiler.stdin.write("!ECHO /*-----*/\n")
@@ -485,10 +482,7 @@ function serialize(x, pclev) {
               jsonNamespacePtr = { NamespaceID : namespaces.length };
               seenNamespaces.set ( x.namespace, namespaces.length );
               namespace = new Map ();
-              namespaces.push (namespace);
-              namespace.set ("$uuid", x.namespace.uuid)
-              namespace.set ("$atoms", x.namespace.serializedatoms)
-              // debuglog ( x.namespace.serializedatoms)
+              namespaces.push (namespace);              
             }
 
             namespace.set (ff, x.fun.serialized)

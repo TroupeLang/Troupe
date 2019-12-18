@@ -112,8 +112,8 @@ instance ToJS IRProgram where
      (jjF, libsF) <- listen $ mapM toJS funs
      
      return $
-          vcat $ [ text "this.uuid = rt.rt_uuid"
-                 , jsLoadLibs
+          vcat $ [ -- text "this.uuid = rt.rt_uuid", 
+                   jsLoadLibs
                  , addLibs libsF
                  , jjA
                  ] ++ jjF
@@ -126,7 +126,7 @@ instance ToJS C.Atoms where
     vcat [ vcat $ (map  (\a -> hsep ["const"
                                     , text a
                                     , "= new rt.Atom"
-                                    , (PP.parens ( (PP.quotes.text) a <+> text ", this.uuid"))]) atoms)
+                                    , (PP.parens ( (PP.quotes.text) a <+> text ", rt.rt_uuid"))]) atoms)
          , text "this.serializedatoms =" <+> (pickle.serializeAtoms) catoms]
 
 

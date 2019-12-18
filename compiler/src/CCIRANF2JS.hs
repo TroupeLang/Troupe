@@ -135,13 +135,15 @@ instance ToJS FunDef where
     toJS fdef@(FunDef hfn arg bb) = do
        jj <- toJS bb
        debug <- ask
+       let (irdeps, libdeps ) = ppDeps fdef
        return $
           vcat [text "this." PP.<>  ppId hfn <+> text "= function" <+> ppArgs ["$env", ppId arg] <+> text "{"
                , if debug then nest 2 $ text "rt.debug" <+> (PP.parens . PP.quotes.  ppId) hfn
                           else PP.empty 
                , nest 2 jj
                , text "}"
-               , semi $ text "this." PP.<> ppId hfn PP.<> text ".deps =" <+> ppDeps fdef
+               , semi $ text "this." PP.<> ppId hfn PP.<> text ".deps =" <+> irdeps
+               , semi $ text "this." PP.<> ppId hfn PP.<> text ".libdeps =" <+> libdeps
                , semi $ text "this." PP.<> ppId hfn PP.<> text ".serialized =" <+> (pickle.serializeFunDef) fdef ]
 
 

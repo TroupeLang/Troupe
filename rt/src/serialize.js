@@ -539,7 +539,8 @@ function serialize(x, pclev) {
     nsp.push (Array.from(namespaces[j]));
   }
 
-  let serializeObj = { namespaces: nsp
+  let serializeObj = { libdeps: []
+                     , namespaces: nsp
                      , closures: closures
                      , envs: envs
                      , value: value };

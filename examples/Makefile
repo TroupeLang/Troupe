@@ -36,3 +36,10 @@ compile.pingpong:
 	$(COMPILER) p2ppingpong.trp --output=$(OUT)/p2ppingpong.js -v
 run.pingpong.dialer:
 	$(TROUPERT) -f=$(OUT)/p2ppingpong.js --id=../rt/src/p2p/id-dialer.json --debug --debugp2p
+
+
+compile.spawnremote:
+	$(COMPILER) spawnremote.trp --output=$(OUT)/spawnremote.js
+
+run.spawnremote.dialer:
+	$(TROUPERT) -f=$(OUT)/spawnremote.js --id=../rt/src/p2p/id-dialer.json --debug --debugp2p

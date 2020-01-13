@@ -418,20 +418,18 @@ let rt_save = mkBase((env, larg) => {
 
 
 let rt_restore = mkBase((env, arg) => {
+  assertIsString(arg)
   let theThread = __sched.__currentThread;
+  let file = arg;
 
-  function resume(data) {
+  (async () => {
+    let jsonStr = await fs.promises.readFile("./out/saved." + file.val + ".json");
+    let data = await SS.deserializeAsync(levels.TOP, JSON.parse(jsonStr));
     theThread.returnInThread(data);
+    __sched.scheduleThreadT(theThread);
     __sched.resumeLoopAsync();
-  }
 
-  function processRestore(cb) {
-    let file = arg
-    // obs: 2018-03-04; aa: synchronous!!! only for prototyping
-    let jsonStr = fs.readFileSync("./out/saved." + file.val + ".json");
-    SS.deserialize(levels.TOP, JSON.parse(jsonStr), cb);
-  }
-  setImmediate(processRestore, resume)
+  }) ()
 }, "restore")
 
 

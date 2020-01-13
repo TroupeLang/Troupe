@@ -289,6 +289,7 @@ class Scheduler {
     \*****************************************************************************/
 
     loop() {
+        // debug (`running scheduler loop with ${this.__funloop.length} many threads`)
         const $$LOOPBOUND = 5000;
 
         for (let $$loopiter = 0; $$loopiter < $$LOOPBOUND && (this.__funloop.length > 0); $$loopiter++) {

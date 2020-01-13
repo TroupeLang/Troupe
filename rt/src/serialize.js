@@ -166,7 +166,7 @@ function compilerOutputReady(data) {
     }
 
     let NS = new Function ('rt',nsFun)
-    console.log (NS.toString());
+    // console.log (NS.toString());
     ns.fun = new NS(rtObj)
   }
 

@@ -1,0 +1,3 @@
+let val x = 42 
+in save ("1004", 42)
+end

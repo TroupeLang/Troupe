@@ -407,6 +407,7 @@ function persist (obj, path) {
 }
 
 let rt_save = mkBase((env, larg) => {
+  assertIsNTuple(larg, 2);
   raiseCurrentThreadPC(larg.lev);
   let arg = larg.val;
   let file = arg[0].val;

@@ -37,6 +37,7 @@ dependencies:
 - tasty
 - tasty-golden
 - strict
+- aeson
 
 library:
   source-dirs: src

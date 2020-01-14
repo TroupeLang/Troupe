@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE DeriveGeneric #-}
 
-module CCIRANF2JS (irProg2JSString,irToJSString) where 
+module CCIRANF2JS (irProg2JSString,irToJSString,irToJSON) where 
 
 import qualified Basics
 import qualified Core as C
@@ -13,18 +14,30 @@ import Control.Monad.Reader
 import Data.List
 import qualified Data.Text as T
 import Data.Text.Encoding
-import Data.ByteString.Base64 (encode,decode) -- cabal install base64-bytestring
+import Data.ByteString.Lazy (ByteString)
+import Data.ByteString.Base64 (encode,decode)
 import CCIRANF
 import CompileMode
 import TroupePositionInfo
+import qualified Data.Aeson as Aeson
+import GHC.Generics (Generic)
+
 
 import qualified Text.PrettyPrint.HughesPJ as PP
 import Text.PrettyPrint.HughesPJ (
     (<+>), ($$), text, hsep, vcat, nest)
 
 data LibAccess = LibAccess Basics.LibName Basics.VarName
-   deriving (Eq, Show)
+   deriving (Eq, Show,Generic)
 
+
+data JSOutput = JSOutput { libs :: [LibAccess] 
+                         , code :: String 
+                         } deriving (Show, Generic)
+
+instance Aeson.ToJSON Basics.LibName 
+instance Aeson.ToJSON LibAccess
+instance Aeson.ToJSON JSOutput
 
 ppLibAccess :: LibAccess -> PP.Doc
 ppLibAccess (LibAccess (Basics.LibName libname) varname) = PP.braces $
@@ -88,6 +101,13 @@ irToJSString :: ToJS a => a -> String
 irToJSString x =
   let (inner, _, libs) = runRWS (toJS x) False initState
   in PP.render (addLibs libs $$ inner)
+
+
+irToJSON :: ToJS a => a -> ByteString
+irToJSON x = 
+  let (inner, _, libs) = runRWS (toJS x) False initState
+  in Aeson.encode $ JSOutput { libs = libs, code = PP.render (inner) } 
+
 
 
 instance ToJS SerializationUnit where

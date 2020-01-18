@@ -15,7 +15,7 @@ function setRuntimeObj(rt)  {
 
 
 function startCompiler() {
-  compiler = spawn(process.env.TROUPE + '/bin/troupec', ['--ir']);
+  compiler = spawn(process.env.TROUPE + '/bin/troupec', ['--json']);
 
   compiler.on ('exit', (code, signal)=>{
     // console.error (code, signal);
@@ -162,7 +162,10 @@ function compilerOutputReady(data) {
       if (j > 0) {
         nsFun += "\n\n" // looks neater this way
       }
-      nsFun += snippets[k++];
+      let snippetJson = JSON.parse (snippets[k++]);
+      // console.log (snippetJson.libs);
+      // console.log (snippetJson.fname);
+      nsFun += snippetJson.code; 
     }
 
     let NS = new Function ('rt',nsFun)

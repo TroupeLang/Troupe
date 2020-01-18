@@ -32,6 +32,7 @@ data LibAccess = LibAccess Basics.LibName Basics.VarName
 
 
 data JSOutput = JSOutput { libs :: [LibAccess] 
+                         , fname:: Maybe String 
                          , code :: String 
                          } deriving (Show, Generic)
 
@@ -103,10 +104,14 @@ irToJSString x =
   in PP.render (addLibs libs $$ inner)
 
 
-irToJSON :: ToJS a => a -> ByteString
+irToJSON :: SerializationUnit -> ByteString
 irToJSON x = 
   let (inner, _, libs) = runRWS (toJS x) False initState
-  in Aeson.encode $ JSOutput { libs = libs, code = PP.render (inner) } 
+  in Aeson.encode $ JSOutput { libs = libs
+                             , fname = case x of FunSerialization (FunDef (HFN n)_ _) -> Just n
+                                                 _ -> Nothing
+                             , code = PP.render (addLibs libs $$ inner) 
+                             } 
 
 
 

@@ -1,0 +1,14 @@
+let 
+    val _ = spawn ( fn () => let val _ = sleep (300000)
+                             in exit (authority, 0)
+                             end )
+    val _ = register ("echo", self(), authority)
+    fun loop () =
+        
+        let     val _ = print "waiting..."
+                val _ = receive [ hn ("ECHO", x, sender) => send (sender, ("REPLY", x))
+                            , hn _ =>  () ]
+        in loop ()
+        end
+in loop ()
+end

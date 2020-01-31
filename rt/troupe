@@ -13,4 +13,4 @@ troupe_file="$1"
 shift
 
 # Execute the runtime with the specified Troupe script
-node $troupe_rt -f "$troupe_file" "$@"
+node $troupe_rt -f="$troupe_file" "$@"

@@ -48,6 +48,7 @@ const lineBuffer = [];
 const readlineCallbacks = []
 
 
+
 function lineListener (input) {  
   if (readlineCallbacks.length > 0 ) {
     let cb = readlineCallbacks.shift ();
@@ -110,7 +111,16 @@ let p2p = require('./p2p/p2p.js')
 
 const __sched = new Scheduler(rt_uuid);
 const __theMailbox = new MailboxProcessor(__sched);
-const __nodeManager = new NodeManager(levels); // 2019-01-03: todo: use options; AA
+
+let aliases = yargs.argv.aliases
+                  ? JSON.parse ( fs.readFileSync(yargs.argv.aliases))
+                  : {}
+
+
+
+
+
+const __nodeManager = new NodeManager(levels, aliases ); // 2019-01-03: todo: use options; AA
 
 let __p2pRunning = false;
 // these are initialized later in webServerReady handler
@@ -865,7 +875,9 @@ let rt_whereis = mkBase((env, arg) => {
   raiseCurrentBlockingThreadLev(arg.val[1].lev);
   
 
-  let n = arg.val[0].val;    
+  // let n = dealias(arg.val[0].val);    
+  let n = __nodeManager.getNode(arg.val[0].val).nodeId;
+  
   let k = arg.val[1].val;
     
   let nodeLev = nodeTrustLevel (n);
@@ -1612,7 +1624,6 @@ async function start(f) {
 
   
 
-
   const trustMapFile = yargs.argv.trustmap ? yargs.argv.trustmap : "trustmap.json";
   try {
     let s = await readFile (trustMapFile);
@@ -1623,6 +1634,9 @@ async function start(f) {
   } catch (err) {
     logger.error ("cannot load trust map file: " + err);
   }
+
+
+  
 
 
   const allowRemoteSpawn = yargs.argv.rspawn

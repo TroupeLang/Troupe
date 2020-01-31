@@ -1,0 +1,4 @@
+let val echo = whereis ("@echo-server", "echo")
+    val _ = send (echo, ("ECHO", "Hello", self()))
+in receive [ hn  x => print x]
+end

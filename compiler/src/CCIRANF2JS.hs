@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE DeriveGeneric #-}
 
-module CCIRANF2JS (irProg2JSString,irToJSString) where 
+module CCIRANF2JS (irProg2JSString,irToJSString,irToJSON) where 
 
 import qualified Basics
 import qualified Core as C
@@ -13,18 +14,31 @@ import Control.Monad.Reader
 import Data.List
 import qualified Data.Text as T
 import Data.Text.Encoding
-import Data.ByteString.Base64 (encode,decode) -- cabal install base64-bytestring
+import Data.ByteString.Lazy (ByteString)
+import Data.ByteString.Base64 (encode,decode)
 import CCIRANF
 import CompileMode
 import TroupePositionInfo
+import qualified Data.Aeson as Aeson
+import GHC.Generics (Generic)
+
 
 import qualified Text.PrettyPrint.HughesPJ as PP
 import Text.PrettyPrint.HughesPJ (
     (<+>), ($$), text, hsep, vcat, nest)
 
 data LibAccess = LibAccess Basics.LibName Basics.VarName
-   deriving (Eq, Show)
+   deriving (Eq, Show,Generic)
 
+
+data JSOutput = JSOutput { libs :: [LibAccess] 
+                         , fname:: Maybe String 
+                         , code :: String 
+                         } deriving (Show, Generic)
+
+instance Aeson.ToJSON Basics.LibName 
+instance Aeson.ToJSON LibAccess
+instance Aeson.ToJSON JSOutput
 
 ppLibAccess :: LibAccess -> PP.Doc
 ppLibAccess (LibAccess (Basics.LibName libname) varname) = PP.braces $
@@ -90,6 +104,17 @@ irToJSString x =
   in PP.render (addLibs libs $$ inner)
 
 
+irToJSON :: SerializationUnit -> ByteString
+irToJSON x = 
+  let (inner, _, libs) = runRWS (toJS x) False initState
+  in Aeson.encode $ JSOutput { libs = libs
+                             , fname = case x of FunSerialization (FunDef (HFN n)_ _) -> Just n
+                                                 _ -> Nothing
+                             , code = PP.render (addLibs libs $$ inner) 
+                             } 
+
+
+
 instance ToJS SerializationUnit where
   toJS (FunSerialization fdecl) = toJS fdecl
   toJS (AtomsSerialization ca) = toJS ca
@@ -112,8 +137,8 @@ instance ToJS IRProgram where
      (jjF, libsF) <- listen $ mapM toJS funs
      
      return $
-          vcat $ [ text "this.uuid = rt.rt_uuid"
-                 , jsLoadLibs
+          vcat $ [ -- text "this.uuid = rt.rt_uuid", 
+                   jsLoadLibs
                  , addLibs libsF
                  , jjA
                  ] ++ jjF
@@ -126,7 +151,7 @@ instance ToJS C.Atoms where
     vcat [ vcat $ (map  (\a -> hsep ["const"
                                     , text a
                                     , "= new rt.Atom"
-                                    , (PP.parens ( (PP.quotes.text) a <+> text ", this.uuid"))]) atoms)
+                                    , (PP.parens ( (PP.quotes.text) a <+> text ", rt.rt_uuid"))]) atoms)
          , text "this.serializedatoms =" <+> (pickle.serializeAtoms) catoms]
 
 
@@ -135,13 +160,15 @@ instance ToJS FunDef where
     toJS fdef@(FunDef hfn arg bb) = do
        jj <- toJS bb
        debug <- ask
+       let (irdeps, libdeps ) = ppDeps fdef
        return $
           vcat [text "this." PP.<>  ppId hfn <+> text "= function" <+> ppArgs ["$env", ppId arg] <+> text "{"
                , if debug then nest 2 $ text "rt.debug" <+> (PP.parens . PP.quotes.  ppId) hfn
                           else PP.empty 
                , nest 2 jj
                , text "}"
-               , semi $ text "this." PP.<> ppId hfn PP.<> text ".deps =" <+> ppDeps fdef
+               , semi $ text "this." PP.<> ppId hfn PP.<> text ".deps =" <+> irdeps
+               , semi $ text "this." PP.<> ppId hfn PP.<> text ".libdeps =" <+> libdeps
                , semi $ text "this." PP.<> ppId hfn PP.<> text ".serialized =" <+> (pickle.serializeFunDef) fdef ]
 
 

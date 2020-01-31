@@ -12,7 +12,7 @@ programming that provides dynamic information flow control.
 2. Get [yarn](https://yarnpkg.com/lang/en/) package manager.
 3. Install js dependencies via `yarn install`
 4. Apply local js patches to the dependencies via `yarn patch-package`
-5. Set TROUPE environment variable to point to the folder that contains this file.
+5. Set TROUPE environment variable to point to the folder that contains this file (In bash this is done by adding a new line with the command `TROUPE=<path to the installation directory>` in a file such as `~/.bashrc` or `~/.bash_profile`). Read <a href="https://www.digitalocean.com/community/tutorials/how-to-read-and-set-environmental-and-shell-variables-on-a-linux-vps"> here</a> for more info on environment variables.
 6. Install [TypeScript](https://www.typescriptlang.org/).
 7. Compile Troupe runtime my typing `make rt`
 

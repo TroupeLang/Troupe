@@ -86,11 +86,13 @@ data IRProgram = IRProgram C.Atoms [FunDef] deriving (Generic)
 -- For dependencies, we only need the function dependencies
 
 class ComputesDependencies a where
-  dependencies :: a -> Writer [HFN]  ()
+  dependencies :: a -> Writer ([HFN], [Basics.LibName])  ()
 
 instance ComputesDependencies IRInst where 
    dependencies (MkFunClosures _ fdefs) = 
-        mapM_ (\(_, hfn) -> tell [hfn]) fdefs
+        mapM_ (\(_, hfn) -> tell ([hfn],[])) fdefs
+   dependencies (Assign _ (Lib libname _)) = 
+        tell ([], [libname])
                                        
    dependencies _ = return ()
 
@@ -109,10 +111,14 @@ instance ComputesDependencies FunDef where
   dependencies (FunDef _ _ bb) = dependencies bb
 
 
-ppDeps :: ComputesDependencies a => a -> PP.Doc 
-ppDeps a = let ffs = execWriter  (dependencies a)
-               f' = map (PP.quotes . ppId) ffs
-            in (PP.brackets.PP.hsep) (PP.punctuate PP.comma f')
+ppDeps :: ComputesDependencies a => a -> (PP.Doc , PP.Doc)
+ppDeps a = let (ffs_0,lls_0) = execWriter  (dependencies a)               
+               (ffs, lls) = (nub ffs_0, nub lls_0)
+
+               format dd =
+                   let tt = map (PP.quotes . ppId) dd in 
+                   (PP.brackets.PP.hsep) (PP.punctuate PP.comma tt)
+            in ( format ffs, format lls )            
 
 
 -----------------------------------------------------------
@@ -378,6 +384,9 @@ instance Identifier VarAccess where
 
 instance Identifier HFN where
   ppId (HFN n) = text n
+
+instance Identifier Basics.LibName where 
+  ppId (Basics.LibName s) = text s
 
 ppArgs args = PP.parens( PP.hcat (PP.punctuate PP.comma args))
 

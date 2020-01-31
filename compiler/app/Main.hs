@@ -2,37 +2,24 @@
 
 module Main (main) where
 
--- import qualified Direct as D
--- import qualified DirectWOPats as D'
 import qualified AtomFolding as AF
-
 import Parser
 import qualified Core as Core
 import RetDFCPS
--- import RetCPSInterp
 import qualified CaseElimination as C
--- import qualified RetCPS as CPS
--- import Control.Monad.Trans
--- import System.Console.Haskeline
 import System.Environment
---import MCEvalDirect
---import FOInterp
 import qualified ClosureConv as CC
 import qualified CCIRANF as CCIR 
 import qualified IROpt
 import qualified RetRewrite as Rewrite
---import qualified IR -- TODO: eventually get rid of this; AA 2019-03-23
 import qualified CCIRANF2JS 
 import System.IO (isEOF)
 import qualified Data.ByteString as BS
--- import qualified Data.Text as T
--- import Data.Text.Encoding
--- import Data.ByteString.Base64 (encode) 
 import Data.ByteString.Base64 (decode) 
 import qualified Data.ByteString.Char8  as BSChar8
+import qualified Data.ByteString.Lazy.Char8 as BSLazyChar8
 import System.IO
 import System.Exit
--- import System.Process
 import ProcessImports
 import ShowIndent
 import Exports
@@ -44,11 +31,15 @@ import Data.Maybe (fromJust)
 import System.FilePath
 import System.Directory
 
+-- import System.Console.Haskeline
+-- import System.Process
+
 
 -- compiler flags
 --
 data Flag
   = IRMode
+  | JSONIRMode
   | LibMode
   | OutputFile String
   | Verbose
@@ -59,8 +50,9 @@ data Flag
 options :: [OptDescr Flag]
 options =
   [ Option ['i']      ["ir"]     (NoArg IRMode)              "ir interactive mode"
-  , Option ['v']      ["verbose"] (NoArg Verbose)             "verbose output"
-  , Option ['d']      ["debug"] (NoArg Debug)                "debugging information in the .js file"
+  , Option ['j']      ["json"]   (NoArg JSONIRMode)          "ir json interactive mode"
+  , Option ['v']      ["verbose"] (NoArg Verbose)            "verbose output"
+  , Option ['d']      ["debug"]  (NoArg Debug)               "debugging information in the .js file"
   , Option ['l']      ["lib"]    (NoArg LibMode)             "compiling a library"
   , Option ['h']      ["help"]   (NoArg Help)                "print usage"
   , Option ['o']      ["output"] (ReqArg OutputFile "FILE")  "output FILE"
@@ -212,6 +204,25 @@ fromStdinIR = do
     fromStdinIR
 
 
+fromStdinIRJson = do
+  eof <- isEOF
+  if eof then exitSuccess else do
+    input <- BS.getLine
+    if BS.isPrefixOf "!ECHO " input
+    then let response = BS.drop 6 input
+          in BSChar8.putStrLn response
+    else
+      case decode input of
+        Right bs ->
+           case CCIR.deserialize bs
+              of Right x -> BSLazyChar8.putStrLn (CCIRANF2JS.irToJSON x)
+                 Left s -> do putStrLn "ERROR in deserialization"
+                              debugOut $ "deserialization error" ++ s
+        Left s -> do putStrLn "ERROR in B64 decoding"
+                     debugOut $ "decoding error" ++s
+    putStrLn "" -- magic marker to be recognized by the JS runtime; 2018-03-04; aa
+    hFlush stdout
+    fromStdinIRJson
 
 main :: IO ExitCode
 main = do
@@ -224,6 +235,8 @@ main = do
     ([Help], [], []) -> do
       putStrLn compilerUsage
       exitSuccess
+
+    ([JSONIRMode], [], []) -> fromStdinIRJson   
 
     ([IRMode], [], []) -> do
       fromStdinIR

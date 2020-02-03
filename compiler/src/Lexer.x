@@ -37,9 +37,14 @@ tokens:-
 -- Comments
 <0> "(*)".*                        ;
 -- We support simple one line comments that are consistent with SML
-<0> "(*".*"*)"                     ;
+<0> "(*"                             { enterNewComment `andBegin` state_comment } 
+<state_comment> "(*"                 { embedComment }
+<state_comment> "*)"                 { unembedComment }
+<state_comment> .                    ; 
+<state_comment> \n                   ;
 
 -- Syntax
+
 <0>   let                            { mkL TokenLet }
 <0>   in                             { mkL TokenIn }
 <0>   end                            { mkL TokenEnd }
@@ -180,25 +185,47 @@ type Lexeme = L Token
 
 -- definition needed by Alex
 alexEOF :: Alex Lexeme
-alexEOF = return (L undefined TokenEOF)
+alexEOF = do 
+    comment_depth <- getLexerCommentDepth 
+    if comment_depth > 0 
+        then alexError "Comment not closed at end of file"
+        else return (L undefined TokenEOF)
 
 
--- scanTokensOLD :: String -> Except String [L Token]
--- scanTokensOLD str = go (alexStartPos, '\n',[],str) where
---     go inp@(pos,_,_bs,str) =
---       case alexScan inp 0 of
---        AlexEOF -> return []
--- 
---        AlexError ((AlexPn _ line column), _,_, _) -> 
---             throwError $ "Invalid lexeme at position " ++ (show line) ++ ":" ++ (show column) 
--- 
---        AlexSkip  inp' len     -> go inp'
---        AlexToken inp' len act -> do
---         res <- go inp'
---         let rest = act pos (take len str)
---         return (rest : res)
+-- handling of nested comments through the state
+-- taken from the following example
+-- https://github.com/simonmar/alex/blob/master/examples/tiger.x
+
+state_initial :: Int
+state_initial = 0
+
+enterNewComment input len =
+    do setLexerCommentDepth 1
+       skip input len
+
+embedComment input len =
+    do cd <- getLexerCommentDepth
+       setLexerCommentDepth (cd + 1)
+       skip input len
+
+unembedComment input len =
+    do cd <- getLexerCommentDepth
+       setLexerCommentDepth (cd - 1)
+       when (cd == 1) (alexSetStartCode state_initial)
+       skip input len
 
 
+getLexerCommentDepth :: Alex Int
+getLexerCommentDepth = Alex $ \s@AlexState{alex_ust=ust} -> Right (s, lexerCommentDepth ust)
+
+setLexerCommentDepth :: Int -> Alex ()
+setLexerCommentDepth ss = Alex $ \s -> Right (s{alex_ust=(alex_ust s){lexerCommentDepth=ss}}, ())
+
+
+-- we use a custom version of monadScan so that we have full
+-- control over the error reporting; this one is based on 
+-- the built-in alexMonadScan
+-- see: https://github.com/simonmar/alex/blob/master/templates/wrappers.hs
 
 
 monadScan = do
@@ -207,7 +234,7 @@ monadScan = do
   us <- alexGetUserState
   case alexScanUser us inp sc of
     AlexEOF -> alexEOF
-    AlexError ((AlexPn _ line column),_,_,_) -> 
+    AlexError ((AlexPn _ line column),_,_,_) ->  
                 alexError $ "Invalid lexeme at position " ++ (show line) ++ ":" ++ (show column) 
     AlexSkip  inp' len -> do
         alexSetInput inp'
@@ -227,7 +254,8 @@ scanTokens str =
     in case runAlex str loop of 
          Right r -> return r 
          Left s -> throwError s 
--- TODO: 2020-02-03; AA; check if we want to change the error reporting format here
+-- TODO: 2020-02-03; AA; revisit this in case we want better error reporting 
+
 
 }
 

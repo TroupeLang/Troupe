@@ -15,8 +15,8 @@ import Direct
 import Control.Monad.Except
 import Data.Char (isSpace, toLower)
 import Data.List (dropWhileEnd)
-
-
+import Data.Char ( chr )
+import Numeric ( readDec )
 }
 
 %wrapper "monadUserState"
@@ -42,6 +42,29 @@ tokens:-
 <state_comment> "*)"                 { unembedComment }
 <state_comment> .                    ; 
 <state_comment> \n                   ;
+
+-- Strings 
+
+<0>   @string                        { mkLs (\s -> TokenString (unquote s)) }
+
+
+-- More complicated string handling is currently OFF 
+-- The lexer infrastructure is in the file, but we do not have the backend support yet 
+-- and not even sure that it is needed (we should be able to piggyback on JS) 
+
+-- <0>             \"           { enterNewString `andBegin` state_string }
+-- <state_string>  \\n          { addCharToString '\n' }
+-- <state_string>  \\t          { addCharToString '\t' }
+-- <state_string>  \\\^[@-_]    { addControlToString }
+-- <state_string>  \\$digit$digit$digit { addAsciiToString }
+-- <state_string>  \\\"         { addCharToString '\"' }
+-- <state_string>  \\\\         { addCharToString '\\' }
+-- <state_string>  \\[\ \n\t\f\r\b\v]+\\   ;
+-- <state_string>  \\           { \_ _ -> lexerError "Illegal escape sequence" }
+-- <state_string>  \"           { leaveString `andBegin` state_initial }
+-- <state_string>  .            { addCurrentToString }
+-- <state_string>  \n           { skip }
+
 
 -- Syntax
 
@@ -91,7 +114,6 @@ tokens:-
 <0>   [\[]                           { mkL TokenLBracket }
 <0>   [\]]                           { mkL TokenRBracket }
 <0>   $alpha [$alpha $digit \_ \']*  { mkLs (\s -> TokenSym s) }
-<0>   @string                        { mkLs (\s -> TokenString (unquote s)) }
 <0>   @label                         { mkLs (\s -> (TokenLabel (((map toLower) . trim . unquote) s)))}
 
 {
@@ -101,8 +123,8 @@ data AlexUserState = AlexUserState
                    {
                      -- used by the lexer phase
                        lexerCommentDepth  :: Int
-                   --  , lexerStringState   :: Bool
-                   --  , lexerStringValue   :: String
+                     , lexerStringState   :: Bool
+                     , lexerStringValue   :: String
                    }
 
 alexInitUserState :: AlexUserState 
@@ -214,12 +236,101 @@ unembedComment input len =
        when (cd == 1) (alexSetStartCode state_initial)
        skip input len
 
+type Action = AlexInput -> Int -> Alex Lexeme
 
 getLexerCommentDepth :: Alex Int
 getLexerCommentDepth = Alex $ \s@AlexState{alex_ust=ust} -> Right (s, lexerCommentDepth ust)
 
 setLexerCommentDepth :: Int -> Alex ()
 setLexerCommentDepth ss = Alex $ \s -> Right (s{alex_ust=(alex_ust s){lexerCommentDepth=ss}}, ())
+
+getLexerStringState :: Alex Bool
+getLexerStringState = Alex $ \s@AlexState{alex_ust=ust} -> Right (s, lexerStringState ust)
+
+setLexerStringState :: Bool -> Alex ()
+setLexerStringState ss = Alex $ \s -> Right (s{alex_ust=(alex_ust s){lexerStringState=ss}}, ())
+
+getLexerStringValue :: Alex String
+getLexerStringValue = Alex $ \s@AlexState{alex_ust=ust} -> Right (s, lexerStringValue ust)
+
+setLexerStringValue :: String -> Alex ()
+setLexerStringValue ss = Alex $ \s -> Right (s{alex_ust=(alex_ust s){lexerStringValue=ss}}, ())
+
+addCharToLexerStringValue :: Char -> Alex ()
+addCharToLexerStringValue c = Alex $ \s -> Right (s{alex_ust=(alex_ust s){lexerStringValue=c:lexerStringValue (alex_ust s)}}, ())
+
+enterNewString _     _   =
+    do setLexerStringState True
+       setLexerStringValue ""
+       monadScan
+
+addCharToString :: Char -> Action
+addCharToString c _     _   =
+    do addCharToLexerStringValue c
+       monadScan
+
+addCurrentToString i@(_, _, _, input) len = addCharToString c i len
+  where
+    c = if (len == 1)
+           then head input
+           else error "Invalid call to addCurrentToString''"
+
+-- if we are given the special form '\nnn'
+addAsciiToString i@(_, _, _, input) len = if (v < 256)
+                                          then addCharToString c i len
+                                          else lexerError ("Invalid ascii value : " ++ input)
+  where
+    s = if (len == 4)
+           then drop 1 input
+           else error "Invalid call to 'addAsciiToString'"
+    r = readDec s
+    v = if (length r == 1)
+           then fst (head r)
+           else error "Invalid call to 'addAsciiToString'"
+    c = chr v
+
+-- if we are given the special form '\^A'
+addControlToString i@(_, _, _, input) len = addCharToString c' i len
+  where
+    c = if (len == 1)
+           then head input
+           else error "Invalid call to 'addControlToString'"
+    v = ord c
+    c' = if (v >= 64)
+            then chr (v - 64)
+            else error "Invalid call to 'addControlToString'"
+
+leaveString (p, _, _, input) len =
+    do s <- getLexerStringValue
+       setLexerStringState False
+       return ( L p (TokenString (reverse s))) 
+       -- Lexeme p (STRING (reverse s)) (Just (take len input)))
+
+
+showPosn :: AlexPosn -> String
+showPosn (AlexPn _ line col) = show line ++ ':': show col
+
+
+lexerError :: String -> Alex a
+lexerError msg =
+    do (p, c, _, inp) <- alexGetInput
+       let inp1 = filter (/= '\r') (takeWhile (/='\n') inp)
+       let inp2 = if (length inp1 > 30)
+                     then trim (take 30 inp1)
+                     else trim inp1
+       let disp = if (null inp)
+                     then " at end of file"
+                     else if (null inp2)
+                             then " before end of line"
+                             else " on char " ++ show c ++ " before : '" ++ inp2 ++ "'"
+       let disp3 = if (null msg)
+                      then "Lexer error"
+                      else trim msg
+       alexError (disp3 ++ " at " ++ showPosn p ++ disp)
+  where
+    trim = reverse . dropWhile (== ' ') . reverse . dropWhile (== ' ')
+
+
 
 
 -- we use a custom version of monadScan so that we have full

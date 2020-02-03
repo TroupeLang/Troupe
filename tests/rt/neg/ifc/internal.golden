@@ -3,5 +3,5 @@
 [31mRuntime error in thread 7dbe5582-a668-4b68-9c06-cd2900993cb1@{}%{}[39m
 [31m>> Illegal flow in adv function:[39m
 [31m |    pc: {}[39m
-[31m | block: {#TOP}[39m
-[31m | value: 1@{#TOP}%{#TOP}[39m
+[31m | block: {secret}[39m
+[31m | value: 1@{secret}%{secret}[39m

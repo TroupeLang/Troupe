@@ -1,13 +1,14 @@
 let fun f ()
-      = let val _ = receive [ hn 12345 => 1
-                            , hn x => adv (2) ]
+      = let val _ = rcv ({}, {secret}, authority,
+                            [ hn 12345 => 1
+                            , hn x => adv (2) ])
             val _ = adv (22)
             val _ = print 88
         in f () 
         end
           
     val p = spawn (f)
-    val secret = mkSecret(42)
+    val secret = 42 raisedTo {secret}
     val _ = if secret > 0 then send(p, 12345) else ()  (* taints the pc of p *)
  in  send (p, 22)                (* results in illegal flow *) 
  end 

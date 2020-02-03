@@ -548,7 +548,7 @@ let rt_send = mkBase((env, larg) => {
   
 }, "send");
 
-
+/*
 function baseRcvWithBounds(env, arg) {
   assertNormalState("receive")
   assertIsNTuple(arg, 3);
@@ -568,17 +568,95 @@ function baseRcvWithBounds(env, arg) {
     debug("wrong number of arguments to rcv");
   }
 }
+*/
+
+
+function okToDeclassify (levFrom, levTo, auth) {
+  let _l = lubs ([auth.val.authorityLevel, levTo.val]);
+  return flowsTo (levFrom.lev, _l);
+}
+ 
+/** Receiving functionality; 2020-02-03; AA 
+ *
+ * Observe that we have three receive functions. 
+ *
+ * 1. The most general one is called `rcv` and it takes a 4-tuple of the form
+ *    (low_bound_lev, high_bound_lev, authority, handlers), and performs an
+ *    interval receive on all messages from the lower to the higher bound.
+ *    Because this sort of ranged modifies the state of the mailbox in a way
+ *    that leaks information, it is necessary to also include an authority
+ *    argument here. The implementation of this function checks that the
+ *    provided authority is sufficient; this check is perfomed similaly to how
+ *    declassification checks are performed. 
+ *
+ * 2. Receive on a point interval, `rcvp`. In this case, no authority is
+ *    required.
+ *
+ * 3. Receive on a point consisting of the current program counter, `receive`.
+ *    We include this option only for backward compatibility with many earlier
+ *    examples.
+ *
+ *
+ */ 
+
+
+// this function must only be called from 
+// one of the checked functions 
+function _receiveFromMailbox (lowb, highb, handlers) {
+  raiseCurrentThreadPC(lub(lowb.lev, highb.lev));
+  __theMailbox.rcv(lub(lowb.val, __sched.pc), highb.val, handlers);
+}
+
+function receiveBoundedRangeWithAuthority(env, arg ) {
+  assertNormalState ("receive");
+  assertIsNTuple(arg, 4);
+  assertIsLevel (arg.val[0])
+  assertIsLevel (arg.val[1])
+  assertIsAuthority (arg.val[2])
+  assertIsList (arg.val[3])
+  let lowb = arg.val[0]
+  let highb = arg.val[1]
+  let auth = arg.val[2]
+  let handlers = arg.val[3]
+
+
+  let is_sufficient_authority = 
+    okToDeclassify (highb, lowb, auth);
+
+  if (is_sufficient_authority)  {
+    _receiveFromMailbox (lowb, highb, handlers)
+  } else {
+    let errorMessage = 
+      "Not enough authority for ranged receive\n" +
+      ` | lower bound: ${lowb.stringRep()}\n` + 
+      ` | upper bound: ${highb.val.stringRep()}`
+      ` | authority:  ${auth.val.authorityLevel.stringRep()}\n` 
+    threadError (errorMessage);
+  }
+}
+
+function receiveAtOneLevel(env, arg) {
+  assertNormalState ("receive")
+  assertIsNTuple (arg, 2)
+  assertIsLevel (arg.val[0])
+  assertIsList (arg.val[1])
+  let lev = arg.val[0]
+  let handlers = arg.val[1];
+  _receiveFromMailbox (lev, lev, handlers)
+}
+
 
 function baseRcv(env, handlers) {
   assertNormalState("receive")
-  // 2018-09-19: obs that TOP labels is used here as the default
-  // label
   assertIsList (handlers)
-  __theMailbox.rcv(__sched.pc, levels.TOP, handlers);
+  __theMailbox.rcv(__sched.pc, __sched.pc, handlers);
+
 }
 
+
 let rt_receive = mkBase(baseRcv)
-let rt_rcv = mkBase(baseRcvWithBounds)
+let rt_rcvp = mkBase(receiveAtOneLevel)
+let rt_rcv = mkBase(receiveBoundedRangeWithAuthority)
 
 
 function formatToN ( s, n )  {
@@ -751,6 +829,8 @@ let rt_attenuate = mkBase ((env, arg) => {
 
   rt_ret ( r)
 }, "attenuate")
+
+
 
 let rt_declassify = mkBase ((env, arg) => {
 //  assertDeclassificationAllowed()// 2019-03-06: AA: allowing declassification everywhere?
@@ -1290,6 +1370,7 @@ function RuntimeObject() {
   this.restore = rt_restore;
   this.save = rt_save;
   this.receive = rt_receive;
+  this.rcvp = rt_rcvp;
   this.rcv = rt_rcv;
   this.mkSecret = rt_mkSecret;
   this.adv = rt_adv;

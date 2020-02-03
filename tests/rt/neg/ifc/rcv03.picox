@@ -3,6 +3,7 @@ let val secret = 10 raisedTo {secret}
                     fn () =>
                          rcv ( {}
                              , {secret}
+                             , authority
                              , [  hn 2 => adv 2
                                 , hn 4 => print 4 ]
                     ))

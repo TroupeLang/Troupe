@@ -1,11 +1,11 @@
 let fun f ()
-      = let val _ = receive [ hn 1 => () ]
+      = let val _ = rcv ({}, {secret}, authority, [ hn 1 => () ])
             val _ = printWithLabels "hi"
         in adv (100)
         end
 
     val p = spawn (f)
-    val secret = mkSecret(42)
+    val secret = 42 raisedTo {secret}
 
     val _ = if secret > 0 then
                             send(p, 1)

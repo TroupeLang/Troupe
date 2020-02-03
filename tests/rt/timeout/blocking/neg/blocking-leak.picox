@@ -3,7 +3,7 @@
 
 let val secret = 0 raisedTo {secret}
     
-    fun wait () = receive [ hn x => () ]
+    fun wait () = rcv ({}, {secret}, authority, [ hn x => () ])
     fun signal p = send (p, ())
 
     val mainPid = self ()

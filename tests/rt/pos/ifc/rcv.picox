@@ -1,8 +1,7 @@
 let val secret = 10 raisedTo {secret}
     val pid = spawn (
                     fn () =>
-                         rcv ( {}
-                             , {}
+                         rcvp( {}
                              , [  hn 2 => adv 2
                                 , hn 4 => print 4 ]
                     ))

@@ -319,10 +319,18 @@ function TroupeP2P (_rt, _peerInfo) {
 
             function tryFindPeer ()  {
                 debug (`>> tryFindPeer ${nPeers()}`)
+                if (_node.peerBook.has(peerId)) {
+                  let _pInfo = _node.peerBook.get(peerId)
+                  DIAL (_pInfo);
+                  return;
+                }
+                
             
                 debug ("Calling find Peer ")
                 // _node.peerRouting.findPeer (peerId, {maxTimeout:2000}, (err, _pInfo) => {
                 // _node.dial(peerId, (err, conn) => {
+
+
                _node.peerRouting.findPeer (peerId, (err, _pInfo) => {                    
                     if (!err) {
                         debug ("Find Peer succeeded");

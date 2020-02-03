@@ -52,14 +52,12 @@ class Node extends libp2p {
 
 
     const defaults = {
-      /*
       connectionManager: {
         maxPeers: 100,          // this allows us to keep the memory footprint low! 2019-03-12; AA
         minPeers: 80,
         pollInterval: 5000,    
         defaultPeerValue: 0.5    // we later set the peer value of Troupe nodes to 1.0
       },
-      */
 
       modules: {
         transport: [

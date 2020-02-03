@@ -19,84 +19,107 @@ import Data.List (dropWhileEnd)
 
 }
 
-%wrapper "posn"
+%wrapper "monadUserState"
 
 $digit = 0-9
 $alpha = [a-zA-Z]
 $eol   = [\n]
 $graphic    = $printable # $white
 @string     = \" ($printable # \")* \"
--- @label      = \{ $white* ($graphic # \})* $white* \}
 @label      = \{ ($printable # \})*  \}
 
 
-tokens :-
+tokens:-
 -- Whitespace insensitive
 <0> $eol                           ;
 <0> $white+                        ;
 
-  -- Comments
-<0> "(*)".*                          ;
-  -- We support simple one line comments that are consistent with SML
+-- Comments
+<0> "(*)".*                        ;
+-- We support simple one line comments that are consistent with SML
 <0> "(*".*"*)"                     ;
 
-  -- Syntax
-<0>   let                            { \p s -> L p TokenLet }
-<0>   in                             { \p s -> L p TokenIn }
-<0>   end                            { \p s -> L p TokenEnd }
-<0>   val                            { \p s -> L p TokenVal }
-<0>   fun                            { \p s -> L p TokenFun }
-<0>   and                            { \p s -> L p TokenAnd }
-<0>   if                             { \p s -> L p TokenIf  }
-<0>   then                           { \p s -> L p TokenThen }
-<0>   else                           { \p s -> L p TokenElse }
-<0>   fn                             { \p s -> L p TokenFn }
-<0>   hn                             { \p s -> L p TokenHn }
-<0>   true                           { \p s -> L p TokenTrue }
-<0>   false                          { \p s -> L p TokenFalse }
-<0>   case                           { \p s -> L p TokenCase }
-<0>   of                             { \p s -> L p TokenOf }
-<0>   import                         { \p s -> L p TokenImport }
-<0>   andalso                        { \p s -> L p TokenAndAlso }
-<0>   orelse                         { \p s -> L p TokenOrElse }
-<0>   raisedTo                       { \p s -> L p TokenRaisedTo }
-<0>   pini                           { \p s -> L p TokenPini}
-<0>   when                           { \p s -> L p TokenWhen  }
-<0>   datatype                       { \p s -> L p TokenDatatype }
-<0>   Atoms                          { \p s -> L p TokenAtoms }
-<0>   $digit+                        { \p s -> L p (TokenNum (read s)) }
-<0>   [\@]                           { \p s -> L p TokenAt }
-<0>   [\=][\>]                       { \p s -> L p TokenArrow }
-<0>   [\=]                           { \p s -> L p TokenEq }
-<0>   [\+]                           { \p s -> L p TokenAdd }
-<0>   [\-]                           { \p s -> L p TokenSub }
-<0>   [\*]                           { \p s -> L p TokenMul }
-<0>   [\^]                           { \p s -> L p TokenCaret } 
-<0>   [\/]                           { \p s -> L p TokenDiv }
-<0>   [\<][\>]                       { \p s -> L p TokenNe }
-<0>   [\<][\=]                       { \p s -> L p TokenLe }
-<0>   [\<]                           { \p s -> L p TokenLt }
-<0>   [\>][\=]                       { \p s -> L p TokenGe }
-<0>   [\>]                           { \p s -> L p TokenGt }
-<0>   \(                             { \p s -> L p TokenLParen }
-<0>   \)                             { \p s -> L p TokenRParen }
-<0>   [\,]                           { \p s -> L p TokenComma }
-<0>   [\|]                           { \p s -> L p TokenBar }
-<0>   [\_]                           { \p s -> L p TokenWildcard }
-<0>   [\:][\:]                       { \p s -> L p TokenColonColon }
-<0>   [\[]                           { \p s -> L p TokenLBracket }
-<0>   [\]]                           { \p s -> L p TokenRBracket }
-<0>   $alpha [$alpha $digit \_ \']*  { \p s -> L p (TokenSym s) }
-<0>   @string                        { \p s -> L p (TokenString (unquote s)) }
-<0>   @label                         { \p s -> L p (TokenLabel (((map toLower) . trim . unquote) s)) }
+-- Syntax
+<0>   let                            { mkL TokenLet }
+<0>   in                             { mkL TokenIn }
+<0>   end                            { mkL TokenEnd }
+<0>   val                            { mkL TokenVal }
+<0>   fun                            { mkL TokenFun }
+<0>   and                            { mkL TokenAnd }
+<0>   if                             { mkL TokenIf  }
+<0>   then                           { mkL TokenThen }
+<0>   else                           { mkL TokenElse }
+<0>   fn                             { mkL TokenFn }
+<0>   hn                             { mkL TokenHn }
+<0>   true                           { mkL TokenTrue }
+<0>   false                          { mkL TokenFalse }
+<0>   case                           { mkL TokenCase }
+<0>   of                             { mkL TokenOf }
+<0>   import                         { mkL TokenImport }
+<0>   andalso                        { mkL TokenAndAlso }
+<0>   orelse                         { mkL TokenOrElse }
+<0>   raisedTo                       { mkL TokenRaisedTo }
+<0>   pini                           { mkL TokenPini}
+<0>   when                           { mkL TokenWhen  }
+<0>   datatype                       { mkL TokenDatatype }
+<0>   Atoms                          { mkL TokenAtoms }
+<0>   $digit+                        { mkLs (\s -> TokenNum (read s)) }
+<0>   [\@]                           { mkL TokenAt }
+<0>   [\=][\>]                       { mkL TokenArrow }
+<0>   [\=]                           { mkL TokenEq }
+<0>   [\+]                           { mkL TokenAdd }
+<0>   [\-]                           { mkL TokenSub }
+<0>   [\*]                           { mkL TokenMul }
+<0>   [\^]                           { mkL TokenCaret } 
+<0>   [\/]                           { mkL TokenDiv }
+<0>   [\<][\>]                       { mkL TokenNe }
+<0>   [\<][\=]                       { mkL TokenLe }
+<0>   [\<]                           { mkL TokenLt }
+<0>   [\>][\=]                       { mkL TokenGe }
+<0>   [\>]                           { mkL TokenGt }
+<0>   \(                             { mkL TokenLParen }
+<0>   \)                             { mkL TokenRParen }
+<0>   [\,]                           { mkL TokenComma }
+<0>   [\|]                           { mkL TokenBar }
+<0>   [\_]                           { mkL TokenWildcard }
+<0>   [\:][\:]                       { mkL TokenColonColon }
+<0>   [\[]                           { mkL TokenLBracket }
+<0>   [\]]                           { mkL TokenRBracket }
+<0>   $alpha [$alpha $digit \_ \']*  { mkLs (\s -> TokenSym s) }
+<0>   @string                        { mkLs (\s -> TokenString (unquote s)) }
+<0>   @label                         { mkLs (\s -> (TokenLabel (((map toLower) . trim . unquote) s)))}
 
 {
 
+-- The user state monad
+data AlexUserState = AlexUserState
+                   {
+                     -- used by the lexer phase
+                       lexerCommentDepth  :: Int
+                   --  , lexerStringState   :: Bool
+                   --  , lexerStringValue   :: String
+                   }
+
+alexInitUserState :: AlexUserState 
+alexInitUserState = AlexUserState 
+                   {
+                       lexerCommentDepth = 0 
+                   }
+               
 unquote = reverse . tail . reverse . tail
 trim = dropWhileEnd isSpace . dropWhile isSpace
 
 data L a = L {  getPos :: AlexPosn, unPos :: a } deriving (Eq, Show)
+-- unPos is a pretty unfortunate name here; 2020-02-03; AA
 
+mkL :: Token -> AlexInput -> Int -> Alex Lexeme
+mkL t (p,_,_,_) len = return (L p t)
+
+
+mkLs :: (String -> Token) -> AlexInput -> Int -> Alex Lexeme 
+mkLs f (p, _, _, str) len = 
+    let s = take len str in
+    return (L p (f s))
 
 data Token
   = TokenLet
@@ -153,18 +176,58 @@ data Token
   | TokenCaret 
   deriving (Eq,Show)
 
+type Lexeme = L Token 
+
+-- definition needed by Alex
+alexEOF :: Alex Lexeme
+alexEOF = return (L undefined TokenEOF)
+
+
+-- scanTokensOLD :: String -> Except String [L Token]
+-- scanTokensOLD str = go (alexStartPos, '\n',[],str) where
+--     go inp@(pos,_,_bs,str) =
+--       case alexScan inp 0 of
+--        AlexEOF -> return []
+-- 
+--        AlexError ((AlexPn _ line column), _,_, _) -> 
+--             throwError $ "Invalid lexeme at position " ++ (show line) ++ ":" ++ (show column) 
+-- 
+--        AlexSkip  inp' len     -> go inp'
+--        AlexToken inp' len act -> do
+--         res <- go inp'
+--         let rest = act pos (take len str)
+--         return (rest : res)
+
+
+
+
+monadScan = do
+  inp <- alexGetInput
+  sc <- alexGetStartCode
+  us <- alexGetUserState
+  case alexScanUser us inp sc of
+    AlexEOF -> alexEOF
+    AlexError ((AlexPn _ line column),_,_,_) -> 
+                alexError $ "Invalid lexeme at position " ++ (show line) ++ ":" ++ (show column) 
+    AlexSkip  inp' len -> do
+        alexSetInput inp'
+        monadScan
+    AlexToken inp' len action -> do
+        alexSetInput inp'
+        action (ignorePendingBytes inp) len
+
 scanTokens :: String -> Except String [L Token]
-scanTokens str = go (alexStartPos, '\n',[],str) where
-    go inp@(pos,_,_bs,str) =
-      case alexScan inp 0 of
-       AlexEOF -> return []
+scanTokens str =
+    let loop = 
+            do t <- monadScan 
+               case unPos t of 
+                 TokenEOF -> return [] 
+                 _ -> do toks <- loop 
+                         return (t: toks)
+    in case runAlex str loop of 
+         Right r -> return r 
+         Left s -> throwError s 
+-- TODO: 2020-02-03; AA; check if we want to change the error reporting format here
 
-       AlexError ((AlexPn _ line column), _,_, _) -> 
-            throwError $ "Invalid lexeme at position " ++ (show line) ++ ":" ++ (show column) 
-
-       AlexSkip  inp' len     -> go inp'
-       AlexToken inp' len act -> do
-        res <- go inp'
-        let rest = act pos (take len str)
-        return (rest : res)
 }
+

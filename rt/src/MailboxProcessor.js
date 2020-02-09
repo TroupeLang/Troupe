@@ -4,7 +4,6 @@ const Thread = require('./Thread.js').Thread;
 const proc = require('./process.js');
 const logger = require('./logger.js').mkLogger('mbox');
 const debug = x => logger.debug(x)
-
 const SandboxStatus = require('./SandboxStatus.js').HandlerState;
 
 const levels = require('./options.js');
@@ -54,6 +53,7 @@ class MailboxProcessor {
     sweepMessages(messages, handlers, lowb, highb) {
 
         let lub = this.levels.lub;
+        let glb = this.levels.glb;
         let flowsTo = this.levels.flowsTo;
         let __sched = this.sched;
         let __rtObj = this.rtObj;
@@ -64,9 +64,9 @@ class MailboxProcessor {
         let theThread = __sched.__currentThread;
 
         function iterate(handlerToUse, messageToCheck) {            
-            debug(`* checkMessages  ${handlerToUse} ${messageToCheck} ${messages.length}`);
+            // debug(`* checkMessages  ${handlerToUse} ${messageToCheck} ${messages.length}`);
             if (handlerToUse < handlers.length && messageToCheck < messages.length) {
-                debug("### 1");
+                // debug("### 1");
                 // debug.log (messages[messageToCheck]);
 
                 let nextIter = (handlerToUse == handlers.length - 1) ?
@@ -81,6 +81,10 @@ class MailboxProcessor {
                 // in patFail which is called from the userland, and therefore
                 // must adhere to our (env, arg) compliation convention.
 
+
+                // 2020-02-08; observe that the value that gets bound to senderPC may be further 
+                // than the original sender's pc, because it is earlier raised by up to the 
+                // clearance level
                 let senderPC = messages[messageToCheck].lev
 
                 let msglvl = lub(senderPC, messages[messageToCheck].val[0].lev); // 2018-05-18!AA
@@ -126,15 +130,20 @@ class MailboxProcessor {
 
                     raisePC(lh.lev);
                     let h = lh.val;
-                    
-                    let args = [ h.env, messages[messageToCheck] ];
+                    let msg_orig = messages[messageToCheck]
+                    // 
+                    // 2020-02-08: AA; this is the place where we are raising the level 
+                    // of the message from the mailbox to that of the lclear
+                    // 
+                    let msg_raised_to_lclear = new LVal ( msg_orig.val, highb)
+                    let args = [h.env, msg_raised_to_lclear];
                     // run the handler
                     __sched.schedule(h.fun, args, h.namespace);
                 }
             } else {
-                debug("### 2");
+                // debug("### 2");
                 function futureMessage() {
-                    debug ("unblocking");
+                    // debug ("unblocking");
                     iterate(0, messageToCheck);
                 }
 
@@ -145,7 +154,8 @@ class MailboxProcessor {
         }
 
         if (!__sched.handlerState.isNormal()) {
-            
+          console.log(new Error().stack)
+
             __rtObj.threadError ("invalid handler state in receive: side effects are prohbited in restricted state");
         }
         
@@ -155,9 +165,9 @@ class MailboxProcessor {
 
 
     rcv(lowb, highb, handlers) {
-        let __sched = this.sched;        
-        let mb = __sched.__currentThread.mailbox;
-        this.sweepMessages(mb, handlers.val, lowb, highb);        
+      let __sched = this.sched;        
+      let mb = __sched.__currentThread.mailbox;
+      this.sweepMessages(mb, handlers.val, lowb, highb);        
     }
 
     

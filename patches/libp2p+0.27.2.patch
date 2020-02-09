@@ -1,0 +1,16 @@
+diff --git a/node_modules/libp2p/src/circuit/index.js b/node_modules/libp2p/src/circuit/index.js
+index e55846d..4d8e284 100644
+--- a/node_modules/libp2p/src/circuit/index.js
++++ b/node_modules/libp2p/src/circuit/index.js
+@@ -42,6 +42,11 @@ class Circuit {
+     const circuit = this
+     let virtualConnection
+ 
++    if (!request) {
++      log ('hitting a bug; request should not be undefined')
++      return; // crude patch!!! not sure if it'll even work ;)
++    }
++
+     switch (request.type) {
+       case CircuitPB.Type.CAN_HOP: {
+         log('received CAN_HOP request from %s', connection.remotePeer.toB58String())

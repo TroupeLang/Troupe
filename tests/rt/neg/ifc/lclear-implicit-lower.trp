@@ -1,0 +1,7 @@
+(* negative test; lowering clearance in a context than the original *)
+
+let val c = raisembox ({alice,bob})        
+in  if (1 raisedTo{alice}) 
+        then lowermbox (c, authority)
+        else ()     
+end

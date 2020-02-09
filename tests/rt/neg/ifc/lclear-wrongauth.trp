@@ -1,0 +1,5 @@
+(* negative test; should fail *)
+let val c = raisembox ({alice})
+    val () = lowermbox (c, attenuate (authority, {bob}))    
+in c
+end 

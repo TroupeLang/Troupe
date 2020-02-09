@@ -227,7 +227,8 @@ class Scheduler {
             , levpc
             , levblock
             , new SandboxStatus.NORMAL()
-            , this.rtObj );
+            , this.rtObj
+            , this );
 
 
         this.__alive[newPid.val.toString()] = t;
@@ -316,6 +317,7 @@ class Scheduler {
                     let f = this.handlerState.getTrapper().val; 
                     this.__currentThread.tailInThread (  f.fun, f.env, [], f.namespace ) ;
                     this.scheduleThreadT (this.__currentThread);
+                    
                 } else  { // a real runtime error, must be a bug
                     console.log ("problems in the scheduler")
                     console.log (theFun);

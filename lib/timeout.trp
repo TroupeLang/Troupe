@@ -1,0 +1,24 @@
+let fun timeout who nonce duration =
+           spawn (fn () => 
+            let val _ = sleep duration
+             in send (who, nonce)
+            end
+           )
+
+          
+    fun exitAfterTimeout authority duration exitcode message = 
+      spawn (fn () => 
+       let val nonce = mkuuid ()          
+           val this = self () 
+           val _ = timeout this nonce duration
+
+      in receive [ hn x when x = nonce => 
+                      let val _ = if message <> "" then print message else () 
+                      in exit (authority, exitcode) 
+                      end
+                  ]
+      end)
+
+
+in [("timeout", timeout), ("exitAfterTimeout", exitAfterTimeout)]
+end

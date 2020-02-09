@@ -1,0 +1,29 @@
+
+(* positive; *)
+
+let val main = self () 
+    val _ = spawn ( fn () => if (1 raisedTo {alice,bob}) then send (main, 1) else ())
+    val _ = spawn ( fn () => if (1 raisedTo {bob}) then send (main, 2) else ())
+                              
+
+    val auth_alice = attenuate (authority, {alice})
+
+    val c = raisembox ({alice}) 
+
+    (* observe that ranged receive takes place over a range that
+      is higher than our clearance; this is okay as long as 
+      we have enough authority to bridge the gap
+    *)
+
+    val r1 = rcv ({bob}, {alice,bob}, [hn x => x])
+    val _ = printWithLabels r1 
+    val _ = lowermbox (c, auth_alice)
+
+    (* the mailbox clearance at this point is restored to BOT *)
+    (* the blocking label is as high as {alice, bob} beacuse of the receive *)
+    val _ = debugpc()
+    val r2 = rcv ({bob}, {bob}, [hn x => x])
+    val _ = debugpc ()
+    val _ = printWithLabels r2
+in ()
+end

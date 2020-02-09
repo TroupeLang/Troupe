@@ -1,7 +1,10 @@
 .PHONY: rt
+
+
+
 COMPILER=./bin/troupec
 # run the make of the compiler itself
-slack:
+stack:
 	$(MAKE) -C compiler 
 
 yarn:
@@ -12,6 +15,7 @@ libs:
 	$(COMPILER) ./lib/lists.trp -l
 	$(COMPILER) ./lib/declassifyutil.trp -l 
 	$(COMPILER) ./lib/stdio.trp -l 
+	$(COMPILER) ./lib/timeout.trp -l 
 
 test:
 	cd compiler && $(MAKE) test
@@ -28,3 +32,8 @@ dist: slack yarn libs
 	yarn run rollup --config
 	cp local.sh ./build/Troupe/
 	cp -RL ./tests ./build/Troupe/tests
+all:
+	make stack 
+	yarn
+	make rt 
+	make libs 

@@ -418,8 +418,7 @@ function serialize(x, pclev) {
 
   let level = pclev;
 
-  function walk (lval)  {
-    // console.log("** walk", lval);
+  function walk (lval)  {    
     assert(isLVal(lval));
 
     level =  rtObj.lub (level, lval.lev); // 2018-09-24: AA: is this the only place 
@@ -465,7 +464,7 @@ function serialize(x, pclev) {
           envs.push (jsonEnv);
 
           for (let field in x.env) {
-            if (field != "ret") {
+            if (field != "ret" && field != "_is_rt_env") {
               let y = x.env[field];
               jsonEnv[field] = walk (y);
             }

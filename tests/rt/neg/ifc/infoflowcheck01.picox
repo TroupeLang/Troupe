@@ -1,5 +1,5 @@
 let fun f ()
-      = let val _ = rcv ({}, {secret}, authority, [ hn 1 => () ])
+      = let val _ = rcv ({secret}, {secret}, [ hn 1 => () ])
             val _ = printWithLabels "hi"
         in adv (100)
         end

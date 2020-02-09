@@ -1,5 +1,5 @@
 let val pid = spawn ( fn () =>
-                         rcv({}, {secret}, authority,
+                         rcv({secret}, {secret}, 
                                  [ hn 1 => adv 1 
                                  , hn x => adv 2
                                  ])

@@ -2,12 +2,16 @@
 const assert = require('assert');
 const request = require('request');
 const ThreadError = require('./ThreadError.js').ThreadError
+const AggregateError = require('aggregate-error');
 const fs = require('fs');
+const util = require('util');
 
 const RtClosure = require('./RtClosure.js')
 
 class RtEnv {
+
   constructor() {
+    this._is_rt_env = true;
     // this.ret = __sched.ret;
   }
 }
@@ -38,6 +42,7 @@ const logger = require('./logger.js').mkLogger('RTM', logLevel);
 
 const info = x => logger.info(x)
 const debug = x => logger.debug(x)
+const error = x => logger.error(x)
 
 const readline = require('readline').createInterface({
   input: process.stdin,
@@ -75,7 +80,6 @@ const BaseFunction = require('./BaseFunction.js').BaseFunction;
 
 const SandboxStatus = require('./SandboxStatus.js').HandlerState;
 
-// const levels = require('./levels/lohi.js');
 
 const Authority = require('./Authority.js').Authority;
 const options = require('./options.js');
@@ -132,13 +136,16 @@ let __p2pRunning = false;
 //
 //
 
+// returns the current thread
+function $t() { return __sched.__currentThread};
+
 let mkBase                            = (f,name=null) => __sched.mkBase(f, name);
 let rt_mkVal                          = (x) => __sched.mkVal(x);
 let rt_mkValPos                       = (x, p) => __sched.mkValPos (x, p);
 let rt_mkCopy                         = (x) => __sched.mkCopy(x);
-let raiseCurrentThreadPC              = (l) => __sched.__currentThread.raiseCurrentThreadPC(l);
-let raiseCurrentThreadPCToBlockingLev = (l) => __sched.__currentThread.raiseCurrentThreadPCToBlockingLev(l);
-let raiseCurrentBlockingThreadLev     = (l) => __sched.__currentThread.raiseBlockingThreadLev (l);
+let raiseCurrentThreadPC              = (l) => $t().raiseCurrentThreadPC(l);
+let raiseCurrentThreadPCToBlockingLev = (l) => $t().raiseCurrentThreadPCToBlockingLev(l);
+let raiseCurrentBlockingThreadLev     = (l) => $t().raiseBlockingThreadLev (l);
 let currentThreadPid                  = () => __sched.currentThreadId;
 const __unit = __sched.__unit;
 
@@ -191,7 +198,7 @@ async function spawnAtNode(nodeid, f) {
   //--------------------------------------------------
 
 
-  let theThread = __sched.__currentThread;
+  let theThread = $t();
 
   try {
     let body1 = await p2p.spawnp2p(node.nodeId, data);
@@ -203,7 +210,14 @@ async function spawnAtNode(nodeid, f) {
     __sched.resumeLoopAsync();
 
   } catch (err) {
-    debug("error spawning remotely; this blocks current thread" + err)
+    error("error spawning remotely; this blocks current thread")
+    if (err instanceof AggregateError) {
+      for (let ie in err) {
+        error (`${ie}`)
+      }
+    } else {
+      error (`${err}`)
+    }
   }
 }
 
@@ -259,7 +273,7 @@ async function spawnFromRemote(jsonObj, fromNode) {
 let rt_sleep = mkBase ((env, arg) => {
     assertIsNumber (arg);
     let delay = arg.val; 
-    let theThread = __sched.__currentThread;
+    let theThread = $t();
     theThread.sleeping = true;
     theThread.timeoutObject = 
       setTimeout ( () => {
@@ -281,7 +295,7 @@ function rt_raisedToLev (x, y) {
 
 let rt_sandbox = mkBase ((env, arg) => {
   assertIsNTuple(arg, 2);
-  let theThread = __sched.__currentThread;
+  let theThread = $t();
   let threadState = theThread.exportState()  
 
   
@@ -297,7 +311,7 @@ let rt_sandbox = mkBase ((env, arg) => {
   }
 
   function ok(x, l) {
-    let statusOk = __sched.__currentThread.mkValWithLev ( true, l  );
+    let statusOk = $t().mkValWithLev ( true, l  );
     let y = rt_raisedToLev (x, l);
     return mk_tupleVal ( [ statusOk, y ]);    
   } 
@@ -366,7 +380,7 @@ let rt_sandbox = mkBase ((env, arg) => {
   })
 
   // __sched.setret (barrierClosure);
-  __sched.__currentThread.callInThread(guard);
+  $t().callInThread(guard);
   theThread.handlerState = new SandboxStatus.INSANDBOX(trapper);
   theThread.barrierdepth = 0;
   rt_tailcall (arg.val[1], __unit);
@@ -393,7 +407,7 @@ let rt_spawn = mkBase((env, larg) => {
   }
 
 
-  if (Array.isArray(arg)) {
+  if (Array.isArray(arg)) {    
     if (__nodeManager.isLocalNode(arg[0].val)) { // check if we are at the same node or note
       // debug ("SAME NODE")
       raiseCurrentThreadPC(lub(arg[0].lev, arg[1].lev));
@@ -429,7 +443,7 @@ let rt_save = mkBase((env, larg) => {
 
 let rt_restore = mkBase((env, arg) => {
   assertIsString(arg)
-  let theThread = __sched.__currentThread;
+  let theThread = $t();
   let file = arg;
 
   (async () => {
@@ -504,6 +518,7 @@ function isLocalPid(pid) {
   return (x);
 }
 
+// TODO: 2020-02-08; consider refactoring this to the Thread module; AA
 function rt_mkuuid () {
   let pid = uuidv4();
   let uuidval = rt_mkVal ( pid );
@@ -548,49 +563,22 @@ let rt_send = mkBase((env, larg) => {
   
 }, "send");
 
-/*
-function baseRcvWithBounds(env, arg) {
-  assertNormalState("receive")
-  assertIsNTuple(arg, 3);
-  assertIsLevel (arg.val[0]);
-  assertIsLevel (arg.val[1]);
-  assertIsList  (arg.val[2]);
 
-  raiseCurrentThreadPC(arg.lev);
-  let argv = arg.val;
-  if (Array.isArray(argv) && argv.length == 3) {
-    let lowb = argv[0];
-    let highb = argv[1];
-    let handlers = argv[2];
-    raiseCurrentThreadPC(lub(lowb.lev, highb.lev));
-    __theMailbox.rcv(lub(lowb.val, __sched.pc), highb.val, handlers);
-  } else {
-    debug("wrong number of arguments to rcv");
-  }
-}
-*/
-
-
-function okToDeclassify (levFrom, levTo, auth) {
-  let _l = lubs ([auth.val.authorityLevel, levTo.val]);
-  return flowsTo (levFrom.lev, _l);
-}
  
-/** Receiving functionality; 2020-02-03; AA 
+/** Receiving functionality; 2020-02-12; AA 
  *
  * Observe that we have three receive functions. 
  *
- * 1. The most general one is called `rcv` and it takes a 4-tuple of the form
- *    (low_bound_lev, high_bound_lev, authority, handlers), and performs an
+ * 1. The most general one is called `rcv` and it takes a 3-tuple of the form
+ *    (low_bound_lev, high_bound_lev handlers), and performs an
  *    interval receive on all messages from the lower to the higher bound.
  *    Because this sort of ranged modifies the state of the mailbox in a way
- *    that leaks information, it is necessary to also include an authority
- *    argument here. The implementation of this function checks that the
- *    provided authority is sufficient; this check is perfomed similaly to how
+ *    that leaks information, it is necessary that the mailbox has sufficient
+ *    clearance. The implementation of this function checks that the
+ *    clearance is sufficient; this check is perfomed similaly to how
  *    declassification checks are performed. 
  *
- * 2. Receive on a point interval, `rcvp`. In this case, no authority is
- *    required.
+ * 2. Receive on a point interval, `rcvp`. A sugar for (1)
  *
  * 3. Receive on a point consisting of the current program counter, `receive`.
  *    We include this option only for backward compatibility with many earlier
@@ -603,40 +591,53 @@ function okToDeclassify (levFrom, levTo, auth) {
 // this function must only be called from 
 // one of the checked functions 
 function _receiveFromMailbox (lowb, highb, handlers) {
-  raiseCurrentThreadPC(lub(lowb.lev, highb.lev));
-  __theMailbox.rcv(lub(lowb.val, __sched.pc), highb.val, handlers);
+
+  let mclear = $t().mailbox.mclear
+  
+  let is_sufficient_clearance = 
+    flowsTo( lub (highb.val, __sched.pc)
+          ,  lub (lowb.val, mclear.boost_level ))
+
+    if (!is_sufficient_clearance)  {  
+      let errorMessage = 
+        "Not enough mailbox clearance for this receive\n" +
+        ` | receive lower bound: ${lowb.val.stringRep()}\n` + 
+        ` | receive upper bound: ${highb.val.stringRep()}\n` +
+        ` | pc level           : ${__sched.pc.stringRep()}\n` +
+        ` | mailbox clearance  : ${mclear.boost_level.stringRep()}` 
+      threadError (errorMessage);
+    }    
+  
+    let is_clearance_a_leak = flowsTo( __sched.pc, mclear.pc_at_creation)
+
+    if (!is_clearance_a_leak)  {
+      let errorMessage = 
+        "The level of mailbox clearance is too sensitive for the lower bound of receive \n" +
+        ` | receive lower bound: ${lowb.val.stringRep()}\n` + 
+        ` | receive upper bound: ${highb.val.stringRep()}\n` +
+        ` | mailbox clearance level: ${mclear.pc_at_creation.stringRep()}`  // we need better terminology for these       
+      threadError (errorMessage);
+    }
+
+    __theMailbox.rcv(lowb.val, highb.val, handlers);    
+  
 }
 
+
 function receiveBoundedRangeWithAuthority(env, arg ) {
-  assertNormalState ("receive");
-  assertIsNTuple(arg, 4);
+  assertNormalState ("rcv");
+  assertIsNTuple(arg, 3);
   assertIsLevel (arg.val[0])
-  assertIsLevel (arg.val[1])
-  assertIsAuthority (arg.val[2])
-  assertIsList (arg.val[3])
+  assertIsLevel (arg.val[1])  
+  assertIsList (arg.val[2])
   let lowb = arg.val[0]
-  let highb = arg.val[1]
-  let auth = arg.val[2]
-  let handlers = arg.val[3]
-
-
-  let is_sufficient_authority = 
-    okToDeclassify (highb, lowb, auth);
-
-  if (is_sufficient_authority)  {
-    _receiveFromMailbox (lowb, highb, handlers)
-  } else {
-    let errorMessage = 
-      "Not enough authority for ranged receive\n" +
-      ` | lower bound: ${lowb.stringRep()}\n` + 
-      ` | upper bound: ${highb.val.stringRep()}`
-      ` | authority:  ${auth.val.authorityLevel.stringRep()}\n` 
-    threadError (errorMessage);
-  }
+  let highb = arg.val[1]  
+  let handlers = arg.val[2]
+  _receiveFromMailbox (lowb, highb, handlers);
 }
 
 function receiveAtOneLevel(env, arg) {
-  assertNormalState ("receive")
+  assertNormalState ("rcvp")
   assertIsNTuple (arg, 2)
   assertIsLevel (arg.val[0])
   assertIsList (arg.val[1])
@@ -649,8 +650,9 @@ function receiveAtOneLevel(env, arg) {
 function baseRcv(env, handlers) {
   assertNormalState("receive")
   assertIsList (handlers)
+  // shortcutting level checks because they are guaranteed 
+  // to hold when both low and upper bound is pc; 2020-02-08; AA
   __theMailbox.rcv(__sched.pc, __sched.pc, handlers);
-
 }
 
 
@@ -690,7 +692,7 @@ let rt_getTime = mkBase ((env,arg)=>{
 
 let rt_printWithLabels = mkBase((env, arg) => {
   console.log (
-        __sched.__currentThread.mkCopy(arg).stringRep(false)
+        $t().mkCopy(arg).stringRep(false)
         );
   
   rt_ret(__unit);
@@ -700,18 +702,18 @@ let rt_printWithLabels = mkBase((env, arg) => {
 let rt_toString = mkBase ((env, arg)=> {
 
   let taintRef = {lev : __sched.pc};
-  let s = __sched.__currentThread.mkCopy(arg).stringRep 
+  let s = $t().mkCopy(arg).stringRep 
                         (true,  // omit labels
                          taintRef  // accumulate taint into this reference
                         )
 
-  let r = __sched.__currentThread.mkValWithLev (s, taintRef.lev) ;  
+  let r = $t().mkValWithLev (s, taintRef.lev) ;  
   rt_ret (r);
 }, "toString")
 
 
 let rt_toStringLabeled = mkBase ((env, arg) => {
-  let v = __sched.__currentThread.mkCopy (arg);
+  let v = $t().mkCopy (arg);
   let taintRef = {lev : __sched.pc};
   
   let s = v.stringRep (false,  // do not omit labels 
@@ -720,7 +722,7 @@ let rt_toStringLabeled = mkBase ((env, arg) => {
 
                 
   
-  let r = __sched.__currentThread.mkValWithLev (s, taintRef.lev) ;  
+  let r = $t().mkValWithLev (s, taintRef.lev) ;  
 
   
   rt_ret (r);
@@ -755,7 +757,7 @@ let rt_writeString = mkBase ((env, arg) => {
 
 let rt_question = mkBase ((env, arg) => {
   readline.removeListener ('line', lineListener);
-  let theThread = __sched.__currentThread;
+  let theThread = $t();
 
   assertIsString (arg);
   theThread.raiseBlockingThreadLev (levels.TOP)
@@ -775,7 +777,7 @@ let rt_question = mkBase ((env, arg) => {
 let rt_inputline = mkBase ((env, arg) => {
   assertIsUnit (arg)
 
-  let theThread = __sched.__currentThread;
+  let theThread = $t();
   theThread.raiseBlockingThreadLev (levels.TOP)
 
   
@@ -801,13 +803,15 @@ let rt_inputline = mkBase ((env, arg) => {
 
 let rt_debug = function (s) {
   
-  let tid = __sched.__currentThread.tid.stringRep()
+  let tid = $t().tid.stringRep()
   let pid = __sched.pc.stringRep()
   let bid = __sched.blockingTopLev.stringRep()
+  let handler_state = __sched.handlerState.toString()
   console.log(
     colors.red (formatToN ( "PID:" + tid, 50)),
     colors.red (formatToN ( "PC:" +  pid, 20)),
     colors.red (formatToN ( "BL:" +  bid, 20)),
+    colors.red (formatToN ( "HN" + handler_state, 20)),
     s
   );
 }
@@ -961,7 +965,7 @@ let rt_whereis = mkBase((env, arg) => {
   let k = arg.val[1].val;
     
   let nodeLev = nodeTrustLevel (n);
-  let theThread = __sched.__currentThread;
+  let theThread = $t();
   
   let okToLookup = flowsTo ( lubs ([__sched.pc, arg.val[0].lev, arg.val[1].lev]), nodeLev);
   if (!okToLookup) {
@@ -986,6 +990,7 @@ let rt_whereis = mkBase((env, arg) => {
           
         } catch (err) {
           debug ("whereis error: " + err.toString())
+          throw err;
         }
       
     }) ()
@@ -1062,7 +1067,7 @@ function rt_mkList(x) {
 
 
 function threadError (s, internal = false) {
-  return __sched.__currentThread.threadError(s,internal);
+  return $t().threadError(s,internal);
 }
 
 let rt_threadError = threadError;
@@ -1137,149 +1142,24 @@ function nodeTrustLevel (nodeid) {
 // 2018-12-07: adding some code for enforcing semantics of numbers
 // 
 
-function assertIsBoolean (x) {
-  raiseCurrentBlockingThreadLev(x.tlev);  
-  if ( typeof x.val != 'boolean') {
-    threadError ("value " + x.stringRep() + " is not a boolean")
-  }
-}
-
-
-function assertIsNumber (x) {
-  raiseCurrentBlockingThreadLev(x.tlev);  
-  if ( typeof x.val != 'number') {
-    threadError ("value " + x.stringRep() + " is not a number")        
-  }
-}
-
-
-function assertIsFunction(x, internal=false) {  
-  raiseCurrentBlockingThreadLev(x.tlev);  
-  if (! ((x.val instanceof RtClosure) || (x.val instanceof BaseFunction)) ) {
-    threadError ("value " + x.stringRep() + " is not a function", internal)
-  } 
-}
-
-function assertIsHandler(x) {
-  raiseCurrentBlockingThreadLev(x.tlev);  
-  if (! (x.val instanceof RtClosure)) { // 2018-12-10: AA: in the future we may need to change this to special handler class
-    threadError ("value " + x.stringRep() + " is not a handler")
-  } 
-}
-
-function assertIsUnit (x) {
-  raiseCurrentBlockingThreadLev (x.tlev);
-  if (x.val != __unitbase) {
-    threadError ( "value " + x.stringRep () + " is not unit")
-  }
-
-}
-
-function assertIsListOrTuple (x) {
-  raiseCurrentBlockingThreadLev (x.tlev);
-  if ( !(Array.isArray (x.val) && (isListFlagSet (x.val) || isTupleFlagSet(x.val) ) ) ) {
-    threadError ("value " + x.stringRep() + " is not a list" )
-  }
-}
-
-function assertIsList (x) {
-  raiseCurrentBlockingThreadLev (x.tlev);
-  if ( !(Array.isArray (x.val) && isListFlagSet (x.val))) {
-    threadError ("value " + x.stringRep() + " is not a list" )
-  }
-}
-
-function assertIsNTuple (x, n) {
-  raiseCurrentBlockingThreadLev (x.tlev);
-  if (!(Array.isArray (x.val) && isTupleFlagSet (x.val)  && x.val.length == n )) {
-    threadError ("value " + x.stringRep() + " is not a " + n + "-tuple" )
-  }
-}
-
-function assertIsString (x) {
-  raiseCurrentBlockingThreadLev(x.tlev);  
-  if ( typeof x.val != 'string') {
-    threadError ("value " + x.stringRep() + " is not a string")        
-  }
-}
-
-
-function assertIsNode (x) {
-  raiseCurrentBlockingThreadLev(x.tlev);  
-  if ( typeof x.val != 'string') {
-    threadError ("value " + x.stringRep() + " is not a node string") // todo: check for it being a proper nodeid format?
-  }
-}
-
-
-
-function assertIsProcessId (x) {
-  raiseCurrentBlockingThreadLev(x.tlev);
-  if (! (x.val instanceof ProcessID)) {
-    threadError ("value " + x.stringRep() + " is not a process id")
-  }
-}
-
-function assertIsLevel (x) {
-  raiseCurrentBlockingThreadLev (x.tlev);
-  if (! (x.val instanceof Level)) {
-    threadError ("value " + x.stringRep() + " is not a level");
-  }
-}
-
-function assertIsTopAuthority (x) {
-  let isTop = flowsTo (levels.TOP, x.val.authorityLevel);
-  if (!isTop) {
-    let errorMessage = 
-      "Provided authority is not TOP\n" +
-      ` | level of the provided authority: ${x.val.authorityLevel.stringRep()}`
-    threadError (errorMessage);
-  }
-}
-
-function assertIsAuthority (x) {
-  raiseCurrentBlockingThreadLev (x.tlev);
-  
-  if (! (x.val instanceof Authority )) {
-    threadError ("value " + x.stringRep() + " is not a authority");
-  } 
-}
-
-function assertIsEnv(x) {
-  raiseCurrentBlockingThreadLev (x.tlev);
-  
-  if (! (x.val instanceof RtEnv )) {
-    threadError ("value " + x.stringRep() + " is not an environment");
-  }  
-}
-
-function assertNormalState (s) {
-  if (!__sched.handlerState.isNormal()) {
-    threadError ("invalid handler state in " + s + " -- side effects are prohbited in handler pattern matching or sandboxed code")
-  }
-}
-
-function assertDeclassificationAllowed() {
-  if (!__sched.handlerState.declassificationAllowed ()) {
-    threadError ("invalid handler state in " + s + ": declassification prohibited in handler pattern matching")
-  }
-}
- 
-
-
-function assertPairAreNumbers(x,y) {
-  assertIsNumber (x);
-  assertIsNumber (y);
-}
-
-function assertPairAreStringsOrNumbers (x,y) {
-  raiseCurrentBlockingThreadLev(x.tlev);
-  switch (typeof x.val) {
-    case 'number' : assertIsNumber(y); break;
-    case 'string' : assertIsString(y); break;
-    default: threadError ("values " + x.stringRep () + " and " + y.stringRep() + " are of different types")
-  }
-}
+let assertIsBoolean = (x) => __sched.__currentThread._asserts.assertIsBoolean(x)
+let assertIsNumber = (x) => __sched.__currentThread._asserts.assertIsNumber (x)
+let assertIsFunction = (x, internal=false) => __sched.__currentThread._asserts.assertIsFunction(x,internal)
+let assertIsHandler = (x) => __sched.__currentThread._asserts.assertIsHandler(x) 
+let assertIsUnit = (x) => __sched.__currentThread._asserts.assertIsUnit(x) 
+let assertIsListOrTuple = (x) => __sched.__currentThread._asserts.assertIsListOrTuple (x)
+let assertIsList = x => __sched.__currentThread._asserts.assertIsList (x)
+let assertIsNTuple = (x,n) => __sched.__currentThread._asserts.assertIsNTuple(x,n)
+let assertIsString = s => __sched.__currentThread._asserts.assertIsString (s)
+let assertIsNode = x => __sched.__currentThread._asserts.assertIsNode (x)
+let assertIsProcessId = (x) => __sched.__currentThread._asserts.assertIsProcessId (x) 
+let assertIsLevel = (x) => __sched.__currentThread._asserts.assertIsLevel (x) 
+let assertIsTopAuthority = (x) => __sched.__currentThread._asserts.assertIsTopAuthority (x) 
+let assertIsAuthority = (x) => __sched.__currentThread._asserts.assertIsAuthority (x)
+let assertNormalState = (s) => __sched.__currentThread._asserts.assertNormalState (s) 
+let assertPairAreNumbers = (x,y) => __sched.__currentThread._asserts.assertPairAreNumbers(x,y)
+let assertPairAreStringsOrNumbers = (x,y) => __sched.__currentThread._asserts.assertPairAreStringsOrNumbers(x,y)
+let assertIsCapability = (x) => $t()._asserts.assertIsCapability(x)
 
 function RuntimeObject() {
   this.Atom = function (name, creation_uuid = rt_uuid) {
@@ -1334,15 +1214,6 @@ function RuntimeObject() {
   this.raisedTo = function (x, y) {
     return new LVal(x.val, lub(lub(x.lev, y.val), y.lev), lubs([x.tlev, y.tlev, __sched.pc]) )
   }
-
-  // this.flowsTo = function (x, y) {
-  //   return new LVal(flowsTo(x.val, y.val), lub(x.lev, y.lev), lub(x.tlev, y.tlev))
-  // }
-  /*
-  this.levelOf = function (x) {
-    return new LVal(x.lev, lub (pc, x.lev)); // 2018-10-15: AA; implementing a sticky level
-  }
-  */
  
   this.unaryMinus = function (x) {
     assertIsNumber(x);
@@ -1377,20 +1248,19 @@ function RuntimeObject() {
   this.register = rt_register;
   this.whereis = rt_whereis;
   this.exit = rt_exit;
-
+  
 
 
 
   this.debugpc = mkBase ((env,arg)=>{
-//    assertIsString(arg);
     rt_debug("");
     rt_ret(__unit);
   })
 
-
   this.eq = function (x, y) {
     return new LVal(runtimeEquals(x.val, y.val), lub(x.lev, y.lev), lub (x.tlev, y.tlev) )
   }
+
   this.neq = function (x, y) {
     return new LVal(!(runtimeEquals(x.val, y.val)), lub(x.lev, y.lev), lub (x.tlev, y.tlev))
   }
@@ -1402,7 +1272,6 @@ function RuntimeObject() {
   }
 
   this.plus = function (x, y) {
-//    assertPairAreNumbers(x,y);
     assertPairAreStringsOrNumbers(x,y);
     return new LVal((x.val + y.val), lub(x.lev, y.lev), lub (x.tlev, y.tlev))
   }
@@ -1484,7 +1353,7 @@ function RuntimeObject() {
     return x.val
   }
   this.branch = function (x) {
-
+    $t().setBranchFlag()
     raiseCurrentThreadPC(x.lev);
    
   }
@@ -1517,33 +1386,30 @@ function RuntimeObject() {
 
 
   this.pcpush = mkBase ((env,arg) => {
-    assertNormalState("pcpush");
-    let cap = rt_mkuuid();    
-    __sched.__currentThread.pcpush(arg, cap);
-    rt_ret (cap);
+    assertNormalState("pcpush")
+    assertIsAuthority(arg);
+    $t().pcpinipush(arg, "pcpush");
   })
 
 
   this.pcpop = mkBase ((env,arg) => {
     assertNormalState("pcpop");
-    assertIsString (arg);
-    __sched.__currentThread.pcpop(arg)    
+    assertIsCapability (arg);
+    $t().pcpop(arg)    
   })
 
 
   this.pinipush = mkBase ((env, arg) => {
     assertNormalState("pinipush");
     assertIsAuthority(arg);    
-    let cap = rt_mkuuid();
-    __sched.__currentThread.pinipush(arg, cap);
-    rt_ret (cap);
+    $t().pcpinipush(arg, "pinipush");    
   })
 
 
   this.pinipop = mkBase (( env, arg) => {   
     assertNormalState("pinipop");
-    assertIsString(arg)
-    __sched.pinipop(arg);
+    assertIsCapability(arg)
+    $t().pinipop(arg);
   })
 
   /* Implementation note: 2019-01-02; AA: exit capabilities are implemented as
@@ -1579,6 +1445,19 @@ function RuntimeObject() {
   })
 
   this.sendMessageNoChecks = rt_sendMessageNochecks;
+
+  this.raisembox = mkBase ((env,arg) => {
+    assertIsLevel (arg);
+    $t().raiseMboxClearance (arg)
+  })
+
+  this.lowermbox = mkBase ((env,arg) => {
+    assertIsNTuple(arg,2);
+    assertIsCapability(arg.val[0]);
+    assertIsAuthority(arg.val[1]);
+
+    $t().lowerMboxClearance ( arg.val[0], arg.val[1])
+  })
 
   
   this.monitorlocal = mkBase ((env, arg) => {
@@ -1625,27 +1504,51 @@ __sched.setRuntimeObject(rtObj);
 function cleanup (cb) {
   readline.close();                    
   SS.stopCompiler(); 
-  if (__p2pRunning) {    
-    p2p.stopp2p((err) =>{
-      debug ("stopping p2p ")
+  if (__p2pRunning) {
+    (async () => {
+      try {
+      await p2p.stopp2p ()
+    } catch (err) {
+       debug ("stopping p2p ")
         if (err) {
             debug ("p2p stop failed " ,err)
         }
         else {
             debug ("p2p stop OK")                
         }
-        cb();
-    });
+     
+    }
+    cb();
+    }) ()    
   }
 }
 
 
-process.on('SIGINT', () =>{
-  debug ("SIGINT")
-  cleanup(( ) => {
-    process.exit(0);
-  }); 
-})
+// 2020-02-09; AA; ugly ugly hack
+function bulletProofSigint ()  {
+  let listeners = process.listeners("SIGINT");
+  // console.log (util.inspect(listeners))
+  // for (let i = 0; i < listeners.length; i ++  ) {
+    // console.log (listeners[i].toString());
+    // }
+    
+  // process.stdin.removeAllListeners("on");
+  process.removeAllListeners("SIGINT") ;
+  // console.log ("sigint bulletproofing")
+  process.on('SIGINT', () =>{  
+    debug ("SIGINT")
+    cleanup(( ) => {
+      process.exit(0);
+    }); 
+  })  
+  // setTimeout (bulletProofSigint, 1000)
+}
+bulletProofSigint();
+
+
+
+
+
 
 async function start(f) {
   SS.setRuntimeObj(rtObj);
@@ -1705,17 +1608,28 @@ async function start(f) {
 
   
 
-  const trustMapFile = yargs.argv.trustmap ? yargs.argv.trustmap : "trustmap.json";
-  try {
-    let s = await readFile (trustMapFile);
-    let trustList = JSON.parse (s);
-    let trustMap = {}
-    trustList.map ( x => trustMap[x.id] = levels.mkLevel (x.level));
-    _trustMap = trustMap;
-  } catch (err) {
-    logger.error ("cannot load trust map file: " + err);
+
+  async function loadTrustMap (trustMapFile) {
+    try {
+      let s = await readFile (trustMapFile);
+      let trustList = JSON.parse (s);
+      let trustMap = {}
+      trustList.map ( x => trustMap[x.id] = levels.mkLevel (x.level));
+      _trustMap = trustMap;
+    } catch (err) {
+      logger.error ("cannot load trust map file: " + err);
+    }  
   }
 
+
+  if (yargs.argv.trustmap) {
+    await loadTrustMap (yargs.argv.trustmap);
+  } else {
+    let default_trustmap = "trustmap.json"
+    if (fs.existsSync (default_trustmap)) {
+      await loadTrustMap (default_trustmap)
+    }        
+  }
 
   
 
@@ -1727,8 +1641,11 @@ async function start(f) {
     }
   }
 
+  // 2020-02-01: rudimentary error handling of networking issues; AA
+  // We mostly suppress connectivity issues, and propagate an error that 
+  // we have not observed before.
+  
 
-  process.on('unhandledRejection', up => { console.log ("Unhandled rejection error"); throw up })
 
   if (!yargs.argv.localonly && !yargs.argv.persist) {
     __p2pRunning = true;
@@ -1738,6 +1655,10 @@ async function start(f) {
   if (nodeIdFile) {
     try{
       let nodeIdObj = await readFile(nodeIdFile)
+
+      process.on('unhandledRejection', p2p.processExpectedNetworkErrors)
+      process.on('uncaughtException', p2p.processExpectedNetworkErrors)
+      
       p2p.startp2p(JSON.parse(nodeIdObj), rtHandlers);
 
     } catch (err) {

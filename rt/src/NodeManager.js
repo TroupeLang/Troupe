@@ -35,11 +35,12 @@ class NodeManager {
     }
 
     isLocalNode (id) {
+        // console.log ("local node id is ", this.localNode)
         if (this.localNode == undefined) {
             console.log("ERROR: local node undefined; should not happen")
             process.exit(1);
         }
-        return this.localNode.nodeId == id
+        return this.localNode.nodeId == this.getNode(id).nodeId
     }
 
     // Another hack; 2018-03-10; aa

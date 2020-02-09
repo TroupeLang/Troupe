@@ -1,0 +1,4 @@
+(* negative test; this program attempts to receive in a range without 
+   sufficient clearance *)
+   
+rcv ({}, {alice}, [] )

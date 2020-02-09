@@ -1,6 +1,12 @@
-(* attempts to leak the value of `secret` through the internal timing leak  *)
+(* attempts to leak the value of `secret` through internal timing leak  *)
 
-let fun skip 0 = ()
+let fun rcv_ hns = let val c = raisembox {secret} 
+                       val r = rcv ({}, {secret}, hns)
+                       val _ = lowermbox (c, authority)
+                   in r 
+                   end
+ 
+    fun skip 0 = ()
       | skip n = skip (n - 1)
 
     val mainPid = self ()
@@ -14,7 +20,7 @@ let fun skip 0 = ()
     val _ = spawn (fn _ => let val _ = skip 5000 in send (mainPid, 0) end )
 
     fun loop 0 = ()
-      | loop n = let val x = rcv ({}, {secret}, authority, [ hn x => x ])
+      | loop n = let val x = rcv_ [ hn x => x ]
                      val _ = adv x
                      val _ = printWithLabels x
                   in loop (n - 1)

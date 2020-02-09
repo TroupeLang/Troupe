@@ -1,0 +1,10 @@
+let fun foo () = raisembox ({alice})
+in 
+    if 1 raisedTo {secret} 
+    then 
+       let val c = raisembox ({alice})
+       in lowermbox (c, authority)
+       end 
+    else 
+       ()      
+end       

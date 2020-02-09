@@ -1,0 +1,8 @@
+if 1 raisedTo {alice} 
+  then if 2 raisedTo {bob} 
+       then let val c = raisembox { bob }
+            in lowermbox (c, authority) 
+            end 
+       else () 
+  else ()
+       

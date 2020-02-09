@@ -1,0 +1,7 @@
+(* negative test; insufficient authority  *)
+let val c1 = raisembox ({alice}) 
+    val c2 = raisembox ({bob})    
+    val _ = lowermbox ( c2, attenuate (authority, {alice} ))
+    val _ = lowermbox ( c1, attenuate (authority, {bob}))
+in () 
+end

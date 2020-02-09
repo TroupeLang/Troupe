@@ -1,0 +1,19 @@
+
+(* positive; *)
+
+let val main = self () 
+    val _ = spawn ( fn () => let val _ = send (main, 1)
+                                 val _ = send (main, 2)
+                              in () 
+                             end )
+
+    val c = raisembox ({alice,bob}) 
+    val r1 = rcv ({}, {alice}, [hn x => x])
+    val _ = lowermbox (c, authority)
+    val r2 = rcv ({}, {}, [hn x => x])
+    val _ = debugpc ()
+    val _ = printWithLabels r1 
+    val _ = printWithLabels r2
+in ()
+end
+

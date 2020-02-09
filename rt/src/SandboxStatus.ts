@@ -1,7 +1,10 @@
 class NormalState  {
-    constructor () {
-        
+    name:string
+    constructor (name="NORMAL") {
+      this.name = name
     }
+
+    
     isNormal () {
         return true;
     }
@@ -9,12 +12,16 @@ class NormalState  {
     declassificationAllowed() {
         return true;
     }
+
+    toString () {
+      return this.name
+    }
 }
 
 class InHandlerState extends NormalState {
     trapper: any;
     constructor (f) {
-        super ();
+        super ("INHANDLER");
         this.trapper = f;
     }
 
@@ -29,13 +36,14 @@ class InHandlerState extends NormalState {
     declassificationAllowed () {
         return false;
     }
+     
 }
 
 
 class InSandboxState extends NormalState {
     trapper: any;
     constructor (f) {
-        super ();
+        super ("INSANDBOX");
         this.trapper = f;
     }
 

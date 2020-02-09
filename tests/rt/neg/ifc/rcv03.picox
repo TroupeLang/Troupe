@@ -1,19 +1,21 @@
 let val secret = 10 raisedTo {secret}
     val pid = spawn (
                     fn () =>
+                         let val _ = raisembox( {secret})  in 
                          rcv ( {}
-                             , {secret}
-                             , authority
+                             , {secret}                             
                              , [  hn 2 => adv 2
                                 , hn 4 => print 4 ]
-                    ))
+                         )
+                         end 
+                    )
     val _ = 
         let pini authority 
             val _ = if secret > 0 then send (pid, 1) else () 
         in () 
-    end
+        end
+    
     val _ = send(pid, 2)
-
     val _ = send(pid, secret)
     
     val _ = adv 10

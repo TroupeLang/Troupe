@@ -1,0 +1,7 @@
+2020-02-09T01:34:54.713Z [RTM] [32minfo[39m: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+[31mRuntime error in thread b61673d0-fdde-4c60-871a-6c6e46ead428@{}%{}[39m
+[31m>> Not enough mailbox clearance for this receive[39m
+[31m | receive lower bound: {}[39m
+[31m | receive upper bound: {alice}[39m
+[31m | pc level           : {}[39m
+[31m | mailbox clearance  : {}[39m

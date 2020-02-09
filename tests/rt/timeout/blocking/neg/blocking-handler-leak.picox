@@ -1,7 +1,10 @@
 let 
     (* set secret to either 0 or 1 *)
     val secret = 1 raisedTo {secret}
-    fun wait () = rcv ({}, {secret}, authority, [ hn x => () ])
+    fun wait () = 
+        let val _ = raisembox ( {secret})
+        in rcv ({}, {secret}, [ hn x => () ])
+        end
     val mainPid = self ()
     val h1 = hn 1 => () 
     val h2 = hn 2 => ()

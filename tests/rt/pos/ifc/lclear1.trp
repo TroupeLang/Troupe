@@ -1,0 +1,10 @@
+(* positive; there is sufficient clearance to 
+   perform the receive *)
+
+let val main = self () 
+    val _ = spawn ( fn () => send (main, 42))
+    val c = raisembox ({alice,bob})    
+    val result =  rcv ({}, {alice}, [hn x => print x ] )
+    val _ = debugpc ()
+in  result
+end

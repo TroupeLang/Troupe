@@ -1,0 +1,5 @@
+2020-02-12T17:06:56.925Z [RTM] [32minfo[39m: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+[31mRuntime error in thread c76fedc3-70fe-486c-94ae-82e8c13b3119@{}%{}[39m
+[31m>> Cannot lower mailbox when the pc more sensitive than the mailbox clearance level[39m
+[31m| current thread's pc level: {alice}[39m
+[31m| mailbox clearance level: {}[39m

@@ -1,0 +1,9 @@
+(* negative test; this program attempts to receive a low message 
+   in a high context without sufficiently raising the mailbox 
+   clearance 
+*)
+
+if (1 raisedTo {alice}) 
+        then rcvp ({}, []) 
+        else ()
+

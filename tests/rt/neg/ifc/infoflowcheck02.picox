@@ -1,5 +1,5 @@
 let fun f ()
-      = let val _ = rcv ({}, {secret}, authority,
+      = let val _ = rcv ({secret}, {secret},
                             [ hn 12345 => 1
                             , hn x => adv (2) ])
             val _ = adv (22)

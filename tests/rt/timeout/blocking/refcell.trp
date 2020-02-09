@@ -1,7 +1,10 @@
 datatype Atoms = WRITE | READ | VALUE
 
+let val receive = fn h =>                
+            let val _ = raisembox ({secret}) 
+            in rcv ({}, {secret}, h) 
+            end 
 
-let val receive = fn h => rcv ({}, {secret}, authority, h) 
     fun cell content = 
     let val _ =  () 
         (* printWithLabels "cell" *)
@@ -26,7 +29,7 @@ let val receive = fn h => rcv ({}, {secret}, authority, h)
     val x = spawn (fn () => cell initValue )
          
     val _ = printWithLabels ( read x )    
-    (* printWithLabelss 42 *)
+    (* prints 42@{secret}%{secret} *)
 
     val c = pinipush authority
     val _ = if (100 raisedTo {secret} > 0) then write x 2 else ()
@@ -37,17 +40,15 @@ let val receive = fn h => rcv ({}, {secret}, authority, h)
     val _ = write x 20     
     val _ = printWithLabels ( read x ) 
 
-    (* printWithLabelss 20@{secret} *)
+    (* prints 20@{secret}%{secret} *)
 
     val _ = pinipop c
     
-    (* From now on the READ messages are not picked up by the cell process because the process' PC is high *)
-    (* that prevents it from picking up messages that are sent when the PC is low                        *)
-
     val _ = write x 10     
     val _ = printWithLabels ( read x )
 
-    (* After the previous line this process is blocked because we never receive the VALUE response *) 
+    (* prints 10@{secret}%{secret} *)
+        
 in ()
 end    
          

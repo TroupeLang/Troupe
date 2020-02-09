@@ -1,7 +1,15 @@
+#
 # Troupe runtime wrapper script
 
+if [[ "$OSTYPE" == "darwin"* ]]; then
+   readlink="greadlink"
+else
+   readlink="readlink"
+fi
+
+
 # Locate the troupe.js runtime and check if it is built
-script_dir=$(dirname $(readlink -f $0))
+script_dir=$(dirname $($readlink -f $0))
 troupe_rt="$script_dir/built/troupe.js"
 if [ ! -f "$troupe_rt" ]; then
     echo "Could not find Troupe runtime. Try building it using 'make rt'"
@@ -13,4 +21,8 @@ troupe_file="$1"
 shift
 
 # Execute the runtime with the specified Troupe script
-node $troupe_rt -f="$troupe_file" "$@"
+#tmpprocessed=`mktemp`
+#node  --prof --no-logfile-per-isolate --stack-trace-limit=1000 $troupe_rt -f="$troupe_file" "$@"
+node  --stack-trace-limit=1000 $troupe_rt -f="$troupe_file" "$@"
+#node --prof-process v8.log > $tmpprocessed.txt
+#atom $tmpprocessed.txt

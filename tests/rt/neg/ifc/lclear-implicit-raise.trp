@@ -1,0 +1,10 @@
+(* negative test; this program attempts to raise the 
+   mailbox clearanec in a high context, violating 
+   the non-sensitive upgrade like property of the mailbox
+   semantics
+*)
+
+if (1 raisedTo {alice}) 
+        then raisembox ({alice})  
+        else ()
+

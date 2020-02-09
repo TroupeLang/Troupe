@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 tmp=`mktemp`
 
@@ -6,7 +6,7 @@ $TROUPE/bin/troupec $1 --output=$tmp
 shift 
 
 if [ $? -eq 0 ]; then    
-    $TROUPE/rt/troupe "$tmp" "$@"    
+    $TROUPE/rt/troupe "$tmp" "$@"  
     code=$?
     rm $tmp
     exit $code

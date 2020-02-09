@@ -9,7 +9,7 @@ compile.zero:
 	$(COMPILER) zero.trp --output=$(OUT)/zero.js
 
 run.zero.listener:
-	$(TROUPERT) -f=$(OUT)/zero.js --id=../rt/src/p2p/id-listener.json --rspawn=true # --debug --debugp2p
+	$(TROUPERT) -f=$(OUT)/zero.js --id=../rt/src/p2p/id-listener.json --rspawn=true --debug --debugp2p
 
 run.dating.decentralized:
 	$(TERMINAL) scripts/startserver.sh

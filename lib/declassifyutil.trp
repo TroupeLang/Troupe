@@ -42,6 +42,29 @@ let
                                           , declassifydeep (x6, a, lev)                                          
                                           , declassifydeep (x7, a, lev)                                          
                                           )                                          
+  and declassify8 ((x1,x2,x3,x4,x5,x6,x7,x8), a, lev) 
+                                        = ( declassifydeep (x1, a, lev)
+                                          , declassifydeep (x2, a, lev)
+                                          , declassifydeep (x3, a, lev)
+                                          , declassifydeep (x4, a, lev)
+                                          , declassifydeep (x5, a, lev)                                          
+                                          , declassifydeep (x6, a, lev)                                          
+                                          , declassifydeep (x7, a, lev)                                          
+                                          , declassifydeep (x8, a, lev)
+                                          )
+  and declassify9 ((x1,x2,x3,x4,x5,x6,x7,x8,x9), a, lev) 
+                                        = ( declassifydeep (x1, a, lev)
+                                          , declassifydeep (x2, a, lev)
+                                          , declassifydeep (x3, a, lev)
+                                          , declassifydeep (x4, a, lev)
+                                          , declassifydeep (x5, a, lev)                                          
+                                          , declassifydeep (x6, a, lev)                                          
+                                          , declassifydeep (x7, a, lev)                                          
+                                          , declassifydeep (x8, a, lev)                                          
+                                          , declassifydeep (x9, a, lev)                        
+                                          )                                          
+
+
 
     and declassifylist (xs, a, lev) = 
         map (fn x => declassifydeep (x, a, lev) ) xs
@@ -60,7 +83,8 @@ let
               | (_,_,_,_,_) => declassify5
               | (_,_,_,_,_,_) => declassify6
               | (_,_,_,_,_,_,_) => declassify7
-              
+              | (_,_,_,_,_,_,_,_) => declassify8
+              | (_,_,_,_,_,_,_,_,_) => declassify9              
               | (_::_) => declassifylist 
               | _ => declassify
       in f(y, a, lev )

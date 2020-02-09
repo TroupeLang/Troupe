@@ -1,0 +1,8 @@
+(* blocking; there is sufficient clearance to 
+   perform the receive *)
+
+let val c = raisembox ({alice})   
+in rcv ({}, {alice}, [] )
+end
+
+

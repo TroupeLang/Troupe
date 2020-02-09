@@ -1,0 +1,16 @@
+import lists
+let fun pingpong () =
+      let val (x, sender) = receive [hn x => x]
+          val _ = send (sender, (x + 1, self()))
+          val _ = print x
+      in pingpong()
+      end
+
+in let val processA = spawn ("@pingpong-listener", pingpong)
+        val _ = print processA
+        val processB = spawn ("@pingpong-dialer", pingpong)
+        val _ = print processB
+        val _ = send (processA,(1, processB))
+    in ()
+    end
+end

@@ -40,7 +40,7 @@ Type `make libs` to compile Troupe's built-in libraries.
 
 #### Utilities for testing
 
-On OS X, make sure to have `gtimeout` utility. This can be installed via `brew install coreutils`.
+On OS X, make sure to have `gtimeout` and `greadlink` utilities. These can be installed via `brew install coreutils`.
 
 #### Checking the installation
 

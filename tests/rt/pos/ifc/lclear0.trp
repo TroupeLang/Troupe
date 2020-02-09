@@ -1,0 +1,5 @@
+(* positive test; should be ok *)
+let val c = raisembox ({alice})    
+    val () = lowermbox (c, authority)
+in c
+end 

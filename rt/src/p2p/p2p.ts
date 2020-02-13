@@ -617,6 +617,9 @@ function processExpectedNetworkErrors (err) {
           case 'ERR_ENCRYPTION_FAILED':
             error ((`${err.toString()}`))
             break;
+          case 'ERR_NO_VALID_ADDRESSES':
+            error ((`${err.toString()}`))
+            break;  
           default:
             error (`Unhandled error case with error code ${err.code}`)
             throw err;

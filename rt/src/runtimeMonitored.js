@@ -895,7 +895,8 @@ let rt_raiseTrust = mkBase ((env, arg) => {
   // AA, 2018-10-20 : beware that no information flow is enforced here
   // let l_meta = lubs ([__sched.pc, arg.lev, authFrom.lev, levTo.lev])
   let l_raise = ok_to_raise ? levTo.val : levels.BOT ;
-  let nodeId = data.val;
+  let nodeId = __nodeManager.getNode(data.val).nodeId;
+  // let nodeId = data.val;
   let currentLevel = nodeTrustLevel (nodeId)
   _trustMap [nodeId] = lub (currentLevel, l_raise);
   rt_ret (__unit);
@@ -1172,6 +1173,7 @@ function RuntimeObject() {
     }
     return atm
   }
+  this.__nodeManager = __nodeManager;
   this.assertIsHandler = assertIsHandler
   this.assertIsNTuple = assertIsNTuple
   this.assertIsFunction = assertIsFunction

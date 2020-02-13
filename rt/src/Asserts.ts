@@ -90,6 +90,11 @@ export class Asserts {
         this._thread.raiseBlockingThreadLev(x.tlev);
         if ( typeof x.val != 'string') {
             this._thread.threadError ("value " + x.stringRep() + " is not a node string") // todo: check for it being a proper nodeid format?
+        } 
+        if (x.val.startsWith ("@")) {
+            if (!this._thread.rtObj.__nodeManager.aliases[x.val.substring(1)]) {
+                this._thread.threadError (`${x.val} is not a defined alias`)
+            }
         }
     }
 

@@ -1,0 +1,5 @@
+(* negative: plus binds tighter than semicolon; this leads to a 
+   runtime error when evaluating the parsed subexpression 1 + print "World" *)
+
+(print "Hello"; 1) + (print "World"; 2)
+

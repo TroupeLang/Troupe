@@ -86,6 +86,7 @@ data Term
     | ListCons Term Term
     | Bin BinOp Term Term
     | Un UnaryOp Term
+    | Seq [Term]
     | Error Term
           deriving (Eq)
 
@@ -226,6 +227,9 @@ ppTerm' (Bin op t1 t2) =
 
 ppTerm' (Un op t) =
   text (show op) <+> ppTerm' t
+
+ppTerm' (Seq ts) = PP.hsep $
+  PP.punctuate (text ";") (map ppTerm' ts)
 
 qqLambda :: Lambda -> (PP.Doc, PP.Doc)
 qqLambda (Lambda args body ) =

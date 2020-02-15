@@ -1,0 +1,3 @@
+(* positive; normal use of sequential composition *)
+
+print "A"; print "B"; print "C"

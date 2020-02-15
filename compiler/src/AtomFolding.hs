@@ -46,6 +46,8 @@ visitTerm atms (Bin op t1 t2) =
   Bin op (visitTerm atms t1) (visitTerm atms t2)
 visitTerm atms (Un op t) =
   Un op (visitTerm atms t)
+visitTerm atms (Seq ts)   = 
+  Seq $ map (visitTerm atms) ts
 visitTerm atms (Error t) =
   Error (visitTerm atms t)
 

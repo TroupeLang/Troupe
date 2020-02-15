@@ -101,6 +101,7 @@ tokens:-
 <0>   [\*]                           { mkL TokenMul }
 <0>   [\^]                           { mkL TokenCaret } 
 <0>   [\/]                           { mkL TokenDiv }
+<0>   [\;]                           { mkL TokenSemi }
 <0>   [\<][\>]                       { mkL TokenNe }
 <0>   [\<][\=]                       { mkL TokenLe }
 <0>   [\<]                           { mkL TokenLt }
@@ -181,6 +182,7 @@ data Token
   | TokenSub
   | TokenMul
   | TokenDiv
+  | TokenSemi
   | TokenEq
   | TokenNe
   | TokenLt

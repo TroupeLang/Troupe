@@ -60,6 +60,7 @@ import Control.Monad.Except
     '-'   { L _ TokenSub }
     '*'   { L _ TokenMul }
     '/'   { L _ TokenDiv }
+    ';'   { L _ TokenSemi }
     '^'   { L _ TokenCaret }
     '<='  { L _ TokenLe }
     '>='  { L _ TokenGe }
@@ -81,8 +82,9 @@ import Control.Monad.Except
 
 
 -- Operators
+%right ';'
 %left andalso orelse
-%nonassoc '=' '<=' '>=' '<>' '<' '>'
+%nonassoc '=' '<=' '>=' '<>' '<' '>' '@'
 %left '+' '-'
 %left '*' '/'
 %right '::'
@@ -139,10 +141,8 @@ Form : Form '+' Form               { Bin Plus $1 $3 }
      | Form '<>' Form              { Bin Neq $1 $3 }
      | Form andalso Form           { Bin And $1 $3 }
      | Form orelse  Form           { Bin Or $1 $3 }
-
      | Form '::' Form              { ListCons $1 $3 }
-     
-
+     | Form ';' Form               { mkSeq $1 $3 }
      | Form 'raisedTo' Form        { Bin RaisedTo $1 $3 }
      | '-' Form                    { Un UnMinus $2 }
      | Fact                        { fromFact $1 }
@@ -150,6 +150,8 @@ Form : Form '+' Form               { Bin Plus $1 $3 }
 
 Fact : Fact Atom                   { $2 : $1 }
      | Atom                        { [$1] }
+
+
 
 
 Lit:   NUM                         { LInt (numTok $1) (pos $1) }
@@ -236,6 +238,11 @@ piniDecl auth decs =
     in 
         (pushDecl:decs) ++ [popDecl]
 
+mkSeq ::Term -> Term ->Term
+mkSeq t1 t2 =
+    let ts = case t2 of (Seq ts) -> ts
+                        _ -> [t2]
+    in Seq (t1: ts)
 
 
 fromFact [x] = x

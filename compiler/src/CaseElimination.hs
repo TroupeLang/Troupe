@@ -151,3 +151,14 @@ transTerm (S.List tms) = T.List (map transTerm tms)
 transTerm (S.ListCons t1 t2) = T.ListCons (transTerm t1) (transTerm t2)
 transTerm (S.Bin op t1 t2) = Bin op (transTerm t1) (transTerm t2)
 transTerm (S.Un op t) = Un op (transTerm t)
+transTerm (S.Seq ts) = transTerm $ 
+    case reverse ts of 
+        [t] -> t 
+        body:ts_rev -> 
+          let decls = map (\t -> S.ValDecl S.Wildcard t NoPos) (reverse ts_rev)
+          in  S.Let decls body 
+          
+
+          
+          
+                  

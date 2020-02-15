@@ -23,6 +23,7 @@ import Numeric ( readDec )
 
 $digit = 0-9
 $alpha = [a-zA-Z]
+$alpha_ = [$alpha \_]
 $eol   = [\n]
 $graphic    = $printable # $white
 @string     = \" ($printable # \")* \"
@@ -113,7 +114,7 @@ tokens:-
 <0>   [\:][\:]                       { mkL TokenColonColon }
 <0>   [\[]                           { mkL TokenLBracket }
 <0>   [\]]                           { mkL TokenRBracket }
-<0>   $alpha [$alpha $digit \_ \']*  { mkLs (\s -> TokenSym s) }
+<0>   $alpha_ [$alpha $digit \_ \']*  { mkLs (\s -> TokenSym s) }
 <0>   @label                         { mkLs (\s -> (TokenLabel (((map toLower) . trim . unquote) s)))}
 
 {

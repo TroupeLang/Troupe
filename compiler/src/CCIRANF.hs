@@ -250,6 +250,7 @@ instance WellFormedIRCheck IRExpr where
                      , "save"
                      , "send"
                      , "self"
+                     , "_setProcessDebuggingName"
                      , "sleep"
                      , "spawn"
                      , "stringToInt"

@@ -608,14 +608,14 @@ function _receiveFromMailbox (lowb, highb, handlers) {
       threadError (errorMessage);
     }    
   
-    let is_clearance_a_leak = flowsTo( __sched.pc, mclear.pc_at_creation)
+    let is_clearance_a_leak = flowsTo( mclear.pc_at_creation, glb (__sched.pc, lowb.val))
 
     if (!is_clearance_a_leak)  {
       let errorMessage = 
-        "The level of mailbox clearance is too sensitive for the lower bound of receive \n" +
+        "PC level at the time of raising the mailbox clearance is too sensitive for this receive\n" +
         ` | receive lower bound: ${lowb.val.stringRep()}\n` + 
-        ` | receive upper bound: ${highb.val.stringRep()}\n` +
-        ` | mailbox clearance level: ${mclear.pc_at_creation.stringRep()}`  // we need better terminology for these       
+        ` | pc level at the time of receive: ${__sched.pc.stringRep()}\n` +        
+        ` | pc level at the time of raise: ${mclear.pc_at_creation.stringRep()}`  // we need better terminology for these       
       threadError (errorMessage);
     }
 
@@ -803,14 +803,14 @@ let rt_inputline = mkBase ((env, arg) => {
 
 let rt_debug = function (s) {
   
-  let tid = $t().tid.stringRep()
-  let pid = __sched.pc.stringRep()
-  let bid = __sched.blockingTopLev.stringRep()
+  let tid = $t().tidErrorStringRep()
+  let pc = __sched.pc.stringRep()
+  let bl = __sched.blockingTopLev.stringRep()
   let handler_state = __sched.handlerState.toString()
   console.log(
     colors.red (formatToN ( "PID:" + tid, 50)),
-    colors.red (formatToN ( "PC:" +  pid, 20)),
-    colors.red (formatToN ( "BL:" +  bid, 20)),
+    colors.red (formatToN ( "PC:" +  pc, 20)),
+    colors.red (formatToN ( "BL:" +  bl, 20)),
     colors.red (formatToN ( "HN" + handler_state, 20)),
     s
   );
@@ -891,7 +891,15 @@ let rt_raiseTrust = mkBase ((env, arg) => {
   let levTo = argv[2];
   assertIsLevel (levTo);
 
-  let ok_to_raise = flowsTo (levTo.val, authFrom.val.authorityLevel);
+  let ok_to_raise = 
+    flowsTo (__sched.blockingTopLev, levels.BOT );
+  if (!ok_to_raise) {
+    threadError ("Cannot raise trust level when the process is tainted\s" + 
+                ` | blocking label: ${__nodeManager.blockingTopLev}`)
+  }
+
+
+    //flowsTo (levTo.val, authFrom.val.authorityLevel);
   // AA, 2018-10-20 : beware that no information flow is enforced here
   // let l_meta = lubs ([__sched.pc, arg.lev, authFrom.lev, levTo.lev])
   let l_raise = ok_to_raise ? levTo.val : levels.BOT ;
@@ -927,6 +935,14 @@ let rt_register = mkBase((env, arg) => {
 
   assertIsAuthority (arg.val[2]);
   assertIsTopAuthority (arg.val[2]);
+
+  let ok_to_raise = 
+    flowsTo (__sched.blockingTopLev, levels.BOT );
+  if (!ok_to_raise) {
+    threadError ("Cannot raise trust level when the process is tainted\s" + 
+                ` | blocking label: ${__nodeManager.blockingTopLev}`)
+  }
+
 
   // TODO: 2018-07-29: info flow checks
   // this is needed, because registration
@@ -1490,6 +1506,13 @@ function RuntimeObject() {
 
 
   })
+
+  this._setProcessDebuggingName = mkBase ((env,arg) => {
+    assertIsString (arg)
+    $t().processDebuggingName = arg.val
+    rt_ret (__unit) 
+  })
+
 }
 
 

@@ -103,6 +103,8 @@ export class Thread {
     callStack : any []
     _sp : number;
 
+    processDebuggingName: string;
+
 
     _asserts: Asserts
 
@@ -120,6 +122,7 @@ export class Thread {
         this.rtObj = rtObj;
         this.sched = sched;
         this.mailbox = new Mailbox();
+        this.processDebuggingName = null;         
         
         /* 
 
@@ -409,11 +412,21 @@ export class Thread {
     }
 
 
+    tidErrorStringRep() {
+        if (this.processDebuggingName) {
+            return ("[" + this.processDebuggingName + "]" + this.tid.stringRep() )
+        }   
+        else {
+            return this.tid.stringRep()
+        }
+    }
+
+
     threadError (s:string, internal = false) {
         // 2018-12-07: AA; eventually the monitoring semantics may 
         // need to be put in here      
         if ( this.handlerState.isNormal()) {  
-          console.log (colors.red ( "Runtime error in thread " + this.tid.stringRep()))
+          console.log (colors.red ( "Runtime error in thread " + this.tidErrorStringRep()))
           console.log (colors.red ( ">> " + s) );
           if (internal)  {
             throw "ImplementationError"

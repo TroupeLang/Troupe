@@ -6,15 +6,17 @@ let val receive = fn h =>
             end 
 
     fun cell content = 
-    let val _ =  () 
-        (* printWithLabels "cell" *)
-    in
-        receive [ hn ( WRITE, newcontent ) => cell newcontent                                                          
-                , hn ( READ, reader) =>  
-                        let val _ = send (reader, (VALUE, content))
-                        in cell content 
-                        end 
-                ]
+    let val _ = raisembox ({secret}) (* we never lower the mbox clearance here *)
+        fun loop content =
+            rcv ({}
+                ,{secret}
+                ,[ hn ( WRITE, newcontent ) => loop newcontent 
+                    , hn ( READ, reader) =>  
+                            let val _ = send (reader, (VALUE, content))
+                            in loop content 
+                            end 
+                    ])
+    in loop content                 
     end                
 
     fun read c = 

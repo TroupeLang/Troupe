@@ -1,0 +1,13 @@
+(* positive; the receives respect the pc-level of the raisembox *)
+let val main = self () 
+    val _ = spawn (fn () => if (1 raisedTo {secret} > 0) then send (main, 1) else ())
+in 
+if 1 raisedTo {secret} then 
+  let val c = raisembox ({topsecret})
+      val y = rcv ({secret}, {secret, topsecret}, [hn x=> x])
+      val _ = lowermbox (c, attenuate (authority, {topsecret}))
+  in y
+  end 
+else 
+  ()
+end

@@ -1,0 +1,10 @@
+(* negative ; receiving below the level of the pc at the raise time *)
+let val _ = _setProcessDebuggingName ("main") 
+in 
+if 1 raisedTo {secret} then 
+  let val c = raisembox ({secret})
+   in rcv ({}, {secret}, [])
+  end 
+else 
+  ()
+end    

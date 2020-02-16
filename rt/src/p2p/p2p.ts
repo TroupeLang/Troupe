@@ -256,7 +256,7 @@ function TroupeP2P (_rt, _peerInfo) {
                   resolve (_node.peerStore.get(peerId))                                     
               } else {
                 try  {                    
-                    debug ("calling peerRouting.findPeer")
+                    debug (`calling peerRouting.findPeer ${peerId}`)
                     const peerInfo = await _node.peerRouting.findPeer (peerId, {timeout:1000}); 
                     debug ("findPeer returned")
                     resolve (peerInfo);                  
@@ -276,11 +276,13 @@ function TroupeP2P (_rt, _peerInfo) {
                     }
 
                     if (n_attempts > 5) {
+                        debug (`Resolving to empty peer info`)
                         resolve (new PeerInfo(peerId))
                         // reject (err);
                     } else {
                         debug (`try_find_peer: attempt ${n_attempts} failed with ${nPeers()} nodes connected`)
-                        addPending (try_find_peer);
+                        // addPending (try_find_peer);
+                        setTimeout (try_find_peer, 2000)
                     }   
                 }
               }

@@ -37,6 +37,7 @@ dependencies:
 - tasty-golden
 - strict
 - aeson
+- MissingH
 
 library:
   source-dirs: src

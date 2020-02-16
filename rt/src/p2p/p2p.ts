@@ -161,6 +161,25 @@ function TroupeP2P (_rt, _peerInfo) {
 
     let _whereisNonces  = {}; 
 
+    let _unacknowledged:any = {}
+
+    function addUnacknowledged (id, uuid, f) {
+        if (!_unacknowledged[id]){ 
+            _unacknowledged[id] = []
+        }
+        _unacknowledged[id][uuid] = f
+    }
+
+    function removeUnacknowledged (id, uuid) {
+        delete _unacknowledged[id][uuid];
+    }
+
+
+    function reissueUnacknowledged (id:string) {
+        for (let uuid in _unacknowledged[id] ) {
+            setImmediate(_unacknowledged[id][uuid])
+        }
+    }
 
     function setupConnection (peerId, stream) {        
         let id:string = peerId.toB58String()
@@ -169,15 +188,21 @@ function TroupeP2P (_rt, _peerInfo) {
         const p = pushable () 
         _nodeTable[id] = p;              
 
-        pipe (p, map (JSON.stringify), lp.encode(), stream.sink)
-        
-        pipe (stream.source,lp.decode(), map(JSON.parse), 
+        pipe (p, map (JSON.stringify), lp.encode(), stream,lp.decode(), map(JSON.parse), 
             async (source) => {
-                for await (const x of source) {
-                    inputHandler (id, x, peerId)
+                try {
+                    for await (const x of source) {
+                        inputHandler (id, x, peerId)
+                    }
+                } catch (err) {
+                    debug (`try catch of the source`)
+                    processExpectedNetworkErrors(err, "setupConnection/pipe");
                 }
-                debug(`deleting entry for  ${id}`);
-                delete _nodeTable[peerId];
+                
+                debug(`deleting entry for  ${id}`);                
+                await _node.hangUp (peerId); // hanging up; will it cause an exception?? 
+                delete _nodeTable[id];        
+                reissueUnacknowledged (id)  
             }
         )            
     }
@@ -233,22 +258,28 @@ function TroupeP2P (_rt, _peerInfo) {
     }
 
     
-    this.whereisp2p = async (id, str) => {    
-        // let p:any = await getNodePushStream (id);
-        // debug (`receive push stream ${p}`)
+    this.whereisp2p = async (id, str) => {            
 
         let whereisNonce = uuidv4()
-        
-        return new Promise ( (resolve, reject) => {        
-            _whereisNonces[whereisNonce] = (err, data) => {
-                if (err) { reject (err) } else { resolve (data)} 
-            }
-            debug ("pushing whereis message")
+
+        function f () {
             push_wrap(id, {
                 messageType: MessageType.WHEREIS,
                 whereisNonce : whereisNonce,
                 message : str 
             });        
+        }
+        addUnacknowledged(id, whereisNonce,f);
+        
+        return new Promise ( (resolve, reject) => {        
+            _whereisNonces[whereisNonce] = (err, data) => {
+                if (err) { reject (err) } else { 
+                    removeUnacknowledged (id,whereisNonce)
+                    resolve (data)
+                } 
+            }
+            debug ("pushing whereis message")
+            f ();    
         })
     }
 
@@ -318,7 +349,7 @@ function TroupeP2P (_rt, _peerInfo) {
                     } else {
                         debug (`try_find_peer: attempt ${n_attempts} failed with ${nPeers()} nodes connected`)
                         // addPending (try_find_peer);
-                        setTimeout (try_find_peer, 2000)
+                        setTimeout (try_find_peer, 500)
                     }   
                 }
               }

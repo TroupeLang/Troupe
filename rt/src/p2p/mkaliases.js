@@ -32,13 +32,11 @@ for (let i in files) {
     
     if (argv.droptrustprefix) {
       let j = alias.indexOf(argv.droptrustprefix) ;
-      console.log (j, argv.droptrustprefix)
       if (j == 0) {
         level = alias.substr (argv.droptrustprefix.length)
       } else {
         level = alias;
-      }
-      console.log (level)
+      }      
     }
     trustmap.push ( {id:json.id, level:level})
 

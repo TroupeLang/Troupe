@@ -30,7 +30,6 @@ dependencies:
 - bytestring
 - text
 - base64-bytestring
-- haskeline
 - process
 - filepath
 - directory

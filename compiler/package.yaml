@@ -30,7 +30,6 @@ dependencies:
 - bytestring
 - text
 - base64-bytestring
-- haskeline
 - process
 - filepath
 - directory
@@ -38,6 +37,7 @@ dependencies:
 - tasty-golden
 - strict
 - aeson
+- MissingH
 
 library:
   source-dirs: src

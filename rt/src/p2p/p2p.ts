@@ -620,6 +620,10 @@ function processExpectedNetworkErrors (err) {
           case 'ERR_NO_VALID_ADDRESSES':
             error ((`${err.toString()}`))
             break;  
+          case 'ERR_MPLEX_STREAM_RESET':
+            error ((`${err.toString()}`))
+            break;  
+
           default:
             error (`Unhandled error case with error code ${err.code}`)
             throw err;

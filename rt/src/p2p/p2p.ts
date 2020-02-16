@@ -71,7 +71,7 @@ const info = x => logger.info(x)
 const debug = x => logger.debug(x)
 const error = x => logger.error(x);
 
-
+const lp = require('it-length-prefixed')
 
 
 
@@ -79,7 +79,7 @@ const error = x => logger.error(x);
 // 
 // const pull = require('pull-stream')
 const pipe = require('it-pipe')
-const pushable = require ('it-pushable')
+const pushable = require ('./Pushable.js')
 import { map } from 'streaming-iterables'
 
 const PeerId = require("peer-id")
@@ -138,6 +138,8 @@ export interface IHash {
     [details: string] : any;
 } 
 
+
+
 function TroupeP2P (_rt, _peerInfo) {
     // GLOBALS 
     
@@ -165,31 +167,64 @@ function TroupeP2P (_rt, _peerInfo) {
         debug(`setupConnection with ${id}`);
         _node.connectionManager.setPeerValue (peerId, 1);
         const p = pushable () 
-        pipe (p, map (JSON.stringify), stream.sink)
+        _nodeTable[id] = p;              
+
+        pipe (p, map (JSON.stringify), lp.encode(), stream.sink)
         
-        pipe (stream.source, map(JSON.parse), 
+        pipe (stream.source,lp.decode(), map(JSON.parse), 
             async (source) => {
                 for await (const x of source) {
-                    inputHandler (p, x, peerId)
+                    inputHandler (id, x, peerId)
                 }
                 debug(`deleting entry for  ${id}`);
                 delete _nodeTable[peerId];
             }
-        )        
-        _nodeTable[id] = p;              
+        )            
     }
    
-   
+    
+    
+
+    async function push_wrap (id:any, data:any) {
+        
+        while (true) {
+            try {
+                debug (`push_wrap`)
+
+                if (!_nodeTable[id]) {     
+                    debug (`no stream cached for ${id}; redialing}`)    
+                    await dial (id);            
+                } else {
+                    debug (`cached stream is available; we reuse it`)
+                }
+                
+                let p = _nodeTable[id];
+
+                debug (`push_wrap; stream obtained`)
+                await p.push (data);
+                debug (`push_wrap; data pushed into the stream`)
+                break 
+            } catch (err) {
+                // the stream we have used is 
+                // no good for whatever reason; 
+                // most likely there are networking 
+                // issues. we report the errors
+                // and redial
+                debug (`push wrap error`)
+                processExpectedNetworkErrors(err, "push_wrap");                
+            }            
+        }
+    }
   
 
+
     this.spawnp2p = async (id, data) => {
-        let p = await getNodePushStream (id);
         const spawnNonce = uuidv4();
         return new Promise ((resolve, reject) => {
             _spawnNonces[spawnNonce] = (err, data) => {
                 if (err) { reject (err) } else { resolve (data)}
             };
-            p.push( {
+            push_wrap(id,  {
                 messageType: MessageType.SPAWN,
                 spawnNonce: spawnNonce,
                 message: data
@@ -199,16 +234,17 @@ function TroupeP2P (_rt, _peerInfo) {
 
     
     this.whereisp2p = async (id, str) => {    
-        let p = await getNodePushStream (id);
+        // let p:any = await getNodePushStream (id);
+        // debug (`receive push stream ${p}`)
+
         let whereisNonce = uuidv4()
-        debug (`receive push stream ${p}`)
         
         return new Promise ( (resolve, reject) => {        
             _whereisNonces[whereisNonce] = (err, data) => {
                 if (err) { reject (err) } else { resolve (data)} 
             }
             debug ("pushing whereis message")
-            p.push ({
+            push_wrap(id, {
                 messageType: MessageType.WHEREIS,
                 whereisNonce : whereisNonce,
                 message : str 
@@ -217,12 +253,12 @@ function TroupeP2P (_rt, _peerInfo) {
     }
 
     this.sendp2p = async (id, procId, obj) => {
-        let p = await getNodePushStream(id);
-        p.push({
+        // let p = await getNodePushStream(id);
+        push_wrap(id, {
             messageType: MessageType.SEND,
             pid: procId,
             message: obj
-        })
+        });
     }
 
     
@@ -322,7 +358,7 @@ function TroupeP2P (_rt, _peerInfo) {
                     setupConnection (peerInfo.id, stream);
                     resolve ( stream );
                 } catch ( err ) {
-                    processExpectedNetworkErrors (err);
+                    processExpectedNetworkErrors (err, "dial");
                     // if the error is suppressed we move on to trying 10 times
                     // with exponential backoff
                     // 2020-02-10; AA: TODO: this code has a hardcoded constant 
@@ -346,17 +382,19 @@ function TroupeP2P (_rt, _peerInfo) {
 
 
 
+    /*
     async function getNodePushStream (id:string) {            
-        if (!_nodeTable[id]) {         
+        if (!_nodeTable[id]) {     
+            debug (`no stream cached for ${id}; redialing}`)    
             await dial (id);            
         } 
         
         return _nodeTable[id];
-
     }
+    */
 
 
-    async function inputHandler(p, input, fromNodeId) {
+    async function inputHandler(id, input, fromNodeId) {
         debug ("-- input handler")
         switch (input.messageType) {
             case (MessageType.SPAWN):
@@ -364,7 +402,7 @@ function TroupeP2P (_rt, _peerInfo) {
                 debug ("RECEIVED SPAWN")
                 let x = await _rt.spawnFromRemote (input.message, fromNodeId)
 
-                p.push({
+                push_wrap(id, {
                     messageType: MessageType.SPAWNOK,
                     spawnNonce: input.spawnNonce,
                     message: x
@@ -396,7 +434,7 @@ function TroupeP2P (_rt, _peerInfo) {
             case (MessageType.WHEREIS): 
                 debug ("p2p whereis incoming request")
                 let y = await _rt.whereisFromRemote (input.message)
-                p.push ({
+                push_wrap(id, {
                     messageType: MessageType.WHEREISOK,
                     whereisNonce : input.whereisNonce, 
                     message : y
@@ -435,14 +473,14 @@ function TroupeP2P (_rt, _peerInfo) {
       const {stream} = await _node.dialProtocol (relay_addr, "/trouperelay/keepalive")            
       const peerId = conn.remotePeer
       _relay_id = peerId.toB58String()
-      debug (`~~ relay dialed, keep alive counter is ${_keepAliveCounter++}`)  
+      //   debug (`~~ relay dialed, keep alive counter is ${_keepAliveCounter++}`)  
       const p = pushable()
       
       pipe (stream.source, 
               async (source: any) => { 
                  let ss = "" 
                  for await (const msg of source ) {                   
-                  debug (`~~ relay says:${msg.toString().trim()}`)  
+                  // debug (`~~ relay says:${msg.toString().trim()}`)  
                  }                
            })
       pipe (p, stream.sink);
@@ -462,7 +500,7 @@ function TroupeP2P (_rt, _peerInfo) {
             timeout = _KEEPALIVE
           } catch (err ) {
             timeout = timeout < 600e3 ? timeout * 2 : timeout // exponential backoff with 10 min limit            
-            processExpectedNetworkErrors(err)
+            processExpectedNetworkErrors(err, "relay")
             debug (`~~ error reaching the relay server; we will retry again in ${timeout/1000} seconds`)
           }             
           setTimeout(f,timeout) 
@@ -504,6 +542,7 @@ function TroupeP2P (_rt, _peerInfo) {
             let id = peerInfo.id.toB58String();
             debug (`-- disconnect: ${id}`)
             if (_nodeTable[id]) {
+                debug (`deleting node table entry for ${id}`)
               delete _nodeTable[id]
             }
             if (_relayTable[id]) {
@@ -584,10 +623,11 @@ async function startp2p(nodeId, rt) {
 }
 
 
-function processExpectedNetworkErrors (err) {    
+function processExpectedNetworkErrors (err, source="source unknown") {    
+    debug (`error source: ${source}`);
     if (err instanceof AggregateError) {
       for (const e of err ) {        
-        processExpectedNetworkErrors (e)
+        processExpectedNetworkErrors (e, source)
       }
     } else {
       if (err.code) {

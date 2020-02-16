@@ -469,7 +469,7 @@ let rt_restore = mkBase((env, arg) => {
  */
 async function receiveFromRemote(pid, jsonObj, fromNode) {
   let data = await SS.deserializeAsync ( nodeTrustLevel(fromNode)  , jsonObj)
-  // debug ("* rt receiveFromremote * " + fromNode);
+  debug ("* rt receiveFromremote * " + fromNode);
 
   // TODO: 2018-07-23: do we need to do some more raising
   // about the level of the fromNode?; AA
@@ -1681,8 +1681,9 @@ async function start(f) {
     try{
       let nodeIdObj = await readFile(nodeIdFile)
 
-      process.on('unhandledRejection', p2p.processExpectedNetworkErrors)
-      process.on('uncaughtException', p2p.processExpectedNetworkErrors)
+      // process.on('unhandledRejection', (e) => p2p.processExpectedNetworkErrors(e, "unhandledRejection"))
+      process.on ('unhandledRejection', up => {throw up})
+      // process.on('uncaughtException', (e) => p2p.processExpectedNetworkErrors(e, "uncaughtException"))
       
       p2p.startp2p(JSON.parse(nodeIdObj), rtHandlers);
 

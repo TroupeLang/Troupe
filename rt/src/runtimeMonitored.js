@@ -1681,10 +1681,10 @@ async function start(f) {
     try{
       let nodeIdObj = await readFile(nodeIdFile)
 
-      // process.on('unhandledRejection', (e) => p2p.processExpectedNetworkErrors(e, "unhandledRejection"))
-      process.on ('unhandledRejection', up => {console.log ("Unhandled rejection"); console.error (up)})
-      process.on ('uncaughtException', up => {console.log ("Uncaught exception"); console.error (up)})
-      // process.on('uncaughtException', (e) => p2p.processExpectedNetworkErrors(e, "uncaughtException"))
+      process.on('unhandledRejection', (e) => p2p.processExpectedNetworkErrors(e, "unhandledRejection"))
+      // process.on ('unhandledRejection', up => {console.log ("Unhandled rejection"); console.error (up)})
+      // process.on ('uncaughtException', up => {console.log ("Uncaught exception"); console.error (up)})
+      process.on('uncaughtException', (e) => p2p.processExpectedNetworkErrors(e, "uncaughtException"))
       
       p2p.startp2p(JSON.parse(nodeIdObj), rtHandlers);
 

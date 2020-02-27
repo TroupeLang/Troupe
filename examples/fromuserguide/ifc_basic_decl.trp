@@ -1,3 +1,12 @@
-let val x = 10 raisedTo {alice}
+let fun f () =
+          receive [ hn ("Hello", x) => printWithLabels x
+                  , hn ("Bye", y) => () ]
+     
+    val p = spawn f
+(*     val _ = send (p, ("Hello", 42))  *)
+in () 
+end
+
+(* let val x = 10 raisedTo {alice}
  in declassify (x , authority, {} )
- end 
+ end  *)

@@ -1,1 +1,4 @@
-42 
+let val x = (42 + 10) raisedTo {alice}
+    val y = 10 raisedTo {bob}
+in x + y
+end 

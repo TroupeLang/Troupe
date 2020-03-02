@@ -341,8 +341,7 @@ function compilerOutputReady(data) {
 // 2018-11-30: AA: TODO: implement a proper deserialization queue instead of 
 // the coarse-grained piggybacking on the event loop
 
-function deserialize(lev, jsonObj, cb) {
-  
+function deserialize(lev, jsonObj, cb) {    
   if (processing) {    
     setImmediate (deserialize, lev, jsonObj, cb) // postpone; 2018-03-04;aa
   } else {

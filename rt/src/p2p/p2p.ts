@@ -200,7 +200,11 @@ function TroupeP2P (_rt, _peerInfo) {
                 }
                 
                 debug(`deleting entry for  ${id}`);                
-                await _node.hangUp (peerId); // hanging up; will it cause an exception?? 
+                try {
+                  await _node.hangUp (peerId); // hanging up; will it cause an exception?? 
+                } catch (err) {
+
+                }
                 delete _nodeTable[id];        
                 reissueUnacknowledged (id)  
             }
@@ -425,7 +429,8 @@ function TroupeP2P (_rt, _peerInfo) {
     */
 
 
-    async function inputHandler(id, input, fromNodeId) {
+    async function inputHandler(id, input, fromNodeId_) {
+        let fromNodeId = fromNodeId_.toB58String()
         debug ("-- input handler")
         switch (input.messageType) {
             case (MessageType.SPAWN):
@@ -454,7 +459,7 @@ function TroupeP2P (_rt, _peerInfo) {
                 break;
 
             case (MessageType.SEND):
-                debug (`SEND  ${fromNodeId.toB58String()}`);
+                debug (`SEND  ${fromNodeId_.toB58String()}`);
                 _rt.receiveFromRemote (
                     input.pid,
                     input.message,

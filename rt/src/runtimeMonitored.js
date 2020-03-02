@@ -469,7 +469,7 @@ let rt_restore = mkBase((env, arg) => {
  */
 async function receiveFromRemote(pid, jsonObj, fromNode) {
   let data = await SS.deserializeAsync ( nodeTrustLevel(fromNode)  , jsonObj)
-  // debug ("* rt receiveFromremote * " + fromNode);
+  debug (`* rt receiveFromremote *  ${fromNode} ${data.stringRep()}`);
 
   // TODO: 2018-07-23: do we need to do some more raising
   // about the level of the fromNode?; AA
@@ -906,7 +906,7 @@ let rt_raiseTrust = mkBase ((env, arg) => {
   let nodeId = __nodeManager.getNode(data.val).nodeId;
   // let nodeId = data.val;
   let currentLevel = nodeTrustLevel (nodeId)
-  _trustMap [nodeId] = lub (currentLevel, l_raise);
+  _trustMap [nodeId] = lub (currentLevel, l_raise);  
   rt_ret (__unit);
 }, "raiseTrust")
 
@@ -1149,10 +1149,11 @@ function rt_linkLibs(libs, obj, cb) {
 
 let _trustMap = {}
 
-function nodeTrustLevel (nodeid) {
+function nodeTrustLevel (nodeid) {  
   if (_trustMap ) {
+    // console.log ("true");
     return _trustMap[nodeid]? _trustMap [nodeid] : levels.BOT;
-  }
+  }  
   return levels.BOT;
 }
 

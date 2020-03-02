@@ -1,0 +1,14 @@
+let fun echo_server () =
+        receive [ hn ("ECHO", x, fromWhom)  => send(fromWhom, ("REPLY", x)); echo_server (),
+                  hn ("SHUTDOWN") => (),
+                  hn 
+                ]
+
+    fun echo_client (serverid) =
+        send (serverid, ("ECHO", 42, self()));
+        receive [ hn  ( "REPLY", x) => print ("received", x); send (serverid, "SHUTDOWN") ]
+    val serverid = spawn echo_server
+    
+in echo_client serverid
+end
+    

@@ -5,6 +5,7 @@ let val pid = spawn ( fn () =>
                                  ])
                     )
     val secret = 42 raisedTo {secret}
-in send (pid, secret)
+in spawn (fn () => if 1 raisedTo {secret} then send (pid, secret) else ());
+   ()
 end
                            

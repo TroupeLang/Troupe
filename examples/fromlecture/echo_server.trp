@@ -1,0 +1,10 @@
+let fun echo_server () =
+        receive [ hn ("ECHO", x, fromWhom)
+                   => send(fromWhom, ("REPLY", x)); echo_server ()
+                , hn ("COMPUTE", f, x, fromWhom) =>
+                      send (fromWhom, ("REPLY", f x)); echo_server ()
+                ]
+    val id = spawn (echo_server)
+in  register ("ECHOSERVER", id, authority)
+end 
+    

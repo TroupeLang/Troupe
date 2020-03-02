@@ -1,0 +1,7 @@
+let val x = 0 raisedTo {alice}
+    val y = if x > 0 then 2 raisedTo {bob} else "hello"
+    val z = x + y
+    val _ = printWithLabels (x,y,z)
+    val _ = adv 1
+in ()
+end

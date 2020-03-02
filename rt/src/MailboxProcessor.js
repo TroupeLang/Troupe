@@ -9,9 +9,8 @@ const SandboxStatus = require('./SandboxStatus.js').HandlerState;
 const levels = require('./options.js');
 
 
-
 function Message(msg, fromNodeId, pc) {
-    let tuple = [msg, fromNodeId];
+    let tuple = [msg, fromNodeId];        
     tuple.isTuple = true; // hack! 2018-10-19: AA
     return new LVal(tuple, pc);
   }
@@ -29,7 +28,7 @@ class MailboxProcessor {
         this.rtObj = rtObj;
     }
 
-    addMessage(fromNodeId, toPid, message, pc) {
+    addMessage(fromNodeId, toPid, message, pc) {        
         let __sched = this.sched;
     
         // check whether the recipient is alive
@@ -41,7 +40,8 @@ class MailboxProcessor {
         let t = __sched.getThread (toPid);
 
         // create the message 
-        let messageWithSenderId = new Message(message, fromNodeId, pc);
+        let messageWithSenderId =
+           new Message(message, fromNodeId, pc);
 
         // add the message to the thread's mailbox
         t.addMessage (messageWithSenderId);
@@ -51,7 +51,7 @@ class MailboxProcessor {
     }
 
     sweepMessages(messages, handlers, lowb, highb) {
-
+        debug (`receive interval: [${lowb.stringRep()}, ${highb.stringRep()}]`)
         let lub = this.levels.lub;
         let glb = this.levels.glb;
         let flowsTo = this.levels.flowsTo;
@@ -64,10 +64,10 @@ class MailboxProcessor {
         let theThread = __sched.__currentThread;
 
         function iterate(handlerToUse, messageToCheck) {            
-            // debug(`* checkMessages  ${handlerToUse} ${messageToCheck} ${messages.length}`);
+            debug(`* checkMessages  ${handlerToUse} ${messageToCheck} ${messages.length}`);
             if (handlerToUse < handlers.length && messageToCheck < messages.length) {
-                // debug("### 1");
-                // debug.log (messages[messageToCheck]);
+                debug("### 1");
+                debug (`${messages[messageToCheck].stringRep()}`);
 
                 let nextIter = (handlerToUse == handlers.length - 1) ?
                     () => {
@@ -86,10 +86,12 @@ class MailboxProcessor {
                 // than the original sender's pc, because it is earlier raised by up to the 
                 // clearance level
                 let senderPC = messages[messageToCheck].lev
+                debug (`receive/sender pc is ${senderPC.stringRep()}`)
 
-                let msglvl = lub(senderPC, messages[messageToCheck].val[0].lev); // 2018-05-18!AA
+                // let msglvl = lub(senderPC, messages[messageToCheck].val[0].lev); // 2018-05-18!AA
+                let msglvl = senderPC 
                 if (!(flowsTo(lowb, msglvl)) || !(flowsTo(msglvl, highb))) {
-                    //debug.log("* checkMessages - skipping message because of rcv bounds");
+                    debug("* checkMessages - skipping message because of rcv bounds");
                                       
                     __sched.schedule(nextIter, [null, null], null);
                     //

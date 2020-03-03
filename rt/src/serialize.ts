@@ -1,6 +1,7 @@
 "use strict";
 const assert = require('assert');
 const { spawn } = require('child_process')
+import * as Ty from './TroupeTypes'
 
 let compiler = null;
 
@@ -42,49 +43,6 @@ function startCompiler() {
 }
 
 startCompiler();
-
-// -- utility functions ----------------------------
-
-function isLVal(x) {
-    return   (typeof x.val != "undefined" &&
-              typeof x.lev != "undefined" && 
-              typeof x.tlev != "undefined" );
-}
-
-function isClosure(x) {
-    return  (typeof x.env != "undefined"
-          && typeof x.fun != "undefined"
-          && typeof x.namespace != "undefined"
-        )
-}
-
-function isProcessId (x) {
-
-  return (typeof x.pid != "undefined"
-      && typeof x.node != "undefined"
-      && typeof x.uuid != "undefined" )
-}
-
-function isTuple(x) {
-  return (typeof x.isTuple != "undefined" )
-}
-
-function isList(x) {
-  return (typeof x.isList != "undefined")
-}
-
-function isLevel (x) {
-  return (typeof x.isLevel != "undefined")
-}
-
-function isAuthority (x) {
-  return (typeof x.authorityLevel != "undefined");
-}
-
-
-function isAtom (x) {
-  return (typeof x.atom != "undefined");
-}
 
 
 // --------------------------------------------------
@@ -154,7 +112,10 @@ function compilerOutputReady(data) {
     
     nsFun += "this.libSet = new Set () \n"
     nsFun += "this.libs = [] \n"
-    nsFun += "this.addLib = function (lib, decl) { if (!this.libSet.has (lib +'.'+decl)) { this.libSet.add (lib +'.'+decl); this.libs.push ({lib:lib, decl:decl})} } \n"
+    nsFun += "this.addLib = function (lib, decl) " + 
+              " { if (!this.libSet.has (lib +'.'+decl)) { " + 
+                 " this.libSet.add (lib +'.'+decl); " + 
+                 " this.libs.push ({lib:lib, decl:decl})} } \n"
     nsFun += "this.loadlibs = function (cb) { rt.linkLibs (this.libs, this, cb) } \n"
 
     
@@ -168,7 +129,7 @@ function compilerOutputReady(data) {
       nsFun += snippetJson.code; 
     }
 
-    let NS = new Function ('rt',nsFun)
+    let NS:any = new Function ('rt',nsFun)
     // console.log (NS.toString());
     ns.fun = new NS(rtObj)
   }
@@ -225,8 +186,8 @@ function compilerOutputReady(data) {
 */
 
   function mkValue (arg) {
-    // console.log("*** mkValue", arg);
-    assert(isLVal(arg));
+    // debuglog ("*** mkValue", arg);
+    assert(Ty.isLVal(arg));
     let obj = arg.val;
     let lev = levRepToLevel (arg.lev);
     let tlev = levRepToLevel (arg.tlev);
@@ -234,79 +195,48 @@ function compilerOutputReady(data) {
     function _trustGLB ( x ) {
       return (rtObj.glb (x, trustLevel))
     }
-
-
-    if (Array.isArray (obj)) {
-      let a = [];
-      for (let i = 0; i < obj.length; i++) {
-        a.push(mkValue(obj[i]));
-      }
-
-      let marker;
-      // console.log (arg.tupleKind);
-      if (arg.tupleKind && arg.tupleKind == true ) {
-        marker = rtObj.mkTuple;
-      } else {
-        // console.log ("LIST")
-        marker = rtObj.mkList;
-      }
-
-      return new rtObj.LVal( marker(a)
-                           , _trustGLB ( lev)
-                           , _trustGLB (tlev)  );
-
-    } else if (typeof obj.ClosureID != "undefined") {
-      return new rtObj.LVal(mkClosure (obj.ClosureID)
-                           , _trustGLB (lev ) 
-                           , _trustGLB (tlev) ); 
-    } else if (typeof obj.envptr != "undefined") {
-      return new rtObj.LVal(mkEnv (typeof obj.envptr.EnvID)
-                           , _trustGLB (lev ) 
-                           , _trustGLB (tlev)) ;
-    } else if (Number.isInteger (obj) || (typeof (obj) ==='boolean')  || typeof (obj) === 'string') {
-      return new rtObj.LVal(obj
-                           , _trustGLB (lev)
-                           , _trustGLB (tlev));
-    } else if ( isProcessId(obj) ) {
-      return new rtObj.LVal(new rtObj.ProcessID(obj.uuid, obj.pid, obj.node)
-                           , _trustGLB (lev) 
-                           , _trustGLB (tlev)
-                           );
-    } else if ( isAuthority (obj)) {
-      // 2018-10-18: AA: authority attenuation based on the trust level of the sender 
-      return new rtObj.LVal (
-            new rtObj.Authority ( _trustGLB (levRepToLevel (obj.authorityLevel)) ) 
-            , _trustGLB ( lev)
-            , _trustGLB ( tlev ) 
-            );
-    } else if (isLevel(obj)) {      
-      return new rtObj.LVal ( levRepToLevel(obj.lev)
-                            , _trustGLB (lev)
-                            , _trustGLB (tlev)
-                            );
-    } else if (isLVal (obj)) {
-      return new rtObj.LVal ( mkValue (obj)
-                            , _trustGLB (lev)
-                            , _trustGLB (tlev));
-
-    } else if (isAtom (obj) ) {      
-      let a = new rtObj.Atom (obj.atom, obj.creation_uuid);      
-      let v = new rtObj.LVal ( a
-                              , _trustGLB (lev)
-                              , _trustGLB (tlev));
-      return v;
-    } else if (Object.keys(obj).length == 0) {
-      return new rtObj.LVal(rtObj.__unitbase
-                          , _trustGLB (lev) 
-                          , _trustGLB (tlev)) ;
-    } else { 
-      return new rtObj.LVal (obj
-                            , _trustGLB (lev)
-                            , _trustGLB (tlev));
-      // aa; 2018-03-04; we should in principle have an exhaustive list of values here and
-      // do not have such a default
+    
+    function value () {
+      
+      if (Array.isArray (obj)) {
+        let a = [];
+        for (let i = 0; i < obj.length; i++) {
+          a.push(mkValue(obj[i]));
+        }  
+        let marker;        
+        if (arg.tupleKind && arg.tupleKind == true ) {
+          marker = rtObj.mkTuple;
+        } else {          
+          marker = rtObj.mkList;
+        }  
+        return marker(a)  
+      } else if (typeof obj.ClosureID != "undefined") {
+        return mkClosure (obj.ClosureID)
+      } else if (typeof obj.envptr != "undefined") {
+        return mkEnv (typeof obj.envptr.EnvID)
+      } else if (Number.isInteger (obj) || (typeof (obj) ==='boolean')  || typeof (obj) === 'string') {
+        return obj 
+      } else if ( Ty.isProcessId(obj) ) {
+        return new rtObj.ProcessID(obj.uuid, obj.pid, obj.node)
+      } else if ( Ty.isAuthority (obj)) {
+        // 2018-10-18: AA: authority attenuation based on the trust level of the sender 
+        return new rtObj.Authority ( _trustGLB (levRepToLevel (obj.authorityLevel)) )
+      } else if (Ty.isLevel(obj)) {      
+        return levRepToLevel(obj.lev)
+      } else if (Ty.isLVal (obj)) {
+        return mkValue (obj)
+      } else if (Ty.isAtom (obj) ) {            
+        return new rtObj.Atom (obj.atom, obj.creation_uuid) 
+      } else if (Object.keys(obj).length == 0) {
+        return rtObj.__unitbase
+      } else { 
+        return obj
+        // aa; 2018-03-04; we should in principle have an exhaustive list of values here and
+        // do not have such a default
+      }  
     }
 
+    return new rtObj.LVal (value(), _trustGLB(lev), _trustGLB (tlev));    
   }
 
   for (let i = 0; i < closures.length; i++) {
@@ -317,10 +247,7 @@ function compilerOutputReady(data) {
     mkEnv (i);
   }
 
-  
-
   let v = mkValue (serobj.value);
-
 
   // go over the namespaces we have generated
   // and load all libraries before calling the last callback
@@ -353,9 +280,9 @@ function deserialize(lev, jsonObj, cb) {
 
     // we need to share this object with the callbacks
     // perhaps reset callbacks?
-    // console.log("* s deserialize", jsonObj);
+    // debuglog("* s deserialize", jsonObj);
     let serializedObj = jsonObj;
-    // console.log (serializedObj);
+    // debuglog (serializedObj);
     
     deserializationObject = serializedObj; // obs: another global that we must be careful with
 
@@ -363,12 +290,10 @@ function deserialize(lev, jsonObj, cb) {
       for (let i = 0; i < serializedObj.namespaces.length; i++) {
         let ns = serializedObj.namespaces[i];
         for (let j = 0; j < ns.length; j++) {
-          // console.log("*s deserialize", ns[j]);
-          
+          // debuglog("*s deserialize", ns[j]);          
           compiler.stdin.write( ns[j][1] );
           compiler.stdin.write("\n")
           // debuglog ("data out")
-
         }
       }
       compiler.stdin.write("!ECHO /*-----*/\n")
@@ -418,7 +343,7 @@ function serialize(x, pclev) {
   let level = pclev;
 
   function walk (lval)  {    
-    assert(isLVal(lval));
+    assert(Ty.isLVal(lval));
 
     level =  rtObj.lub (level, lval.lev); // 2018-09-24: AA: is this the only place 
                                        // where we need to check the level of the message?
@@ -428,97 +353,92 @@ function serialize(x, pclev) {
 
     let tupleKind = false;
 
-    if ( isList(x) || isTuple(x)) {
-      jsonObj = [];
-      var i;
-      for (i = 0; i < x.length; i ++) {
-        jsonObj.push (walk (x[i]));
-      } 
-      
-      if (isTuple (x)) {
-        tupleKind = true;
-        // console.log ("ISTUPLE")
-      } else {
-        
-        // jsonObj.isList = true;
-      }
-      
+    let _tt = Ty.getTroupeType(x);
 
-    } else if ( isClosure(x) ) {
-      if (seenClosures.has(x)) { // debuglog ("pointer to [existing] heap object", seen.get(x))
-        jsonObj = { ClosureID : seenClosures.get(x)};
-      } else {
-        jsonObj  = { ClosureID : closures.length  }
-        seenClosures.set(x, closures.length  );
-        let jsonClosure = {};
-        closures.push (jsonClosure);
+    switch (_tt) {
+      case Ty.TroupeType.LIST:
+      case Ty.TroupeType.TUPLE:
+          jsonObj = [];          
+          for (let i = 0; i < x.length; i ++) {
+            jsonObj.push (walk (x[i]));
+          }                   
+          tupleKind = Ty.isTuple (x)          
+          break;
+      case Ty.TroupeType.CLOSURE:
+          if (seenClosures.has(x)) { // debuglog ("pointer to [existing] heap object", seen.get(x))
+            jsonObj = { ClosureID : seenClosures.get(x)};
+          } else {
+            jsonObj  = { ClosureID : closures.length  }
+            seenClosures.set(x, closures.length  );
+            let jsonClosure:any = {};
+            closures.push (jsonClosure);
 
-        let jsonEnvPtr;
-        if (seenEnvs.has (x.env)) {
-          jsonEnvPtr = { EnvID: seenEnvs.get(x.env)}
-        } else {
-          jsonEnvPtr = { EnvID: envs.length };
-          seenEnvs.set (x.eqnv, envs.length)
-          let jsonEnv = {};
-          envs.push (jsonEnv);
-
-          for (let field in x.env) {
-            if (field != "ret" && field != "_is_rt_env") {
-              let y = x.env[field];
-              jsonEnv[field] = walk (y);
-            }
-          }
-        }
-
-        jsonClosure.envptr = jsonEnvPtr;
-        for ( let ff in x.namespace ) {
-          if (x.namespace[ff] == x.fun) {
-            let jsonNamespacePtr;
-            let namespace ;
-            if (seenNamespaces.has(x.namespace)) {
-              let n_id = seenNamespaces.get (x.namespace);
-              jsonNamespacePtr = { NamespaceID: n_id };
-              namespace = namespaces[n_id];
+            let jsonEnvPtr;
+            if (seenEnvs.has (x.env)) {
+              jsonEnvPtr = { EnvID: seenEnvs.get(x.env)}
             } else {
-              jsonNamespacePtr = { NamespaceID : namespaces.length };
-              seenNamespaces.set ( x.namespace, namespaces.length );
-              namespace = new Map ();
-              namespaces.push (namespace);              
-            }
+              jsonEnvPtr = { EnvID: envs.length };
+              seenEnvs.set (x.eqnv, envs.length)
+              let jsonEnv = {};
+              envs.push (jsonEnv);
 
-            namespace.set (ff, x.fun.serialized)
-
-            function dfs (deps) {
-              for (let depName of deps) {
-                if (!namespace.has (depName) )  {
-                  namespace.set(depName, x.namespace[depName].serialized);
-                  dfs (x.namespace[depName].deps);
+              for (let field in x.env) {
+                if (field != "ret" && field != "_is_rt_env") {
+                  let y = x.env[field];
+                  jsonEnv[field] = walk (y);
                 }
               }
             }
 
-            dfs (x.fun.deps);
+            jsonClosure.envptr = jsonEnvPtr;
+            for ( let ff in x.namespace ) {
+              if (x.namespace[ff] == x.fun) {
+                let jsonNamespacePtr;
+                let namespace ;
+                if (seenNamespaces.has(x.namespace)) {
+                  let n_id = seenNamespaces.get (x.namespace);
+                  jsonNamespacePtr = { NamespaceID: n_id };
+                  namespace = namespaces[n_id];
+                } else {
+                  jsonNamespacePtr = { NamespaceID : namespaces.length };
+                  seenNamespaces.set ( x.namespace, namespaces.length );
+                  namespace = new Map ();
+                  namespaces.push (namespace);              
+                }
 
-            jsonClosure.namespacePtr = jsonNamespacePtr;
-            jsonClosure.fun = ff;
+                namespace.set (ff, x.fun.serialized)
+
+                function dfs (deps) {
+                  for (let depName of deps) {
+                    if (!namespace.has (depName) )  {
+                      namespace.set(depName, x.namespace[depName].serialized);
+                      dfs (x.namespace[depName].deps);
+                    }
+                  }
+                }
+
+                dfs (x.fun.deps);
+
+                jsonClosure.namespacePtr = jsonNamespacePtr;
+                jsonClosure.fun = ff;
+              }
+            }
           }
-        }
-      }
-    // } else if (isProcessId(x)) {
-    //     console.log("XXX", x)
-    //     jsonObj = new rtObj.ProcessID ( x.uuid, x.pid, x.node )
-    //     // Object.setPrototypeOf(jsonObj, rtObj.ProcesSID);
-
-    } else if (isLevel (x) ) {     
-      jsonObj = { lev : x.stringRep(), isLevel : true }     
-    } else if ( isLVal (x)) {
-        jsonObj = walk (x)
-    } else if ( isAuthority (x) ) {
-        jsonObj = { authorityLevel: x.authorityLevel.stringRep() } 
-    } else if ( isAtom (x)) {
-        jsonObj = { atom: x.atom, creation_uuid: x.creation_uuid }
-    } else {
-        jsonObj = x;
+          break;
+      case Ty.TroupeType.LEVEL:
+          jsonObj = { lev : x.stringRep(), isLevel : true };
+          break;
+      case Ty.TroupeType.LVAL:
+          jsonObj = walk (x);
+          break;
+      case Ty.TroupeType.AUTHORITY:
+          jsonObj = { authorityLevel: x.authorityLevel.stringRep() } 
+          break;
+      case Ty.TroupeType.ATOM:
+          jsonObj = { atom: x.atom, creation_uuid: x.creation_uuid };
+          break;
+      default:
+          jsonObj = x;
     }
 
     // OBS: we are moving away from LVal representation
@@ -527,8 +447,14 @@ function serialize(x, pclev) {
     // that in a different class with a name that reflects that 
     // this is a transport-level representation. 
 
-    return { val: jsonObj, lev : lval.lev.stringRep(), tlev: lval.tlev.stringRep(), tupleKind : tupleKind  };
-    // return new rtObj.LVal(jsonObj, lval.lev.stringRep());
+    return { val: jsonObj
+           , lev : lval.lev.stringRep()
+           , tlev: lval.tlev.stringRep()
+           , tupleKind : tupleKind
+           , troupeType: _tt   // Obs: we cannot use this in deserialization yet, 
+                               // because of backward compatibility of the 
+                               // runners in the version released for LBS; 2020-03-03; AA
+           };              
   }
 
   let value = walk (x);

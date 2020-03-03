@@ -70,16 +70,17 @@ readline.on ('line', lineListener)
 // an attempt to modularize the runtime; 2018-07-16; AA
 //
 const Scheduler = require('./Scheduler.js');
-const LVal = require('./Lval.js').LVal;
+const {LVal, TLVal} = require('./Lval.js');
 const proc = require('./process.js');
 
-const MailboxProcessor = require('./MailboxProcessor.js');
+const {MailboxProcessor} = require('./MailboxProcessor.js');
 const NodeManager = require('./NodeManager.js');
 const loadLibs = require('./loadLibs.js');
 const BaseFunction = require('./BaseFunction.js').BaseFunction;
 
 const SandboxStatus = require('./SandboxStatus.js').HandlerState;
 
+const {runtimeEquals} = require('./EqualityChecker.js')
 
 const Authority = require('./Authority.js').Authority;
 const options = require('./options.js');
@@ -108,8 +109,6 @@ const flowsTo = levels.flowsTo;
 let ProcessID = proc.ProcessID;
 const __unitbase = require('./UnitBase.js');
 let SS = require('./serialize.js')
-// let WS = require('./webserver.js')
-
 let p2p = require('./p2p/p2p.js')
 
 
@@ -1117,21 +1116,6 @@ function rt_tailcall(lff, arg) {
 let rt_ret = (arg) => __sched.returnInThread(arg);
 
 
-function runtimeEquals(o1, o2) {
-  if (typeof o1.atom != "undefined" && typeof o2.atom != "undefined") {
-    // obs: atoms operate in a global namespace; 2018-03-09; aa
-    return (o1.atom == o2.atom)
-  }
-  
-  
-  if (typeof o1.pid != "undefined" &&
-    typeof o2.pid != "undefined") { 
-    return (proc.pid_val_equals(o1, o2));
-  } else {
-    return (o1 == o2)
-  }
-}
-
 
 function rt_loadLib(lib, decl, obj) {
   // load the lib from the linked data structure
@@ -1277,11 +1261,15 @@ function RuntimeObject() {
   })
 
   this.eq = function (x, y) {
-    return new LVal(runtimeEquals(x.val, y.val), lub(x.lev, y.lev), lub (x.tlev, y.tlev) )
+    return runtimeEquals(this, x,y) 
+//     return new LVal(runtimeEquals(x.val, y.val), lub(x.lev, y.lev), lub (x.tlev, y.tlev) )
   }
 
   this.neq = function (x, y) {
-    return new LVal(!(runtimeEquals(x.val, y.val)), lub(x.lev, y.lev), lub (x.tlev, y.tlev))
+    let b = runtimeEquals(this,x,y);
+    b.val = !b.val;
+    return b;
+//    return new LVal(!(runtimeEquals(x.val, y.val)), lub(x.lev, y.lev), lub (x.tlev, y.tlev))
   }
 
   this.stringConcat = function (x,y ) {
@@ -1296,16 +1284,16 @@ function RuntimeObject() {
   }
   this.minus = function (x, y) {
     assertPairAreNumbers(x,y);
-    let rv = new LVal((x.val - y.val), lub(x.lev, y.lev), lub (x.tlev, y.tlev) )    
+    let rv = new LVal((x.val - y.val), lub(x.lev, y.lev), levels.BOT )    
     return rv; 
   }
   this.mult = function (x, y) {
     assertPairAreNumbers(x,y);
-    return new LVal((x.val * y.val), lub(x.lev, y.lev), lub (x.tlev, y.tlev) )
+    return new LVal((x.val * y.val), lub(x.lev, y.lev), levels.BOT )
   }
   this.div = function (x, y) {
     assertPairAreNumbers(x,y);
-    return new LVal((x.val / y.val), lub(x.lev, y.lev), lub (x.tlev, y.tlev) )
+    return new LVal((x.val / y.val), lub(x.lev, y.lev), levels.BOT )
   }
   this.le = function (x, y) {
     assertPairAreStringsOrNumbers(x,y);
@@ -1326,18 +1314,18 @@ function RuntimeObject() {
   this.and = function (x, y) {
     assertIsBoolean(x);
     assertIsBoolean(y);
-    return new LVal((x.val && y.val), lub(x.lev, y.lev), lub (x.tlev, y.tlev) )
+    return new LVal((x.val && y.val), lub(x.lev, y.lev), levels.BOT )
   }
   this.or = function (x, y) {
     assertIsBoolean(x);
     assertIsBoolean(y);
-    return new LVal((x.val || y.val), lub(x.lev, y.lev), lub (x.tlev, y.tlev) )
+    return new LVal((x.val || y.val), lub(x.lev, y.lev), levels.BOT )
   }
   this.index = function (x, y) {
     assertIsListOrTuple(x);
     assertIsNumber(y);    
     let z = x.val[y.val];    
-    return new LVal(z.val, lub(lub(x.lev, y.lev), z.lev), lubs ([x.tlev,y.tlev,z.tlev]) )
+    return new LVal(z.val, lub(lub(x.lev, y.lev), z.lev), z.tlev) 
   }
   this.islist = function (x) {
     return new LVal(Array.isArray(x.val) && isListFlagSet(x.val), x.lev, x.tlev )
@@ -1349,17 +1337,17 @@ function RuntimeObject() {
     assertIsList(b) // 2019-03-07: AA; consider forcing the elements of the list to be of the same type (unless nil)
     let x = b.val.slice();
     x.unshift(a);
-    return new LVal(rt_mkList(x), b.lev, b.tlev )
+    return new LVal(rt_mkList(x), b.lev, levels.BOT )
   }
   this.length = function (x) {
     assertIsListOrTuple(x);
-    return new LVal(x.val.length, x.lev, x.tlev )
+    return new LVal(x.val.length, x.lev, levels.BOT )
   }
 
   this.head = function (x) {
     assertIsList(x)
     let y = x.val[0];
-    return new LVal(y.val, lub(y.lev, x.lev), x.tlev )
+    return new LVal(y.val, lub(y.lev, x.lev), levels.BOT)
   }
 
   this.tail = function (x) {
@@ -1400,7 +1388,7 @@ function RuntimeObject() {
     assertIsLevel(x);
     assertIsLevel(y);
 
-    rt_ret( new LVal(flowsTo(x.val, y.val), lub (__sched.pc, lub(x.lev, y.lev))))
+    rt_ret( new LVal(flowsTo(x.val, y.val), levels.BOT )) // lub (__sched.pc, lub(x.lev, y.lev))))
   })
 
 

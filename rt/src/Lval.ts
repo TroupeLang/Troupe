@@ -1,5 +1,6 @@
 import levels  = require ('./options')
 import { Level } from "./Level";
+import * as Ty from './TroupeTypes';
 
 
 export class LVal {
@@ -8,12 +9,14 @@ export class LVal {
     tlev: Level;
     posInfo: string;
     stringRep: (omitLevels?: boolean, taintRef?: any) => string;
+    highestLevel : Level;    
     constructor(v:any, l:Level, tlev:Level = null, posInfo:string = null) {
         this.val = v;
         this.lev = l;
 
         this.tlev = tlev == null?l:tlev;
         this.posInfo = posInfo;
+        this.highestLevel = levels.TOP;
 
         this.stringRep = (omitLevels = false, taintRef = null) => {
             let t = "";
@@ -46,3 +49,13 @@ export class LVal {
     }
 }
 
+export class TLVal extends LVal {
+    troupeType : Ty.TroupeType
+    constructor(v:any, l: Level, tlev:Level = null, posInfo:string = null) {
+        super (v,l,tlev, posInfo )
+        this.troupeType = Ty.getTroupeType(v);
+        if (Ty.isBaseType(this.troupeType)) {
+            this.highestLevel = this.tlev;
+        }
+    }
+}

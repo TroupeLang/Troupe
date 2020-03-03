@@ -104,7 +104,7 @@ transport).
 
 ### Navigating the code base
 
-The main p2p runtime module is in [rt/src/p2p/p2p.js](rt/src/p2p/p2p.js).
+The main p2p runtime module is in [rt/src/p2p/p2p.ts](rt/src/p2p/p2p.ts).
 
 
 ## References

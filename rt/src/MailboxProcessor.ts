@@ -1,23 +1,23 @@
-'use strict'
 const LVal = require('./Lval.js').LVal;
-const Thread = require('./Thread.js').Thread;
-const proc = require('./process.js');
 const logger = require('./logger.js').mkLogger('mbox');
 const debug = x => logger.debug(x)
 const SandboxStatus = require('./SandboxStatus.js').HandlerState;
-
 const levels = require('./options.js');
 
 
-function Message(msg, fromNodeId, pc) {
-    let tuple = [msg, fromNodeId];        
+function createMessage(msg, fromNodeId, pc) {
+    let tuple:any = [msg, fromNodeId];  
     tuple.isTuple = true; // hack! 2018-10-19: AA
     return new LVal(tuple, pc);
   }
 
 
-
-class MailboxProcessor {
+export class MailboxProcessor {
+    sched: any;
+    levels: any; 
+    mailboxes : any [];
+    rtObj: any ;
+    
     constructor(sched) {
         this.sched = sched;
         this.levels = levels;
@@ -40,8 +40,7 @@ class MailboxProcessor {
         let t = __sched.getThread (toPid);
 
         // create the message 
-        let messageWithSenderId =
-           new Message(message, fromNodeId, pc);
+        let messageWithSenderId = createMessage(message, fromNodeId, pc);
 
         // add the message to the thread's mailbox
         t.addMessage (messageWithSenderId);
@@ -165,15 +164,11 @@ class MailboxProcessor {
     }
 
 
-
     rcv(lowb, highb, handlers) {
       let __sched = this.sched;        
       let mb = __sched.__currentThread.mailbox;
       this.sweepMessages(mb, handlers.val, lowb, highb);        
-    }
-
-    
+    }    
     
 }
 
-module.exports = MailboxProcessor;

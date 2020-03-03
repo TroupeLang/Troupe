@@ -81,7 +81,7 @@ export function getTroupeType (x:any) {
     return TroupeType.AUTHORITY
   } else if (isAtom(x)) {
     return TroupeType.ATOM
-  } else if (Number.isInteger (x)) {
+  } else if (typeof(x) === 'number') {
     return TroupeType.NUMBER
   } else if (typeof(x) === 'boolean') {
     return TroupeType.BOOLEAN
@@ -89,8 +89,10 @@ export function getTroupeType (x:any) {
     return TroupeType.STRING
   } else if (isLVal(x)) {
     return TroupeType.LVAL;
+  } else if (x._is_unit) {
+    return TroupeType.UNIT
   }
-
+  throw new Error (`Cannot identify troupe type for value ${x.toString()}`);
 }
 
 export function isBaseType (t:TroupeType) {

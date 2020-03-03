@@ -67,6 +67,8 @@ import Control.Monad.Except
     '<'   { L _ TokenLt }
     '>'   { L _ TokenGt }
     '<>'  { L _ TokenNe }
+    'div' { L _ TokenIntDiv }
+    'mod' { L _ TokenMod }
 
     'raisedTo' { L _ TokenRaisedTo }
 
@@ -85,8 +87,8 @@ import Control.Monad.Except
 %right ';'
 %left andalso orelse
 %nonassoc '=' '<=' '>=' '<>' '<' '>' '@'
-%left '+' '-'
-%left '*' '/'
+%left '+' '-' 
+%left '*' '/' 'div' 'mod'
 %right '::'
 
 %left 'raisedTo'
@@ -132,6 +134,8 @@ Form : Form '+' Form               { Bin Plus $1 $3 }
      | Form '-' Form               { Bin Minus $1 $3 }
      | Form '*' Form               { Bin Mult $1 $3 }
      | Form '/' Form               { Bin Div $1 $3 }
+     | Form 'div' Form             { Bin IntDiv $1 $3}
+     | Form 'mod' Form             { Bin Mod $1 $3}
      | Form '^' Form               { Bin Concat $1 $3 }
      | Form '=' Form               { Bin Eq $1 $3 }
      | Form '<=' Form              { Bin Le $1 $3 }

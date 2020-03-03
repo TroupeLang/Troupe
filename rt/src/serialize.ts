@@ -214,7 +214,7 @@ function compilerOutputReady(data) {
         return mkClosure (obj.ClosureID)
       } else if (typeof obj.envptr != "undefined") {
         return mkEnv (typeof obj.envptr.EnvID)
-      } else if (Number.isInteger (obj) || (typeof (obj) ==='boolean')  || typeof (obj) === 'string') {
+      } else if (typeof(obj) === 'number' || (typeof (obj) ==='boolean')  || typeof (obj) === 'string') {
         return obj 
       } else if ( Ty.isProcessId(obj) ) {
         return new rtObj.ProcessID(obj.uuid, obj.pid, obj.node)

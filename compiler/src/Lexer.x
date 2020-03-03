@@ -91,6 +91,8 @@ tokens:-
 <0>   pini                           { mkL TokenPini}
 <0>   when                           { mkL TokenWhen  }
 <0>   datatype                       { mkL TokenDatatype }
+<0>   div                            { mkL TokenIntDiv }
+<0>   mod                            { mkL TokenMod }
 <0>   Atoms                          { mkL TokenAtoms }
 <0>   $digit+                        { mkLs (\s -> TokenNum (read s)) }
 <0>   [\@]                           { mkL TokenAt }
@@ -168,6 +170,8 @@ data Token
   | TokenWhen
   | TokenDatatype
   | TokenAtoms
+  | TokenIntDiv 
+  | TokenMod  
   | TokenFn
   | TokenHn
   | TokenNum Integer

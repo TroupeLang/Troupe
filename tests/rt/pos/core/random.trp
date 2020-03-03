@@ -1,0 +1,14 @@
+(* 
+
+Generate a pair of random numbers and check a
+bunch of expected facts about them: 
+
+- each is between between 0 (inclusive) and 1
+- (it is unlikely) they are not the same 
+
+*)
+
+let val r1 = random () 
+    val r2 = random () 
+in (r1 >= 0, r2 >= 0, r1 < 1, r2 <1, r1 <> r2 )  
+end    

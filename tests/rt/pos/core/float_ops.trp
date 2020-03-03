@@ -1,0 +1,7 @@
+let val _ =  print (1/2 , 3 / 4, 5 div 2, 5 mod 2)
+    val x = 32/15 
+    val y = 32/17
+    val ops_x = (ceil x, floor x, round x)
+    val ops_y = (ceil y, floor y, round y)
+in print ops_x; print ops_y
+end

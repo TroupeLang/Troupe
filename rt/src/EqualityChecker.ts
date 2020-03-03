@@ -3,7 +3,7 @@ import {TLVal, LVal} from './Lval'
 const proc = require('./process.js');
 
 
-export function runtimeEquals (rt:any, x:LVal, y:LVal) {
+export function runtimeEquals (rt:any, x:LVal, y:LVal) {  
   let t1 = getTroupeType(x.val)
   let t2 = getTroupeType(y.val)
 
@@ -21,6 +21,7 @@ export function runtimeEquals (rt:any, x:LVal, y:LVal) {
   if (t1 != t2) return baseBoolean(false)
   let o1 = x.val 
   let o2 = y.val 
+  
 
   switch (t1){
     case TroupeType.ATOM:
@@ -51,7 +52,7 @@ export function runtimeEquals (rt:any, x:LVal, y:LVal) {
         return baseBoolean(true, l)
       };
       break;
-    default: 
+    default:       
       return baseBoolean (x.val == y.val) 
   }
 }

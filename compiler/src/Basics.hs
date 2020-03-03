@@ -10,7 +10,7 @@ import Data.Serialize (Serialize)
 type VarName = String
 type AtomName = String
 
-data BinOp = Plus | Minus | Mult | Div | Mod | Eq | Neq | Le | Lt | Ge | Gt | And | Or | Index | RaisedTo | FlowsTo | Concat 
+data BinOp = Plus | Minus | Mult | Div | Mod |  Eq | Neq | Le | Lt | Ge | Gt | And | Or | Index | RaisedTo | FlowsTo | Concat| IntDiv 
   deriving (Eq,Generic)
 instance Serialize BinOp
 data UnaryOp = IsList | IsTuple | Head | Tail | Fst | Snd | Length | LevelOf | UnMinus
@@ -22,7 +22,8 @@ instance Show BinOp where
   show Minus = "-"
   show Mult  = "*"
   show Div   = "/"
-  show Mod   = "%"
+  show IntDiv = "div"
+  show Mod   = "mod"
   show Eq    = "="
   show Neq   = "<>"
   show Le    = "<="

@@ -1189,9 +1189,6 @@ function RuntimeObject() {
   this.Closure = RtClosure;
   this.Env = RtEnv;
   this.setret = rt_setret
-  
-
-  // this.resetret = rt_resetret
   this.ret = rt_ret
   this.__unitbase = __unitbase
   this.__unit = __unit
@@ -1202,18 +1199,13 @@ function RuntimeObject() {
   this.mkCopy = rt_mkCopy
   this.mkTuple = rt_mkTuple
   this.mkList = rt_mkList
-
   this.loadLib = rt_loadLib
-
   this.debug = rt_debug 
-
   this.linkLibs = rt_linkLibs
-
   this.levels = levels
-
   this.persist = persist
-
   this.mkLabel = rt_mkLabel
+  
   this.raisedTo = function (x, y) {
     return new LVal(x.val, lub(lub(x.lev, y.val), y.lev), lubs([x.tlev, y.tlev, __sched.pc]) )
   }
@@ -1253,8 +1245,6 @@ function RuntimeObject() {
   this.exit = rt_exit;
   
 
-
-
   this.debugpc = mkBase ((env,arg)=>{
     rt_debug("");
     rt_ret(__unit);
@@ -1262,83 +1252,105 @@ function RuntimeObject() {
 
   this.eq = function (x, y) {
     return runtimeEquals(this, x,y) 
-//     return new LVal(runtimeEquals(x.val, y.val), lub(x.lev, y.lev), lub (x.tlev, y.tlev) )
   }
 
-  this.neq = function (x, y) {
-    let b = runtimeEquals(this,x,y);
-    b.val = !b.val;
+  this.neq = function (x, y) {    
+    let b = runtimeEquals(this,x,y);    
+    b.val = !b.val;        
     return b;
-//    return new LVal(!(runtimeEquals(x.val, y.val)), lub(x.lev, y.lev), lub (x.tlev, y.tlev))
   }
 
   this.stringConcat = function (x,y ) {
     assertIsString (x);
     assertIsString (y);
-    return new LVal ( (x.val + y.val), lub (x.lev, y.lev), lub (x.tlev, y.tlev));
+    return new LVal ( (x.val + y.val), lub (x.lev, y.lev), levels.BOT);
   }
 
   this.plus = function (x, y) {
     assertPairAreStringsOrNumbers(x,y);
     return new LVal((x.val + y.val), lub(x.lev, y.lev), lub (x.tlev, y.tlev))
   }
+
   this.minus = function (x, y) {
     assertPairAreNumbers(x,y);
     let rv = new LVal((x.val - y.val), lub(x.lev, y.lev), levels.BOT )    
     return rv; 
   }
+
   this.mult = function (x, y) {
     assertPairAreNumbers(x,y);
     return new LVal((x.val * y.val), lub(x.lev, y.lev), levels.BOT )
   }
+
   this.div = function (x, y) {
-    assertPairAreNumbers(x,y);
+    assertPairAreNumbers(x,y);    
     return new LVal((x.val / y.val), lub(x.lev, y.lev), levels.BOT )
   }
+
+  this.intdiv = function (x,y) {    
+    assertPairAreNumbers(x,y);      
+    return new LVal(Math.trunc (x.val / y.val), lub(x.lev, y.lev), levels.BOT )
+  }
+
+  this.mod = function (x,y) {
+    assertPairAreNumbers(x,y);    
+    return new LVal(x.val  % y.val, lub(x.lev, y.lev), levels.BOT )
+  }
+
   this.le = function (x, y) {
     assertPairAreStringsOrNumbers(x,y);
-    return new LVal((x.val <= y.val), lub(x.lev, y.lev), lub (x.tlev, y.tlev) )
+    return new LVal((x.val <= y.val), lub(x.lev, y.lev), levels.BOT )
   }
+
   this.lt = function (x, y) {
     assertPairAreStringsOrNumbers(x,y);
-    return new LVal((x.val < y.val), lub(x.lev, y.lev), lub (x.tlev, y.tlev) )
+    return new LVal((x.val < y.val), lub(x.lev, y.lev), levels.BOT )
   }
+
   this.ge = function (x, y) {
     assertPairAreStringsOrNumbers(x,y);
-    return new LVal((x.val >= y.val), lub(x.lev, y.lev), lub (x.tlev, y.tlev) )
+    return new LVal((x.val >= y.val), lub(x.lev, y.lev), levels.BOT )
   }
+
   this.gt = function (x, y) {
     assertPairAreStringsOrNumbers(x,y);
-    return new LVal((x.val > y.val), lub(x.lev, y.lev), lub (x.tlev, y.tlev) )
+    return new LVal((x.val > y.val), lub(x.lev, y.lev), levels.BOT )
   }
+
   this.and = function (x, y) {
     assertIsBoolean(x);
     assertIsBoolean(y);
     return new LVal((x.val && y.val), lub(x.lev, y.lev), levels.BOT )
   }
+
   this.or = function (x, y) {
     assertIsBoolean(x);
     assertIsBoolean(y);
     return new LVal((x.val || y.val), lub(x.lev, y.lev), levels.BOT )
   }
+
   this.index = function (x, y) {
     assertIsListOrTuple(x);
     assertIsNumber(y);    
     let z = x.val[y.val];    
     return new LVal(z.val, lub(lub(x.lev, y.lev), z.lev), z.tlev) 
   }
+  
   this.islist = function (x) {
     return new LVal(Array.isArray(x.val) && isListFlagSet(x.val), x.lev, x.tlev )
   }
+
   this.istuple = function (x) {
     return new LVal(Array.isArray(x.val) && isTupleFlagSet(x.val), x.lev, x.tlev )
   }
+
   this.cons = function (a, b) {
     assertIsList(b) // 2019-03-07: AA; consider forcing the elements of the list to be of the same type (unless nil)
     let x = b.val.slice();
     x.unshift(a);
     return new LVal(rt_mkList(x), b.lev, levels.BOT )
   }
+
   this.length = function (x) {
     assertIsListOrTuple(x);
     return new LVal(x.val.length, x.lev, levels.BOT )
@@ -1359,10 +1371,10 @@ function RuntimeObject() {
   this.getVal = function (x) {
     return x.val
   }
+
   this.branch = function (x) {
     $t().setBranchFlag()
-    raiseCurrentThreadPC(x.lev);
-   
+    raiseCurrentThreadPC(x.lev);   
   }
 
   this.push = (x) => {
@@ -1372,6 +1384,27 @@ function RuntimeObject() {
   this.assertOrError = function (x)  {
     raiseCurrentBlockingThreadLev (x.lev);
   }
+
+  this.random = mkBase ((env, arg) => {
+    assertIsUnit(arg);
+    rt_ret (new LVal (Math.random(), levels.BOT, levels.BOT))
+  })
+
+  this.ceil = mkBase ((env, arg) => {
+    assertIsNumber (arg);
+    rt_ret (new LVal (Math.ceil(arg.val), arg.lev, arg.tlev));
+  })
+
+  this.round = mkBase ((env, arg) => {
+    assertIsNumber (arg);
+    rt_ret (new LVal (Math.round(arg.val), arg.lev, arg.tlev));
+  })
+
+  this.floor = mkBase ((env, arg) => {
+    assertIsNumber (arg);
+    rt_ret (new LVal (Math.floor(arg.val), arg.lev, arg.tlev));
+  })
+
 
 
   this.levelOf = mkBase ((env, arg) => {

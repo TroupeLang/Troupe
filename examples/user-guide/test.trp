@@ -1,0 +1,4 @@
+let val (a,b) = (1,2) raisedTo {alice}
+in a + b
+end 
+    

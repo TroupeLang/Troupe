@@ -29,7 +29,7 @@ by the runtime module.
 
 ### Step 3. Install Troupe top-level scripts
 
-Type `make slack` to compile Troupe's bin scripts
+Type `make stack` to compile Troupe's bin scripts
 
 ### Step 4. Install Troupe standard library
 

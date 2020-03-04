@@ -1,0 +1,10 @@
+(* Get two consecutive time stamps and check for their expected properties,
+namely that it is higher than `Sun Sep 9 01:46:40 2001` (timestamp for 1000000000)`
+and that the timestamps are monotonic
+*)
+
+let 
+   val t1 = getTime ()
+   val t2 = getTime ()
+in (t1 >= 1000000000000, t2 - t1 >=0)
+end  

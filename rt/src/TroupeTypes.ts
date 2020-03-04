@@ -6,6 +6,7 @@ export const enum TroupeType {
   PROCESS_ID,
   LEVEL,
   AUTHORITY,
+  CAPABILITY,
   CLOSURE,
   ATOM,
   /* up until this point only base types */  
@@ -51,6 +52,9 @@ export function isAuthority (x) {
   return (typeof x.authorityLevel != "undefined");
 }
 
+export function isCapability (x) {
+  return x._troupeType == TroupeType.CAPABILITY
+}
 
 export function isAtom (x) {
   return (typeof x.atom != "undefined");
@@ -67,6 +71,11 @@ export function isAtom (x) {
 // lval but is the vaule field of 
 // the lval.
 export function getTroupeType (x:any) {
+  
+  if (x._troupeType) {
+    return x._troupeType;
+  }
+
   if (isClosure(x)) {
     return TroupeType.CLOSURE
   } else if (isTuple(x)) {
@@ -91,6 +100,8 @@ export function getTroupeType (x:any) {
     return TroupeType.LVAL;
   } else if (x._is_unit) {
     return TroupeType.UNIT
+  } else if (isCapability(x)) {
+    return TroupeType.CAPABILITY
   }
   throw new Error (`Cannot identify troupe type for value ${x.toString()}`);
 }

@@ -1,4 +1,4 @@
-const LVal = require('./Lval.js').LVal;
+const {LVal, MbVal} = require('./Lval.js');
 const logger = require('./logger.js').mkLogger('mbox');
 const debug = x => logger.debug(x)
 const SandboxStatus = require('./SandboxStatus.js').HandlerState;
@@ -8,7 +8,7 @@ const levels = require('./options.js');
 function createMessage(msg, fromNodeId, pc) {
     let tuple:any = [msg, fromNodeId];  
     tuple.isTuple = true; // hack! 2018-10-19: AA
-    return new LVal(tuple, pc);
+    return new MbVal(tuple, pc);
   }
 
 

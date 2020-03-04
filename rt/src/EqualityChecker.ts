@@ -1,21 +1,23 @@
 import {TroupeType, getTroupeType} from './TroupeTypes'
 import {TLVal, LVal} from './Lval'
 const proc = require('./process.js');
+import levels  = require ('./options')
 
 
-export function runtimeEquals (rt:any, x:LVal, y:LVal) {  
+
+export function runtimeEquals (x:LVal, y:LVal) {  
   let t1 = getTroupeType(x.val)
   let t2 = getTroupeType(y.val)
 
-  function baseBoolean (b:boolean, l=rt.levels.lub (x.lev, y.lev)) {
-    return new TLVal (b, l, rt.levels.BOT) 
+  function baseBoolean (b:boolean, l=levels.lub (x.lev, y.lev)) {
+    return new TLVal (b, l, levels.BOT) 
   }
 
   function levelEquality (o1, o2) {
-    let b1 = rt.levels.flowsTo (o1, o2)
+    let b1 = levels.flowsTo (o1, o2)
     if (!b1)
       return baseBoolean (false);
-    return baseBoolean(rt.levels.flowsTo(o2,o1))
+    return baseBoolean(levels.flowsTo(o2,o1))
   }
 
   if (t1 != t2) return baseBoolean(false)
@@ -41,10 +43,10 @@ export function runtimeEquals (rt:any, x:LVal, y:LVal) {
       if (o1.length != o2.length) 
         return baseBoolean(false)
       else {
-        let l = rt.levels.lub (x.lev, y.lev);
+        let l = levels.lub (x.lev, y.lev);
         for (let j = 0; j < o1.length; j ++ ) {
-          let z = runtimeEquals(rt, o1[j], o2[j]);
-          l = rt.levels.lub (l, z.lev)
+          let z = runtimeEquals(o1[j], o2[j]);
+          l = levels.lub (l, z.lev)
           if (!z.val) {
             return baseBoolean(false, l)
           }

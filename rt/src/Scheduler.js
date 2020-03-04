@@ -4,7 +4,7 @@ const process = require('./process.js');
 
 const BaseFunction = require('./BaseFunction.js').BaseFunction;
 const BaseKont = require('./BaseKont.js')
-const LVal = require('./Lval.js').LVal;
+const {TLVal } = require('./Lval.js');
 const Thread = require('./Thread.js').Thread;
 const SandboxStatus = require('./SandboxStatus.js').HandlerState;
 
@@ -46,7 +46,7 @@ class Scheduler {
         this.stackcounter = 0;
                 
         // the unit value 
-        this.__unit = new LVal (__unitbase, levels.BOT);
+        this.__unit = new TLVal (__unitbase, levels.BOT);
     }
 
     done  (arg)  {            
@@ -121,7 +121,7 @@ class Scheduler {
     }
 
     mkBase(f,name=null) {
-        return new LVal(new BaseFunction(f,name), levels.BOT);
+        return new TLVal(new BaseFunction(f,name), levels.BOT);
     }
 
     initScheduler(node, stopWhenAllThreadsAreDone = false, stopRuntime = () => {}) {
@@ -208,7 +208,7 @@ class Scheduler {
     createNewProcessIDAtLevel(pcArg) {
         let pid = uuidv4();
         let pidObj = new ProcessID(this.rt_uuid, pid, this.__node);
-        return new LVal(pidObj, pcArg);
+        return new TLVal(pidObj, pcArg);
     }
 
     scheduleNewThreadAtLevel (thefun, args, nm, levpc, levblock, ismain = false, persist=null) {

@@ -1,5 +1,5 @@
 import levels = require ('./options')
-import { LVal } from './Lval.js';
+import { LVal , TLVal, LValCopyAt } from './Lval.js';
 import { ThreadError } from './ThreadError.js';
 import colors = require('colors/safe');
 import { StackItem } from './StackItem';
@@ -11,6 +11,7 @@ let lub = levels.lub;
 let flowsTo = levels.flowsTo
 import uuidv4 = require('uuid/v4');
 import { Asserts  } from './Asserts'
+import { TroupeType } from './TroupeTypes'
 
 export enum PCDeclassificationPurpose {
     Full="pcpush", 
@@ -42,6 +43,7 @@ export class Capability<T> {
 
     */
    
+    _troupeType: TroupeType
     uid : string 
     data : T
     prev: string
@@ -49,6 +51,8 @@ export class Capability<T> {
         this.uid = c; 
         this.data = l;
         this.prev = p // provides scoping control; needs better name; AA; 2020-02-08
+
+        this._troupeType = TroupeType.CAPABILITY
     }
     stringRep() : string {
         return this.uid;
@@ -225,9 +229,7 @@ export class Thread {
     }
     
     returnInThread (arg) {       
-        let rv = new LVal (arg.val
-                    ,  lub  (arg.lev, this.pc)
-                    ,  lub  (arg.tlev, this.pc));
+        let rv = new LValCopyAt (arg, this.pc);
 
         let branchFlag = this.callStack.pop ()
         let lclear = this.callStack.pop()
@@ -387,22 +389,22 @@ export class Thread {
     }
 
     mkVal(x) {
-        return new LVal(x, this.pc, this.pc );
+        return new TLVal(x, this.pc, this.pc );
     }
 
     mkValPos(x: any, pos: string) {
-        return new LVal (x, this.pc, this.pc, pos);
+        return new TLVal (x, this.pc, this.pc, pos);
     }
 
-    mkValWithLev(x:any, l:any) {            
-        
-        return new LVal ( x
+    mkValWithLev(x:any, l:any) {                    
+        return new TLVal ( x
                         , lub(this.pc, l)
                         , this.pc )              
     }
 
     mkCopy (x) {
-        return new LVal(x.val, lub(x.lev, this.pc), lub (x.tlev, this.pc) )
+        return new LValCopyAt (x, this.pc);
+        // return new TLVal(x.val, lub(x.lev, this.pc), lub (x.tlev, this.pc) )
     }
 
     

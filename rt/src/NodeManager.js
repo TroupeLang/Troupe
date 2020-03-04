@@ -22,7 +22,10 @@ class NodeManager {
     }
 
     getNodeId () {
-        this.localNode.nodeId
+        if (this.localNode.nodeId == null) {
+            return "<local>"
+        } 
+        return this.localNode.nodeId
     }
 
     getNode(nodeName) {

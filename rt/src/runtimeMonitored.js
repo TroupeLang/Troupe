@@ -70,7 +70,7 @@ readline.on ('line', lineListener)
 // an attempt to modularize the runtime; 2018-07-16; AA
 //
 const Scheduler = require('./Scheduler.js');
-const {LVal, TLVal} = require('./Lval.js');
+const {LVal, TLVal, MbVal, LValCopyAt, LCopyVal} = require('./Lval.js');
 const proc = require('./process.js');
 
 const {MailboxProcessor} = require('./MailboxProcessor.js');
@@ -203,7 +203,7 @@ async function spawnAtNode(nodeid, f) {
     let body1 = await p2p.spawnp2p(node.nodeId, data);
     let body = await SS.deserializeAsync ( nodeTrustLevel(node.nodeId) , body1)
     let pid = new ProcessID(body.val.uuid, body.val.pid, body.val.node);
-    theThread.returnInThread (new LVal(pid, body.lev));
+    theThread.returnInThread (new TLVal(pid, body.lev));
 
     __sched.scheduleThreadT(theThread);
     __sched.resumeLoopAsync();
@@ -289,7 +289,7 @@ let rt_sleep = mkBase ((env, arg) => {
 
 
 function rt_raisedToLev (x, y) {
-    return new LVal(x.val, lub(x.lev, y));
+   return new LValCopyAt(x, y)
 }
 
 let rt_sandbox = mkBase ((env, arg) => {
@@ -474,7 +474,7 @@ async function receiveFromRemote(pid, jsonObj, fromNode) {
   // about the level of the fromNode?; AA
 
   let fromNodeId = __sched.mkVal(fromNode);
-  let toPid = new LVal(new ProcessID(rt_uuid, pid, __nodeManager.getLocalNode()), data.lev);
+  let toPid = new TLVal(new ProcessID(rt_uuid, pid, __nodeManager.getLocalNode()), data.lev);
   __theMailbox.addMessage(fromNodeId, toPid, data.val, data.lev);
   __sched.resumeLoopAsync();
 
@@ -495,7 +495,7 @@ function sendMessageToRemote(toPid, message) {
   let pid = toPid.pid;
   // debug ("* rt *", toPid, message);
 
-  let {data, level} = SS.serialize(new LVal(message, __sched.pc), __sched.pc);
+  let {data, level} = SS.serialize(new MbVal(message, __sched.pc), __sched.pc);
   let trustLevel = nodeTrustLevel (node);
 
   // debug ("data level: " +  level.stringRep());
@@ -685,7 +685,7 @@ let rt_getTime = mkBase ((env,arg)=>{
   assertIsUnit(arg)
   let d = new Date()
   let t = d.getTime()
-  let v = new LVal (t, __sched.pc);
+  let v = new TLVal (t, __sched.pc);
   rt_ret (v)
 } )
 
@@ -828,7 +828,7 @@ let rt_attenuate = mkBase ((env, arg) => {
   // todo: 2018-10-18: AA; are we missing anything?
   let l_meta = lubs ( [  __sched.pc, arg.lev, authFrom.lev, levTo.lev] )
   let l_auth = ok_to_attenuate? levTo.val: levels.BOT;
-  let r = new LVal ( new Authority (l_auth), l_meta)
+  let r = new TLVal ( new Authority (l_auth), l_meta)
 
   rt_ret ( r)
 }, "attenuate")
@@ -861,7 +861,8 @@ let rt_declassify = mkBase ((env, arg) => {
 
   if (ok_to_declassify) {
     // we need to collect all the restrictions
-    let r =  new LVal (data.val, lubs ([toLevV.val, toLevV.lev, pc, arg.lev, auth.lev]));
+    let r =  new LCopyVal(data, lubs ([toLevV.val, toLevV.lev, pc, arg.lev, auth.lev]));
+
     rt_ret (r) // schedule the return value
   } else {
     let errorMessage = 
@@ -918,7 +919,7 @@ let rt_nodeFromProcess = mkBase ((env, arg) => {
   assertIsProcessId (arg);
   let data = arg.val;
   let nodeId = data.node.nodeId;
-  let v = new LVal  (nodeId, arg.lev);
+  let v = new TLVal  (nodeId, arg.lev);
   rt_ret (v);
 }, "node")
 
@@ -1017,7 +1018,7 @@ let rt_whereis = mkBase((env, arg) => {
 
 let baseMkSecret = function (env, x) {
   // debug ("making secret " + x.val)
-  rt_ret(new LVal(x.val, levels.TOP))
+  rt_ret(new TLVal(x.val, levels.TOP))
 }
 
 let rt_mkSecret = mkBase(baseMkSecret)
@@ -1048,7 +1049,7 @@ function rt_setret(namespace, kf, e) {
 function rt_mkLabel(x) {
   // debug ("mkLabel", x, x === "secret");
 
-  return new LVal(levels.mkLevel(x), __sched.pc);
+  return new TLVal(levels.mkLevel(x), __sched.pc);
 
 }
 
@@ -1207,12 +1208,13 @@ function RuntimeObject() {
   this.mkLabel = rt_mkLabel
   
   this.raisedTo = function (x, y) {
-    return new LVal(x.val, lub(lub(x.lev, y.val), y.lev), lubs([x.tlev, y.tlev, __sched.pc]) )
+    assertIsLevel(y)
+    return new LCopyVal(x, lub(lub(x.lev, y.val), y.lev), lubs([x.tlev, y.tlev, __sched.pc]) )
   }
  
   this.unaryMinus = function (x) {
     assertIsNumber(x);
-    return new LVal(-x.val, x.lev, x.tlev)
+    return new TLVal(-x.val, x.lev, levels.BOT)
   }
 
   this.node = rt_nodeFromProcess;
@@ -1251,11 +1253,11 @@ function RuntimeObject() {
   })
 
   this.eq = function (x, y) {
-    return runtimeEquals(this, x,y) 
+    return runtimeEquals(x,y) 
   }
 
   this.neq = function (x, y) {    
-    let b = runtimeEquals(this,x,y);    
+    let b = runtimeEquals(x,y);    
     b.val = !b.val;        
     return b;
   }
@@ -1263,85 +1265,85 @@ function RuntimeObject() {
   this.stringConcat = function (x,y ) {
     assertIsString (x);
     assertIsString (y);
-    return new LVal ( (x.val + y.val), lub (x.lev, y.lev), levels.BOT);
+    return new TLVal ( (x.val + y.val), lub (x.lev, y.lev), levels.BOT);
   }
 
   this.plus = function (x, y) {
     assertPairAreStringsOrNumbers(x,y);
-    return new LVal((x.val + y.val), lub(x.lev, y.lev), lub (x.tlev, y.tlev))
+    return new TLVal((x.val + y.val), lub(x.lev, y.lev), lub (x.tlev, y.tlev))
   }
 
   this.minus = function (x, y) {
     assertPairAreNumbers(x,y);
-    let rv = new LVal((x.val - y.val), lub(x.lev, y.lev), levels.BOT )    
+    let rv = new TLVal((x.val - y.val), lub(x.lev, y.lev), levels.BOT )    
     return rv; 
   }
 
   this.mult = function (x, y) {
     assertPairAreNumbers(x,y);
-    return new LVal((x.val * y.val), lub(x.lev, y.lev), levels.BOT )
+    return new TLVal((x.val * y.val), lub(x.lev, y.lev), levels.BOT )
   }
 
   this.div = function (x, y) {
     assertPairAreNumbers(x,y);    
-    return new LVal((x.val / y.val), lub(x.lev, y.lev), levels.BOT )
+    return new TLVal((x.val / y.val), lub(x.lev, y.lev), levels.BOT )
   }
 
   this.intdiv = function (x,y) {    
     assertPairAreNumbers(x,y);      
-    return new LVal(Math.trunc (x.val / y.val), lub(x.lev, y.lev), levels.BOT )
+    return new TLVal(Math.trunc (x.val / y.val), lub(x.lev, y.lev), levels.BOT )
   }
 
   this.mod = function (x,y) {
     assertPairAreNumbers(x,y);    
-    return new LVal(x.val  % y.val, lub(x.lev, y.lev), levels.BOT )
+    return new TLVal(x.val  % y.val, lub(x.lev, y.lev), levels.BOT )
   }
 
   this.le = function (x, y) {
     assertPairAreStringsOrNumbers(x,y);
-    return new LVal((x.val <= y.val), lub(x.lev, y.lev), levels.BOT )
+    return new TLVal((x.val <= y.val), lub(x.lev, y.lev), levels.BOT )
   }
 
   this.lt = function (x, y) {
     assertPairAreStringsOrNumbers(x,y);
-    return new LVal((x.val < y.val), lub(x.lev, y.lev), levels.BOT )
+    return new TLVal((x.val < y.val), lub(x.lev, y.lev), levels.BOT )
   }
 
   this.ge = function (x, y) {
     assertPairAreStringsOrNumbers(x,y);
-    return new LVal((x.val >= y.val), lub(x.lev, y.lev), levels.BOT )
+    return new TLVal((x.val >= y.val), lub(x.lev, y.lev), levels.BOT )
   }
 
   this.gt = function (x, y) {
     assertPairAreStringsOrNumbers(x,y);
-    return new LVal((x.val > y.val), lub(x.lev, y.lev), levels.BOT )
+    return new TLVal((x.val > y.val), lub(x.lev, y.lev), levels.BOT )
   }
 
   this.and = function (x, y) {
     assertIsBoolean(x);
     assertIsBoolean(y);
-    return new LVal((x.val && y.val), lub(x.lev, y.lev), levels.BOT )
+    return new TLVal((x.val && y.val), lub(x.lev, y.lev), levels.BOT )
   }
 
   this.or = function (x, y) {
     assertIsBoolean(x);
     assertIsBoolean(y);
-    return new LVal((x.val || y.val), lub(x.lev, y.lev), levels.BOT )
+    return new TLVal((x.val || y.val), lub(x.lev, y.lev), levels.BOT )
   }
 
   this.index = function (x, y) {
     assertIsListOrTuple(x);
     assertIsNumber(y);    
     let z = x.val[y.val];    
-    return new LVal(z.val, lub(lub(x.lev, y.lev), z.lev), z.tlev) 
+    return new TLVal(z.val, lub(lub(x.lev, y.lev), z.lev), z.tlev) 
   }
   
   this.islist = function (x) {
-    return new LVal(Array.isArray(x.val) && isListFlagSet(x.val), x.lev, x.tlev )
+    return new TLVal(Array.isArray(x.val) && isListFlagSet(x.val), x.lev, x.tlev )
   }
 
   this.istuple = function (x) {
-    return new LVal(Array.isArray(x.val) && isTupleFlagSet(x.val), x.lev, x.tlev )
+    return new TLVal(Array.isArray(x.val) && isTupleFlagSet(x.val), x.lev, x.tlev )
   }
 
   this.cons = function (a, b) {
@@ -1353,7 +1355,7 @@ function RuntimeObject() {
 
   this.length = function (x) {
     assertIsListOrTuple(x);
-    return new LVal(x.val.length, x.lev, levels.BOT )
+    return new TLVal(x.val.length, x.lev, levels.BOT )
   }
 
   this.head = function (x) {
@@ -1387,29 +1389,29 @@ function RuntimeObject() {
 
   this.random = mkBase ((env, arg) => {
     assertIsUnit(arg);
-    rt_ret (new LVal (Math.random(), levels.BOT, levels.BOT))
+    rt_ret (new TLVal (Math.random(), levels.BOT, levels.BOT))
   })
 
   this.ceil = mkBase ((env, arg) => {
     assertIsNumber (arg);
-    rt_ret (new LVal (Math.ceil(arg.val), arg.lev, arg.tlev));
+    rt_ret (new TLVal (Math.ceil(arg.val), arg.lev, arg.tlev));
   })
 
   this.round = mkBase ((env, arg) => {
     assertIsNumber (arg);
-    rt_ret (new LVal (Math.round(arg.val), arg.lev, arg.tlev));
+    rt_ret (new TLVal (Math.round(arg.val), arg.lev, arg.tlev));
   })
 
   this.floor = mkBase ((env, arg) => {
     assertIsNumber (arg);
-    rt_ret (new LVal (Math.floor(arg.val), arg.lev, arg.tlev));
+    rt_ret (new TLVal (Math.floor(arg.val), arg.lev, arg.tlev));
   })
 
 
 
   this.levelOf = mkBase ((env, arg) => {
     let l = arg.lev; 
-    rt_ret (new LVal (l, lub (__sched.pc, l)))
+    rt_ret (new TLVal (l, lub (__sched.pc, l)))
   })
 
 
@@ -1421,7 +1423,7 @@ function RuntimeObject() {
     assertIsLevel(x);
     assertIsLevel(y);
 
-    rt_ret( new LVal(flowsTo(x.val, y.val), levels.BOT )) // lub (__sched.pc, lub(x.lev, y.lev))))
+    rt_ret( new TLVal(flowsTo(x.val, y.val), levels.BOT )) // lub (__sched.pc, lub(x.lev, y.lev))))
   })
 
 
@@ -1462,8 +1464,8 @@ function RuntimeObject() {
   
 
   this.setLibloadMode = () => {
-    this.mkVal = (x) => new LVal (x, levels.BOT );
-    this.mkValPos = (x, pos) => new LVal(x, levels.BOT, levels.BOT, pos );
+    this.mkVal = (x) => new TLVal (x, levels.BOT );
+    this.mkValPos = (x, pos) => new TLVal(x, levels.BOT, levels.BOT, pos );
     this.Env = LibEnv; 
   }
 
@@ -1628,7 +1630,7 @@ async function start(f) {
         , stopWhenAllThreadsAreDone
         , cleanup );
 
-      let mainAuthority = new LVal(new Authority (levels.TOP), levels.BOT);
+      let mainAuthority = new TLVal(new Authority (levels.TOP), levels.BOT);
 
       __sched.scheduleNewThreadAtLevel (  
             f.main

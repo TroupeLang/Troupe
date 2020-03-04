@@ -1,6 +1,9 @@
+import {TroupeType} from './TroupeTypes'
+
 export class BaseFunction {
   env: any;
   fun: any;
+  _troupeType: TroupeType;
   stringRep: () => string;
     constructor(f, name=null) {
       this.env = null;
@@ -12,6 +15,7 @@ export class BaseFunction {
           return "<basefun:_>"
         }
       }
+      this._troupeType = TroupeType.CLOSURE;
     }
   }
 

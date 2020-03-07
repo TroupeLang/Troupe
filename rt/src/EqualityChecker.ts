@@ -20,6 +20,22 @@ export function runtimeEquals (x:LVal, y:LVal) {
     return baseBoolean(levels.flowsTo(o2,o1))
   }
 
+  function arrayEquality (o1, o2) {
+    if (o1.length != o2.length) 
+      return baseBoolean(false)
+   
+    let l = levels.lub (x.lev, y.lev);
+    for (let j = 0; j < o1.length; j ++ ) {
+      let z = runtimeEquals(o1[j], o2[j]);
+      l = levels.lub (l, z.lev)
+      if (!z.val) {
+        return baseBoolean(false, l)
+      }
+    }
+    return baseBoolean(true, l)
+  
+  }
+
   if (t1 != t2) return baseBoolean(false)
   let o1 = x.val 
   let o2 = y.val 
@@ -39,20 +55,10 @@ export function runtimeEquals (x:LVal, y:LVal) {
       return levelEquality(o1.authorityLevel, o2.authorityLevel);
       break;    
     case TroupeType.LIST:
+      return arrayEquality(o1.toArray(), o2.toArray());
+      break;
     case TroupeType.TUPLE: 
-      if (o1.length != o2.length) 
-        return baseBoolean(false)
-      else {
-        let l = levels.lub (x.lev, y.lev);
-        for (let j = 0; j < o1.length; j ++ ) {
-          let z = runtimeEquals(o1[j], o2[j]);
-          l = levels.lub (l, z.lev)
-          if (!z.val) {
-            return baseBoolean(false, l)
-          }
-        }
-        return baseBoolean(true, l)
-      };
+      return arrayEquality(o1,o2)
       break;
     default:       
       return baseBoolean (x.val == y.val) 

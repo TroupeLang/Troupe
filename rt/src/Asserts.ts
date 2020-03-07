@@ -57,14 +57,14 @@ export class Asserts {
 
     assertIsListOrTuple (x:any) {
         this._thread.raiseBlockingThreadLev(x.tlev);;
-        if ( !(Array.isArray (x.val) && (isListFlagSet (x.val) || isTupleFlagSet(x.val) ) ) ) {
-            this._thread.threadError ("value " + x.stringRep() + " is not a list" )
+        if ( !((isListFlagSet (x.val) || isTupleFlagSet(x.val) ) ) ) {
+            this._thread.threadError ("value " + x.stringRep() + " is not a list or tuple" )
         }
     }
 
     assertIsList (x: any) {
         this._thread.raiseBlockingThreadLev(x.tlev);;
-        if ( !(Array.isArray (x.val) && isListFlagSet (x.val))) {
+        if ( !isListFlagSet (x.val)) {
             this._thread.threadError ("value " + x.stringRep() + " is not a list" )
         }
     }

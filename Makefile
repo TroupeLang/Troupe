@@ -37,3 +37,5 @@ all:
 	yarn
 	make rt 
 	make libs 
+clear-built-rt:
+	rm -rf rt/built

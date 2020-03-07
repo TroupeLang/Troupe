@@ -167,7 +167,7 @@ export class MailboxProcessor {
     rcv(lowb, highb, handlers) {
       let __sched = this.sched;        
       let mb = __sched.__currentThread.mailbox;
-      this.sweepMessages(mb, handlers.val, lowb, highb);        
+      this.sweepMessages(mb, handlers.val.toArray(), lowb, highb);        
     }    
     
 }

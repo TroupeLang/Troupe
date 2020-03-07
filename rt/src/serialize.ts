@@ -357,6 +357,13 @@ function serialize(x, pclev) {
 
     switch (_tt) {
       case Ty.TroupeType.LIST:
+          jsonObj = [];          
+          let y = x.toArray()
+          for (let i = 0; i < y.length; i ++) {
+            jsonObj.push (walk (y[i]));
+          }                   
+          tupleKind = Ty.isTuple (x)          
+          break;
       case Ty.TroupeType.TUPLE:
           jsonObj = [];          
           for (let i = 0; i < x.length; i ++) {

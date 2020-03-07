@@ -52,7 +52,7 @@ function loadLibsAsync(libs, obj, cb, rtObj) {
           //    here 
 
           rtObj.setLibloadMode(); // 2019-01-03: AA; Hack
-          let table = libinstance.export().val;
+          let table = libinstance.export().val.toArray();
           rtObj.setNormalMode();  // 2019-01-03: AA; EOH
 
           // 6. Lookup in the resulting table

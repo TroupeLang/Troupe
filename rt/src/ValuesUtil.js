@@ -1,7 +1,6 @@
 
 
-function isListFlagSet (x) {
-
+function isListFlagSet (x) {  
   return (x.isList == true )
   /*
   console.log (x)

@@ -1,26 +1,18 @@
 'use strict'
-const assert = require('assert');
-const request = require('request');
-const ThreadError = require('./ThreadError.js').ThreadError
+// const assert = require('assert');
 const AggregateError = require('aggregate-error');
 const fs = require('fs');
-const util = require('util');
+const {Nil, Cons, RawList} = require('./RawList')
 
 const RtClosure = require('./RtClosure.js')
 
 class RtEnv {
-
   constructor() {
     this._is_rt_env = true;
-    // this.ret = __sched.ret;
   }
 }
 
-
-
-
 const { isListFlagSet, isTupleFlagSet } = require ('./ValuesUtil.js');
-
 
 const { promisify } = require ('util')
 const readFile = promisify (fs.readFile);
@@ -70,7 +62,7 @@ readline.on ('line', lineListener)
 // an attempt to modularize the runtime; 2018-07-16; AA
 //
 const Scheduler = require('./Scheduler.js');
-const {LVal, TLVal, MbVal, LValCopyAt, LCopyVal} = require('./Lval.js');
+const {LVal, TLVal, MbVal, LValCopyAt, LCopyVal, listStringRep} = require('./Lval.js');
 const proc = require('./process.js');
 
 const {MailboxProcessor} = require('./MailboxProcessor.js');
@@ -1054,18 +1046,6 @@ function rt_mkLabel(x) {
 }
 
 
-function listStringRep(x, omitLevels = false, taintRef = null) {
-  if (x.length == 0) {
-    return "";
-  }
-  let s = x[0].stringRep(omitLevels, taintRef);
-
-  for (let i = 1; i < x.length; i++) {
-    s += ", " + x[i].stringRep(omitLevels, taintRef );
-  }
-  return s;
-}
-
 function rt_mkTuple(x) {
   x.stringRep = function (omitLevels = false, taintRef  = null) {
     return ("(" + listStringRep(x, omitLevels, taintRef) + ")")
@@ -1074,12 +1054,24 @@ function rt_mkTuple(x) {
   return x;
 }
 
+// function rt_mkList(x) {
+//   x.stringRep = function (omitLevels = false, taintRef = null) {
+//     return ("[" + listStringRep(x, omitLevels, taintRef) + "]")
+//   }
+//   x.isList = true;
+//   return x;
+// }
+
 function rt_mkList(x) {
+  return RawList.fromArray (x);
+
+  /*
   x.stringRep = function (omitLevels = false, taintRef = null) {
     return ("[" + listStringRep(x, omitLevels, taintRef) + "]")
   }
   x.isList = true;
   return x;
+  */
 }
 
 
@@ -1339,7 +1331,7 @@ function RuntimeObject() {
   }
   
   this.islist = function (x) {
-    return new TLVal(Array.isArray(x.val) && isListFlagSet(x.val), x.lev, x.tlev )
+    return new TLVal(isListFlagSet(x.val), x.lev, x.tlev )
   }
 
   this.istuple = function (x) {
@@ -1348,9 +1340,13 @@ function RuntimeObject() {
 
   this.cons = function (a, b) {
     assertIsList(b) // 2019-03-07: AA; consider forcing the elements of the list to be of the same type (unless nil)
+    return new LVal ( new Cons (a, b.val), b.lev,  levels.BOT)
+
+    /*
     let x = b.val.slice();
     x.unshift(a);
     return new LVal(rt_mkList(x), b.lev, levels.BOT )
+    */
   }
 
   this.length = function (x) {
@@ -1360,14 +1356,22 @@ function RuntimeObject() {
 
   this.head = function (x) {
     assertIsList(x)
+    let y = x.val.head;
+    return new TLVal(y.val, lub(y.lev, x.lev), lub(y.tlev, x.lev))
+    
+    /*
     let y = x.val[0];
-    return new LVal(y.val, lub(y.lev, x.lev), levels.BOT)
+    
+    */
   }
 
   this.tail = function (x) {
-    assertIsList (x)
+    assertIsList (x) 
+    return new TLVal (x.val.tail, x.tlev, x.tlev);
+    /*
     let y = x.val.slice(1);
     return new LVal(rt_mkList(y), x.lev, x.tlev )
+    */
   }
 
   this.getVal = function (x) {

@@ -1,0 +1,13 @@
+ let val y = 2 raisedTo {bob} 
+     fun foo x = 
+           let pini attenuate (authority, {alice}) 
+               val r =  declassify ( if x + y > 0 then "AAA" else "BBB"  , authority,{bob} )
+           in r 
+           end 
+     val r = sandbox (1000, fn () => foo (1 raisedTo {alice}))
+in printWithLabels r
+end 
+      
+
+
+      

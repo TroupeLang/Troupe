@@ -1446,14 +1446,14 @@ function RuntimeObject() {
 
 
   this.pinipush = mkBase ((env, arg) => {
-    assertNormalState("pinipush");
+    // assertNormalState("pinipush");
     assertIsAuthority(arg);    
     $t().pcpinipush(arg, "pinipush");    
   })
 
 
   this.pinipop = mkBase (( env, arg) => {   
-    assertNormalState("pinipop");
+    // assertNormalState("pinipop");
     assertIsCapability(arg)
     $t().pinipop(arg);
   })

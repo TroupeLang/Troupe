@@ -29,7 +29,7 @@ let topLevel = new TagLevel ({});
 topLevel.stringRep = () => "{#TOP}"
 topLevel.isTop = true;
 
-function lub (l1, l2):any {
+function lub (l1:Level, l2:Level):Level {
     // return topLevel;
     if (l1 == topLevel || l2 == topLevel) {
         return topLevel;
@@ -43,7 +43,7 @@ function lub (l1, l2):any {
     return new TagLevel (s);    
 }
 
-function glb (l1, l2):any {
+function glb (l1:Level, l2:Level):Level {
     if (l1 == topLevel) {
         return l2;
     }
@@ -62,7 +62,7 @@ function glb (l1, l2):any {
     return new TagLevel (s);
 }
 
-function flowsTo (l1, l2) {
+function flowsTo (l1:Level, l2:Level):boolean {
     if (l2 == topLevel) {
         return true;
     }
@@ -83,7 +83,7 @@ function flowsTo (l1, l2) {
 
 
 
-function fromString (str2) {
+function fromString (str2): Level {
     // debug (str2.toString())
     // the implementation is slightly over-protected
     // to deal with {} issues; 2018-09-19; AA

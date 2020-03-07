@@ -7,19 +7,27 @@ export class LVal {
     lev: Level;
     tlev: Level;
     posInfo: string;
-    highestAggregateLevel : Level;
 
+
+    __troupeType : Ty.TroupeType
+
+    
     constructor(v:any, l:Level, tlev:Level = null, posInfo:string = null) {
         this.val = v;
         this.lev = l;
 
         this.tlev = tlev == null?l:tlev;
         this.posInfo = posInfo;
-        this.highestAggregateLevel = levels.TOP;  // conservative default
+        this.__troupeType = Ty.getTroupeType(v);
+
     }
 
-    get highestLevel () {
-        return levels.lub (this.highestAggregateLevel,this.tlev)
+    get troupeType () {
+        return this.__troupeType
+    }
+
+    get dataLevel () {
+        return levels.TOP;// 2020-03-07; AA; placeholder
     }
 
     stringRep(omitLevels?: boolean, taintRef?: any) {
@@ -61,30 +69,19 @@ export class LValCopyAt extends LVal {
             l2 = levels.lub (x.tlev,l)
         }
         super (x.val, levels.lub (x.lev, l), l2);
-        this.highestAggregateLevel = x.highestAggregateLevel;
     }
 }
 
 export class LCopyVal extends LVal {
     constructor (x:LVal, l1:Level, l2:Level = null) {
         super (x.val, l1, l2);
-        this.highestAggregateLevel = x.highestAggregateLevel;
     }
 }
 
 
 
 export class TLVal extends LVal {
-    troupeType : Ty.TroupeType
-    constructor(v:any, l: Level, tlev:Level = null, posInfo:string = null) {
-        super (v,l,tlev, posInfo )
-        this.troupeType = Ty.getTroupeType(v);
-        if (Ty.isBaseType(this.troupeType)) {
-            this.highestAggregateLevel = levels.BOT
-        } else if (this.troupeType == Ty.TroupeType.LVAL) {
-            this.highestAggregateLevel = v.highestAggregateLevel
-        }
-    }
+   
 }
 
 export class MbVal extends LVal {

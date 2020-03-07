@@ -3,7 +3,6 @@ const uuidv4 = require('uuid/v4');
 const process = require('./process.js');
 
 const BaseFunction = require('./BaseFunction.js').BaseFunction;
-const BaseKont = require('./BaseKont.js')
 const {TLVal } = require('./Lval.js');
 const Thread = require('./Thread.js').Thread;
 const SandboxStatus = require('./SandboxStatus.js').HandlerState;

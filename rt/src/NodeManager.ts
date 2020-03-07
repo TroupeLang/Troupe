@@ -1,11 +1,15 @@
 'use strict'
 class Node {
+    nodeId: any;
     constructor(nodeId) {
         this.nodeId = nodeId;     
     }
 }
 
-class NodeManager {   
+export class NodeManager {
+    localNode: any;
+    levels: any;
+    aliases: any;   
 
     constructor (levels, aliases) {
         this.localNode = null;
@@ -56,4 +60,3 @@ class NodeManager {
     }
 }
 
-module.exports = NodeManager;

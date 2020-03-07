@@ -1,8 +1,11 @@
 import {TroupeType} from './TroupeTypes'
-import {TroupeRawValue} from './TroupeRawValue'
+import {TroupeAggregateRawValue} from './TroupeRawValue'
 import {LVal, listStringRep} from './Lval'
+import { Level } from './Level'
+import levels = require('./levels/tagsets')
 
-export abstract class RawList implements TroupeRawValue {    
+
+export abstract class RawList implements TroupeAggregateRawValue {    
     _troupeType : TroupeType
     isNil : boolean
     isList: boolean;
@@ -27,6 +30,8 @@ export abstract class RawList implements TroupeRawValue {
         }
         return x;
     }
+
+    abstract get dataLevel (): Level 
 }
 
 export class Nil extends RawList {
@@ -53,6 +58,9 @@ export class Nil extends RawList {
         return [];
     }
 
+    get dataLevel (): Level {
+        return levels.BOT
+    }
 
 }
 
@@ -60,12 +68,18 @@ export class Cons extends RawList {
     _head: LVal
     _tail: RawList 
     _length : number;
+    _dataLevel: Level;
     constructor (head: LVal, tail: RawList ) {
         super ();
         this._head = head;
         this._tail = tail;
         this.isNil = false;
         this._length = tail.length + 1 
+        this._dataLevel = levels.lub (head.dataLevel, tail.dataLevel)
+    }
+
+    get dataLevel (): Level {
+        return this._dataLevel
     }
 
     get head () {
@@ -75,7 +89,6 @@ export class Cons extends RawList {
     get tail () {
         return this._tail;
     }
-
 
     get length () {
         return this._length;

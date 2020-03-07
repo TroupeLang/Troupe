@@ -4,7 +4,7 @@ const AggregateError = require('aggregate-error');
 const fs = require('fs');
 const {Nil, Cons, RawList} = require('./RawList')
 
-const RtClosure = require('./RtClosure.js')
+const {RtClosure} = require('./RtClosure.js')
 
 class RtEnv {
   constructor() {
@@ -66,7 +66,7 @@ const {LVal, TLVal, MbVal, LValCopyAt, LCopyVal, listStringRep} = require('./Lva
 const proc = require('./process.js');
 
 const {MailboxProcessor} = require('./MailboxProcessor.js');
-const NodeManager = require('./NodeManager.js');
+const {NodeManager} = require('./NodeManager.js');
 const loadLibs = require('./loadLibs.js');
 const BaseFunction = require('./BaseFunction.js').BaseFunction;
 

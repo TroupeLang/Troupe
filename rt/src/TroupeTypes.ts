@@ -1,18 +1,20 @@
 export const enum TroupeType {
   UNIT=0,
-  BOOLEAN,
-  NUMBER,
-  STRING,
-  PROCESS_ID,
-  LEVEL,
-  AUTHORITY,
-  CAPABILITY,
-  CLOSURE,
-  ATOM,
+  BOOLEAN=1,
+  NUMBER=2,
+  STRING=3,
+  PROCESS_ID=4,
+  LEVEL=5,
+  AUTHORITY=6,
+  CAPABILITY=7,
+  ATOM=8,
   /* up until this point only base types */  
-  LVAL, // TODO: AA; 2020-03-03 ; this should be only used for transports;
-  TUPLE,
-  LIST
+
+  /* aggregate types */
+  CLOSURE=100,
+  LVAL=101,        // TODO: AA; 2020-03-03 ; this should be only used for transports;
+  TUPLE=102,
+  LIST=103
 }
 
 
@@ -72,7 +74,7 @@ export function isAtom (x) {
 // the lval.
 export function getTroupeType (x:any) {
   
-  if (x._troupeType) {
+  if (x._troupeType) { // hack; 2020-03-07; aa
     return x._troupeType;
   }
 
@@ -108,4 +110,8 @@ export function getTroupeType (x:any) {
 
 export function isBaseType (t:TroupeType) {
   return t <= TroupeType.ATOM
+}
+
+export function isAggregate(t:TroupeType) {
+  return t >= TroupeType.CLOSURE
 }

@@ -1,6 +1,5 @@
 import { Thread, Capability } from './Thread';
-const RtClosure = require('./RtClosure.js')
-const BaseFunction = require('./BaseFunction.js').BaseFunction;
+
 const __unitbase = require('./UnitBase.js');
 const { isListFlagSet, isTupleFlagSet } = require ('./ValuesUtil.js');
 const proc = require('./process.js');
@@ -8,6 +7,7 @@ const ProcessID = proc.ProcessID;
 import { Level } from './Level';
 import { Authority } from './Authority'
 import options = require('./options.js');
+import { TroupeType } from './TroupeTypes';
 const levels = options;
 const flowsTo = levels.flowsTo;
 
@@ -35,14 +35,14 @@ export class Asserts {
 
     assertIsFunction(x:any, internal=false) {  
         this._thread.raiseBlockingThreadLev(x.tlev);  
-        if (! ((x.val instanceof RtClosure) || (x.val instanceof BaseFunction)) ) {
+        if (x.val._troupeType != TroupeType.CLOSURE) {
             this._thread.threadError ("value " + x.stringRep() + " is not a function", internal)
         }
     }
     
     assertIsHandler(x: any) {
         this._thread.raiseBlockingThreadLev(x.tlev);  
-        if (! (x.val instanceof RtClosure)) { // 2018-12-10: AA: in the future we may need to change this to special handler class
+        if (x.val._troupeType != TroupeType.CLOSURE) {
             this._thread.threadError ("value " + x.stringRep() + " is not a handler")
         } 
     }

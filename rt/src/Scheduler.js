@@ -123,8 +123,7 @@ class Scheduler {
         return new TLVal(new BaseFunction(f,name), levels.BOT);
     }
 
-    initScheduler(node, stopWhenAllThreadsAreDone = false, stopRuntime = () => {}) {
-        
+    initScheduler(node, stopWhenAllThreadsAreDone = false, stopRuntime = () => {}) {        
         this.__node = node;
         this.__stopWhenAllThreadsAreDone = stopWhenAllThreadsAreDone;
         this.__stopRuntime = () => { stopRuntime () }

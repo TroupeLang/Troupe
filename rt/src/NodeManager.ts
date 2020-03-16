@@ -55,7 +55,7 @@ export class NodeManager {
         if (this.localNode == undefined) {
             console.log("ERROR: local node undefined; should not happen")
             process.exit(1);
-        }
+        }        
         return this.localNode;
     }
 }

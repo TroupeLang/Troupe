@@ -913,6 +913,9 @@ let rt_nodeFromProcess = mkBase ((env, arg) => {
   assertIsProcessId (arg);
   let data = arg.val;
   let nodeId = data.node.nodeId;
+  if (nodeId == null) {
+    nodeId = "<null>"
+  }
   let v = new TLVal  (nodeId, arg.lev);
   rt_ret (v);
 }, "node")

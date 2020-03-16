@@ -16,7 +16,6 @@ class ProcessID {
       this.node = node ; // getLocalNode();
       this.stringRep = toString;
       this.equals = pid_equals;
-
       this.stringRep = this.toString;
     }   
   

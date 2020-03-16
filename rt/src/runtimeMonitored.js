@@ -582,6 +582,7 @@ let rt_send = mkBase((env, larg) => {
 // this function must only be called from 
 // one of the checked functions 
 function _receiveFromMailbox (lowb, highb, handlers) {
+  
 
   let mclear = $t().mailbox.mclear
   
@@ -610,8 +611,9 @@ function _receiveFromMailbox (lowb, highb, handlers) {
       threadError (errorMessage);
     }
 
-    __theMailbox.rcv(lowb.val, highb.val, handlers);    
-  
+    
+    __theMailbox.rcv(lowb.val, highb.val, handlers, mclear.boost_level)
+    
 }
 
 
@@ -623,7 +625,7 @@ function receiveBoundedRangeWithAuthority(env, arg ) {
   assertIsList (arg.val[2])
   let lowb = arg.val[0]
   let highb = arg.val[1]  
-  let handlers = arg.val[2]
+  let handlers = arg.val[2]  
   _receiveFromMailbox (lowb, highb, handlers);
 }
 
@@ -643,7 +645,7 @@ function baseRcv(env, handlers) {
   assertIsList (handlers)
   // shortcutting level checks because they are guaranteed 
   // to hold when both low and upper bound is pc; 2020-02-08; AA
-  __theMailbox.rcv(__sched.pc, __sched.pc, handlers);
+  __theMailbox.rcv(__sched.pc, __sched.pc, handlers, $t().mailbox.mclear.boost_level);
 }
 
 

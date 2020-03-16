@@ -1,0 +1,10 @@
+let val main = self () 
+    fun f1 () = send (main, 1); send (main, 2)
+    val _ = spawn (f1)
+    val c = raisembox {alice}
+    val _ = debugpc()
+    val u = rcv ({}, {alice}, [hn _ => 42]) 
+    val _ = debugpc ()
+    val v = rcv ({}, {}, [hn x => x ])
+in adv v
+end

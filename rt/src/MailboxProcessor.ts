@@ -49,7 +49,7 @@ export class MailboxProcessor {
         __sched.unblockThread(toPid);
     }
 
-    sweepMessages(messages, handlers, lowb, highb) {
+    sweepMessages(messages, handlers, lowb, highb, l_clear) {
         debug (`receive interval: [${lowb.stringRep()}, ${highb.stringRep()}]`)
         let lub = this.levels.lub;
         let glb = this.levels.glb;
@@ -128,6 +128,7 @@ export class MailboxProcessor {
                     theThread.handlerState = new SandboxStatus.INHANDLER ( mkBase ( (env, arg) => {
                         __rtObj.ret (theThread.mkVal (__rtObj.mkTuple ([theThread.mkVal (1), __sched.unit]) )); // trigger next iter
                     }));
+                    
 
                     raisePC(lh.lev);
                     let h = lh.val;
@@ -136,9 +137,9 @@ export class MailboxProcessor {
                     // 2020-02-08: AA; this is the place where we are raising the level 
                     // of the message from the mailbox to that of the lclear
                     // 
-                    let msg_raised_to_lclear = new LVal ( msg_orig.val, highb)
+                    let msg_raised_to_lclear = new LVal ( msg_orig.val, lub (highb, l_clear))
                     let args = [h.env, msg_raised_to_lclear];
-                    // run the handler
+                    // run the handler                    
                     __sched.schedule(h.fun, args, h.namespace);
                 }
             } else {
@@ -164,10 +165,10 @@ export class MailboxProcessor {
     }
 
 
-    rcv(lowb, highb, handlers) {
+    rcv(lowb, highb, handlers, l_clear) {
       let __sched = this.sched;        
       let mb = __sched.__currentThread.mailbox;
-      this.sweepMessages(mb, handlers.val.toArray(), lowb, highb);        
+      this.sweepMessages(mb, handlers.val.toArray(), lowb, highb, l_clear);
     }    
     
 }

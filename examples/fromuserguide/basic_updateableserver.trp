@@ -1,0 +1,32 @@
+import timeout
+let fun v_one n =
+         receive [ hn ("REQUEST", senderid) => 
+                        let val _ = send (senderid, n) 
+                        in v_one (n+1) 
+                        end
+                 , hn ("UPDATE", newversion) => newversion n
+                 ]
+                 
+    val service = spawn (fn () => v_one 0)
+    val _ = send (service, ("REQUEST", self()))
+    val _ = receive [ hn x => print x]
+                    
+    fun v_two n =
+        receive [ hn ("REQUEST", senderid) => 
+                        let val _ = send (senderid, n) 
+                         in v_two (n+1) 
+                        end
+                , hn ("COMPUTE", senderid, f, x) =>
+                        let val _ = send (senderid, f x)
+                         in v_two (n+1)
+                        end
+                , hn ("UPDATE", newversion) => newversion n
+                ]
+
+    val _ = send (service, ("UPDATE", v_two))
+    val _ = send (service, ("COMPUTE", self(), fn x => x * x, 42))
+    val _ = receive [ hn x => print x]
+in exitAfterTimeout 
+        authority 1000 0 "force terminating the server example after 1s"
+end    
+

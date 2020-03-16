@@ -1,0 +1,10 @@
+let fun timeout p r t = let val _ = sleep t
+                        in send (p, r)
+                        end
+    val p = self () 
+    val r = mkuuid () 
+    val _ = spawn ( fn () => timeout p r 1000)    
+in receive [ hn ("MESSAGE", x) => print x
+           , hn s when s = r => print "timeout" 
+           ]
+end	

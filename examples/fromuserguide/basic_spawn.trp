@@ -1,0 +1,6 @@
+import lists
+let fun printwait x = let val _ = printWithLabels x in sleep 10 end
+    fun foo () = map printwait [1,2,3]
+    fun bar () = map printwait ["A", "B", "C"]
+in  (spawn foo, spawn bar)
+end

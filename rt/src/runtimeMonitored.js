@@ -1267,7 +1267,7 @@ function RuntimeObject() {
 
   this.plus = function (x, y) {
     assertPairAreStringsOrNumbers(x,y);
-    return new TLVal((x.val + y.val), lub(x.lev, y.lev), lub (x.tlev, y.tlev))
+    return new TLVal((x.val + y.val), lub(x.lev, y.lev), levels.BOT)
   }
 
   this.minus = function (x, y) {

@@ -1,9 +1,14 @@
-(* implicit flows and type labels *)
-let val x = 1 raisedTo {alice}
-    val y = 2 raisedTo {bob}
-    val z = 3 raisedTo {charlie}
-    val t = pinipush authority
-    val w = x + (if y > 2 then z else -z)
-    val _ = pinipop t
-in printWithLabels w
+let val x = 100 raisedTo {alice}
+    val y = 200 raisedTo {bob}
+    val z = 300 raisedTo {charlie}
+    val a = let pini authority 
+                val a = if y > 10 then z else "not an integer"
+            in a 
+            end
+    val _ = printWithLabels a
+    val _ = debugpc()
+    val w = a + x
+    val _ = printWithLabels w
+in debugpc()
 end
+

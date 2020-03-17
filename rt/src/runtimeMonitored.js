@@ -1266,7 +1266,7 @@ function RuntimeObject() {
   }
 
   this.plus = function (x, y) {
-    assertPairAreStringsOrNumbers(x,y);
+    assertPairAreNumbers(x,y);
     return new TLVal((x.val + y.val), lub(x.lev, y.lev), levels.BOT)
   }
 

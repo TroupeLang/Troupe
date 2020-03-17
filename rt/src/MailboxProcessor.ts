@@ -137,7 +137,7 @@ export class MailboxProcessor {
                     // 2020-02-08: AA; this is the place where we are raising the level 
                     // of the message from the mailbox to that of the lclear
                     // 
-                    let msg_raised_to_lclear = new LVal ( msg_orig.val, lub (highb, l_clear))
+                    let msg_raised_to_lclear = new LVal ( msg_orig.val, lub (msg_orig.lev, lub (highb, l_clear)))
                     let args = [h.env, msg_raised_to_lclear];
                     // run the handler                    
                     __sched.schedule(h.fun, args, h.namespace);

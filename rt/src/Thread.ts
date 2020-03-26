@@ -256,10 +256,10 @@ export class Thread {
     }  
 
 
-    pcpinipush ( auth: any, purpose: PCDeclassificationPurpose )  {
+    pcpinipush ( auth: any, purpose: PCDeclassificationPurpose, bl = this.bl )  {
         let uid = uuidv4()
         let cap = this.mkVal (new Capability(uid,
-                    { bl: this.bl
+                    { bl
                     , pc: this.pc
                     , auth : auth                    
                     , purpose: purpose

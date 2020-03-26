@@ -1456,6 +1456,19 @@ function RuntimeObject() {
     $t().pcpinipush(arg, "pinipush");    
   })
 
+  this.pinipushto = mkBase ((env, arg) =>{
+    assertIsNTuple(arg, 2)
+    assertIsAuthority(arg.val[0])
+    assertIsLevel (arg.val[1])
+    let is_lev_ok = flowsTo($t().blockingTopLev,  arg.val[1].val) ;
+    if (!is_lev_ok) {
+      threadError (`level argument of pinipushto operation must flow to the current blocking level\n` +
+                  `| the blocking level: ${$t().blockingTopLev.stringRep()}\n` +
+                  `| the level argument: ${arg.val[1].stringRep()}`)      
+    } else {
+      $t().pcpinipush(arg.val[0], "pinipush", arg.val[1].val);
+    }
+  })
 
   this.pinipop = mkBase (( env, arg) => {   
     // assertNormalState("pinipop");

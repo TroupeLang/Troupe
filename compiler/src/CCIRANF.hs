@@ -236,6 +236,7 @@ instance WellFormedIRCheck IRExpr where
                      , "node"
                      , "pcpop"
                      , "pinipush"
+                     , "pinipushto"
                      , "pinipop"
                      , "pcpush"
                      , "print"

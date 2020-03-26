@@ -1,0 +1,7 @@
+let val a_ = attenuate (authority, {alice})
+    val c = pinipushto (a_ , {alice}) 
+    val _ = if (1 raisedTo {alice, bob}) then () else ()   
+    val _ = debugpc ()
+    val _ = pinipop (c)
+in debugpc ()
+end

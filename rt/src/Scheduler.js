@@ -1,5 +1,6 @@
 'use strict';
-const uuidv4 = require('uuid/v4');
+import { v4 as uuidv4} from 'uuid'
+
 const process = require('./process.js');
 
 const BaseFunction = require('./BaseFunction.js').BaseFunction;

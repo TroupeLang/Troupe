@@ -1,4 +1,6 @@
 'use strict'
+import { v4 as uuidv4} from 'uuid'
+
 // const assert = require('assert');
 const AggregateError = require('aggregate-error');
 const fs = require('fs');
@@ -21,7 +23,6 @@ const colors = require ('colors/safe')
 
 const os = require('os');
 
-const uuidv4 = require('uuid/v4');
 const rt_uuid = uuidv4();
 
 let yargs = require('yargs');

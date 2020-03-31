@@ -9,7 +9,8 @@ const logger = require('./logger.js').mkLogger('thread');
 const debug = x => logger.debug(x)
 let lub = levels.lub;
 let flowsTo = levels.flowsTo
-import uuidv4 = require('uuid/v4');
+import { v4 as uuidv4} from 'uuid'
+
 import { Asserts  } from './Asserts'
 import { TroupeType } from './TroupeTypes'
 

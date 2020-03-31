@@ -43,7 +43,7 @@
     "socket.io": "^2.1.1",
     "streaming-iterables": "^4.1.2",
     "update": "^0.7.4",
-    "uuid": "^3.4.0",
+    "uuid": "^7.0.2",
     "winston": "^3.0.0",
     "yargs": "^15.1.0"
   },
@@ -51,8 +51,8 @@
     "@types/yargs": "^15.0.3",
     "patch-package": "^6.0.5",
     "postinstall-prepare": "^1.0.1",
-    "rollup": "^1.31.0",
-    "rollup-plugin-babel-minify": "^9.1.1",
+    "rollup": "^2.3.1",
+    "rollup-plugin-babel-minify": "^10.0.0",
     "rollup-plugin-commonjs": "^10.1.0",
     "rollup-plugin-json": "^4.0.0",
     "rollup-plugin-node-resolve": "^5.2.0"

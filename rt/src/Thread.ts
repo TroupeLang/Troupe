@@ -14,6 +14,11 @@ import { v4 as uuidv4} from 'uuid'
 import { Asserts  } from './Asserts'
 import { TroupeType } from './TroupeTypes'
 
+let yargs = require('yargs');
+
+let isPiniMode = yargs.argv.pini?true:false;
+
+
 export enum PCDeclassificationPurpose {
     Full="pcpush", 
     Pini="pinipush"
@@ -236,6 +241,11 @@ export class Thread {
         let lclear = this.callStack.pop()
         let ret = this.callStack.pop ();
         this.pc = this.callStack.pop();
+
+        // 2021-03-23; AA -- hack: in PINI mode the blocking label is restored back to the pc upon returns
+        if (isPiniMode) {
+            this.bl = this.pc
+        }
 
         if (branchFlag) {
             if (lclear != this.mailbox.mclear) {

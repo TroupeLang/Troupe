@@ -5,7 +5,7 @@ const fs = require('fs');
 let relays
 
 let default_relays =
-  ["/dns4/troupe-lbs-primary.askarov.net/tcp/5555/p2p/QmUjm46PZGcN7KwkjzcsTFpccWZTAVKijLEgCS9XBKzAoD"]
+  ["/dns4/troupe-lbs-primary.askarov.net/tcp/5555/p2p/QmQTEevjW9fpda553UoKXHE6mQiQ58Ej6XYUvMB27yPZe8"]
   
 
 if (fs.existsSync(P2PCONFIG_FILE)) {

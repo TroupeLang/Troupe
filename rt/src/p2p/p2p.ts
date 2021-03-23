@@ -72,7 +72,6 @@ const error = x => logger.error(x);
 
 const lp = require('it-length-prefixed')
 
-debug ("this should show up")
 
 
 // 
@@ -504,11 +503,12 @@ function TroupeP2P (_rt, _peerInfo) {
     let _relayTable:IHash = {}
 
     async function dialRelay (relay_addr)  {
+      debug (`dialing relay ${relay_addr}`)
       const conn = await _node.dial(relay_addr);
       const {stream} = await _node.dialProtocol (relay_addr, "/trouperelay/keepalive")            
       const peerId = conn.remotePeer
       _relay_id = peerId.toB58String()
-      //   debug (`~~ relay dialed, keep alive counter is ${_keepAliveCounter++}`)  
+      debug (`~~ relay dialed, keep alive counter is ${_keepAliveCounter++}`)  
       const p = pushable()
       
       pipe (stream.source, 
@@ -526,7 +526,7 @@ function TroupeP2P (_rt, _peerInfo) {
     
     async function keepAliveRelay (relay_addr:string) {
       let id = relay_addr.split('/').pop();
-      // debug (`id is ${id}`)
+      debug (`relay id is ${id}`)
       let timeout = _KEEPALIVE;
       async function f ()  {
         try {            

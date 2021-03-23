@@ -10,20 +10,19 @@ const myFormat = printf(info => {
   return `${info.timestamp} [${info.label}] ${info.level}: ${info.message}`;
 });
 
-const console = new transports.Console();
-
-const mkLogger = (l, level='info') => createLogger({
-  level : level, // comment out this file to remove debug messages
-  format: combine(
-    format.colorize(),
-
-    
-    label({ label: `${l}` }),
-    timestamp(),
-    myFormat
-  ),
-  transports: [console]
-});
+const mkLogger = (l, lev='info') => {   
+  const cons = new transports.Console();
+  return  createLogger({
+    level: lev, // comment out this file to remove debug messages
+    format: combine(
+      format.colorize(),      
+      label({ label: `${l}` }),
+      timestamp(),
+      myFormat
+    ),
+    transports: [cons]
+  }) 
+};
 
 module.exports = {
   mkLogger: mkLogger

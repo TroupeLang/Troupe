@@ -62,7 +62,6 @@ the libp2p).
 
 let yargs = require('yargs');
 let logLevel = yargs.argv.debugp2p?'debug':'info';
-
 const _PROTOCOL = "/troupe/1.0.0"
 
 
@@ -73,7 +72,7 @@ const error = x => logger.error(x);
 
 const lp = require('it-length-prefixed')
 
-
+debug ("this should show up")
 
 
 // 

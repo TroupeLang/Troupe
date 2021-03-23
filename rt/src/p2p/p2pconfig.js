@@ -1,6 +1,6 @@
 'use strict'
 const P2PCONFIG_FILE = 'p2pconfig.json'
-const logger = require('../logger.js').mkLogger('p2p','info');
+const logger = require('../logger.js').mkLogger('p2p-config','info');
 const fs = require('fs');
 let relays
 

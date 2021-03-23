@@ -1,4 +1,0 @@
-let val x = 10 raisedTo {alice} 
-    val _ = if x then () else () 
-in  adv ()
-end 

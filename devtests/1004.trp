@@ -1,4 +1,0 @@
-import lists
-
-save ("1004", fn ls => map (fn x => x + 1) ls)
-

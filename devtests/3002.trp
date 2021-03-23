@@ -1,4 +1,0 @@
-let val x = print 1
-    val y = print 2
-in (x,y)
-end

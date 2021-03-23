@@ -1,4 +1,0 @@
-import lists
-let val x = map in 
-(fn _ => x , foldl)
-end

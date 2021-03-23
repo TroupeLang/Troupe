@@ -1,3 +1,0 @@
-let val f = restore ("1004")
-in  f [1,2,3]
-end 

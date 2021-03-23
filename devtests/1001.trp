@@ -1,7 +1,0 @@
-let fun f () = pinipush authority 
-    fun g () = f () 
-    val c = g () 
-    val _ = if (1 raisedTo {secret}) > 0 then () else () 
-    val _ = pinipop c 
-in debugpc ()
-end

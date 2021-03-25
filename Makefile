@@ -30,8 +30,9 @@ dist: stack yarn rt libs
 	cp -RL node_modules ./build/Troupe/node_modules
 	# yarn run rollup --config
 	cp -RL rt/built ./build/Troupe/rt/
-	cp local.sh ./build/Troupe/bin/runtrp_local
-	cp network.sh ./build/Troupe/bin/runtrp
+	cp rt/troupe ./build/Troupe/rt/troupe
+	cp local.sh ./build/Troupe/bin/local.sh
+	cp network.sh ./build/Troupe/bin/network.sh
 	cp -RL tests ./build/Troupe/
 all:
 	make stack 

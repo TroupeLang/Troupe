@@ -1,0 +1,17 @@
+name: Build docker image and push to registry
+on: push
+jobs: 
+  publish_docker:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/master'
+    steps:
+      - uses: docker/login-action@v1
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: build and push docker image
+        uses: docker/build-push-action@v2
+        with:
+          push: true
+          tags: ghcr.io/troupelang/troupe:latest

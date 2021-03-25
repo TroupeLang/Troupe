@@ -1,0 +1,29 @@
+name: Build project and run tests
+on: pull_request
+jobs:
+  build_and_test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: install missing dependency for ghc 8.4.3
+        # https://gitlab.haskell.org/ghc/ghc/-/issues/15444
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libnuma-dev happy alex
+      - uses: actions/checkout@v2
+      - uses: haskell/actions/setup@v1
+        with:
+          ghc-version: '8.4.4' # Exact version of ghc to use
+          # cabal-version: 'latest'. Omitted, but defaults to 'latest'
+          enable-stack: true
+          # stack-version: 'latest'
+      - run: |
+          echo "STACK_OPTS=--system-ghc" >> $GITHUB_ENV
+          echo "TROUPE=$GITHUB_WORKSPACE" >> $GITHUB_ENV
+      - name: compile the compiler
+        run: make stack
+      - uses: actions/setup-node@v2
+      - run: yarn install
+      - name: compile the runtime
+        run: make rt
+      - name: unit tests
+        run: make test

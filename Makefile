@@ -20,18 +20,19 @@ libs:
 test:
 	cd compiler && $(MAKE) test
 
-dist: slack yarn libs
+dist: stack yarn rt libs
 	rm -rf ./build/
 	mkdir -p ./build/Troupe/rt/built
 	mkdir -p ./build/Troupe/bin
-	cp -RP ./bin  ./build/Troupe
-	cp -RL lib ./build/Troupe/lib
-	cp -RL trustmaps ./build/Troupe/trustmaps
+	cp -RP bin  ./build/Troupe
+	cp -RL lib ./build/Troupe/
 	cp -RL trustmap.json ./build/Troupe/trustmap.json
 	cp -RL node_modules ./build/Troupe/node_modules
-	yarn run rollup --config
-	cp local.sh ./build/Troupe/
-	cp -RL ./tests ./build/Troupe/tests
+	# yarn run rollup --config
+	cp -RL rt/built ./build/Troupe/rt/
+	cp local.sh ./build/Troupe/bin/runtrp_local
+	cp network.sh ./build/Troupe/bin/runtrp
+	cp -RL tests ./build/Troupe/
 all:
 	make stack 
 	yarn

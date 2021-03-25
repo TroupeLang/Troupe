@@ -4,7 +4,7 @@ START=$(TROUPE)/network.sh
 
 echo-server:
 
-	$(START) echo-server.trp --id=ids/echo-server.json --debug --debugp2p
+	$(START) echo-server.trp --id=ids/echo-server.json # --debug --debugp2p
 
 echo-client:
 	$(START) echo-client.trp --id=ids/echo-client.json --aliases=aliases.json --debug --debugp2p

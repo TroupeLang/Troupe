@@ -3,6 +3,9 @@
 Troupe is a programming language based on the actor model for concurrent and distributed
 programming that provides dynamic information flow control.
 
+## Troupe tryout container 
+
+If you want to try out Troupe without manual installation (e.g., for a class exercise or just checking the system), please check out the VSCode development container available through the [Troupe/example-project](https://github.com/TroupeLang/example-project) repository.
 
 ## Installation
 

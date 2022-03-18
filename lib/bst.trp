@@ -1,0 +1,55 @@
+datatype Atoms = NOT_FOUND
+
+let
+
+    val leaf = ()
+
+    val empty_tree = ()
+
+    fun insert k v t =
+        case t of
+            () => ((), k, v, ())
+          | (l, k', v', r) => if k = k' then (l, k, v, r)
+                              else if k > k' then (l, k', v', insert k v r) else (insert k v l, k', v', r)
+
+    fun lookup k t =
+        case t of
+            () => NOT_FOUND
+          | (l, k', v', r) => if k = k' then v'
+                              else if k > k' then lookup k r else lookup k l
+
+    fun contains k t =
+        case t of
+            () => false
+          | (l, k', v', r) => if k = k' then true
+                              else if k > k' then contains k r else contains k l
+
+    fun remove k t =
+        let fun extract_smallest (l, k, v, r) =
+                case l of
+                    () => (k, v, r)
+                  | _ => let val (k', v', l') = extract_smallest l
+                         in (k', v', (l', k, v, r)) end
+        in case t of
+               () => ()
+             | (l, k', v', r) =>
+               if k = k' then
+                   case l of
+                       () => r
+                     | _ => case r of
+                                () => l
+                              | _ => let val (k'', v'', r') = extract_smallest r
+                                     in (l, k'', v'', r') end
+               else if k > k' then (l, k', v', remove k r) else (remove k l, k', v', r)
+        end
+
+in
+    [ ("empty_tree", empty_tree)
+    , ("insert",     insert)
+    , ("lookup",     lookup)
+    , ("contains",   contains)
+    , ("remove",     remove)
+    ]
+
+end
+

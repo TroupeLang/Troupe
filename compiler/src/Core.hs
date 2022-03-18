@@ -18,7 +18,7 @@ where
 import GHC.Generics(Generic)
 import Data.Serialize (Serialize)
 
-
+import qualified Data.Ord 
 import           Basics
 import qualified DirectWOPats as D
 import qualified Data.Map.Strict as Map
@@ -55,13 +55,35 @@ data Lit
     | LUnit
     | LBool Bool
     | LAtom AtomName
-  deriving (Ord, Eq, Show, Generic)
+  deriving (Show, Generic)
 instance Serialize Lit
-
+instance Eq Lit where 
+  (LInt x _) == (LInt y _) = x == y
+  (LString s) == (LString s') = s == s' 
+  (LLabel l) == (LLabel l') = l == l' 
+  LUnit == LUnit = True 
+  (LBool x) == (LBool y) = x == y 
+  (LAtom x) == (LAtom y) = x == y 
+  _ == _ = False
+instance Ord Lit where 
+  (LInt x _)   <= (LInt y _)   = x <= y
+  (LString x ) <= (LString y)  = x <=y
+  (LLabel x)   <= (LLabel y)   = x <=y
+  (LUnit)      <= (LUnit)      = True 
+  (LBool x)    <= (LBool y)    = x <=y
+  (LAtom x)    <= (LAtom y)    = x <=y
+  (LInt _ _)   <= (LString _)  = True 
+  (LString _)  <= (LLabel _)   = True 
+  (LLabel _)   <= (LUnit)      = True 
+  (LUnit)      <= (LBool _)    = True 
+  (LBool _)    <= (LAtom _)    = True 
+  _ <= _                       = False 
 
 instance GetPosInfo Lit where
   posInfo (LInt _ p) = p
   posInfo _ = NoPos
+
+type Fields = [(FieldName, Term)]
 
 data VarAccess
     = RegVar VarName
@@ -77,6 +99,9 @@ data Term
     | If Term Term Term
     | AssertElseError Term Term Term PosInf
     | Tuple [Term]
+    | Record Fields 
+    | WithRecord Term Fields
+    | Proj Term FieldName 
     | List [Term]
     | ListCons Term Term
     | Bin BinOp Term Term
@@ -163,6 +188,9 @@ lower (D.Let decls e) =
 lower (D.If e1 e2 e3) = If (lower e1) (lower e2) (lower e3)
 lower (D.AssertElseError e1 e2 e3 p) = AssertElseError (lower e1 ) (lower e2) (lower e3) p
 lower (D.Tuple terms) = Tuple (map lower terms)
+lower (D.Record fields) = Record (map (\(f, t) -> (f, lower t)) fields)
+lower (D.WithRecord  e fields) = WithRecord (lower e) (map (\(f, t) -> (f, lower t)) fields)
+lower (D.Proj t f) = Proj (lower t) f
 lower (D.List terms) = List (map lower terms)
 lower (D.ListCons t1 t2) = ListCons (lower t1) (lower t2)
 
@@ -284,6 +312,24 @@ rename (AssertElseError t1 t2 t3 p) m = do
 
 rename (Tuple terms) m =
   Tuple <$> mapM (flip rename m) terms
+
+rename (Record fields) m = 
+  Record <$> mapM renameField fields 
+     where renameField (f, t) = do 
+                   t' <- rename t m 
+                   return (f, t')
+
+rename (WithRecord e fields) m = do 
+  t' <- rename e m 
+  fs <- mapM renameField fields 
+  return $ WithRecord  t' fs
+  where renameField (f, t) = do 
+                   t' <- rename t m 
+                   return (f, t')
+  
+rename (Proj t f) m = do 
+  t' <- rename t m 
+  return $ Proj t' f
 rename (List terms) m =
   List <$> mapM (flip rename m) terms
 rename (ListCons t1 t2) m = do
@@ -340,7 +386,6 @@ instance ShowIndent Prog where
   showIndent k t = PP.render (nest k (ppProg t))
 --------------------------------------------------
 
-type Precedence = Integer
 
 
 
@@ -379,6 +424,14 @@ ppTerm'  (List ts) =
   PP.brackets $
   PP.hcat $
   PP.punctuate (text ",") (map (ppTerm 0) ts)
+
+ppTerm' (Record fs) = PP.braces $ qqFields fs
+
+ppTerm' (WithRecord e fs) = 
+    PP.braces $ PP.hsep [ ppTerm 0 e, text "with", qqFields fs]
+
+ppTerm' (Proj t fn) = 
+  ppTerm projPrec t PP.<> text "." PP.<> PP.text fn  
 
 
 
@@ -435,6 +488,12 @@ ppTerm' (Un op t) =
      text (show op) <+>
      ppTerm unOpPrec t
 
+
+qqFields fs = PP.hcat $
+    PP.punctuate (text ",") (map ppField fs)
+     where ppField (name, t)  = 
+              PP.hcat [PP.text name, PP.text "=", ppTerm 0 t ]
+
 qqLambda :: Lambda -> (PP.Doc, PP.Doc)
 qqLambda (Unary arg body) =
   ( text arg, ppTerm 0 body )
@@ -473,36 +532,7 @@ ppLit (LBool True)  = text "true"
 ppLit (LBool False) = text "false"
 ppLit (LAtom a) = text a
 
-opPrec :: BinOp -> Precedence
-opPrec Plus  = 100
-opPrec Minus = 100
-opPrec Mult  = 200
-opPrec Div   = 200
-opPrec Eq    = 50
-opPrec Neq   = 50
-opPrec Le    = 50
-opPrec Lt    = 50
-opPrec Ge    = 50
-opPrec Gt    = 50
-opPrec And   = 50
-opPrec Index = 50
-opPrec FlowsTo    = 50
-opPrec RaisedTo   = 50
 
-op1Prec :: UnaryOp -> Precedence
-op1Prec x = 50
-
-appPrec :: Precedence
-appPrec = 5000
-
-argPrec :: Precedence
-argPrec = appPrec + 1
-
-maxPrec :: Precedence
-maxPrec = 100000
-
-consPrec :: Precedence
-consPrec = 6000
 
 termPrec :: Term -> Precedence
 termPrec (Lit _)         = maxPrec

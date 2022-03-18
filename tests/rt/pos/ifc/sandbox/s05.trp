@@ -1,0 +1,9 @@
+let fun loop i = _debug i; sleep (300); loop (i + 1)
+    val secret = 2 raisedTo `{secret}`
+    val x = sandbox ( 100, fn () => if secret > 10 then 1+() else loop 0)
+    val _ = sleep (1000)
+    val _ = printWithLabels x
+    val (2, resume) = x 
+    val _ = resume 1000 
+in 0 
+end

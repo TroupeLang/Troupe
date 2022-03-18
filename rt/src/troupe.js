@@ -1,7 +1,8 @@
+import {start } from './runtimeMonitored.js'
+import { getRuntimeObject } from './SysState.js';
 const path = require('path');
 let yargs = require('yargs');
 let fs = require('fs');
-let runtime = require ('./runtimeMonitored.js');
 let p  = yargs.argv.f;
 if (!path.isAbsolute(p))  {
     p = path.normalize ( process.cwd() + "/"+  p );
@@ -14,5 +15,6 @@ if (!fs.existsSync(p)) {
 
 let Top = require(p);
 
-let top = new Top (runtime.runtime);
-runtime.start (top);
+let __userRuntime = getRuntimeObject().__userRuntime
+let top = new Top (__userRuntime);
+start (top);

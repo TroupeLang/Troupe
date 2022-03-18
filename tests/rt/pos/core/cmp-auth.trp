@@ -1,4 +1,4 @@
-let val x = attenuate (authority, {alice})
-    val y = attenuate (authority, {alice})
+let val x = attenuate (authority, `{alice}`)
+    val y = attenuate (authority, `{alice}`)
 in x = y
 end    

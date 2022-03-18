@@ -1,9 +1,0 @@
-let val message = 42
-        fun f x = x + 1 
-        fun echo_client (serverid) =
-            send (serverid, ("COMPUTE", f, 8, self()));
-            receive [ hn  ( "REPLY", reply)
-                     => print ("received", reply)]
-    val serverid = whereis ("QmZYvghWZyYBDcYYXu5qfoJL9LYw4PodKyK1nsCAuFj2iT", "ECHOSERVER")
-in echo_client (serverid)
-end 

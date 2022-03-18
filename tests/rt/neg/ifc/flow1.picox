@@ -1,5 +1,5 @@
 let
-   val h = 42 raisedTo {secret}
+   val h = true raisedTo `{secret}`
    fun f () = adv 1
    fun g () = adv 2
 in

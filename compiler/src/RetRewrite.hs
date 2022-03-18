@@ -66,12 +66,16 @@ instance Substitutable SimpleTerm where
       Bin op v1 v2 -> Bin op (fwd v1) (fwd v2)
       Un op v -> Un op (fwd v)
       Tuple vs -> Tuple (map fwd vs)
+      Record fields -> Record $ fwdFields fields
+      WithRecord x fields -> WithRecord (fwd x) $ fwdFields fields
+      Proj x f -> Proj (fwd x) f
       List vs -> List (map fwd vs)
       ListCons v v' -> ListCons (fwd v) (fwd v')
       ValSimpleTerm sv -> ValSimpleTerm (apply subst sv)
       Base v -> Base v
       Lib l v -> Lib l v 
     where fwd x = Map.findWithDefault x x varmap
+          fwdFields fields = map (\(f, x) -> (f, fwd x)) fields
 
 instance Substitutable ContDef where
   apply subst@(Subst varmap) (Cont vn kt) =
@@ -351,14 +355,18 @@ betaFun _ = error "this should not be called"
 
 
 
-rewrites = [ (betaFunPred, betaFun)
-           ,(betaContPred, betaCont)
-           -- ,(deadContPred, deadCont)
-           ]
+contextualRewrites = [ (betaFunPred, betaFun)
+                     , (betaContPred, betaCont)
+                     -- ,(deadContPred, deadCont)
+                     ]
 
 
 ktWalk :: KTerm -> KTerm
-ktWalk kt = foldl (\kt' (pred, f) -> walk pred f kt') kt rewrites
+ktWalk kt =
+   let rewrites = 
+          map (\(pred, f) -> walk pred f) contextualRewrites
+   in
+    foldl (\t rwrt -> rwrt t) kt rewrites
 
 
 ktWalkFix kt =

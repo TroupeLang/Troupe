@@ -1,0 +1,4 @@
+let val a = "Hello"
+    val r = {a, b = 42, c = 10}
+in (r.a, r.b + r.c)
+end

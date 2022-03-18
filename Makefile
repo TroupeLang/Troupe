@@ -11,13 +11,23 @@ yarn:
 	yarn install
 rt:
 	cd rt; tsc 
+service:
+	$(COMPILER) ./trp-rt/service.trp -l	
 libs:
+	$(COMPILER) ./lib/nsuref.trp -l
+	$(COMPILER) ./lib/string.trp -l
+	$(COMPILER) ./lib/printService.trp -l
 	$(COMPILER) ./lib/lists.trp -l
 	$(COMPILER) ./lib/declassifyutil.trp -l 
 	$(COMPILER) ./lib/stdio.trp -l 
-	$(COMPILER) ./lib/timeout.trp -l 
+	$(COMPILER) ./lib/timeout.trp -l
+	$(COMPILER) ./lib/raft.trp -l
+	$(COMPILER) ./lib/raft_debug.trp -l
+	$(COMPILER) ./lib/bst.trp -l	
+	$(COMPILER) ./lib/localregistry.trp -l	
 
 test:
+	mkdir -p out
 	cd compiler && $(MAKE) test
 
 dist: stack yarn rt libs
@@ -39,5 +49,13 @@ all:
 	yarn
 	make rt 
 	make libs 
+	make service
 clear-built-rt:
 	rm -rf rt/built
+
+build-and-push-docker:
+	docker build -t jbay/troupe . && docker push jbay/troupe
+
+build-and-push-repo:
+	docker build -t jbay/troupe git@github.com:aslanix/Troupe.git\#devraft && docker push jbay/troupe
+

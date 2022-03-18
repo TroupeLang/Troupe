@@ -1,9 +1,0 @@
-let val x = 0 raisedTo {alice}
-    val _ = 
-      let pini authority 
-          val _ = if x > 0 then receive [] else ()
-    in ()
-    end
-in    
-    adv 1
-end

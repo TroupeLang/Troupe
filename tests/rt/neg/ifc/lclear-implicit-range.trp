@@ -1,4 +1,11 @@
 (* negative test; this program attempts to receive in a range without 
    sufficient clearance *)
-   
-rcv ({}, {alice}, [] )
+
+consume (0,`{}`, `{alice}`) 
+(* rcv (`{}`, `{alice}`, [hn x => x]) *)
+
+(* 2021-08-08; AA; this test has been modified to use consume 
+   instead of the rcv because rcv is now a service library code 
+   and because of how it is constructed, consume ends up 
+   being called in the high pc 
+*)

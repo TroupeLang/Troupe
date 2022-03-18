@@ -1,0 +1,6 @@
+let fun f () = 
+      receive [ hn x => printWithLabels x]
+    val p = spawn f 
+in send (p, 1) 
+   
+end 

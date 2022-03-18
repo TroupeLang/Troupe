@@ -6,9 +6,11 @@
         "module": "commonjs",
         "target": "ES2017",
         "esModuleInterop": true,
-        "incremental": true
+        "incremental": true,
+        
     },
     "include": [
-        "./src/**/*"
-    ]
+        "src/**/*"
+    ],
+    "exclude": ["../../trp-rt/**"]
 }

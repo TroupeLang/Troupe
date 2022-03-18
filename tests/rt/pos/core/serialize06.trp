@@ -1,0 +1,17 @@
+(* -- POSITIVE -- added on 2021-06-12 by AA -- 
+
+Positive test checking the interaction between serialization and built 
+in functions. Built-in functions wrapped in a lambda should be serializable. 
+
+*)
+
+
+let val _ = save ("serialize06", fn () => random ) (* random is a built-in *)
+    val f = restore ("serialize06")
+    val g = f () 
+    val r = g () 
+in r >= 0 
+end 
+
+
+

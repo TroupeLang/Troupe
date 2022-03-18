@@ -20,7 +20,8 @@ import Control.Monad.Reader
 import Data.List
 import CompileMode
 
-import CCIRANF as CCIR
+import           Control.Monad.Except
+import IR as CCIR
 
 import Control.Monad.Identity
 
@@ -39,15 +40,16 @@ type NestingLevel = Integer
 -- The main translation takes place in RWS monad
 
 type CC = RWS
-            CCEnv                   -- reader: the translation environment
-            (FunDefs, Frees)        -- writer: hoisted funs and free variables 
-            FreshCounter            -- state:  the counter for fresh name generation
+            CCEnv                         -- reader: the translation environment
+            (FunDefs, Frees, ConstTracking)      -- writer: hoisted funs and free variables 
+            FreshCounter                  -- state:  the counter for fresh name generation
 
 
 type CCEnv   = (CompileMode, C.Atoms, NestingLevel, Map VarName VarLevel)
 type Frees   = [(VarName, NestingLevel)]
 type FunDefs = [CCIR.FunDef]
-
+type ConstEntry = (VarName, C.Lit)
+type ConstTracking = [(ConstEntry, NestingLevel)]
 
 
 ------------------------------------------------------------
@@ -89,7 +91,7 @@ transVar v@(VN vname) = do
     Just (VarNested lev') -> 
       if lev' < lev 
       then do 
-        tell $([], [(v, lev')]) -- collecting info about free vars 
+        tell $([], [(v, lev')], []) -- collecting info about free vars 
         return $VarEnv v 
       else 
         return $ VarLocal v 
@@ -106,13 +108,16 @@ isDeclaredEarlierThan lev (_, l)  = l < lev
 transFunDec (VN fname) (CPS.Unary var kt) = do   
   lev <- askLev
   let filt = isDeclaredEarlierThan lev
-  (bb, (_, frees)) <- censor (\(a,b) -> (id a, filter filt b))
+  (bb, (_, frees, consts_wo_levs)) <- 
+      censor (\(a,b,c ) -> (a, filter filt b, filter (\(_, l) -> l == lev ) c))
      $ listen 
         $ local ((insVar var) . incLev)
            $ cpsToIR kt
-  tell ([FunDef (HFN fname) var bb], [])
+  let consts = (fst.unzip) consts_wo_levs
+  tell ([FunDef (HFN fname) var consts bb], [], [])
   return (nub frees)
 
+transFunDec (VN _) (CPS.Nullary _) = error "not implemented"
 
 -- state accessors
 
@@ -134,42 +139,58 @@ mkEnvBindings fv = do
 -- Main translation
 ------------------------------------------------------------
 
-
+transFields fields = do 
+          let (ff, vv) = unzip fields 
+          lst' <- transVars vv 
+          return $ zip ff lst'
 
 cpsToIR :: CPS.KTerm -> CC CCIR.IRBBTree
 cpsToIR (CPS.LetSimple vname@(VN ident) st kt) = do 
     i <-
+      let _assign arg = return $ Just $ CCIR.Assign vname arg in
       case st of 
-        CPS.Base base -> do 
-          return $ CCIR.Assign vname (Base base)
-        CPS.Lib lib base -> do 
-          return $ CCIR.Assign vname (Lib lib base)
+        CPS.Base base -> _assign  $ Base base
+        CPS.Lib lib base -> _assign (Lib lib base)
         CPS.Bin binop v1 v2 -> do
           v1' <- transVar v1 
           v2' <- transVar v2
-          return $ CCIR.Assign vname (Bin binop v1' v2')
+          _assign (Bin binop v1' v2')
         CPS.Un unop v -> do 
           v' <- transVar v
-          return $ CCIR.Assign vname (Un unop v')
+          _assign (Un unop v')
         CPS.Tuple lst -> do 
           lst' <- transVars lst 
-          return $ CCIR.Assign vname (Tuple lst')
+          _assign (Tuple lst')
+        CPS.Record fields -> do
+          fields' <- transFields fields
+          _assign (Record fields')
+        CPS.WithRecord x fields -> do
+          x' <- transVar x 
+          fields' <- transFields fields
+          _assign $ WithRecord x' fields'
+        CPS.Proj x f -> do
+          x' <- transVar x 
+          _assign (Proj x' f)
         CPS.List lst -> do 
           lst' <- transVars lst 
-          return $ CCIR.Assign vname (List lst')
+          _assign (List lst')
         CPS.ListCons v1 v2 -> do 
           v1' <- transVar v1 
           v2' <- transVar v2 
-          return $ CCIR.Assign vname (ListCons v1' v2')
-        CPS.ValSimpleTerm (CPS.Lit lit) -> 
-          return $ CCIR.Assign vname (Const lit)
+          _assign (ListCons v1' v2')
+        CPS.ValSimpleTerm (CPS.Lit lit) -> do lev <- askLev  
+                                              tell ([],[],[((vname, lit), lev)])
+                                              return Nothing 
         CPS.ValSimpleTerm (CPS.KAbs klam) -> do 
           freeVars <- transFunDec vname klam          
           envBindings <- mkEnvBindings freeVars
-          return $ CCIR.MkFunClosures envBindings [(vname, HFN ident)]          
+          return $ Just $ CCIR.MkFunClosures envBindings [(vname, HFN ident)]          
         
     t <- local (insVar vname) (cpsToIR kt)   
-    return $ i `consBB` t
+    return $ case i of 
+      Just i' -> i' `consBB` t
+      Nothing -> t 
+
 cpsToIR (CPS.LetRet (CPS.Cont arg kt') kt) = do
     t  <- cpsToIR kt
     t' <- local (insVar arg) (cpsToIR kt')
@@ -232,7 +253,7 @@ cpsToIR (CPS.Error v p) = do
 -- Top-level function
 ------------------------------------------------------------
 
-closureConvert :: CompileMode -> CPS.Prog -> CCIR.IRProgram
+closureConvert :: CompileMode -> CPS.Prog -> Except String CCIR.IRProgram
 closureConvert compileMode (CPS.Prog (C.Atoms atms) t) =
   let atms' = C.Atoms atms
       initEnv = ( compileMode
@@ -241,18 +262,21 @@ closureConvert compileMode (CPS.Prog (C.Atoms atms) t) =
                 , Map.empty
                 )
       initState = 0
-      (bb, (fdefs, _)) = evalRWS (cpsToIR t) initEnv initState
+      (bb, (fdefs, _, consts_wo_levs)) = evalRWS (cpsToIR t) initEnv initState
       (argumentName, toplevel) =
          case compileMode of
            Normal -> ("$$authorityarg", "main") -- passing authority through the argument to main 
            Export -> ("$$dummy", "export")
 
       -- obs that our 'main' may have two names depending on the compilation mode; 2018-07-02; AA
-      main = FunDef (HFN toplevel) (VN argumentName) bb
+      consts = (fst.unzip) consts_wo_levs
+      main = FunDef (HFN toplevel) (VN argumentName) consts bb
 
       irProg = CCIR.IRProgram (C.Atoms atms) $ fdefs++[main]
-    in if CCIR.wfIRProg irProg then irProg
-                               else error "the generated IR is not well-formed"
+    in do CCIR.wfIRProg irProg 
+          return irProg
+    -- then irProg
+    --                       else error "the generated IR is not well-formed"
 
                
   

@@ -1,7 +1,7 @@
 (* attempts to leak the value of `secret` through internal timing leak  *)
 
-let fun rcv_ hns = let val c = raisembox {secret} 
-                       val r = rcv ({}, {secret}, hns)
+let fun rcv_ hns = let val c = raisembox `{secret}` 
+                       val r = rcv (`{}`, `{secret}`, hns)
                        val _ = lowermbox (c, authority)
                    in r 
                    end
@@ -11,7 +11,7 @@ let fun rcv_ hns = let val c = raisembox {secret}
 
     val mainPid = self ()
 
-    val secret = 1 raisedTo {secret}
+    val secret = 1 raisedTo `{secret}`
 
     val _ = spawn (fn _ => let val _ =  if secret > 0 then skip 100000 else ()
                             in send (mainPid, 1)

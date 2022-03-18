@@ -1,0 +1,17 @@
+(* POSITIVE 
+
+   Checks various normal interactions of blocking level declassification
+   and declassification.
+
+*)
+let val x = false raisedTo `{alice; bob}`
+    val y = false raisedTo `{alice}`
+    val auth_alice = attenuate (authority, `{alice}`) 
+    val _ = if x then receive [] else () 
+    val _ = blockdecl authority 
+    val y = declassify (y,  auth_alice, `{}`) 
+    val _ = if y then receive [] else ()  
+    val _ = debugpc () 
+    val _ = adv y 
+in printWithLabels y 
+end

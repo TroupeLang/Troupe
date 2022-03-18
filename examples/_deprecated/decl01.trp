@@ -1,4 +1,0 @@
-let val auth01 = attenuate ( authority, {alice} )
-    fun foo x = declassify (x, auth01, {})
-in foo (42 raisedTo {secret})
-end

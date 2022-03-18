@@ -104,7 +104,7 @@ diff_n ref new = ["tests/_util/diff_n.sh", ref, new ]
 -- 2019-03-04: AA: we should probably use type classes... 
 
 runtimeTests testFiles =
-    testGroup "Runtime (positive, negative, and warnings) tests" 
+    testGroup "Runtime tests" 
         [ goldenVsStringDiff  
             troupeFile
             diff 
@@ -121,7 +121,7 @@ timeoutTests testFiles =
             troupeFile            
             diff 
             goldenFile 
-            (runPositiveTimeout 4 troupeFile) 
+            (runPositiveTimeout 8 troupeFile) 
         | troupeFile <- testFiles 
         , let goldenFile = replaceExtension troupeFile ".golden"
         ] 
@@ -133,7 +133,7 @@ divergingTests testFiles =
             troupeFile            
             diff_n
             goldenFile 
-            (runPositiveTimeout 2 troupeFile)
+            (runPositiveTimeout 8 troupeFile)
         | troupeFile <- testFiles 
         , let goldenFile = replaceExtension troupeFile ".golden"
         ] 

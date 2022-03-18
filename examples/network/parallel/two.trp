@@ -1,0 +1,38 @@
+(* Adaptation of an example in Foundations for Parallel Information Flow Control Runtime Systems*)
+
+let
+    fun secret () = if (true raisedTo `{alice}`) then secret () else ()
+
+    fun public pid k n = if n = 0 then () 
+                         else  ( sleep (100)
+                               ; send (pid, k)
+                               ; public pid k (n - 1)
+                               )
+
+    fun rcv p q n =
+        if n = 0 then if p > q then print "Secret is 1." 
+                               else print "Secret is 0."
+        else let val k = receive [ hn x => x ]
+             in if k = 1 then rcv (p + 1) q (n - 1) 
+                         else rcv p (q + 1) (n - 1) 
+             end
+
+    fun send_and_rcv k n1 p q n2 =
+        let val _ = receive [ hn x => x ]
+            val pid = self ()
+            val _ = spawn (fn () => public pid k n1)
+        in rcv p q n2 end
+
+    fun secret_and_send pid k n =
+        let val _ = spawn secret
+        in public pid k n end
+
+in
+
+    let val one = spawn ("@one", (fn () => rcv 0 0 100))
+        val _ = spawn ("@three", (fn () => public one 1 100))
+        val _ = spawn ("@two", (fn () => secret_and_send one 2 100))
+
+    in () end
+
+end

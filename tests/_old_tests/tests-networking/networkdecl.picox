@@ -1,5 +1,5 @@
 let fun foo () = 
-    let  val x = 42 raisedTo {alice}
+    let  val x = 42 raisedTo `{alice}`
          val y = declassify (x, authority, {})
     in print y
     end

@@ -1,0 +1,6 @@
+let fun f() = sleep (500)
+            ; _debug "Awake"
+	    ; 42
+    val (2, resume) = sandbox (10, f)
+in if (1 raisedTo `{secret}` > 0) then resume 1000 else () 
+end

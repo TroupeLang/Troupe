@@ -1,0 +1,5 @@
+let val r = {a = 10, b = "hello"} 
+    val _ =  save ("records", r)
+    val r1 = restore ("records")
+in r = r1   
+end

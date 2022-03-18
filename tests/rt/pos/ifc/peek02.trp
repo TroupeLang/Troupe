@@ -1,0 +1,11 @@
+let fun f () = 
+      let val x = peek (0, `{}`, `{}`) 
+          val y = peek (1, `{}`, `{}`)
+      in print (x,y) 
+      end 
+    val p = spawn f 
+in send (p, 1) ;
+   (if true raisedTo `{secret}` then send (p,2) else ()); 
+   blockdecl (authority);
+   send (p, 3)
+end 

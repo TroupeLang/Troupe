@@ -1,6 +1,8 @@
 import stdio
-let val _ = writeString "Please input something: "
-    val s = inputLineAtLevel authority {}
+let val out = getStdout authority
+    fun writeString x = fwrite (out, x)
+    val _ = writeString "Please input something: "
+    val s = inputLineAtLevel authority `{}`
     val _ =  writeString ("You have provided input: " ^ s ^ "\n")
 in s 
 end 

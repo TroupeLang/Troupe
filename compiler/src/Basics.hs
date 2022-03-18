@@ -9,12 +9,13 @@ import Data.Serialize (Serialize)
 
 type VarName = String
 type AtomName = String
+type FieldName = String
 
-data BinOp = Plus | Minus | Mult | Div | Mod |  Eq | Neq | Le | Lt | Ge | Gt | And | Or | Index | RaisedTo | FlowsTo | Concat| IntDiv 
-  deriving (Eq,Generic)
+data BinOp = Plus | Minus | Mult | Div | Mod |  Eq | Neq | Le | Lt | Ge | Gt | And | Or | Index | RaisedTo | FlowsTo | Concat| IntDiv | BinAnd | BinOr | BinXor | BinShiftLeft | BinShiftRight | BinZeroShiftRight | HasField | LatticeJoin | LatticeMeet
+  deriving (Eq,Generic, Ord)
 instance Serialize BinOp
-data UnaryOp = IsList | IsTuple | Head | Tail | Fst | Snd | Length | LevelOf | UnMinus
-  deriving (Eq, Generic)
+data UnaryOp = IsList | IsTuple | IsRecord | Head | Tail | Fst | Snd | Length | LevelOf | UnMinus
+  deriving (Eq, Generic, Ord)
 instance Serialize UnaryOp
 
 instance Show BinOp where
@@ -31,44 +32,74 @@ instance Show BinOp where
   show Ge    = ">="
   show Gt    = ">"  
   show And   = "&&"
+  show Or    = "||"
   show Index = "!!"
   show RaisedTo = "raisedTo"
   show FlowsTo  = "flowsTo"
   show Concat   = "^"
+  show BinAnd = "andb" 
+  show BinOr =  "orb" 
+  show BinXor = "xorb" 
+  show BinShiftLeft = "<<"
+  show BinShiftRight = ">>" 
+  show BinZeroShiftRight = "~>>"
+  show HasField = "hasField"
+  show LatticeJoin = "join"
+  show LatticeMeet = "meet"
 
 
 
 instance Show UnaryOp where
   show IsList = "is-list"
   show IsTuple = "is-tuple"
-  show Head = "tail"
-  show Tail = "head"
+  show Head = "list-head"
+  show Tail = "list-tail"
   show Fst = "fst"
   show Snd = "snd"
   show Length = "length"
   show LevelOf = "levelOf"
+  show UnMinus = "-"
+  show IsRecord = "is-record"
 
-{--
 
-evalBinOp :: Integral a => BinOp -> a -> a -> a
-evalBinOp op a b =
-   case op of
-      Plus  -> a + b
-      Minus -> a - b
-      Mult  -> a * b
-      Div   -> a `div` b
-      Eq    -> boolToInt $ a == b
-      Neq   -> boolToInt $ a /= b
-      Gt    -> boolToInt $ a >  b
-      Ge    -> boolToInt $ a >= b
-      Lt    -> boolToInt $ a < b
-      Le    -> boolToInt $ a <= b
-    where boolToInt True  = 1
-          boolToInt False = 0
+type Precedence = Integer
 
---}
+opPrec :: BinOp -> Precedence
 
-newtype LibName = LibName String deriving (Eq, Show, Generic)
+opPrec LatticeJoin = 300
+opPrec LatticeMeet = 300
+
+opPrec Mult   = 200
+opPrec IntDiv = 200
+opPrec Div    = 200
+opPrec Mod    = 200
+
+opPrec Plus   = 100
+opPrec Minus  = 100
+opPrec Concat = 100
+
+opPrec BinShiftLeft      = 70
+opPrec BinShiftRight     = 70
+opPrec BinZeroShiftRight = 70
+
+opPrec BinAnd = 60
+opPrec BinOr  = 60
+opPrec BinXor = 60
+
+opPrec Eq    = 50
+opPrec Neq   = 50
+opPrec Le    = 50
+opPrec Lt    = 50
+opPrec Ge    = 50
+opPrec Gt    = 50
+opPrec And   = 50
+opPrec Or    = 50
+opPrec Index = 50
+opPrec FlowsTo    = 50
+opPrec RaisedTo   = 50
+opPrec HasField   = 50
+
+newtype LibName = LibName String deriving (Eq, Show, Generic, Ord)
 instance Serialize LibName
 
 
@@ -81,5 +112,25 @@ instance Serialize LibName
 
 
 data Imports = Imports [(LibName, Maybe [VarName])]
-  deriving (Eq, Show)
+  deriving (Eq, Show, Ord)
 
+
+
+
+op1Prec :: UnaryOp -> Precedence
+op1Prec x = 50
+
+appPrec :: Precedence
+appPrec = 5000
+
+argPrec :: Precedence
+argPrec = appPrec + 1
+
+maxPrec :: Precedence
+maxPrec = 100000
+
+consPrec :: Precedence
+consPrec = 6000
+
+projPrec :: Precedence 
+projPrec = 6100

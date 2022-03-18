@@ -1,0 +1,10 @@
+let fun f () = 
+      let val x = peek (0 raisedTo `{alice}`, `{}`, `{secret}`) 
+      in printWithLabels x 
+      ;  debugpc()
+      end 
+    val p = spawn f 
+in if true raisedTo `{secret}` 
+   then send (p, 1) 
+   else ()
+end 

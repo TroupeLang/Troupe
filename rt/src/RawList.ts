@@ -2,22 +2,23 @@ import {TroupeType} from './TroupeTypes'
 import {TroupeAggregateRawValue} from './TroupeRawValue'
 import {LVal, listStringRep} from './Lval'
 import { Level } from './Level'
-import levels = require('./levels/tagsets')
+import levels from './options'
 
 
 export abstract class RawList implements TroupeAggregateRawValue {    
-    _troupeType : TroupeType
+    _troupeType = TroupeType.LIST;
+    isList = true ;
     isNil : boolean
-    isList: boolean;
+
     constructor() {
-        this._troupeType = TroupeType.LIST;
-        this.isList = true;
+        
     }
 
     abstract toArray (): LVal [];
     abstract get length() : number;
     abstract get head () : LVal 
     abstract get tail () : RawList 
+    abstract index (j:number) : LVal
     
     stringRep (omitLevels?: boolean, taintRef?: any) {
         return ("[" + listStringRep(this.toArray(), omitLevels, taintRef) + "]")
@@ -62,6 +63,11 @@ export class Nil extends RawList {
         return levels.BOT
     }
 
+    index (j:number) {
+        throw new Error ("index: empty list")
+        return null
+    }
+
 }
 
 export class Cons extends RawList {
@@ -76,6 +82,14 @@ export class Cons extends RawList {
         this.isNil = false;
         this._length = tail.length + 1 
         this._dataLevel = levels.lub (head.dataLevel, tail.dataLevel)
+    }
+
+    index (j:number) {
+        if (j == 0) {
+            return this._head 
+        } else {
+            return this._tail.index(j - 1)
+        }
     }
 
     get dataLevel (): Level {

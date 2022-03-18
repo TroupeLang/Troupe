@@ -1,4 +1,0 @@
-import lists
-let fun dosomething () = map (fn x => print x) [1,2,3]
-in spawn ("QmQSEt8DBeumRh8ZupmUaW8rVvwnjFtpBE557vjSLccUBh", dosomething)      
-end

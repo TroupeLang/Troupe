@@ -1,6 +1,6 @@
 (* 2019-01-02: this test _correctly_ fails because of the *)
 (* side effects in the handler pattern matching *)
-
+datatype Atoms = SHUTDOWN
 let 
     fun foo (pid) = let val _ = send (pid, 0)
                     in true 
@@ -8,9 +8,11 @@ let
                       
     val pid =
         spawn ( fn () => 
-                    receive [ hn (x,sender) when foo (sender) => x ]
+                    receive [ hn (x,sender) when foo (sender) => x 
+                            , hn SHUTDOWN => () ] 
               )
               
-    val _ = send (pid, (42, self()))
+    val _ = send (pid, (42, self())); send (pid, SHUTDOWN)
 in 0    
 end 
+ 

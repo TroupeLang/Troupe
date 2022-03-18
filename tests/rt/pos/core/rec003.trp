@@ -1,0 +1,4 @@
+let val record = {a = 10, b = "Hello", f = fn x => x + 1}
+    val {a, f} = record  
+in f a 
+end

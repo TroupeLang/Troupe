@@ -1,32 +1,43 @@
-import {TroupeType} from './TroupeTypes'
+import {ClosureType, TroupeType} from './TroupeTypes'
 import {TroupeAggregateRawValue} from './TroupeRawValue'
-import levels = require('./levels/tagsets');
+import levels from './options' 
+import { getRuntimeObject } from './SysState'
 
-export class BaseFunction implements TroupeAggregateRawValue{
-  env: any;
-  fun: any;
-  _troupeType: TroupeType;
-
-  stringRep: () => string;
-
-  constructor(f, name=null) {
-    this.env = null;
-    this.fun = f;
-    this.stringRep = () => {
-      if (name) {
-        return `<basefun:${name}>`
-      } else {
-        return "<basefun:_>"
-      }
+export function BaseFunctionWithExplicitArg(f, name = null) : TroupeAggregateRawValue{
+  
+  let closure : any = () => {
+    let thread = getRuntimeObject().$t;
+    return f (thread.arg_as_lval);
+  }
+  closure.env = null;
+  closure.fun = f  
+  closure._troupeType = TroupeType.CLOSURE; 
+  closure._closureType = ClosureType.BUILTINFN;
+  closure.stringRep = () => {
+    if (name) {
+      return `<basefun:${name}>`
+    } else {
+      return "<basefun:_>"
     }
-    this._troupeType = TroupeType.CLOSURE;
-  }
-
-  get dataLevel () {
-    return levels.BOT; // there is nothing confidential in the data 
-                       // contained in the base functions
-  }
-
+  }    
+  closure.dataLevel = levels.BOT; 
+  return closure;
 }
 
   
+export function ServiceFunction (f, name=null) : TroupeAggregateRawValue {  
+  let closure : any = () => f ();
+  closure.env = null;
+  closure.fun = f  
+  closure._troupeType = TroupeType.CLOSURE; 
+  closure._closureType = ClosureType.SERVICEFN;
+  closure.stringRep = () => {
+    if (name) {
+      return `<basefun:${name}>`
+    } else {
+      return "<basefun:_>"
+    }
+  }    
+  closure.dataLevel = levels.BOT; 
+  return closure;  
+}

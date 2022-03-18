@@ -7,10 +7,10 @@ let val main = self ()
                               in () 
                              end )
 
-    val c = raisembox ({alice,bob}) 
-    val r1 = rcv ({}, {alice}, [hn x => x])
+    val c = raisembox (`{alice,bob}`) 
+    val r1 = rcv (`{}`, `{alice}`, [hn x => x])
     val _ = lowermbox (c, authority)
-    val r2 = rcv ({}, {}, [hn x => x])
+    val r2 = rcv (`{}`, `{}`, [hn x => x])
     val _ = debugpc ()
     val _ = printWithLabels r1 
     val _ = printWithLabels r2

@@ -1,6 +1,6 @@
 
 let (* set secret to 0 or 1 *)
-    val secret = 1 raisedTo {secret}
+    val secret = 1 raisedTo `{secret}`
     fun wait () = receive [ hn x => () ]
     val mainPid = self ()
     val h1 = hn 1 => () 
@@ -15,14 +15,20 @@ let (* set secret to 0 or 1 *)
                     orelse ( (secret <= 0 ) andalso (i = 2))
                     then (h1, h2) else (h2, h1)
 
-              val _ = receive [g1]
+              val t = raisembox `{secret}`
+              val _ = rcv (`{}`, `{secret}`, [g1])
+              val _ = lowermbox (t, authority)
               val _ = pinipop c
 
               
               val _ = adv i
               val _ = printWithLabels i                     
               val _ = send (mainPid, ())
-              val _ = receive [g2]
+
+              val t = raisembox `{secret}`
+              val _ = rcv (`{}`, `{secret}`, [g2])
+              val _ = lowermbox (t, authority)
+
           in printWithLabels "DONE"
           end       
 

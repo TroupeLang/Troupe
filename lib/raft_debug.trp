@@ -1,0 +1,327 @@
+import timeout
+import lists
+
+datatype Atoms = APPEND_ENTRIES
+               | REQUEST_VOTE
+               | APPEND_ENTRIES_RESPONSE
+               | REQUEST_VOTE_RESPONSE
+               | CLIENT_COMMAND
+               | CLIENT_COMMAND_RESPONSE
+               | NOT_LEADER
+               | START
+               | TIMEOUT
+               | ERROR
+
+let val DURATION = 150
+
+    fun append l1 l2 =
+        case l1 of
+            [] => l2
+          | x::l => x::(append l l2)
+
+    fun broadcast [] msg = ()
+      | broadcast ((_, pid)::l) msg =
+        let val _ = send (pid, msg)
+        in broadcast l msg
+        end
+
+    fun index_of [] pid = -1
+      | index_of ((n, pid')::l) pid = if pid' = pid then n else index_of l pid
+
+    val empty_log = (0, [(0, 0)])
+
+    fun nth (x::l) 1 = x
+      | nth (x::l) n = nth l (n - 1)
+
+    fun log_get (sz, xs) n = if n > sz then ERROR else nth xs (sz - n + 1)
+
+    fun log_push (sz, xs) x = (sz + 1, x::xs)
+
+    fun last_log_index (sz, xs) = sz
+
+    (* discard everything in the log after index n *)
+    fun log_discard (sz, xs) n =
+        if sz > n
+        then case xs of
+                 y::ys => log_discard (sz - 1, ys) n
+               | [] => ERROR
+        else (sz, xs)
+
+    fun log_add_new_entries (sz, xs) ys =
+        (sz + length ys, append ys xs)
+
+    (* Get all the entries after index n *)
+    fun log_take_entries (sz, xs) n =
+        if sz = n
+        then []
+        else case xs of
+                 y::ys => y::(log_take_entries (sz - 1, ys) n)
+               | [] => ERROR
+
+    fun fst (a, b) = a
+
+    fun snd (a, b) = b
+
+    (* Check entry at prevLogIndex matches prevLogTerm,
+       return true if it doesn't
+       false otherwise *)
+    fun check_log log prevLogIndex prevLogTerm print =
+        let val (prevLogTerm', _) = case log_get log prevLogIndex of (a, b) => (a, b) | x => print x
+            val (prevLogTerm', _) = log_get log prevLogIndex
+        in prevLogTerm <> prevLogTerm'
+        end
+
+    (* If leaderCommit > commitIndex, return min(leaderCommit, index of last new entry) *)
+    fun new_commit_index commitIndex lastEntryIndex leaderCommit =
+        if leaderCommit > commitIndex
+        then if leaderCommit < lastEntryIndex then leaderCommit else lastEntryIndex
+        else commitIndex
+
+    (* Returns prevLogIndex, prevLogTerm, entries *)
+    (* such that prevLogIndex = nextIndex - 1 *)
+    (* and prevLogTerm = term at prevLogIndex *)
+    (* entries = the entries starting at nextIndex *)
+    fun get_log_entries log nextIndex =
+        let val prevLogIndex = nextIndex - 1
+            val (prevLogTerm, _) = if prevLogIndex = 0 then (0, ()) else log_get log prevLogIndex
+            val entries = log_take_entries log prevLogIndex
+        in (prevLogIndex, prevLogTerm, entries)
+        end
+
+    (* Send append entries response and return new log state and new commitIndex*)
+    (* log is a list of pairs (term * cmd) *)
+    (* entries is a list of triples (num * term * cmd) *)
+    fun append_entries currentTerm log commitIndex term leaderId prevLogIndex prevLogTerm entries leaderCommit print =
+        if (term < currentTerm) then
+            let val _ = send (leaderId, (APPEND_ENTRIES_RESPONSE, self(), prevLogIndex, entries, currentTerm, false))
+            in (log, commitIndex)
+            end
+        else if check_log log prevLogIndex prevLogTerm print then
+            let val _ = send (leaderId, (APPEND_ENTRIES_RESPONSE, self(), prevLogIndex, entries, currentTerm, false))
+            in (log, commitIndex)
+            end
+        else let val log1 = log_discard log prevLogIndex
+                 val newLog = log_add_new_entries log1 entries
+                 val newCommitIndex = new_commit_index commitIndex (prevLogIndex + length entries) leaderCommit
+                 val _ = send (leaderId, (APPEND_ENTRIES_RESPONSE, self(), prevLogIndex, entries, currentTerm, true))
+             in (newLog, newCommitIndex)
+             end
+
+    (* If last log index >= nextIndex for a follower: send
+       AppendEntries RPC with log entries starting at nextIndex *)
+    fun update_followers currentTerm commitIndex cluster log nextIndex =
+        let fun f (n, pid) =
+                (* if nextIndex = last log index, this should behave as a heartbeat *)
+                if arrayGet (nextIndex, n - 1) <= last_log_index log + 1
+                then let val (prevLogIndex, prevLogTerm, entries) = get_log_entries log (arrayGet (nextIndex, n - 1))
+                     in send (pid, (APPEND_ENTRIES, currentTerm, self (), prevLogIndex, prevLogTerm, entries, commitIndex))
+                     end
+                else ()
+        in map f cluster
+        end
+
+    (* If there exists an N such that N > commitIndex, a majority
+       of matchIndex[i] >= N, and log[N].term == currentTerm:
+       set commitIndex = N *)
+    fun check_commitIndex cluster threshold log commitIndex matchIndex =
+        let val lastLogIndex = last_log_index log
+            val majority = foldl (fn ((n, _), k) => if arrayGet (matchIndex, n - 1) >= lastLogIndex then k + 1 else k) 1 cluster
+        in if (lastLogIndex > commitIndex andalso majority)
+           then lastLogIndex
+           else commitIndex
+        end
+
+    (* Takes the list of all machines present in the cluster represented by a list of pairs (number * process id) *)
+    fun machine index machines apply_entry init_state print =
+        let val threshold = ((length machines) + 1) / 2
+            val cluster = machines
+
+            fun leader m (currentTerm, votedFor, log, commitIndex, lastApplied, nextIndex, matchIndex) state =
+                let
+                    (* val _ = print ("Machine " ^ (toString index) ^ " is leader during term " ^ (toString currentTerm)) *)
+                    (* val _ = print ("Machine " ^ (toString index) ^ " has pid", self ()) *)
+                    (* val _ = print ("Log is", log) *)
+                    val nonce = mkuuid ()
+                    val _ = timeout (self ()) (TIMEOUT, nonce) DURATION
+                    val commitIndex = check_commitIndex cluster threshold log commitIndex matchIndex
+                    (* If last log index >= nextIndex for a follower: send
+                       AppendEntries RPC with log entries starting at nextIndex *)
+                    val _ = update_followers currentTerm commitIndex cluster log nextIndex
+                    val (lastApplied, state) = if commitIndex > lastApplied then (lastApplied + 1, apply_entry true state (snd (log_get log (lastApplied + 1)))) else (lastApplied, state)
+                    fun loop n lastApplied state =
+                        receive
+                            [ hn (TIMEOUT, k) =>
+                              if k <> n then loop n lastApplied state else
+                              leader (m + 1) (currentTerm, votedFor, log, commitIndex, lastApplied, nextIndex, matchIndex) state
+                            , hn (REQUEST_VOTE, term, candidateId, lastLogIndex, lastLogTerm) =>
+                              (* If RPC request or response contains term T > currentTerm:
+                                 set currentTerm = T, convert to follower *)
+                              if (term > currentTerm)
+                              then follower (term, -1, log, commitIndex, lastApplied) state
+                              else loop n lastApplied state
+                            , hn (REQUEST_VOTE_RESPONSE, term, vote) =>
+                              (* If RPC request or response contains term T > currentTerm:
+                                 set currentTerm = T, convert to follower *)
+                              if term > currentTerm
+                              then follower (term, -1, log, commitIndex, lastApplied) state
+                              else loop n lastApplied state
+                            , hn (APPEND_ENTRIES, term, leaderId, prevLogIndex, prevLogTerm, entries, leaderCommit) =>
+                              (* If RPC request or response contains term T > currentTerm:
+                                 set currentTerm = T, convert to follower *)
+                              if term > currentTerm then
+                                  let val (newLog, newCommitIndex) = append_entries currentTerm log commitIndex term leaderId prevLogIndex prevLogTerm entries leaderCommit print
+                                  in follower (term, -1, newLog, newCommitIndex, lastApplied) state
+                                  end
+                              else loop n lastApplied state
+                            , hn (APPEND_ENTRIES_RESPONSE, from, prevLogIndex, entries, term, result) =>
+                              (* If RPC request or response contains term T > currentTerm:
+                                 set currentTerm = T, convert to follower *)
+                              if (term > currentTerm)
+                              then follower (term, -1, log, commitIndex, lastApplied) state
+                              else
+                              (* If successful: update nextIndex and matchIndex for follower
+                                 If AppendEntries fails because of log inconsistency:
+                                 decrement nextIndex and retry *)
+                                  let val follower_index = index_of cluster from
+                                      val _ = if result then
+                                                  arraySet (matchIndex, follower_index - 1, prevLogIndex + (length entries))
+                                              else ()
+                                      val _ = if result then
+                                                  arraySet (nextIndex, follower_index - 1, prevLogIndex + (length entries) + 1)
+                                              else arraySet (nextIndex, follower_index - 1, (arrayGet (nextIndex, follower_index - 1)) - 1)
+                                      val (lastApplied, state) = if result andalso commitIndex > lastApplied then (lastApplied + 1, apply_entry true state (snd (log_get log (lastApplied + 1)))) else (lastApplied, state)
+                                  in loop n lastApplied state
+                                  end
+                            , hn (CLIENT_COMMAND, pid, cmd) =>
+                              let val newLog = log_push log (currentTerm, (pid, cmd))
+                              in leader (m + 1) (currentTerm, votedFor, newLog, commitIndex, lastApplied, nextIndex, matchIndex) state
+                              end
+                            , hn (CLIENT_COMMAND_RESPONSE, _) =>
+                              (* This should never happen, just ignore *)
+                              loop n lastApplied state
+                            ]
+                in loop nonce lastApplied state
+                end
+
+            and follower (currentTerm, votedFor, log, commitIndex, lastApplied) state =
+                let
+                    (* val _ = print ("Machine " ^ (toString index) ^ " is follower during term " ^ (toString currentTerm)) *)
+                    (* val _ = print ("Machine " ^ (toString index) ^ " has pid", self ()) *)
+                    (* val _ = print ("Log is", log) *)
+                    val election_timeout = (1 + random ()) * DURATION
+                    val nonce = mkuuid ()
+                    val _ = timeout (self ()) (TIMEOUT, nonce) election_timeout
+                    val (lastApplied, state) = if commitIndex > lastApplied then (lastApplied + 1, apply_entry false state (snd (log_get log (lastApplied + 1)))) else (lastApplied, state)
+                    fun loop votedFor n =
+                        receive
+                            [ hn (TIMEOUT, k) when k <> n => loop votedFor n
+                            , hn (TIMEOUT, k) when k = n =>
+                              candidate (currentTerm + 1, self (), log, commitIndex, lastApplied) state
+                            , hn (APPEND_ENTRIES, term, leaderId, prevLogIndex, prevLogTerm, entries, leaderCommit) =>
+                              let
+                                  (* val _ = print ("Follower " ^ (toString index) ^ " has received", (APPEND_ENTRIES, term, leaderId, prevLogIndex, prevLogTerm, entries, leaderCommit)) *)
+                                  val (newLog, newCommitIndex) = append_entries currentTerm log commitIndex term leaderId prevLogIndex prevLogTerm entries leaderCommit print
+                              in follower (if term >= currentTerm then term else currentTerm, if term > currentTerm then -1 else votedFor, newLog, newCommitIndex, lastApplied) state
+                              end
+                            , hn (APPEND_ENTRIES_RESPONSE, from, prevLogIndex, entries, term, result) =>
+                              if term > currentTerm then follower (term, -1, log, commitIndex, lastApplied)
+                              else loop votedFor n
+                            , hn (REQUEST_VOTE, term, candidateId, lastLogIndex, lastLogTerm) =>
+                              let val vote = ((term = currentTerm) andalso ((votedFor = -1) orelse (votedFor = candidateId)) orelse (term > currentTerm)) andalso (lastLogIndex >= last_log_index log)
+                                  val _ = send (candidateId, (REQUEST_VOTE_RESPONSE, term, vote))
+                              in if vote
+                                 then follower (term, candidateId, log, commitIndex, lastApplied) state
+                                 else follower (currentTerm, votedFor, log, commitIndex, lastApplied) state
+                              end
+                            , hn (REQUEST_VOTE_RESPONSE, term, vote) =>
+                              if term >= currentTerm
+                              then follower (term, votedFor, log, commitIndex, lastApplied) state
+                              else loop votedFor n
+                            , hn (CLIENT_COMMAND, pid, cmd) =>
+                              send (pid, NOT_LEADER);
+                              loop votedFor n
+                            , hn (CLIENT_COMMAND_RESPONSE, _) =>
+                              (* This should never happen, just ignore *)
+                              loop votedFor n
+                            ]
+                in loop votedFor nonce
+                end
+
+            and candidate (currentTerm, votedFor, log, commitIndex, lastApplied) state =
+                let
+                    (* val _ = print ("Machine " ^ (toString index) ^ " is candidate during term " ^ (toString currentTerm)) *)
+                    (* val _ = print ("Machine " ^ (toString index) ^ " has pid", self ()) *)
+                    (* val _ = print ("Log is", log) *)
+                    val election_timeout = (1 + random ()) * DURATION
+                    val nonce = mkuuid ()
+                    val _ = timeout (self ()) (TIMEOUT, nonce) election_timeout
+                    val _ = broadcast cluster (REQUEST_VOTE, currentTerm, self (), commitIndex, currentTerm - 1)
+                    val (lastApplied, state) = if commitIndex > lastApplied then (lastApplied + 1, apply_entry false state (snd (log_get log (lastApplied + 1)))) else (lastApplied, state)
+                    fun loop votes n =
+                        if votes >= threshold then
+                            leader 0 (currentTerm, self (), log, commitIndex, lastApplied, arrayCreate (`{}`, length cluster + 1, last_log_index log + 1), arrayCreate (`{}`, length cluster + 1, 0)) state
+                        else
+                        receive
+                            [ hn (TIMEOUT, k) when k <> n => loop votes n
+                            , hn (TIMEOUT, k) when k = n =>
+                              (* Start new election term *)
+                              candidate (currentTerm + 1, self (), log, commitIndex, lastApplied) state
+                            , hn (APPEND_ENTRIES, term, leaderId, prevLogIndex, prevLogTerm, entries, leaderCommit) =>
+                              (* If RPC request or response contains term T > currentTerm:
+                                 set currentTerm = T, convert to follower *)
+                              if term >= currentTerm then
+                                  let val (newLog, newCommitIndex) = append_entries currentTerm log commitIndex term leaderId prevLogIndex prevLogTerm entries leaderCommit print
+                                  in follower (term, votedFor, newLog, newCommitIndex, lastApplied) state
+                                  end
+                              else loop votes n
+                            , hn (APPEND_ENTRIES_RESPONSE, from, prevLogIndex, entries, term, result) =>
+                              (* If RPC request or response contains term T > currentTerm:
+                                 set currentTerm = T, convert to follower *)
+                              if term > currentTerm then follower (term, votedFor, log, commitIndex, lastApplied) state
+                              else loop votes n
+                            , hn (REQUEST_VOTE, term, candidateId, lastLogIndex, lastLogTerm) =>
+                              let val vote = (term > currentTerm)
+                              in if vote
+                                 then follower (term, candidateId, log, commitIndex, lastApplied) state
+                                 else loop votes n
+                              end
+                            , hn (REQUEST_VOTE_RESPONSE, term, vote) =>
+                              (* If RPC request or response contains term T > currentTerm:
+                                 set currentTerm = T, convert to follower *)
+                              if term > currentTerm then follower (term, -1, log, commitIndex, lastApplied) state
+                              else if term = currentTerm andalso vote then loop (votes + 1) n else loop votes n
+                            , hn (CLIENT_COMMAND, pid, cmd) =>
+                              send (pid, NOT_LEADER);
+                              loop votes n
+                            , hn (CLIENT_COMMAND_RESPONSE, _) =>
+                              (* This should never happen, just ignore *)
+                              loop votes n
+                            ]
+                in loop 1 nonce
+                end
+
+        in follower (0, -1, empty_log, 0, 0) init_state
+        end
+
+    fun apply_entry apply_command isLeader state (pid, cmd) =
+        let val (v, s) = apply_command state cmd
+            val _ = if isLeader then send (pid, (CLIENT_COMMAND_RESPONSE, v)) else ()
+        in s end
+
+    fun pre_machine () =
+        receive [ hn (START, (n, l, apply_command, init_state, print)) =>
+                  machine n l (apply_entry apply_command) init_state print ]
+
+    fun spawn_machine () =
+        spawn pre_machine
+
+in
+    [
+      ("START",                   START)
+    , ("pre_machine",             pre_machine)
+    , ("spawn_machine",           spawn_machine)
+    , ("CLIENT_COMMAND",          CLIENT_COMMAND)
+    , ("CLIENT_COMMAND_RESPONSE", CLIENT_COMMAND_RESPONSE)
+    , ("NOT_LEADER",              NOT_LEADER)
+    ]
+end

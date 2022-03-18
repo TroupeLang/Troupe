@@ -35,6 +35,27 @@ transProg :: Core.Prog -> CPS.Prog
 transProg (Core.Prog imports atoms t) =
   Prog atoms $ evalState (trans t (\z -> return $ Halt z)) 1
 
+
+transFields k fields context = 
+  transRecord fields [] context
+    where
+      transRecord [] acc context = do
+          v <- freshV
+          e' <- context v
+          return $ LetSimple v (k (reverse acc)) e'
+      transRecord ((f, t):fields) acc context =
+        trans t (\v -> transRecord fields ((f,v):acc) context)
+
+
+transFieldsExplicit k fields =
+  iter fields []
+    where iter [] acc = do
+              v <- freshV
+              return $ LetSimple v (k (reverse acc)) (KontReturn v)
+          iter ((f,t):fields) acc  =
+              trans t (\v -> iter fields ((f,v):acc))
+
+
 transExplicit :: Core.Term -> S CPS.KTerm
 transExplicit (Core.Var (Core.RegVar x))  = return $ KontReturn (VN x)
 
@@ -96,10 +117,10 @@ transExplicit (Core.If e0 e1 e2)  = do
 
 -- 2018-09-28: AA; gotta double check this part of 
 -- the translation
-transExplicit (Core.AssertElseError e0 e1 e2 p) = do 
-  e1' <- transExplicit e1   
-  trans e0 (\v0 -> 
-    trans e2 (\v2 -> 
+transExplicit (Core.AssertElseError e0 e1 e2 p) = do
+  e1' <- transExplicit e1
+  trans e0 (\v0 ->
+    trans e2 (\v2 ->
       return $AssertElseError v0 e1' v2 p))
 
 
@@ -112,6 +133,18 @@ transExplicit (Core.Tuple ts)  =
       return $ LetSimple v (Tuple (reverse acc)) (KontReturn v)
     transTuple (t:ts) acc  =
       trans t (\v -> transTuple ts (v:acc) )
+
+transExplicit (Core.Record fields) = 
+    transFieldsExplicit Record fields 
+  
+transExplicit (Core.WithRecord e fields) =
+  trans e (\x -> transFieldsExplicit (WithRecord x) fields)
+  
+
+transExplicit (Core.Proj t f)= do
+  x <- freshV
+  trans t (\x' ->
+    return $ LetSimple x (CPS.Proj x' f) (KontReturn x))
 
 transExplicit (Core.List ts) =
   transList ts []
@@ -128,7 +161,6 @@ transExplicit (Core.ListCons h t) = do
 
 transFunDef :: Core.Lambda -> S CPS.KLambda
 transFunDef (Core.Unary x e) = do
-
   e' <- transExplicit e
   return (CPS.Unary (VN x) e')
 transFunDef (Core.Nullary e) = do
@@ -150,7 +182,7 @@ trans (Core.Var (Core.LibVar lib v)) context = do
   x <- freshV
   kterm' <- context x
   return $ LetSimple x (Lib lib v) kterm'
-  
+
 
 trans (Core.Lit i) context =
   do x <- freshV
@@ -211,14 +243,14 @@ trans (Core.If e0 e1 e2) context = do
   trans e0 (\z -> return $ LetRet (Cont v kterm) (If z e1' e2'))
 
 
-trans (Core.AssertElseError e0 e1 e2 p) context = do 
-  x <- freshV 
-  kterm <- context x 
-  e1' <- transExplicit e1 
+trans (Core.AssertElseError e0 e1 e2 p) context = do
+  x <- freshV
+  kterm <- context x
+  e1' <- transExplicit e1
   trans e0 (\z ->
     trans e2 (\z2 ->
       return $ LetRet (Cont x kterm) (AssertElseError z e1' z2 p)))
-  
+
 
 
 trans (Core.Tuple ts) context =
@@ -230,6 +262,18 @@ trans (Core.Tuple ts) context =
       return $ LetSimple v (Tuple (reverse acc)) e'
     transTuple (t:ts) acc context =
       trans t (\v -> transTuple ts (v:acc) context)
+
+trans (Core.Record fields) context = transFields Record fields context
+
+trans (Core.WithRecord  e fields) context = 
+  trans e (\ rr -> transFields (WithRecord rr) fields context )
+    
+
+trans (Core.Proj t f) context = do
+  x <- freshV
+  kterm <- context x
+  trans t (\z -> return $ LetSimple x (CPS.Proj z f) kterm)
+
 
 trans (Core.List ts) context =
   transList ts [] context

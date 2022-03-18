@@ -1,16 +1,16 @@
-import {TroupeType, getTroupeType} from './TroupeTypes'
-import {TLVal, LVal} from './Lval'
+import {TroupeType} from './TroupeTypes'
+import {LVal} from './Lval'
 const proc = require('./process.js');
 import levels  = require ('./options')
 
 
 
 export function runtimeEquals (x:LVal, y:LVal) {  
-  let t1 = getTroupeType(x.val)
-  let t2 = getTroupeType(y.val)
+  let t1 = x.troupeType
+  let t2 = y.troupeType
 
   function baseBoolean (b:boolean, l=levels.lub (x.lev, y.lev)) {
-    return new TLVal (b, l, levels.BOT) 
+    return new LVal (b, l, levels.BOT) 
   }
 
   function levelEquality (o1, o2) {
@@ -34,6 +34,28 @@ export function runtimeEquals (x:LVal, y:LVal) {
     }
     return baseBoolean(true, l)
   
+  }
+
+  function recordEquality (o1,o2) {
+    let l = levels.lub (x.lev, y.lev); 
+    if (o1.__obj.size != o2.__obj.size) {
+      return baseBoolean(false, l);
+    }
+
+    for (let [k,v] of o1.__obj.entries()) {
+      if (o2.__obj.has(k)) {
+        let u = o2.__obj.get(k);
+        let z = runtimeEquals (v,u);
+        l = levels.lub (l, z.lev);
+        if (!z.val) {
+          return baseBoolean(false,l)
+        }
+      } else {
+        return baseBoolean (false, l);
+      }
+    }
+
+    return baseBoolean(true, l)
   }
 
   if (t1 != t2) return baseBoolean(false)
@@ -60,6 +82,8 @@ export function runtimeEquals (x:LVal, y:LVal) {
     case TroupeType.TUPLE: 
       return arrayEquality(o1,o2)
       break;
+    case TroupeType.RECORD:
+      return recordEquality(o1,o2)
     default:       
       return baseBoolean (x.val == y.val) 
   }

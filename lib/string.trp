@@ -1,0 +1,7 @@
+(* returns the first character of a string - a wrappear around the built in  *)
+
+let fun charAt s i = substring (s, i, i + 1)
+in [("charAt", charAt)]
+end
+        
+        

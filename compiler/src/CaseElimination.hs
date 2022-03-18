@@ -1,3 +1,4 @@
+{-# LANGUAGE  FlexibleContexts  #-}
 module CaseElimination ( trans )
 where
 
@@ -111,6 +112,24 @@ compilePattern succ (v, S.ConsPattern p1 p2) = do
   succ' <- compilePattern succ (Un Head v, p1)
   succ'' <- compilePattern succ' (Un Tail v, p2)
   return $ ifpat (Bin And (Un IsList v) (Bin Gt (Un Length v) (Lit (LInt 0 _srcRT) ))) succ'' fail
+compilePattern succ (v, S.RecordPattern fieldPatterns) = do
+  fail <- ask  
+  succ' <- foldM compileField succ  (reverse fieldPatterns)
+  return $ ifpat (Un IsRecord v) succ' fail
+    where ifHasField f k = do 
+              succ' <- k 
+              fail <- ask 
+              let f' = Lit (LString f )
+              return $ ifpat (Bin HasField v  f' ) succ' fail 
+
+          compileField succ (f, Just p) = do 
+              ifHasField f $ compilePattern succ (T.Proj v f, p)
+              
+          compileField succ (f, Nothing) = do 
+              ifHasField f $ compilePattern succ (T.Proj v f, S.VarPattern f)
+  
+
+
 
 transDecl (S.ValDecl pat t pos) succ = do
   let temp = "$decltemp$"
@@ -147,6 +166,9 @@ transTerm (S.Case t cases pos) = do
 transTerm (S.If t1 t2 t3) =
   If (transTerm t1) (transTerm t2) (transTerm t3)
 transTerm (S.Tuple tms) = T.Tuple (map transTerm tms)
+transTerm (S.Record fields) = T.Record (transFields fields)
+transTerm (S.WithRecord e fields) = T.WithRecord (transTerm e) (transFields fields)
+transTerm (S.Proj t f) = T.Proj (transTerm t) f
 transTerm (S.List tms) = T.List (map transTerm tms)
 transTerm (S.ListCons t1 t2) = T.ListCons (transTerm t1) (transTerm t2)
 transTerm (S.Bin op t1 t2) = Bin op (transTerm t1) (transTerm t2)
@@ -157,8 +179,12 @@ transTerm (S.Seq ts) = transTerm $
         body:ts_rev -> 
           let decls = map (\t -> S.ValDecl S.Wildcard t NoPos) (reverse ts_rev)
           in  S.Let decls body 
-          
+        []  -> error "impossible case: sequence of empty terms"  
+
+transTerm (S.Error _) = error "impossible case: error"
 
           
-          
+transFields fields = map transField fields
+       where transField (f, Nothing) = (f, T.Var f)
+             transField (f, Just t) = (f, transTerm t)
                   

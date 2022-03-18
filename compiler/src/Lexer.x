@@ -27,7 +27,7 @@ $alpha_ = [$alpha \_]
 $eol   = [\n]
 $graphic    = $printable # $white
 @string     = \" ($printable # \")* \"
-@label      = \{ ($printable # \})*  \}
+@label      = \`\{ ($printable # \})*  \}\`
 
 
 tokens:-
@@ -89,12 +89,19 @@ tokens:-
 <0>   orelse                         { mkL TokenOrElse }
 <0>   raisedTo                       { mkL TokenRaisedTo }
 <0>   pini                           { mkL TokenPini}
-<0>   when                           { mkL TokenWhen  }
+<0>   when                           { mkL TokenWhen }
+<0>   with                           { mkL TokenWith }
 <0>   datatype                       { mkL TokenDatatype }
 <0>   div                            { mkL TokenIntDiv }
 <0>   mod                            { mkL TokenMod }
+<0>   andb                           { mkL TokenBinAnd }
+<0>   orb                            { mkL TokenBinOr }
+<0>   xorb                           { mkL TokenBinXor }
 <0>   Atoms                          { mkL TokenAtoms }
 <0>   $digit+                        { mkLs (\s -> TokenNum (read s)) }
+<0>   [\<][\<]                       { mkL TokenBinShiftLeft }
+<0>   [\>][\>]                       { mkL TokenBinShiftRight }
+<0>   [\~][\>][\>]                   { mkL TokenBinZeroShiftRight }
 <0>   [\@]                           { mkL TokenAt }
 <0>   [\=][\>]                       { mkL TokenArrow }
 <0>   [\=]                           { mkL TokenEq }
@@ -111,6 +118,9 @@ tokens:-
 <0>   [\>]                           { mkL TokenGt }
 <0>   \(                             { mkL TokenLParen }
 <0>   \)                             { mkL TokenRParen }
+<0>   [\.]                           { mkL TokenDot }
+<0>   [\{]                           { mkL TokenLBrace }
+<0>   [\}]                           { mkL TokenRBrace }
 <0>   [\,]                           { mkL TokenComma }
 <0>   [\|]                           { mkL TokenBar }
 <0>   [\_]                           { mkL TokenWildcard }
@@ -168,6 +178,7 @@ data Token
   | TokenReceive
   | TokenPini
   | TokenWhen
+  | TokenWith
   | TokenDatatype
   | TokenAtoms
   | TokenIntDiv 
@@ -208,6 +219,15 @@ data Token
   | TokenLabel String
   | TokenAt
   | TokenCaret 
+  | TokenBinAnd 
+  | TokenBinOr 
+  | TokenBinXor 
+  | TokenBinShiftLeft 
+  | TokenBinShiftRight 
+  | TokenBinZeroShiftRight 
+  | TokenDot 
+  | TokenLBrace
+  | TokenRBrace
   deriving (Eq,Show)
 
 type Lexeme = L Token 

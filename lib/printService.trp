@@ -1,0 +1,21 @@
+datatype Atoms = PRINT | SHUTDOWN 
+let fun spawnLocalPrintService auth = 
+        let fun loop () =           
+             receive [ hn (PRINT, x) => fprintln (getStdout auth, x)
+                                     ;  loop ()                      
+                     , hn SHUTDOWN => () (* probably needs authentication *)
+                     , hn _ => loop () ]                       
+                    (* TODO: pick messages with higher presence labels*)
+                    (* TODO: shutdown message *)
+            val p = spawn loop 
+        in register ("__localprintservice", p, auth ); p
+        end 
+
+    fun printLocal x = 
+            let val pp = whereis (node (self()),  "__localprintservice")        
+            in send (pp, (PRINT,x))
+            end 
+
+in [("spawnLocalPrintService", spawnLocalPrintService)
+   ,("printLocal", printLocal)]
+end 

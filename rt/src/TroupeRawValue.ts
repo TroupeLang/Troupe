@@ -3,6 +3,7 @@ import { Level } from './Level'
 
 export interface TroupeRawValue {
     _troupeType: TroupeType;
+    dataLevel: Level ;
     stringRep (omitLevels?: boolean, taintRef?: any): string;
 }
 

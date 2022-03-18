@@ -1,0 +1,3 @@
+let fun f () = let val x = 42 raisedTo `{secret}` in x end 
+ in guard (f, `{}`, 0)
+ end 

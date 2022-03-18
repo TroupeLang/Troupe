@@ -1,0 +1,7 @@
+let val r1 = {a = 1, b = "Hello"} 
+    val r2 = {b = "Hello", a =1}
+    val r3 = r1
+    val r4 = {r2 with c = "Bye"}
+    val r5 = {r1 with c = "Bye"}
+in (r1 = r2 , r1 = r3, r1 = r4, r4 = r5)
+end 

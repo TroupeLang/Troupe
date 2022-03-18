@@ -1,1 +1,1 @@
-raiseTrust ("YYY", attenuate (authority, {alice}), {alice}) 
+raiseTrust ("YYY", attenuate (authority, `{alice}`), `{alice}`) 

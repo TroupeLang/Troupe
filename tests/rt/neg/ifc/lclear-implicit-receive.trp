@@ -3,7 +3,10 @@
    clearance 
 *)
 
-if (1 raisedTo {alice}) 
-        then rcvp ({}, []) 
+send (self(), 1);
+
+if (true raisedTo `{alice}`) 
+        (* then consume  (0, `{}`, `{}`)  *)
+        then rcvp (`{}`, [hn x => x]) 
         else ()
 

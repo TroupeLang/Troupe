@@ -3,11 +3,20 @@ let fun map f list =
        [] => []
       |  (x::xs) => (f x) :: (map f xs)
 
+    fun mapi f list =
+    let fun mapj j ls = 
+            case ls of [] => []
+            |  (x::xs) => (f (j,x)) :: (mapj (j+1) xs)
+    in mapj 0 list
+    end
+    
+    
+
     fun foldl f y [] = y
       | foldl f y (x::xs) = foldl f (f (x,y)) xs
 
-    fun add (x, y) = x + y
-
+    fun length [] = 0
+      | length (x::xs) = 1 + length xs
 
     fun reverse ls =
       let fun rev [] a = a
@@ -22,6 +31,13 @@ let fun map f list =
       in reverse (rng n)
      end
 
+    fun append l1 l2 =
+        case l1 of
+            [] => l2
+          | x::l => x::(append l l2)
+
+    fun nth (x::l) 1 = x
+      | nth (x::l) n = nth l (n - 1)
 
     fun lookup list key default =
       case list of [] => default
@@ -32,12 +48,26 @@ let fun map f list =
     fun elem x [] = false 
       | elem x (y::ys) = if x = y then true else elem x ys
 
+    fun partition f ls = 
+      let fun partition_aux  (a,b) [] = (reverse a, reverse b ) 
+            | partition_aux  (a,b) (x::xs) =
+                        if f x then partition_aux (x::a, b) xs 
+                               else partition_aux (a, x::b) xs
+            
+      
+      in  partition_aux ([],[]) ls 
+      end   
+
 in
     [ ("map",     map)
+    , ("mapi",    mapi)
     , ("foldl",   foldl)
     , ("range",   range)
     , ("reverse", reverse)
     , ("lookup",  lookup) 
     , ("elem",    elem)
+    , ("length",  length)
+    , ("append",  append)
+    , ("partition", partition) 
     ]
 end

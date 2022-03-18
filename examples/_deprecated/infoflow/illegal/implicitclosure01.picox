@@ -1,7 +1,0 @@
-let val secret = mkSecret 42
-    val f = if secret > 0 then fn x => x + 1
-                          else fn x => x + 2
-    val y = f 0
-    val _ = adv y
-in print y
-end

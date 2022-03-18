@@ -1,0 +1,19 @@
+datatype Atoms = WRITE | READ | VALUE
+
+let fun cell authority v =	
+  let fun loop content = 
+    rcv (`{}`, `{#TOP}`
+        , [ hn (WRITE, newcontent) => loop newcontent ]
+        , [ hn (READ, reader, nonce) => 
+                send (reader, (VALUE, nonce, content))
+              ; loop content 
+          ]
+       )
+        
+  in loop v
+  end 
+ 
+in [("cell", cell)]
+end
+        
+        

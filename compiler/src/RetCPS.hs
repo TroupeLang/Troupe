@@ -9,7 +9,7 @@ where
 import GHC.Generics
 import qualified Data.Serialize as Serialize
 
-import Basics(BinOp(..),UnaryOp(..))
+import Basics(BinOp(..),UnaryOp(..),Precedence, opPrec)
 
 import qualified Basics
 import qualified Core as C
@@ -43,28 +43,32 @@ doing that from this language
 
 data KLambda = Unary VarName KTerm
              | Nullary KTerm
-  deriving (Eq)
+  deriving (Eq, Show, Ord)
 
 data SVal
    = KAbs KLambda
    | Lit C.Lit
-     deriving (Eq)
+     deriving (Eq, Show, Ord)
 
 data ContDef = Cont VarName KTerm
-               deriving (Eq)
+               deriving (Eq, Ord)
 data FunDef = Fun VarName KLambda
-              deriving (Eq)
+              deriving (Eq, Ord)
 
+type Fields = [(Basics.FieldName, VarName)]
 data SimpleTerm
    = Bin BinOp VarName VarName
    | Un UnaryOp VarName
    | ValSimpleTerm SVal
    | Tuple [VarName]
+   | Record Fields 
+   | WithRecord VarName Fields
+   | Proj VarName Basics.FieldName
    | List [VarName]
    | ListCons VarName VarName
    | Base Basics.VarName
    | Lib Basics.LibName Basics.VarName
-     deriving (Eq)
+     deriving (Eq, Show, Ord)
 
 data KTerm
     = LetSimple VarName SimpleTerm KTerm
@@ -79,7 +83,7 @@ data KTerm
     -- ; aa; 2018-07-02; bringing Halt back because
     -- of exports
 
-      deriving (Eq)
+      deriving (Eq, Ord)
 
 data Prog = Prog C.Atoms KTerm
   deriving (Eq, Show)
@@ -89,12 +93,13 @@ data Prog = Prog C.Atoms KTerm
 instance Show KTerm
   where show t = PP.render (ppKTerm 0 t)
 
+instance Show ContDef 
+  where show (Cont x t) = PP.render ( ppKTerm 0 t)
 instance ShowIndent Prog where
   showIndent k p = PP.render (nest k (ppProg p))
 --------------------------------------------------
 -- obs: these functions are not exported
 --
-type Precedence = Integer
 
 ppProg :: Prog -> PP.Doc
 ppProg (Prog (C.Atoms atoms) kterm) =
@@ -142,6 +147,18 @@ ppSimpleTerm (ListCons v1 v2) =
   PP.parens $ textv v1 PP.<> text "::" PP.<> textv v2
 ppSimpleTerm (Base b) = text b PP.<> text "$base"
 ppSimpleTerm (Lib (Basics.LibName lib) v) = text lib <+> text "." <+> text v
+ppSimpleTerm (Record fields) = PP.braces $ qqFields fields 
+ppSimpleTerm (WithRecord x fields) = 
+    PP.braces $ PP.hsep [textv x, text "with", qqFields fields]
+
+ppSimpleTerm (Proj x f) = 
+  textv x PP.<> text "." PP.<> PP.text f
+
+qqFields fields =
+  PP.hcat $
+  PP.punctuate (text ",") (map ppField fields)
+    where ppField (name, v) = 
+           PP.hcat [PP.text name, PP.text "=", textv v]
 
 
 ppKLambda :: KLambda -> PP.Doc
@@ -222,17 +239,6 @@ ppKTerm' (AssertElseError vname kt1 verr _) =
 
 
 
-opPrec :: BinOp -> Precedence
-opPrec Plus  = 100
-opPrec Minus = 100
-opPrec Mult  = 200
-opPrec Div   = 200
-opPrec Eq    = 50
-opPrec Neq   = 50
-opPrec Le    = 50
-opPrec Lt    = 50
-opPrec Ge    = 50
-opPrec Gt    = 50
 
 appPrec :: Precedence
 appPrec = 5000
@@ -252,3 +258,6 @@ termPrec (LetSimple _ _ _) = 0
 -- termPrec (LetCont   _ _)   = 0
 termPrec (LetFun    _ _)   = 0
 --termPrec (Case _ _)        = 0
+termPrec (LetRet _ _) = 0
+termPrec (AssertElseError _ _ _ _) = 0
+termPrec (Error _ _) = 0

@@ -1,1 +1,1 @@
-raiseTrust ("XXX", authority, {alice}) 
+raiseTrust ("XXX", authority, `{alice}`) 

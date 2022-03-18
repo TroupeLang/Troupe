@@ -9,11 +9,17 @@ import RetDFCPS
 import qualified CaseElimination as C
 import System.Environment
 import qualified ClosureConv as CC
-import qualified CCIRANF as CCIR 
-import qualified IROpt
-import qualified RetRewrite as Rewrite
-import qualified CCIRANF2JS 
-import System.IO (isEOF)
+import qualified IR as CCIR 
+-- import qualified IROpt
+-- import qualified RetRewrite as Rewrite
+import qualified CPSOpt as CPSOpt
+import qualified IR2JS 
+import qualified IR2Raw 
+-- import qualified Stack 
+import qualified Raw2Stack
+import qualified Stack2JS 
+import qualified RawOpt
+-- import System.IO (isEOF)
 import qualified Data.ByteString as BS
 import Data.ByteString.Base64 (decode) 
 import qualified Data.ByteString.Char8  as BSChar8
@@ -21,6 +27,7 @@ import qualified Data.ByteString.Lazy.Char8 as BSLazyChar8
 import System.IO
 import System.Exit
 import ProcessImports
+import AddAmbientMethods
 import ShowIndent
 import Exports
 import CompileMode
@@ -76,7 +83,11 @@ process flags fname input = do
       -- putStrLn ("Tokens: " ++ show tokens)
       die $ "Parse Error:\n" ++ err
 
-    Right prog_empty_imports -> do
+    Right prog_parsed -> do
+      let prog_empty_imports = 
+            case compileMode of 
+                Normal -> addAmbientMethods prog_parsed 
+                Export -> prog_parsed 
       prog <- processImports prog_empty_imports
       
       exports <- case compileMode of
@@ -106,23 +117,47 @@ process flags fname input = do
       when verbose $ do printSep "CPSED"
                         writeFileD "out/out.cps" (showIndent 2 cpsed)
       --------------------------------------------------
-      let rwcps = Rewrite.rewrite cpsed
+      let rwcps = CPSOpt.rewrite cpsed -- Rewrite.rewrite cpsed
       when verbose $ do printSep  "REWRITING CPS"
-                        writeFileD "out/out.rwcps" (showIndent 2 rwcps)
+                        writeFileD "out/out.cpsopt" (showIndent 2 rwcps)
       --------------------------------------------------
-      let ir = CC.closureConvert compileMode rwcps
+      ir <- case runExcept (CC.closureConvert compileMode rwcps) of 
+          Right ir -> return ir 
+          Left  s -> die $ "troupec: " ++ s
+        
+      
+      
+
       when verbose $ writeFileD "out/out.ir" (show ir)
 
-      let iropt = IROpt.iropt ir 
-      when verbose $ writeFileD "out/out.iropt" (show iropt)
+      -- let iropt = IROpt.iropt ir 
+      let iropt = ir 
+      --when verbose $ writeFileD "out/out.iropt" (show iropt)
       
 
       --------------------------------------------------
       let debugOut = elem Debug flags 
-      let js = CCIRANF2JS.irProg2JSString compileMode debugOut iropt
+
+
+      ------ RAW -----------------------------------------
+      let raw = IR2Raw.prog2raw iropt
+      when verbose $ printSep  "GENERATING RAW"
+      when verbose $ writeFileD "out/out.rawout" (show raw)
+
+      ----- RAW OPT --------------------------------------
+
+      let rawopt = RawOpt.rawopt raw
+      when verbose $ printSep  "OPTIMIZING RAW OPT"
+      when verbose $ writeFileD "out/out.rawopt" (show rawopt)
+
+      ----- STACK ----------------------------------------
+      let stack = Raw2Stack.rawProg2Stack rawopt 
+      when verbose $ printSep "GENARTING STACK"
+      when verbose $ writeFileD "out/out.stack" (show stack)
+      let stackjs = Stack2JS.irProg2JSString compileMode debugOut stack 
       let jsFile = outFile flags (fromJust fname)
-      when verbose $ printSep $ "WRITING JS TO " ++ jsFile
-      writeFileD jsFile js
+      writeFile jsFile stackjs 
+
     
       case exports of
         Nothing -> return ()
@@ -172,7 +207,7 @@ outFile flags fname | LibMode `elem` flags =
 outFile flags _ =
   case List.find isOutFlag flags of
     Just (OutputFile s) -> s
-    _ -> "out/out.js"
+    _ -> "out/out.stack.js"
 
 
 -- AA: 2018-07-15: consider timestamping these entries
@@ -192,7 +227,7 @@ fromStdinIR = do
       case decode input of
         Right bs ->
            case CCIR.deserialize bs
-              of Right x -> do putStrLn (CCIRANF2JS.irToJSString x)
+              of Right x -> do putStrLn (IR2JS.irToJSString x)
 --                                 debugOut "deserialization OK"
 
                  Left s -> do putStrLn "ERROR in deserialization"
@@ -215,7 +250,7 @@ fromStdinIRJson = do
       case decode input of
         Right bs ->
            case CCIR.deserialize bs
-              of Right x -> BSLazyChar8.putStrLn (CCIRANF2JS.irToJSON x)
+              of Right x -> BSLazyChar8.putStrLn (IR2JS.irToJSON x)
                  Left s -> do putStrLn "ERROR in deserialization"
                               debugOut $ "deserialization error" ++ s
         Left s -> do putStrLn "ERROR in B64 decoding"
@@ -245,9 +280,6 @@ main = do
     (o, [file], []) | optionsOK o ->
       fromFile o file
 
---    (o, n, [] ) -> do
---      print (o,n)
---      exitSuccess
 
     (_,_, errs) -> die $ concat errs ++ compilerUsage
  where
@@ -263,21 +295,6 @@ main = do
    optionsOK _ = True
 
 
-{--
-
--- 2018-07-02: AA: our REPL needs refactoring; there is
--- very little of what we can do inside of it at the moment.
-repl :: IO ExitCode
-repl = runInputT defaultSettings loop
-  where
-  loop = do
-    minput <- getInputLine "PicoML> "
-    case minput of
-      Nothing -> do outputStrLn "Goodbye."
-                    liftIO exitSuccess
-      Just input -> liftIO  (process [] Nothing input) >> loop
-
---}
 
 fromFile :: [Flag] -> String -> IO ExitCode
 fromFile flags fname = do

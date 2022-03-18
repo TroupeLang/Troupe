@@ -8,7 +8,7 @@ let fun loop () = loop ()
       | leak bits i =
         let fun f () =
               let val _ = adv i
-                  val _ = if (hd bits) then loop () else ()
+                  val _ = if (hd bits) > 0 then loop () else ()
                   val _ = printWithLabels (i, "x")
               in adv i
               end

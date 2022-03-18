@@ -7,16 +7,28 @@ export const enum TroupeType {
   LEVEL=5,
   AUTHORITY=6,
   CAPABILITY=7,
-  ATOM=8,
+  ATOM=8,  
   /* up until this point only base types */  
 
   /* aggregate types */
   CLOSURE=100,
   LVAL=101,        // TODO: AA; 2020-03-03 ; this should be only used for transports;
   TUPLE=102,
-  LIST=103
+  LIST=103,
+  RECORD=104, 
+  /* meaningless to serialize */
+  LOCALOBJECT=200
 }
 
+export const enum ClosureType { 
+  /* okay to serialize */
+  REGULARFN = 0,         
+
+  /* meaningless to serialize */
+  BUILTINFN = 1,       
+  SANDBOXKONT = 2  ,
+  SERVICEFN = 3    
+}
 
 export function isLVal(x) {
   return   (typeof x.val != "undefined" &&
@@ -24,90 +36,31 @@ export function isLVal(x) {
             typeof x.tlev != "undefined" );
 }
 
-export  function isClosure(x) {
-  return  (typeof x.env != "undefined"
-        && typeof x.fun != "undefined"
-        && typeof x.namespace != "undefined"
-      )
+export function isSerializableClosure (ct)  {
+  return (ct == ClosureType.REGULARFN);
 }
 
-export  function isProcessId (x) {
-
-  return (typeof x.pid != "undefined"
-    && typeof x.node != "undefined"
-    && typeof x.uuid != "undefined" )
+export function getTypeForBasicValue (x:any) {
+  switch (typeof(x)) {
+    case 'number':
+      return TroupeType.NUMBER
+    case 'boolean':
+      return TroupeType.BOOLEAN
+    case 'string':
+      return TroupeType.STRING
+  }  
+  throw new Error (`Cannot identify troupe type for value ${JSON.stringify(x)}  of type ${typeof x}`);
 }
 
-export function isTuple(x) {
-  return (typeof x.isTuple != "undefined" )
-}
-
-export function isList(x) {
-  return (typeof x.isList != "undefined")
-}
-
-export function isLevel (x) {
-  return (typeof x.isLevel != "undefined")
-}
-
-export function isAuthority (x) {
-  return (typeof x.authorityLevel != "undefined");
-}
-
-export function isCapability (x) {
-  return x._troupeType == TroupeType.CAPABILITY
-}
-
-export function isAtom (x) {
-  return (typeof x.atom != "undefined");
-}
-
-// 2020-03-03; AA; observe that the use of
-// these function together with a switch 
-// statement creates an extra branching
-// but this is a placeholder for future
-// refactoring where LVals contain explicit
-// type information 
-
-// observe: that the argument is not an
-// lval but is the vaule field of 
-// the lval.
-export function getTroupeType (x:any) {
-  
-  if (x._troupeType) { // hack; 2020-03-07; aa
+export function getTroupeType (x:any) {  
+  if (x._troupeType != undefined) { 
     return x._troupeType;
   }
 
-  if (isClosure(x)) {
-    return TroupeType.CLOSURE
-  } else if (isTuple(x)) {
-    return TroupeType.TUPLE
-  } else if (isList(x)) {
-    return TroupeType.LIST
-  } else if (isProcessId(x)) {
-    return TroupeType.PROCESS_ID
-  } else if (isLevel(x)) {
-    return TroupeType.LEVEL
-  } else if (isAuthority(x)) {
-    return TroupeType.AUTHORITY
-  } else if (isAtom(x)) {
-    return TroupeType.ATOM
-  } else if (typeof(x) === 'number') {
-    return TroupeType.NUMBER
-  } else if (typeof(x) === 'boolean') {
-    return TroupeType.BOOLEAN
-  } else if (typeof(x) === 'string') {
-    return TroupeType.STRING
-  } else if (isLVal(x)) {
-    return TroupeType.LVAL;
-  } else if (x._is_unit) {
-    return TroupeType.UNIT
-  } else if (isCapability(x)) {
-    return TroupeType.CAPABILITY
-  }
-  throw new Error (`Cannot identify troupe type for value ${x.toString()}`);
+  throw new Error (`Cannot identify troupe type for value ${x.toString()} of type ${typeof x}`);
 }
 
+/*
 export function isBaseType (t:TroupeType) {
   return t <= TroupeType.ATOM
 }
@@ -115,3 +68,4 @@ export function isBaseType (t:TroupeType) {
 export function isAggregate(t:TroupeType) {
   return t >= TroupeType.CLOSURE
 }
+*/

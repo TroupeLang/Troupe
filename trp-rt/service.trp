@@ -1,0 +1,62 @@
+(* Node service process and runtime functionality *)
+
+import lists
+datatype Atoms = STDOUT   
+               | SPAWN 
+               | SPAWNOK
+
+
+let fun service (authority, options) = 
+    let val stdout = getStdout (authority)
+        fun loop () = 
+              let val _ = receive 
+                           [ hn (STDOUT, s) => fprintln (stdout, s)  
+                            (*
+                            , hn (SPAWN, f, pid_spawner, nonce) when options.spawnAllowed => 
+                                    let val pid = spawn f
+                                    in send (pid_spawner, (SPAWNOK, nonce, pid))
+                                    end
+                            , hn (SPAWN, _, _, _) when true <> options.spawnAllowed => ()  
+                            *)
+                           ]
+              in loop ()
+              end 
+    in loop () 
+    end 
+
+    fun rcv (l1, l2, hns) = 
+        if hns = [] then _blockThread () 
+        else
+          let fun work i = 
+                let val v = peek (i, l1, l2) 
+                    fun iterate [] = work (i+1)
+                      | iterate (h::hns) = 
+                            let val (status, body) = guard (fn () => h v, l2, (1, ()))
+                            in if status = 0 
+                                  then body (consume (i, l1, l2))
+                                  else iterate hns
+                            end 
+                in iterate hns 
+                end
+          in work 0
+          end
+
+    fun rcvp (l, hns) = rcv (l,l,hns)
+
+    fun receive hns =
+        let val pc = _pc () 
+         in rcv (pc, pc, hns)
+        end 
+     
+ 
+     fun servicetest x = x + 5 
+
+
+
+in [("service", service)
+   ,("servicetest", servicetest)
+   ,("rcv", rcv)
+   ,("rcvp", rcvp)
+   ,("receive", receive)
+   ]
+end

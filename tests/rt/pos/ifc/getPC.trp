@@ -1,0 +1,3 @@
+let val x = if true raisedTo `{secret}` then _pc () else 1
+ in printWithLabels x 
+ end 

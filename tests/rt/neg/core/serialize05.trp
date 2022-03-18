@@ -1,0 +1,15 @@
+(* -- NEGATIVE -- added by2021-06-12; AA -- 
+
+Negative test checking the interaction between sandboxing and serialization; 
+resumption konts that we receive from the sandbox must not be serializable
+
+This test is a variant of seralize04.trp. Compared to serialize04.trp here 
+we wrap the resume kont in a lambda; this should still fail 
+
+*)
+
+
+let fun f() =_debug (1); sleep (2000); _debug (2)
+    val (2, resume) = sandbox (1000, f)
+in  save ("serialize05", fn () => resume)
+end

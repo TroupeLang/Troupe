@@ -1,3 +1,8 @@
+/* 2020-05-19; this method is commented for convenience to avoid 
+            having the IDE erroneously suggest importing it 
+*/
+
+/*
 const Level = require('../Level.js');
 
 let levels = {
@@ -10,7 +15,7 @@ levels.TOP = levels.HIGH;
 
 levels.LOW.stringRep = () => "{public}"
 
-levels.HIGH.stringRep = () => "{secret}"
+levels.HIGH.stringRep = () => "`{secret}`"
 
 
 levels.lub = (l1, l2) => {
@@ -30,7 +35,7 @@ levels.flowsTo = (l1, l2) => {
 }
 
 levels.mkLevel = (x) => {
-    if ( x === "secret" || x === "{secret}" ) {
+    if ( x === "secret" || x === "`{secret}`" ) {
         return levels.HIGH;
     } else {
         if ( x === "public" || x === "{public}" ) { 
@@ -43,3 +48,4 @@ levels.mkLevel = (x) => {
 }
 
 module.exports = levels;
+*/

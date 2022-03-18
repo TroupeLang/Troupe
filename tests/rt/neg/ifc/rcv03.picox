@@ -1,9 +1,9 @@
-let val secret = 10 raisedTo {secret}
+let val secret = 10 raisedTo `{secret}`
     val pid = spawn (
                     fn () =>
-                         let val _ = raisembox( {secret})  in 
-                         rcv ( {}
-                             , {secret}                             
+                         let val _ = raisembox( `{secret}`)  in 
+                         rcv ( `{}`
+                             , `{secret}`                             
                              , [  hn 2 => adv 2
                                 , hn 4 => print 4 ]
                          )

@@ -2,46 +2,97 @@ const logger = require('../logger.js').mkLogger('TAGSETS');
 const info = x => logger.info(x)
 const debug = x => logger.debug(x)
 
+import { create } from 'peer-id';
+import { string } from 'yargs';
 import { Level }  from '../Level.js'
+
+
+function stringRep (T) {
+    let n = T.size
+    let s = "{";
+    let i = 0;
+    let R = Array.from (T.values()).sort();
+
+    R.forEach( t => {
+        s += t;
+        if (++ i < n ) {
+            s += ","
+        }
+    })
+    s += "}"
+    return s;
+}
+
+
+let __cache = {}
+
 
 class TagLevel extends Level {
     isTop: boolean;
-    constructor (lev) {
+    __stringRep : string ;
+   
+    constructor (lev, s = null) {
+        s = s || stringRep (lev);
         super(lev);
+        this.__stringRep = s
+      
     }
 
     stringRep () {
-        let n = this.lev.size
-        let s = "{";
-        let i = 0;
-        this.lev.forEach( t => {
-            s += t;
-            if (++ i < n ) {
-                s += ","
-            }
-        })
-        s += "}"
-        return s;
+        return this.__stringRep;
     }
+
+    get dataLevel () {
+        return botLevel;
+    }
+
+
 }
 
-let topLevel = new TagLevel ({});
-topLevel.stringRep = () => "{#TOP}"
+// Factory method for creating tag levels 
+// Observe that it makes use of caching 
+function createTagLevel0 ( lev ) {
+    let s = stringRep (lev)
+    __cache [s] = __cache[s] || (new TagLevel (lev))
+    return __cache[s]
+}
+
+let botLevel = createTagLevel0 (new Set ())
+// botLevel.dataLevel = botLevel ; // 2021-03-19; hacky; AA
+
+
+function createTagLevel ( lev ) {
+    let obj = createTagLevel0 (lev);    
+    // obj.dataLevel = botLevel ;
+    return obj;
+}
+
+
+
+let topLevel = new TagLevel ({}, "{#TOP}");
 topLevel.isTop = true;
 
-function lub (l1:Level, l2:Level):Level {
-    // return topLevel;
-    if (l1 == topLevel || l2 == topLevel) {
-        return topLevel;
-    }
-    // debug (l1.lev.toString());
-    // debug (l2);
+
+
+
+function lub (...ls:Level[]):Level {
+    if (ls.length == 2) {
+        if (ls[0] == ls[1]) {
+            return ls[0]
+        }
+
+    }  
 
     let s = new Set ();
-    l1.lev.forEach(t => s.add(t));
-    l2.lev.forEach(t => s.add(t));
-    return new TagLevel (s);    
+    for (let l of ls) {
+        if (l == topLevel) {
+            return topLevel
+        }
+        l.lev.forEach(t => s.add(t));
+    }
+    return createTagLevel (s); 
 }
+
 
 function glb (l1:Level, l2:Level):Level {
     if (l1 == topLevel) {
@@ -59,10 +110,13 @@ function glb (l1:Level, l2:Level):Level {
               s.add(t);
             }
         });
-    return new TagLevel (s);
+    return createTagLevel (s);
 }
 
 function flowsTo (l1:Level, l2:Level):boolean {
+    if (l1 == l2) {
+        return true;
+    }
     if (l2 == topLevel) {
         return true;
     }
@@ -105,17 +159,32 @@ function fromString (str2): Level {
           s.add (t.trim().toLowerCase());
         }
     });
-    return new TagLevel (s);
+    return createTagLevel (s);
+}
+
+
+
+function lubs (x) {
+  if (x.length == 0) {
+    return levels.BOT;
+  } else {
+    let r = x[0];
+    for (let i = 1; i < x.length; i++) {
+      r = lub (r, x[i]);
+    }
+    return r;
+  }
 }
 
 
 let levels = {
-    BOT: new TagLevel (new Set ()),
+    BOT: botLevel, 
     TOP: topLevel,
     lub: lub,
     glb: glb,
     flowsTo: flowsTo,
-    mkLevel :fromString
+    mkLevel :fromString,
+    lubs    
 }
 
 

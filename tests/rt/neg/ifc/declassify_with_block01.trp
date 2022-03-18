@@ -1,0 +1,5 @@
+let val x = true raisedTo `{alice}`
+    val y = if x then () else ()
+    val z = declassify (x, authority, `{}`)
+in () 
+end 

@@ -1,11 +1,11 @@
 let val pid = spawn ( fn () =>
-                         rcv({secret}, {secret}, 
+                         rcv(`{secret}`, `{secret}`, 
                                  [ hn 1 => adv 1 
                                  , hn x => adv 2
                                  ])
                     )
-    val secret = 42 raisedTo {secret}
-in spawn (fn () => if 1 raisedTo {secret} then send (pid, secret) else ());
+    val secret = 42 raisedTo `{secret}`
+in spawn (fn () => if true raisedTo `{secret}` then send (pid, secret) else ());
    ()
 end
                            

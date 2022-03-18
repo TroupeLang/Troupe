@@ -38,16 +38,20 @@ data Lit
 data Lambda = Lambda [VarName] Term
   deriving (Eq)
 
+type Fields = [(FieldName, Term)]
+
 data Term
     = Lit Lit
     | Var VarName
     | Abs Lambda
     | App Term [Term]
-    | Let [Decl] Term
-    -- | Case Term [(VarName, Term)]
+    | Let [Decl] Term    
     | If Term Term Term
     | AssertElseError Term Term Term PosInf
     | Tuple [Term]
+    | Record Fields 
+    | WithRecord Term Fields
+    | Proj Term FieldName 
     | List [Term]
     | ListCons Term Term
     | Bin BinOp Term Term
@@ -76,7 +80,6 @@ instance ShowIndent Prog where
 --------------------------------------------------
 -- obs: these functions are not exported
 --
-type Precedence = Integer
 
 
 
@@ -111,6 +114,16 @@ ppTerm'  (Tuple ts) =
   PP.hcat $
   PP.punctuate (text ",") (map (ppTerm 0) ts)
 
+ppTerm' (Record fs) = 
+    PP.braces $  qqFields fs
+
+ppTerm' (WithRecord e fs) =
+    PP.braces $ PP.hsep [ ppTerm 0 e, text "with", qqFields fs ]
+
+ppTerm' (Proj t fn) = 
+  ppTerm projPrec t PP.<> text "." PP.<> PP.text fn  
+
+
 ppTerm'  (List ts) =
   PP.brackets $
   PP.hcat $
@@ -137,24 +150,6 @@ ppTerm' (Let decs body) =
   nest 3 (ppTerm 0 body) $$
   text "end"
 
-{--
-ppTerm' (Case e cases) =
-  text "case" <+>
-  ppTerm 0 e  $$
-  nest 2 (ppCases cases)
-  where
-    ppCases [] = error "empty cases"
-    ppCases (first:rest) =
-      text "of" <+> ppCaseBody first $$
-      vcat (map ppNonFirst rest)
-
-    ppNonFirst second =
-      text " |" <+> ppCaseBody second
-
-    ppCaseBody (decl, term) =
-      text (show decl) <+> text "=>" <+> ppTerm 0 term
-
---}
 
 ppTerm' (If e0 e1 e2) =
   text "if" <+>
@@ -187,6 +182,13 @@ ppTerm' (Un op t) =
      ppTerm unOpPrec t
 
 
+
+qqFields fs = PP.hcat $
+    PP.punctuate (text ",") (map ppField fs)
+     where ppField (name, t)  = 
+              PP.hcat [PP.text name, PP.text "=", ppTerm 0 t ]
+
+
 qqLambda :: Lambda -> (PP.Doc, PP.Doc)
 qqLambda (Lambda args body) =
   let ppArgs' =
@@ -217,36 +219,7 @@ ppLit (LBool False) = text "false"
 ppLit (LAtom a) = text a
 
 
-opPrec :: BinOp -> Precedence
-opPrec Plus  = 100
-opPrec Minus = 100
-opPrec Mult  = 200
-opPrec Div   = 200
-opPrec Eq    = 50
-opPrec Neq   = 50
-opPrec Le    = 50
-opPrec Lt    = 50
-opPrec Ge    = 50
-opPrec Gt    = 50
-opPrec And   = 50
-opPrec Index = 50
-opPrec FlowsTo    = 50
-opPrec RaisedTo   = 50
 
-op1Prec :: UnaryOp -> Precedence
-op1Prec x = 50
-
-appPrec :: Precedence
-appPrec = 5000
-
-argPrec :: Precedence
-argPrec = appPrec + 1
-
-maxPrec :: Precedence
-maxPrec = 100000
-
-consPrec :: Precedence
-consPrec = 6000
 
 termPrec :: Term -> Precedence
 termPrec (Lit _)         = maxPrec

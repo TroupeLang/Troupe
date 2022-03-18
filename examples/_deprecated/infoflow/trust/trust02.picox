@@ -1,5 +1,0 @@
-let val x = 42 raisedTo {alice} 
-    fun f () = receive [ hn () => print x ] 
-    val pid = spawn ("QmQSEt8DBeumRh8ZupmUaW8rVvwnjFtpBE557vjSLccUBh", f)
-in send (pid, ())
-end

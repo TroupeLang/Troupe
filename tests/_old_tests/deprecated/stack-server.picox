@@ -56,7 +56,7 @@ let
             val _ = receive( [hn n => let val _ = print n in adv n end ] )
         in consumer lvl () end
     val _ = spawn (1, producer {public})
-    val _ = spawn (1, producer {secret})
+    val _ = spawn (1, producer `{secret}`)
     val _ = spawn (1, consumer {public})
 in
     print "DONE"

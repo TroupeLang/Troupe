@@ -38,6 +38,11 @@ visitTerm atms (If t1 t2 t3) =
   If (visitTerm atms t1) (visitTerm atms t2) (visitTerm atms t3)
 visitTerm atms (Tuple terms) =
   Tuple (map (visitTerm atms) terms)
+visitTerm atms (Record fields) =  Record (visitFields atms fields)    
+visitTerm atms (WithRecord e fields) = 
+    WithRecord (visitTerm atms e) (visitFields atms fields)
+visitTerm atms (Proj t f) =
+    Proj (visitTerm atms t) f
 visitTerm atms (List terms) =
   List (map (visitTerm atms) terms)
 visitTerm atms (ListCons t1 t2) =
@@ -51,6 +56,11 @@ visitTerm atms (Seq ts)   =
 visitTerm atms (Error t) =
   Error (visitTerm atms t)
 
+
+visitFields atms fs  =  map visitField fs   
+    where visitField (f, Nothing) = (f, Nothing) 
+          visitField (f, Just t) = (f, Just (visitTerm atms t))
+
 visitPattern :: [AtomName] -> DeclPattern -> DeclPattern
 visitPattern atms pat@(VarPattern nm) =
   if (elem nm atms)
@@ -62,6 +72,9 @@ visitPattern _ pat@Wildcard = pat
 visitPattern atms (TuplePattern pats) = TuplePattern (map (visitPattern atms) pats)
 visitPattern atms (ConsPattern p1 p2) = ConsPattern (visitPattern atms p1) (visitPattern atms p2)
 visitPattern atms (ListPattern pats) = ListPattern (map (visitPattern atms) pats)
+visitPattern atms (RecordPattern fields) = RecordPattern $ map visitField fields
+      where visitField pat@(_, Nothing) = pat 
+            visitField (f, Just p) = (f, Just (visitPattern atms p))
 
 visitLambda :: [AtomName] -> Lambda -> Lambda
 visitLambda atms (Lambda pats term) =

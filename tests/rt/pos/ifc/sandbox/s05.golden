@@ -1,0 +1,7 @@
+2021-06-11T23:12:26.052Z [RTM] [32minfo[39m: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+0
+(2@{secret}%{}, <sandboxkont>@{secret}%{secret})@{}%{}
+1
+2
+3
+>>> Main thread finished with value: 0@{secret}%{secret}

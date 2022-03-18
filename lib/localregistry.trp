@@ -1,0 +1,34 @@
+import lists 
+datatype Atoms = REGISTER | LOOKUP | FOUND | NOT_FOUND | SHUTDOWN 
+
+let fun local_registry () = 
+        let fun registry_worker (active , pending) = 
+                receive [ 
+                        hn (REGISTER, name_registered, pid_registered) => 
+                            let val new_active = (name_registered, pid_registered)::active 
+                                val (to_notify, new_pending) = partition ( fn (x, _) => x = name_registered) pending 
+                                val _ = map (fn (_, pid) => send (pid, (FOUND, pid_registered))) to_notify 
+                            in registry_worker ( new_active, new_pending)
+
+                            end 
+                        , hn (LOOKUP, name, pid_requester ) => 
+                            registry_worker
+                                (active, 
+                                    case lookup active name NOT_FOUND of 
+                                      NOT_FOUND => (name,pid_requester)::pending 
+                                    | pid_found => send (pid_requester, (FOUND, pid_found)); pending 
+                                )
+                        , hn (SHUTDOWN) => ()
+                        ]
+        in registry_worker ([],[])
+        end 
+
+    fun local_register reg name = send (reg, (REGISTER, name, self()))
+    fun local_whois reg name = 
+            send (reg, (LOOKUP, name, self()));
+            receive [ hn (FOUND, pid) => pid]
+in [("local_register", local_register)
+   ,("local_whois", local_whois)
+   ,("local_registry", local_registry) 
+   ]
+end

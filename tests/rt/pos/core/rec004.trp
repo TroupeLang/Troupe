@@ -1,0 +1,5 @@
+let val record = {a = (10,20), b = "Hello", f = fn x => x + 1}
+in  case record of 
+            { a = (10, x), f} => f x 
+          | _ => 0        
+end

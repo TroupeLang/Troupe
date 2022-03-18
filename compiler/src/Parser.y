@@ -45,6 +45,7 @@ import Control.Monad.Except
     hn    { L _ TokenHn }
     pini  { L _ TokenPini }
     when  { L _ TokenWhen }
+    with  { L _ TokenWith }
     true  { L _ TokenTrue }
     false { L _ TokenFalse }
     andalso { L _ TokenAndAlso }
@@ -67,8 +68,16 @@ import Control.Monad.Except
     '<'   { L _ TokenLt }
     '>'   { L _ TokenGt }
     '<>'  { L _ TokenNe }
-    'div' { L _ TokenIntDiv }
-    'mod' { L _ TokenMod }
+    div { L _ TokenIntDiv }
+    mod { L _ TokenMod }
+    andb  { L _ TokenBinAnd }
+    orb   { L _ TokenBinOr }
+    xorb  { L _ TokenBinXor }
+    '<<'    { L _ TokenBinShiftLeft }
+    '>>'    { L _ TokenBinShiftRight }
+    '~>>'   { L _ TokenBinZeroShiftRight }
+
+
 
     'raisedTo' { L _ TokenRaisedTo }
 
@@ -80,16 +89,27 @@ import Control.Monad.Except
     '::'  { L _ TokenColonColon }
     '['   { L _ TokenLBracket }
     ']'   { L _ TokenRBracket }
+    '.'   { L _ TokenDot }
+    '{'   { L _ TokenLBrace }
+    '}'   { L _ TokenRBrace }
 
 
 
 -- Operators
+
+
+%nonassoc with
+%right '=>' 
 %right ';'
+%right else 
 %left andalso orelse
 %nonassoc '=' '<=' '>=' '<>' '<' '>' '@'
+%left andb orb xorb
+%left '<<' '>>' '~>>'
 %left '+' '-' 
-%left '*' '/' 'div' 'mod'
+%left '*' '/' div mod
 %right '::'
+%right '.'
 
 %left 'raisedTo'
 %left '^'
@@ -111,7 +131,7 @@ AtomsList : { [] }
           | '|' VAR AtomsList  { (varTok $2): $3 }
 
 
-Expr:Form                         { $1 }
+Expr: Form                        { $1 }
     | let pini Expr Decs in Expr end  { Let (piniDecl $3 $4)  $6 }
     | let Decs in Expr end        { Let $2 $4 }
     | if Expr then Expr else Expr { If $2 $4 $6 }
@@ -121,6 +141,32 @@ Expr:Form                         { $1 }
     | hn Pattern when Expr '=>' Expr        { Hnd (Handler $2 Nothing (Just $4) $6)}
     | hn Pattern '|' Pattern when Expr '=>' Expr      { Hnd (Handler $2 (Just $4) (Just $6) $8)}
     | case Expr of Match          { Case $2 $4 (pos $1) }
+    | Expr ';' Expr               { mkSeq $1 $3 }
+    | Expr '-' Expr               { Bin Minus $1 $3 }
+    | Expr '+' Expr               { Bin Plus $1 $3 }
+    | Expr '>=' Expr              { Bin Ge $1 $3 }
+    | Expr '*' Expr               { Bin Mult $1 $3 }
+    | Expr '/' Expr               { Bin Div $1 $3 }
+    | Expr div Expr             { Bin IntDiv $1 $3}
+    | Expr mod Expr             { Bin Mod $1 $3}
+    | Expr '^' Expr               { Bin Concat $1 $3 }
+    | Expr '=' Expr               { Bin Eq $1 $3 }
+    | Expr '<=' Expr              { Bin Le $1 $3 }
+     
+    | Expr '<' Expr               { Bin Lt $1 $3 }
+    | Expr '>' Expr               { Bin Gt $1 $3 }
+    | Expr '<>' Expr              { Bin Neq $1 $3 }
+    | Expr andalso Expr           { Bin And $1 $3 }
+    | Expr orelse  Expr           { Bin Or $1 $3 }
+
+    | Expr andb Expr              { Bin BinAnd $1 $3 }
+    | Expr orb Expr               { Bin BinOr $1 $3 }
+    | Expr xorb Expr              { Bin BinXor $1 $3 }
+    | Expr '<<' Expr              { Bin BinShiftLeft $1 $3 }
+    | Expr '>>' Expr              { Bin BinShiftRight $1 $3 }
+    | Expr '~>>' Expr             { Bin BinZeroShiftRight $1 $3 }
+    | Expr '::' Expr              { ListCons $1 $3 }
+    | Expr 'raisedTo' Expr        { Bin RaisedTo $1 $3 }
 
 -- Note there is a shift/reduce conflict in this grammar
 -- This is a side-effect of the SML/NJ grammar
@@ -130,25 +176,7 @@ Match : Pattern '=>' Expr                      { [($1,$3)] }
 
 
 Form :: { Term }
-Form : Form '+' Form               { Bin Plus $1 $3 }
-     | Form '-' Form               { Bin Minus $1 $3 }
-     | Form '*' Form               { Bin Mult $1 $3 }
-     | Form '/' Form               { Bin Div $1 $3 }
-     | Form 'div' Form             { Bin IntDiv $1 $3}
-     | Form 'mod' Form             { Bin Mod $1 $3}
-     | Form '^' Form               { Bin Concat $1 $3 }
-     | Form '=' Form               { Bin Eq $1 $3 }
-     | Form '<=' Form              { Bin Le $1 $3 }
-     | Form '>=' Form              { Bin Ge $1 $3 }
-     | Form '<' Form               { Bin Lt $1 $3 }
-     | Form '>' Form               { Bin Gt $1 $3 }
-     | Form '<>' Form              { Bin Neq $1 $3 }
-     | Form andalso Form           { Bin And $1 $3 }
-     | Form orelse  Form           { Bin Or $1 $3 }
-     | Form '::' Form              { ListCons $1 $3 }
-     | Form ';' Form               { mkSeq $1 $3 }
-     | Form 'raisedTo' Form        { Bin RaisedTo $1 $3 }
-     | '-' Form                    { Un UnMinus $2 }
+Form :  '-' Form                    { Un UnMinus $2 }
      | Fact                        { fromFact $1 }
 
 
@@ -170,7 +198,27 @@ Atom : '(' Expr ')'                { $2 }
      | VAR                         { Var (varTok $1) }
      | '(' ')'                     { Lit LUnit }
      | '(' CSExpr Expr ')'         { Tuple (reverse ($3:$2)) }
+     | '{' '}'                     { Record [] }
+     | RecordExpr                  { $1 }
      | ListExpr                    { $1 }
+     | Atom '.' VAR                { Proj $1 (varTok $3) }
+
+
+RecordExpr 
+     : '{' RecordFields  '}'                           { Record $2 }
+     | '{' Atom with RecordFields'}'                   { WithRecord $2 $4 }
+     
+
+RecordFields
+     : Field                           { [$1] }
+     | Field ',' RecordFields          { $1 : $3 }
+
+
+Field 
+     : VAR                         { (varTok $1, Nothing) }
+     | VAR '=' Expr                { (varTok $1, Just $3) }
+     
+
 
 ListExpr :: {Term}
 ListExpr : '[' ']'                 { List []   }
@@ -188,8 +236,17 @@ Pattern : VAR                               { VarPattern (varTok $1) }
     | '_'                                   { Wildcard }
     | Lit                                   { ValPattern $1 }
     | '(' CSPattern Pattern ')'             { TuplePattern (reverse ($3:$2)) }
+    | '{' FieldPatterns '}'                 { RecordPattern $2 }
     | ListPattern   { $1}
 
+
+FieldPatterns
+    : FieldPat                         { [$1] }
+    | FieldPat ',' FieldPatterns       { $1: $3 } 
+
+FieldPat 
+    : VAR              {(varTok $1, Nothing) }
+    | VAR '=' Pattern  {(varTok $1, Just $3) }
 
 ListPattern:  '[' ']'                              { ListPattern [] }
     | '[' Pattern ']'                              { ListPattern [$2] }

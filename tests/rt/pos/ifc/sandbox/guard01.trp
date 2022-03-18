@@ -1,0 +1,3 @@
+let fun f () = print "Hello"
+ in guard (f, `{}`, 0)
+ end 

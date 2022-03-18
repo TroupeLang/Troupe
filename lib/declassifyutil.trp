@@ -70,6 +70,9 @@ let
         map (fn x => declassifydeep (x, a, lev) ) xs
     
     and declassifydeep (x, a, lev)  = 
+      (* we declassify the blocking label before touching the value *) 
+      blockdeclto ( a, lev);
+
       (* declassification is a 2-step process ; first we pattern match *) 
       (* on the given value and figure out which function to apply;    *) 
       (* the choice of the function needs to be declassified before we *)
@@ -90,5 +93,10 @@ let
       in f(y, a, lev )
       end      
 
-in [("declassifydeep", declassifydeep)]
+   fun declassify_with_block (x, a, lev) = blockdeclto (a, lev); declassify (x, a, lev)
+
+      
+
+in [("declassifydeep", declassifydeep)
+   ,("declassify_with_block", declassify_with_block)]
 end

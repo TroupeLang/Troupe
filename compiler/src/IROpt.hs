@@ -1,7 +1,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 
 module IROpt(iropt) where
-import CCIRANF
+import IR
 import Control.Monad.RWS.Lazy
 import Data.Map.Lazy (Map)
 import Data.Set(Set)
@@ -37,11 +37,15 @@ instance Substitutable IRExpr where
             Bin op x y -> Bin op (apply subst x) (apply subst y)
             Un op x -> Un op (apply subst x)
             Tuple xs -> Tuple (map (apply subst) xs)
+            Record fields -> Record (_ff fields)
+            WithRecord x fields -> WithRecord (apply subst x) (_ff fields)
+            Proj x f -> Proj (apply subst x) f
             List xs  -> List (map (apply subst) xs)
             ListCons x y -> ListCons (apply subst x) (apply subst y)
             Const x -> Const x
             Base name -> Base name 
             Lib name name' -> Lib name name'
+        where _ff fields = map (\(f,x) -> (f, apply subst x)) fields
 
 instance Substitutable IRInst where 
     apply subst i = 
@@ -78,6 +82,10 @@ data PValue = Unknown
             | ListVal
             | IntConst Integer
             | BoolConst Bool
+            | StringConst String
+            | RecordVal Fields
+             
+             
 
 
 type Env = Map VarName PValue
@@ -131,41 +139,67 @@ irExprPeval e =
     let r_ x = return (RExpr x) 
         def_ = r_ (Unknown, e) in
     case e of 
-        (Un Basics.IsTuple x) -> do 
+        Un Basics.IsTuple x -> do 
             v <- varPEval x 
             case v of 
                 TupleVal _ -> do 
                     setChangeFlag
                     r_ (BoolConst True, Const (C.LBool True))
                 _ -> def_
+        Un Basics.IsRecord x -> do 
+            v <- varPEval x 
+            case v of 
+                RecordVal _ -> do 
+                    setChangeFlag 
+                    r_ (BoolConst True, Const (C.LBool True))
+                _ -> def_
+        
 
-        (Bin Basics.Eq x y) -> do 
+        Bin Basics.Eq x y -> do 
             v1 <- varPEval x 
             v2 <- varPEval y 
             case (v1, v2) of 
-                (IntConst a, IntConst b) | a == b -> 
+                (IntConst a, IntConst b) | a == b -> do
+                    setChangeFlag
                     r_ (BoolConst True, Const (C.LBool True))
-                (IntConst a, IntConst b) | a /= b -> 
+                (IntConst a, IntConst b) | a /= b -> do
+                    setChangeFlag
                     r_ (BoolConst False, Const (C.LBool False))
                 _ -> r_ (Unknown, e)
+        
 
         Bin Basics.Index x y -> do 
             v1 <- varPEval x 
             v2 <- varPEval y 
             case (v1, v2) of 
-                (TupleVal xs, IntConst i) -> 
+                (TupleVal xs, IntConst i) -> do
+                    setChangeFlag
                     return $ RMov (xs !! (fromIntegral  i))
                 _ -> def_
 
-
+        Bin Basics.HasField x y -> do 
+            v1 <- varPEval x 
+            v2 <- varPEval y 
+            case (v1, v2) of 
+                (RecordVal fs, StringConst s) -> 
+                    case lookup s fs of 
+                        Just _ -> do
+                            setChangeFlag
+                            r_ (BoolConst True, Const (C.LBool True))
+                        Nothing -> def_ 
+                _ -> def_ 
+        
+        
         Bin op x y -> do 
           u <- varPEval x 
           v <- varPEval y
           case (u, v) of 
             (IntConst a, IntConst b) -> do
-                let ii f = let c = f a b in 
+                let ii f = let c = f a b in do
+                              setChangeFlag
                               r_ (IntConst c, Const (C.LInt c NoPos))  
-                let bb f = let c = f a b in 
+                let bb f = let c = f a b in do
+                              setChangeFlag
                               r_ (BoolConst c, Const (C.LBool c))
                 case op of 
                             Basics.Plus ->  ii (+)
@@ -180,13 +214,38 @@ irExprPeval e =
                             Basics.Lt ->    bb (<)
                             Basics.Ge ->    bb ( >= )
                             Basics.Gt ->    bb ( > )
-                            _  -> fail "Type error discovered at compliation time"
+                            _ -> def_
+                            -- _  -> fail "Type error discovered at compliation time"
                             
             _ -> do
               markUsed' x 
               markUsed' y
               def_
-            
+        Record fields -> do mapM pevalField fields 
+                            r_ (RecordVal fields, e)
+                            -- def_
+            where pevalField (_, x) = markUsed' x
+        WithRecord r fields -> do   
+                    markUsed' r
+                    mapM (\(_,x) -> markUsed' x) fields
+                    z <- varPEval r 
+                    let fields' = fields ++ ( case z of 
+                                               RecordVal f0 -> f0
+                                               _ -> [] )
+                    r_ (RecordVal fields', e)
+        Proj x s -> do 
+            v <- varPEval x 
+            case v of 
+                RecordVal fs -> 
+                    case lookup s fs of 
+                        Just y -> do
+                            setChangeFlag
+                            return $ RMov y 
+                            -- r_ (BoolConst True, Const (C.LBool True))
+                        Nothing -> def_ 
+                _ -> def_ 
+        
+        
 
 
 
@@ -214,6 +273,8 @@ irExprPeval e =
                     r_ (IntConst n, e)
                 C.LBool b -> 
                     r_ (BoolConst b, e)
+                C.LString s -> 
+                    r_ (StringConst s, e)
                 _ -> 
                     r_ (Unknown, e) 
 
@@ -278,12 +339,16 @@ trPeval :: IRTerminator -> Opt IRBBTree
 
 trPeval (If x bb1 bb2) = do 
         v <- varPEval x 
+        let _doThen = do setChangeFlag   
+                         peval bb1 
+        
+        let _doElse = do setChangeFlag
+                         peval bb2  
         case v of 
-            BoolConst True -> do setChangeFlag   
-                                 peval bb1 
-
-            BoolConst False -> do setChangeFlag
-                                  peval bb2 
+            BoolConst True -> _doThen
+            BoolConst False -> _doElse
+            IntConst x | x /= 0 -> _doThen 
+            IntConst 0 -> _doElse
                                   
             _ -> do bb1' <- peval bb1 
                     bb2' <- peval bb2 
@@ -362,11 +427,11 @@ instance PEval IRBBTree where
 
 
 funopt :: FunDef -> FunDef
-funopt (FunDef hfn argname bb) = 
+funopt (FunDef hfn argname consts bb) = 
     let initEnv = (Map.singleton argname Unknown, False)
         (bb', (_, hasChanges), _) = runRWS (peval bb) () initEnv
 
-        new = FunDef hfn argname bb'
+        new = FunDef hfn argname consts bb'
     in if (bb /= bb')  then funopt new 
                        else new 
 

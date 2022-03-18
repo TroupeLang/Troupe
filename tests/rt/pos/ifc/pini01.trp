@@ -1,6 +1,6 @@
-let pini authority val x = 42 raisedTo {secret} 
+let pini authority val x = 42 raisedTo `{secret}` 
     fun loop () = loop () 
-    val y = if x > 100 then loop () else () 
+    val y = if x > 100 then loop () else debugpc () 
     val z = 532
 in z 
 end

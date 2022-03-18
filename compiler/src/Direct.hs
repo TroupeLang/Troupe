@@ -8,6 +8,7 @@ module Direct ( Lambda (..)
               , Atoms(..)
               , Prog(..)
               , Handler(..)
+              , FieldName
               )
 where
 
@@ -53,6 +54,7 @@ data DeclPattern
     | TuplePattern [DeclPattern] --SrcPosInf
     | ConsPattern DeclPattern DeclPattern --SrcPosInf
     | ListPattern [DeclPattern] --SrcPosInf
+    | RecordPattern [(FieldName, Maybe DeclPattern)]
       deriving (Eq)
 
 data Decl
@@ -72,6 +74,9 @@ data Lit
     | LAtom AtomName --SrcPosInf
   deriving (Eq, Show)
 
+
+type Fields = [(FieldName, Maybe Term)]
+
 data Term
     = Lit Lit
     | Var VarName --SrcPosInf
@@ -82,6 +87,9 @@ data Term
     | Case Term [(DeclPattern, Term)] PosInf
     | If Term Term Term
     | Tuple [Term]
+    | Record Fields 
+    | WithRecord Term Fields
+    | Proj Term FieldName
     | List [Term]
     | ListCons Term Term
     | Bin BinOp Term Term
@@ -108,7 +116,6 @@ instance ShowIndent Prog where
 --------------------------------------------------
 -- obs: these functions are not exported
 --
-type Precedence = Integer
 
 
 
@@ -152,12 +159,20 @@ ppTerm'  (Tuple ts) =
   PP.hcat $
   PP.punctuate (text ",") (map (ppTerm 0) ts)
 
+ppTerm' (Record fs) = 
+  PP.braces $ qqFields fs 
+
+ppTerm' (WithRecord t fs) = 
+  PP.braces $ PP.hsep [ppTerm 0 t, text "with", qqFields fs] 
+
+
+ppTerm' (Proj t fn) = 
+  ppTerm projPrec t PP.<> text "." PP.<> PP.text fn  
+
 ppTerm'  (List ts) =
   PP.brackets $
   PP.hcat $
   PP.punctuate (text ",") (map (ppTerm 0) ts)
-
-
 
 ppTerm' (ListCons hd tl) =
    ppTerm consPrec hd PP.<> text "::" PP.<> ppTerm consPrec tl
@@ -239,6 +254,13 @@ qqLambda (Lambda args body ) =
   in ( ppArgs', ppTerm 0 body)
 
 
+qqFields fs = PP.hcat $
+    PP.punctuate (text ",") (map ppField fs)
+     where ppField (name, Nothing) = PP.text name 
+           ppField (name, Just t)  = 
+              PP.hcat [PP.text name, PP.text "=", ppTerm 0 t ]
+
+
 qqHandler :: Handler -> (PP.Doc, Maybe PP.Doc, Maybe PP.Doc, PP.Doc)
 qqHandler (Handler pat Nothing Nothing e) =
   (ppDeclPattern pat, Nothing, Nothing, ppTerm 0 e)
@@ -295,7 +317,12 @@ ppDeclPattern (ListPattern pats ) =
 ppDeclPattern (ConsPattern headPattern tailPattern ) =
   PP.parens $
   ppDeclPattern headPattern PP.<> text "::" PP.<> ppDeclPattern tailPattern
-
+ppDeclPattern (RecordPattern fields) = 
+  PP.braces $ 
+    PP.hsep $ 
+      PP.punctuate  (text ",") (map ppField fields)
+        where ppField (f, Nothing) = text f 
+              ppField (f, Just pat) = PP.hsep[text f, text "=", ppDeclPattern pat]
 
 ppLit :: Lit -> PP.Doc
 ppLit (LInt i _ )      = PP.integer i
@@ -304,36 +331,8 @@ ppLit (LUnit )       = text "()"
 ppLit (LBool True  )  = text "true"
 ppLit (LBool False) = text "false"
 ppLit (LLabel s ) = PP.braces (text s)
+ppLit (LAtom s) = text s 
 
-
-opPrec :: BinOp -> Precedence
-opPrec Plus  = 100
-opPrec Minus = 100
-opPrec Mult  = 200
-opPrec Div   = 200
-opPrec Eq    = 50
-opPrec Neq   = 50
-opPrec Le    = 50
-opPrec Lt    = 50
-opPrec Ge    = 50
-opPrec Gt    = 50
-opPrec FlowsTo    = 50
-opPrec RaisedTo   = 50
-opPrec And = 40
-opPrec Or = 40
-
-
-appPrec :: Precedence
-appPrec = 5000
-
-argPrec :: Precedence
-argPrec = appPrec + 1
-
-maxPrec :: Precedence
-maxPrec = 100000
-
-consPrec :: Precedence
-consPrec = 6000
 
 termPrec :: Term -> Precedence
 termPrec (Lit _)         = maxPrec
@@ -342,5 +341,6 @@ termPrec (List _ )       = maxPrec
 termPrec (Var _)         = maxPrec
 termPrec (App _ _)       = appPrec
 termPrec (Bin op _ _)    = opPrec op
+termPrec (Proj _ _ )     = projPrec 
 termPrec (ListCons _ _)  = 200
 termPrec _               = 0

@@ -1,10 +1,23 @@
-class NormalState  {
+import { Level } from "./Level";
+
+export interface HnState {
+    isNormal ():  boolean
+    checkGuard () : void 
+    getTrapper (): any 
+    declassificationAllowed () : boolean
+    lev : Level
+}
+class NormalState implements HnState   {
     name:string
     constructor (name="NORMAL") {
       this.name = name
     }
 
-    
+
+    checkGuard () {
+
+    }
+
     isNormal () {
         return true;
     }
@@ -16,13 +29,29 @@ class NormalState  {
     toString () {
       return this.name
     }
+
+    getTrapper () {
+        return null;
+    }
+
+    get lev () {
+        throw new Error ("handler usage error")
+        return null;
+    }
 }
 
 class InHandlerState extends NormalState {
     trapper: any;
-    constructor (f) {
+    _lev : Level
+    constructor (f,lev, checkGuard ) {
         super ("INHANDLER");
         this.trapper = f;
+        this._lev = lev 
+        this.checkGuard = checkGuard 
+    }
+
+    get lev () {
+        return this._lev
     }
 
     isNormal () {
@@ -42,9 +71,15 @@ class InHandlerState extends NormalState {
 
 class InSandboxState extends NormalState {
     trapper: any;
-    constructor (f) {
+    _lev : Level 
+    constructor (f, lev ) {
         super ("INSANDBOX");
         this.trapper = f;
+        this._lev = lev 
+    }
+
+    get lev () {
+        return this._lev 
     }
 
     isNormal () {
@@ -62,3 +97,4 @@ export const HandlerState = {
     INSANDBOX : InSandboxState
 }
 
+export default HandlerState

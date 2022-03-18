@@ -3,7 +3,7 @@
 
 let val main = self ()
     val _ = spawn (fn () => 
-                     if (1 raisedTo {alice}) then send (main, 42) 
+                     if (true raisedTo `{alice}`) then send (main, 42) 
                      else ())    
     val _ = receive [ hn x => print x ] 
 in ()

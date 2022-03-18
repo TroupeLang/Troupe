@@ -1,15 +1,17 @@
 (* scheduler-independent leak via blocking behavior *)
 (* this is a nasty, nasty leak *)
 
-let (* set secret to 0 or 1 *)
-    val secret = 0 raisedTo {secret}
+let (* set secret to true or false *)
+    val secret = false raisedTo `{secret}`
     
-    fun wait () = let val _ = raisembox ( {secret})
-                  in rcv ({}, {secret}, [ hn x => () ])
+    fun wait () = let val c = raisembox ( `{secret}`)
+                  in rcv (`{}`, `{secret}`, [ hn x => () ]); 
+                     lowermbox (c, authority)
                   end
     fun signal p = send (p, ())
 
     val mainPid = self ()
+    val _ = print mainPid
 
     fun leak i = let val c = pinipush authority 
                      val _ = wait () 
@@ -20,14 +22,15 @@ let (* set secret to 0 or 1 *)
                  in printWithLabels "DONE"
                  end       
 
+    fun hang () = receive []
     (* uncomment to see that the secret is properly labelled *)
     (* val _ = adv secret  *)
 
     val p1 = spawn ( fn () => leak 1 )
     val p2 = spawn ( fn () => leak 2 )    
     
-    val (q1, q2) = if secret then (p1, p2) 
-                                else (p2, p1)
+    val (q1, q2) = if secret  then (p1, p2) 
+                              else (p2, p1)
                    
     val _ = signal q1 
     val _ = wait () 

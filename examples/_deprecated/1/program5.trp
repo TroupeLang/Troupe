@@ -1,4 +1,0 @@
-let val x = 1 raisedTo {alice}
-    fun f y = if x > 1 then "hello" else "bye"
-in adv f
-end

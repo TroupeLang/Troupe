@@ -1,34 +1,52 @@
-const {LVal, MbVal} = require('./Lval.js');
-const logger = require('./logger.js').mkLogger('mbox');
+import { assertIsHandler, assertIsNTuple, assertIsFunction } from "./Asserts";
+import { mkTuple } from "./ValuesUtil";
+import { SchedulerInterface } from "./SchedulerInterface";
+import { __unit } from "./UnitVal";
+import { RuntimeInterface } from "./RuntimeInterface";
+
+// const {LVal, MbVal} = require('./Lval.js');
+const yargs = require ('yargs')
+let logLevel = yargs.argv.debugmailbox ? 'debug': 'info'
+const logger = require('./logger.js').mkLogger('MBX', logLevel);
 const debug = x => logger.debug(x)
 const SandboxStatus = require('./SandboxStatus.js').HandlerState;
-const levels = require('./options.js');
+import levels, {lub,flowsTo} from './options'
+import { ReceiveTaintAction } from "./ReceiveTaintAction";
+import { LVal, MbVal } from "./Lval";
+import { MailboxInterface } from "./MailboxInterface";
+import { Level } from "./Level";
+import { Thread } from "./Thread";
 
 
 function createMessage(msg, fromNodeId, pc) {
-    let tuple:any = [msg, fromNodeId];  
-    tuple.isTuple = true; // hack! 2018-10-19: AA
+    let tuple:any = mkTuple ([msg, fromNodeId]);  
+    // tuple.isTuple = true; // hack! 2018-10-19: AA
+    // tuple._troupeType = TroupeType.TUPLE
+    // tuple.dataLevel = lub (msg.dataLevel, pc)
     return new MbVal(tuple, pc);
   }
 
 
-export class MailboxProcessor {
-    sched: any;
+export class MailboxProcessor implements MailboxInterface {
+    sched: SchedulerInterface;
     levels: any; 
     mailboxes : any [];
-    rtObj: any ;
+    rtObj: RuntimeInterface
+
+
     
-    constructor(sched) {
-        this.sched = sched;
+    constructor(rtObj:RuntimeInterface) {
         this.levels = levels;
         this.mailboxes = new Array();
+        this.rtObj = rtObj        
+        this.sched = rtObj.__sched
     }
 
-    setRuntimeObject (rtObj) {
-        this.rtObj = rtObj;
-    }
+
 
     addMessage(fromNodeId, toPid, message, pc) {        
+
+        debug (`addMessage ${message.stringRep()} ${pc.stringRep()}`)
         let __sched = this.sched;
     
         // check whether the recipient is alive
@@ -48,33 +66,51 @@ export class MailboxProcessor {
         // unblock the thread if necessary        
         __sched.unblockThread(toPid);
     }
+    /*
 
-    sweepMessages(messages, handlers, lowb, highb, l_clear) {
+    sweepMessages(messages, handlers, lowb, highb, l_clear, taintLimit, taintAction) {
+
+
         debug (`receive interval: [${lowb.stringRep()}, ${highb.stringRep()}]`)
+
         let lub = this.levels.lub;
         let glb = this.levels.glb;
         let flowsTo = this.levels.flowsTo;
         let __sched = this.sched;
         let __rtObj = this.rtObj;
-        
-        let mkBase = (f) => __sched.mkBase(f);
-        let raisePC = (l) => { __sched.raiseCurrentThreadPC(l)  };
-        let assertIsHandler = this.rtObj.assertIsHandler;
         let theThread = __sched.__currentThread;
+
+        if (!theThread.handlerState.isNormal()) {            
+            theThread.threadError ("invalid handler state in receive: side effects are prohbited in restricted state");
+        }
+
+        
+        let raisePC = (l) => { theThread.raiseCurrentThreadPC(l)  };
+
+
+        let guard_sp:number = null;
+
+        theThread.handlerState = new SandboxStatus.INHANDLER (
+            () => {
+                theThread._sp = guard_sp
+                return theThread.returnImmediateLValue (
+                    theThread.mkVal (mkTuple ([theThread.mkVal (1), __unit]) ))
+            }    
+            // Errors in the evaluation of the handler will trigger next iteration.
+            // See iterate function below
+            // 
+        , theThread.pc
+        );
 
         function iterate(handlerToUse, messageToCheck) {            
             debug(`* checkMessages  ${handlerToUse} ${messageToCheck} ${messages.length}`);
             if (handlerToUse < handlers.length && messageToCheck < messages.length) {
                 debug("### 1");
-                debug (`${messages[messageToCheck].stringRep()}`);
+                debug (`iterate ${messages[messageToCheck].stringRep()}  || l_clear = ${l_clear.stringRep()}`);
 
                 let nextIter = (handlerToUse == handlers.length - 1) ?
-                    () => {
-                        iterate(0, messageToCheck + 1)
-                    } :
-                    () => {
-                        iterate(handlerToUse + 1, messageToCheck)
-                    };
+                    () => { return iterate(0, messageToCheck + 1) } :
+                    () => { return iterate(handlerToUse + 1, messageToCheck) };
 
                 // we need two arguments because this function is later used
                 // in patFail which is called from the userland, and therefore
@@ -91,85 +127,206 @@ export class MailboxProcessor {
                 let msglvl = senderPC 
                 if (!(flowsTo(lowb, msglvl)) || !(flowsTo(msglvl, highb))) {
                     debug("* checkMessages - skipping message because of rcv bounds");
-                                      
-                    __sched.schedule(nextIter, [null, null], null);
+                    return nextIter 
+                    // __sched.schedule(nextIter, [null, null], null);
                     //
                 } else {                    
+                    debug ("executing handler")
                     let lh = handlers[handlerToUse];
                     assertIsHandler (lh);
                     // let threadState = theThread.exportState();
 
+                    let _pcBeforeHandler = theThread.pc
+                    let _blBeforeHandler = theThread.bl 
 
-                    let guard = (arg) => {
-                        
+                    debug (`_pcBeforeHandler = ${_pcBeforeHandler.stringRep()} | _blBeforeHandler = ${_blBeforeHandler.stringRep()}`)
+                    let guardReturnPoint:any = () => {      
                         // theThread.importState (threadState);
-                        __rtObj.assertIsNTuple(arg, 2);
+                        let arg = theThread.arg_as_lval 
+                        debug (`arg in pushed frame ${arg.stringRep()}`)
+                        assertIsNTuple(arg, 2);
                         let status = arg.val[0];
-                        theThread.raiseCurrentThreadPC(status.lev);
-                        
-                        
-                        switch (status.val) {
-                            case 0:                                 
-                                let funclos = arg.val[1];
-                                __rtObj.assertIsFunction (funclos);
-                                messages.splice(messageToCheck, 1);
-                                theThread.raiseBlockingThreadLev( lub (senderPC, __sched.pc))  // 2018-11-29; AA, the lub is probably redundant...                        
-                                theThread.handlerState = new SandboxStatus.NORMAL();
-                                __rtObj.tailcall ( funclos, __sched.__unit);                        
-                                break;
-                            default:
-                                nextIter();
-                                break;
+                        theThread.raiseCurrentThreadPC(lub ( status.lev, arg.lev) );
+                        if (flowsTo (theThread.bl, taintLimit )) {
+                            switch (status.val) {
+                                case 0:                                 
+                                    let funclos = arg.val[1];
+                                    assertIsFunction (funclos);
+                                    messages.splice(messageToCheck, 1);
+                                    theThread.raiseBlockingThreadLev( lub (senderPC, __sched.__currentThread.pc))  // 2018-11-29; AA, the lub is probably redundant...                        
+                                    theThread.invalidateSparseBit() // 2021-05-12; AA: TODO: consider optimizing this and actually using the received value
+                                    theThread.handlerState = new SandboxStatus.NORMAL();                                                                        
+                                    debug ("setting the thread state back to normal")
+                                    return theThread.tailCall ( funclos.val, __unit);
+                                default:
+                                    return nextIter;                                    
+                            }   
+                        } else {
+                            let idx;
+                            switch (taintAction) {
+                                case ReceiveTaintAction.KEEP:
+                                    idx = messageToCheck + 1
+                                    break; 
+                                case ReceiveTaintAction.DROP:
+                                    idx = messageToCheck
+                                    messages.splice(messageToCheck, 1);
+                            }                            
+                            // restore the pc,bl levels (but bound by the taintLimit)  
+                                                  
+                            theThread.pc = lub (_pcBeforeHandler, taintLimit)
+                            theThread.bl = lub (_blBeforeHandler, taintLimit)
+                            
+                            // onto the next message
+                            return iterate(0, idx)
                         }                        
                     }
-                    
-                    theThread.callInThread (guard);
-
-                    theThread.handlerState = new SandboxStatus.INHANDLER ( mkBase ( (env, arg) => {
-                        __rtObj.ret (theThread.mkVal (__rtObj.mkTuple ([theThread.mkVal (1), __sched.unit]) )); // trigger next iter
-                    }));
-                    
-
+                    guardReturnPoint.debugname = "<guardReturnPoint>"
+                    theThread.pushFrame ( guardReturnPoint )
+                    guard_sp = theThread._sp // see the code for the INHANDLER above that uses this to unwind the stack
+                   
                     raisePC(lh.lev);
                     let h = lh.val;
                     let msg_orig = messages[messageToCheck]
+
+                    
                     // 
                     // 2020-02-08: AA; this is the place where we are raising the level 
                     // of the message from the mailbox to that of the lclear
                     // 
-                    let msg_raised_to_lclear = new LVal ( msg_orig.val, lub (msg_orig.lev, lub (highb, l_clear)))
-                    let args = [h.env, msg_raised_to_lclear];
-                    // run the handler                    
-                    __sched.schedule(h.fun, args, h.namespace);
+                    //  debug (`about to tail into the handler code\n  ${h.toString()}`)
+                    let msg_raised_to_lclear = new LVal ( msg_orig.val, lub (msg_orig.lev, highb, l_clear))
+                    return theThread.tailCall (h, msg_raised_to_lclear);
+                    
                 }
             } else {
-                // debug("### 2");
+                debug("### 2");
                 function futureMessage() {
                     // debug ("unblocking");
-                    iterate(0, messageToCheck);
+                    return iterate(0, messageToCheck);
                 }
 
-                __sched.__currentThread.block (futureMessage) ; 
+                theThread.block (futureMessage) ; 
                 // __sched.__currentThread.handlerState =  new HandlerState.INHANDLER(null);                
-                __sched.blockThread (__sched.__currentThread);                                
+                __sched.blockThread (theThread);   
             }
         }
 
-        if (!__sched.handlerState.isNormal()) {
-          console.log(new Error().stack)
-
-            __rtObj.threadError ("invalid handler state in receive: side effects are prohbited in restricted state");
-        }
         
-        iterate(0, 0);
+        
+        return iterate(0, 0);
     }
 
 
-    rcv(lowb, highb, handlers, l_clear) {
+    rcv(lowb, highb, handlers, l_clear, taintLimit = levels.TOP, taintAction = ReceiveTaintAction.KEEP) {
       let __sched = this.sched;        
       let mb = __sched.__currentThread.mailbox;
-      this.sweepMessages(mb, handlers.val.toArray(), lowb, highb, l_clear);
-    }    
+      return this.sweepMessages(mb, handlers.val.toArray(), lowb, highb, l_clear,taintLimit, taintAction);
+      
+    } 
+    
+    */
+
+    findFrom (theThread: Thread, i : number, j:number, index:number, lowb: Level, highb: Level, kont ) {
+        let mb = theThread.mailbox;
+        let _peekF = (i : number, j: number) => {
+            for (; i < mb.length; i ++ ) {
+                let msg_i = mb[i]
+                debug (`mailbox iteration ${i} ${j} ${msg_i.stringRep()}`)
+                let presenceLev = msg_i.lev 
+                debug (`presence level is ${presenceLev.stringRep()}`)
+                if (!(flowsTo(lowb, presenceLev)) || !(flowsTo(presenceLev, highb))) {
+                    debug("* skipping message because it is outside of the interval bounds");
+                    continue; 
+                } else {        
+                    debug (`* message is within the interval ${j} ${index}`) 
+                    if ( j == index ) {     
+                        debug (`* find match; returning`)
+                        return kont (i)
+                    } else {
+                        j++
+                    }
+                }
+            }                
+            debug (`* blocking `)
+            theThread.block (() => {
+                    debug (` * unblocking *`)
+                    return _peekF (i,j)
+                })
+                
+            this.sched.blockThread(theThread)
+        }        
+
+        return _peekF (i,j)
+    }
+
+
+    peek(lev: Level, index: number, lowb: Level, highb: Level) {        
+        let theThread = this.sched.__currentThread
+        let mb = theThread.mailbox;
+        debug (`peek index: ${index}`)        
+        debug (`peek interval: [${lowb.stringRep()}, ${highb.stringRep()}]`)
+        let lclear = mb.mclear 
+        theThread.raiseBlockingThreadLev (lub (highb, lclear.boost_level))
+        theThread.invalidateSparseBit()
+        let _i = 0, _j = 0
+
+        if (mb.peek_cache_index < index && mb.peek_cache_lowb == lowb 
+                                        && mb.peek_cache_highb == highb) {
+                debug (`* peek cache hit`)
+            _i = mb.peek_cache_position + 1
+            _j = mb.peek_cache_index + 1 
+        }
+
+        return this.findFrom ( theThread , _i , _j , index , lowb , highb
+                            , (i:number) => {
+                                    mb.peek_cache_index = index 
+                                    mb.peek_cache_position = i
+                                    mb.peek_cache_lowb = lowb
+                                    mb.peek_cache_highb = highb 
+                                    let newLev =        lub (mb[i].lev, lev)
+                                    debug (`* peek returns value at level ${newLev.stringRep()}`)
+                                    return theThread.returnImmediateLValue (
+                                        new LVal (mb[i].val,
+                                                    newLev,
+                                                    newLev 
+                                                  ))
+                            })
+    }
+
+    consume(lev: Level, index: number, lowb: Level, highb: Level) {
+        let theThread = this.sched.__currentThread
+        let mb = theThread.mailbox;
+        debug (`consume index: ${index}`)        
+        debug (`consume interval: [${lowb.stringRep()}, ${highb.stringRep()}]`)
+        let lclear = mb.mclear 
+        theThread.raiseBlockingThreadLev (lub (highb, lclear.boost_level))
+        theThread.invalidateSparseBit()
+        let kontFound = (i:number) => {
+            mb.resetPeekCache ();
+            let foundValue = mb[i]
+            mb.splice (i, 1)
+            return theThread.returnImmediateLValue (
+                new LVal (foundValue.val, lub (foundValue.lev, lev)))
+        }
+
+        if (mb.peek_cache_index == index && mb.peek_cache_lowb == lowb 
+                                         && mb.peek_cache_highb == highb) {
+            debug (`* consume exact cache hit`)
+            return kontFound (mb.peek_cache_position)
+        }
+
+        let _i = 0, _j = 0
+
+        if (mb.peek_cache_index < index && mb.peek_cache_lowb == lowb 
+            && mb.peek_cache_highb == highb) {
+                debug (`* consume next cache hit`)
+                _i = mb.peek_cache_position + 1
+                _j = mb.peek_cache_index + 1 
+        }
+
+        return this.findFrom ( theThread , _i , _j , index , lowb , highb, kontFound)
+
+    }
     
 }
 

@@ -1,0 +1,4 @@
+let val main = self () 
+    val _ = spawn (fn () => send (main, 42))
+in receive [ hn x => print ("Received", x)]
+end 

@@ -1,6 +1,6 @@
-let val x = 100 raisedTo {alice}
-    val y = 200 raisedTo {bob}
-    val z = 300 raisedTo {charlie}
+let val x = 100 raisedTo `{alice}`
+    val y = 200 raisedTo `{bob}`
+    val z = 300 raisedTo `{charlie}`
     val a = let pini authority 
                 val a = if y > 10 then z else "not an integer"
             in a 

@@ -1,6 +1,10 @@
 map
+mapi
 foldl
 range
 reverse
 lookup
 elem
+length
+append
+partition

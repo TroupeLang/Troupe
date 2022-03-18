@@ -56,7 +56,13 @@ instance FreeNames SimpleTerm where
   freeVars (ListCons v1 v2) = FreeVars (Set.fromList [v1, v2])
   freeVars (Base _ ) = FreeVars $ Set.empty
   freeVars (Lib _ _) = FreeVars $ Set.empty
-
+  freeVars (Record fields) = unionMany $ 
+      map (\(f,x) -> FreeVars (if x == VN f then Set.empty else Set.singleton x))
+      fields
+  freeVars (WithRecord x fields) = 
+    let _f = map (\(f,x) -> FreeVars ( if x == VN f then Set.empty else Set.singleton x)) fields in 
+    unionMany $(FreeVars (Set.singleton x)): _f
+  freeVars (Proj x _) = FreeVars (Set.singleton x)
 
 freeOfLet d vs kt =
    (freeVars d) `unionFreeVars` (restrictFree kt vs)

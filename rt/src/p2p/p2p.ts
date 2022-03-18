@@ -61,7 +61,9 @@ the libp2p).
 // LOGGING AND DEBUGGING 
 
 let yargs = require('yargs');
-let logLevel = yargs.argv.debugp2p?'debug':'info';
+let logLevel = yargs.argv.debugp2p? 'debug':'info'
+let __port = yargs.argv.port || 0
+
 const _PROTOCOL = "/troupe/1.0.0"
 
 
@@ -93,6 +95,7 @@ const p2pconfig = require('./p2pconfig.js')
 // const Pushable = require('pull-pushable')
 
 import { v4 as uuidv4} from 'uuid'
+import { Nil } from '../RawList';
 
 
 const MessageType = {
@@ -106,7 +109,7 @@ const MessageType = {
 
 
 
-async function obtainPeerId(nodeId) {
+async function obtainPeerId(nodeId) {    
     let id = null;
     if (nodeId) {
         try {
@@ -127,7 +130,7 @@ async function obtainPeerId(nodeId) {
         }
     }
     let _peerInfo = new PeerInfo(id)    
-    _peerInfo.multiaddrs.add(`/ip4/0.0.0.0/tcp/0`);     
+    _peerInfo.multiaddrs.add(`/ip4/0.0.0.0/tcp/${__port}`);
     return _peerInfo;
 }
 
@@ -362,7 +365,19 @@ function TroupeP2P (_rt, _peerInfo) {
     
     let _relay_id = null;
 
-    async function getPeerInfoWithRelay(id:any) {  
+    async function getPeerInfoWithRelay(id:any) {
+        let known_nodes = p2pconfig.known_nodes;
+        for (let ni of known_nodes) {
+            if (ni.nodeid == id) {
+                // found a known node!
+                let pi = new PeerInfo (PeerId.createFromB58String(id));
+                pi.multiaddrs.add (multiaddr(`${ni.ip}`))
+                debug(`node ${ni.nodeid} will be contacted directly via IP: ${ni.ip}`) 
+                return pi
+            }
+        }
+        debug ("the node is not known; using relay information")
+        
         let pi:any = await getPeerInfo (id)
         if (_relay_id) {
             pi.multiaddrs.add( multiaddr(`/p2p/${_relay_id}/p2p-circuit/p2p/${id}`))
@@ -515,7 +530,7 @@ function TroupeP2P (_rt, _peerInfo) {
               async (source: any) => { 
                  let ss = "" 
                  for await (const msg of source ) {                   
-                  // debug (`~~ relay says:${msg.toString().trim()}`)  
+                  debug (`~~ relay says:${msg.toString().trim()}`)  
                  }                
            })
       pipe (p, stream.sink);
@@ -652,9 +667,10 @@ async function startp2p(nodeId, rt) {
     _troupeP2P = new TroupeP2P( rt, peerInfo );        
     setupBlockingHealthChecker (_HEALTHCHECKPERIOD)
     await _troupeP2P.startNode ();
-    if (rt) {
-      rt.networkReady(peerInfo.id.toB58String());
-    }
+    return peerInfo.id.toB58String()
+    // if (rt) {
+    //   rt.networkReady(peerInfo.id.toB58String());
+    // }
 }
 
 
@@ -713,7 +729,7 @@ function processExpectedNetworkErrors (err, source="source unknown") {
   }
 
 
-module.exports = {
+export default {
     startp2p: startp2p,
     spawnp2p: (arg1, arg2) => _troupeP2P.spawnp2p(arg1, arg2),
     sendp2p: (arg1, arg2, arg3) => _troupeP2P.sendp2p(arg1, arg2, arg3),

@@ -1,35 +1,57 @@
 import levels  = require ('./options')
 import { Level } from "./Level";
 import * as Ty from './TroupeTypes';
+import { TroupeRawValue } from './TroupeRawValue';
 
-export class LVal {
+export class LVal implements TroupeRawValue{
     val: any;
     lev: Level;
     tlev: Level;
+    dlev: Level;
     posInfo: string;
 
+    /* 2020-06-06: AA   
 
-    __troupeType : Ty.TroupeType
+       Observe that we only need the type information here only because of the 
+       base type such as booleans, strings, and numbers; becauase we cannot attach
+       properties to them in JS. 
 
+       The main downside of duplicating the type information is the duplication of 
+       this information during serialization
+    */
+    __troupeType : Ty.TroupeType 
     
     constructor(v:any, l:Level, tlev:Level = null, posInfo:string = null) {
         this.val = v;
         this.lev = l;
-
         this.tlev = tlev == null?l:tlev;
         this.posInfo = posInfo;
-        this.__troupeType = Ty.getTroupeType(v);
-
+        if (v._troupeType == undefined) {
+            this.__troupeType = Ty.getTypeForBasicValue(v)
+            this.dlev = this.lev
+        } else {
+            this.__troupeType = v._troupeType                 
+            this.dlev = levels.lub (this.lev, v.dataLevel)
+        } 
     }
 
-    get troupeType () {
+    get _troupeType() {
+        return Ty.TroupeType.LVAL
+    }
+    get troupeType () {        
         return this.__troupeType
     }
 
     get dataLevel () {
-        return levels.TOP;// 2020-03-07; AA; placeholder
+        return this.dlev;
     }
 
+    get closureType ()  {
+        return (this.troupeType == Ty.TroupeType.CLOSURE 
+                    ? this.val._closureType 
+                    : null
+               )
+    }    
     stringRep(omitLevels?: boolean, taintRef?: any) {
       let v = this.val;
       let l = this.lev;
@@ -80,9 +102,6 @@ export class LCopyVal extends LVal {
 
 
 
-export class TLVal extends LVal {
-   
-}
 
 export class MbVal extends LVal {
 

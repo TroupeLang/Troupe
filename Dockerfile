@@ -1,4 +1,4 @@
-FROM fpco/stack-build:lts-12.2
+FROM fpco/stack-build:lts-17.11
 ENV TROUPE /troupe
 ENV STACK_OPTS --system-ghc
 WORKDIR $TROUPE
@@ -36,7 +36,5 @@ COPY Makefile .
 COPY local.sh .
 COPY network.sh .
 COPY examples examples
-RUN make -C examples/raft_benchmarks install
-RUN make yarn
-RUN make rt
-RUN make libs
+COPY pini.sh .
+RUN make all

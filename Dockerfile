@@ -37,4 +37,8 @@ COPY local.sh .
 COPY network.sh .
 COPY examples examples
 COPY pini.sh .
-RUN make all
+RUN yarn 
+RUN make rt 
+RUN make libs 
+RUN make service
+

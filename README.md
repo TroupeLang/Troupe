@@ -58,7 +58,7 @@ The current user guide is accessible [here](https://troupe.cs.au.dk/userguide.pd
 ## Running examples that do not require network
 
 For programs that do not require network access, there is a convenient script
-`local.sh` thatprompts the  Troupe runtime to skip initialization of the p2p
+`local.sh` that prompts the  Troupe runtime to skip initialization of the p2p
 infrastructure or key generation (which otherwise takes a few seconds).
 
 ## Networking

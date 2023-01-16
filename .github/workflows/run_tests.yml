@@ -25,5 +25,9 @@ jobs:
       - run: yarn install
       - name: compile the runtime
         run: make rt
+      - name: compile libs
+        run: make libs
+      - name: compile service
+        run: make service
       - name: unit tests
         run: make test

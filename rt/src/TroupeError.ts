@@ -15,8 +15,9 @@ export abstract class ThreadError extends TroupeError {
     }
 }
 
-export abstract class StopThreadError extends ThreadError {
+export abstract class StopThreadError extends ThreadError {    
     handleError (sched) {
+        let console = this.thread.rtObj.xconsole
         console.log (colors.red ( "Runtime error in thread " + this.thread.tidErrorStringRep()))
         console.log (colors.red ( ">> " + this.errorMessage));
         sched.stopThreadWithErrorMessage(this.thread, this.errorMessage);
@@ -43,6 +44,7 @@ export class HandlerError extends ThreadError {
           // we have an error inside of an receive pattern or guard;
           // we are discarding the rest of the current thread and are
           // scheduling the execution of the handler 
+          let console = this.thread.rtObj.xconsole
           console.log (colors.yellow (`Warning: runtime exception in the handler or sandbox: ${this.errstr}`))
           this.thread.next = this.thread.handlerState.getTrapper();
           sched.scheduleThread(this.thread)

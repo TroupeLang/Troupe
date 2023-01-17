@@ -25,6 +25,7 @@ import { initTrustMap, nodeTrustLevel, _trustMap } from './TrustManager';
 import { serialize } from './serialize';
 import { Thread } from './Thread';
 
+const { Console } = require('node:console')
 
 const { flowsTo, lub, glb } = levels
 const yargs = require('yargs');
@@ -40,6 +41,12 @@ const error = x => logger.error(x)
 
 let __p2pRunning = false;
 
+
+let rt_xconsole = 
+      new Console({ stdout: process.stdout
+                  , stderr: process.stderr
+                  , colorMode:true
+                 });
 
 function $t():Thread { return __sched.__currentThread }; // returns the current thread
 
@@ -251,7 +258,7 @@ let rt_debug = function (s) {
   let pc = $t().pc.stringRep()
   let bl = $t().bl.stringRep()
   let handler_state = __sched.handlerState.toString()
-  console.log(
+  rt_xconsole.log(
     colors.red(formatToN("PID:" + tid, 50)),
     colors.red(formatToN("PC:" + pc, 20)),
     colors.red(formatToN("BL:" + bl, 20)),
@@ -320,6 +327,7 @@ let __service:any = {}
 
 class RuntimeObject implements RuntimeInterface {
   // tailcall = tailcall
+  xconsole = rt_xconsole
   ret = rt_ret
   // ret_raw = rt_ret_raw 
   debug = rt_debug

@@ -18,4 +18,5 @@ export interface RuntimeInterface {
     // ret_raw ()
     // tailcall(funclos: any, __unit: any);
     persist (obj, path)    
+    xconsole: Console
 }

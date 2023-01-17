@@ -11,19 +11,24 @@ If you want to try out Troupe without manual installation (e.g., for a class exe
 
 
 ### Step 1. Install JS runtime
-1. Install NodeJS.
-2. Get [yarn](https://yarnpkg.com/lang/en/) package manager.
+1. Install NodeJS (e.g. `sudo apt-get install nodejs`)
+2. Get [yarn](https://yarnpkg.com/lang/en/) package manager (e.g. `npm install --global yarn`)
 3. Install js dependencies via `yarn install`
 4. Apply local js patches to the dependencies via `yarn patch-package`
-5. Set TROUPE environment variable to point to the folder that contains this file (In bash this is done by adding a new line with the command `TROUPE=<path to the installation directory>` in a file such as `~/.bashrc` or `~/.bash_profile`). Read <a href="https://www.digitalocean.com/community/tutorials/how-to-read-and-set-environmental-and-shell-variables-on-a-linux-vps"> here</a> for more info on environment variables.
-6. Install [TypeScript](https://www.typescriptlang.org/).
-7. Compile Troupe runtime my typing `make rt`
+5. Set the `TROUPE` environment variable to point to the folder that contains this README. In bash this is done by adding the following lines to a file such as `~/.bashrc` or `~/.bash_profile`:
+   ```
+   TROUPE=<path to the installation directory>
+   export TROUPE=<path to the installation directory>
+   ```
+   Read <a href="https://www.digitalocean.com/community/tutorials/how-to-read-and-set-environmental-and-shell-variables-on-a-linux-vps"> here</a> for more info on environment variables.
+6. Install [TypeScript](https://www.typescriptlang.org/): `npm install -g typescript`
+7. Compile Troupe runtime by typing `make rt`
 
 ### Step 2. Install Troupe compiler
 
 1. Get [Haskell stack](https://www.haskellstack.org).
 2. `stack install alex happy`
-3. Change to the compiler directory and run `make`
+3. Change to the `compiler` directory and run `make`
 
 The above make script copies the binary of the compiler into the
 bin folder of the project under name `troupec`. That name is then used
@@ -32,7 +37,7 @@ by the runtime module.
 
 ### Step 3. Install Troupe top-level scripts
 
-Type `make stack` to compile Troupe's bin scripts
+Type `make stack` (in the repository's root) to compile Troupe's bin scripts
 
 ### Step 4. Install Troupe standard library
 

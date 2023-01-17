@@ -12,7 +12,7 @@ jobs:
       - uses: actions/checkout@v2
       - uses: haskell/actions/setup@v1
         with:
-          ghc-version: '8.4.4' # Exact version of ghc to use
+          ghc-version: '8.10.4' # Exact version of ghc to use
           # cabal-version: 'latest'. Omitted, but defaults to 'latest'
           enable-stack: true
           # stack-version: 'latest'

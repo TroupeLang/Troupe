@@ -1,5 +1,7 @@
 name: Build project and run tests
 on: [pull_request, push]
+env:
+    TERM=xterm-color
 jobs:
   build_and_test:
     runs-on: ubuntu-latest
@@ -30,4 +32,4 @@ jobs:
       - name: compile service
         run: make service
       - name: unit tests
-        run: export TERM=xterm-color;make test
+        run: make test

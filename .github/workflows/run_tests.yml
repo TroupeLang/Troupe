@@ -2,7 +2,7 @@ name: Build project and run tests
 on: [pull_request, push]
 jobs:
   build_and_test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     steps:
       - name: install missing dependency for ghc 8.4.3
         # https://gitlab.haskell.org/ghc/ghc/-/issues/15444

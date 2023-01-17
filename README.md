@@ -36,7 +36,7 @@ Type `make stack` to compile Troupe's bin scripts
 
 ### Step 4. Install Troupe standard library
 
-Type `make libs` to compile Troupe's built-in libraries.
+Type `make libs` to compile Troupe's built-in libraries, and `make service` to compile the service module placeholder.
 
 
 ### Step 5. Running the test suite

@@ -1,5 +1,5 @@
 name: Build project and run tests
-on: pull_request
+on: [pull_request, push]
 jobs:
   build_and_test:
     runs-on: ubuntu-latest
@@ -8,22 +8,27 @@ jobs:
         # https://gitlab.haskell.org/ghc/ghc/-/issues/15444
         run: |
           sudo apt-get update
-          sudo apt-get install -y libnuma-dev happy alex
+          sudo apt-get install -y libnuma-dev happy alex diffutils
       - uses: actions/checkout@v2
       - uses: haskell/actions/setup@v1
         with:
-          ghc-version: '8.4.4' # Exact version of ghc to use
+          ghc-version: '8.10.4' # Exact version of ghc to use
           # cabal-version: 'latest'. Omitted, but defaults to 'latest'
           enable-stack: true
           # stack-version: 'latest'
       - run: |
           echo "STACK_OPTS=--system-ghc" >> $GITHUB_ENV
           echo "TROUPE=$GITHUB_WORKSPACE" >> $GITHUB_ENV
+          echo "TERM=xterm-color" >> $GITHUB_ENV
       - name: compile the compiler
         run: make stack
       - uses: actions/setup-node@v2
       - run: yarn install
       - name: compile the runtime
         run: make rt
+      - name: compile libs
+        run: make libs
+      - name: compile service
+        run: make service
       - name: unit tests
         run: make test

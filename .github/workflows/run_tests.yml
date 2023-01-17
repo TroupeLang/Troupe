@@ -30,4 +30,4 @@ jobs:
       - name: compile service
         run: make service
       - name: unit tests
-        run: make test
+        run: export TERM=xterm-color;make test

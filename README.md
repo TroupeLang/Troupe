@@ -3,7 +3,7 @@
 Troupe is a programming language based on the actor model for concurrent and distributed
 programming that provides dynamic information flow control.
 
-## Troupe development container 
+## Troupe development container
 
 If you want to try out Troupe without manual installation (e.g., for a class exercise or just checking the system), please check out the VSCode development container available through the [Troupe/example-project](https://github.com/TroupeLang/example-project) repository.
 
@@ -55,16 +55,70 @@ On OS X, make sure to have `gtimeout` and `greadlink` utilities. These can be in
 Check that the installation works by running the local test suite: `$TROUPE/bin/golden`
 (alternatively `make test` in this directory).
 
+
+## Setting up a development environment
+
+### Using VSCode
+
+#### Setting up remote development on a Linux remote machine (optional)
+This will allow to develop on a remote machine, using VSCode on a local machine to access the project. Compilation and tools such as the Haskell Language Server will run on the remote machine.
+
+
+##### On the remote machine
+
+- Setup ssh
+- Install [ghcup](https://www.haskell.org/ghcup/install/#how-to-install): `curl --proto '=https' --tlsv1.2 -sSf https://get-ghcup.haskell.org | sh`
+  - The installation script will ask whether to install stack and the Haskell Language Server, say yes both
+  - Make sure that PATH is updated as suggested
+- Reboot remote (or make sure that the newly installed environment variables are on PATH and available everywhere)
+
+
+##### On the local machine
+
+- Install Visual Studio Code
+- Install the [Remote Development extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.vscode-remote-extensionpack)
+  - NOTE: ssh connections might not work with the open source builds of VS Code (where the ssh extensions have to be manually downloaded and installed, or open source alternatives have to be used)
+- Now you should be able to connect to the remote machine (use the green button in the bottom-left, or F1 -> "Remote-SSH: Connect to Host"). If the remote machine is added in `.ssh/config`, it should show up. You'll be asked to enter the password for the ssh key.
+  - On first connect, the VSCode server will automatically be installed on the remote machine.
+
+
+#### Setting up Haskell support
+
+- Install the [Haskell](https://marketplace.visualstudio.com/items?itemName=haskell.haskell) and [Haskell Syntax Highlighting](https://marketplace.visualstudio.com/items?itemName=justusadam.language-haskell) extensions (on the remote if applicable)
+  - The Haskell extension will at some point ask which way to use to manage HLS, choose GHCup
+  - In the description of the Haskell extension is a table with supported GHC versions. Make sure that the project's stack resolver in `compiler/stack.yaml` is set to a version with a supported GHC version (see [stackage.org](https://www.stackage.org/)).
+- Open the `compiler` folder. VSCode should start setting up the Haskell Language Server and might ask whether to download some specific versions of HLS/stack/ghc.
+  - In case of a failure, it might help to reload the window, so that VSCode tries again.
+
+Now, when having opened the `compiler` folder, the Haskell Language Server should highlight errors and hints, support "Go to definition" and more.
+
+
+#### Building and running
+
+- **Building the compiler:** When having opened the `compiler` folder, there is a task "Build all", which is set as the default build task, so running "Run build task" (Ctrl-F9) should execute it.
+- **Running a Troupe file locally:** When having the Troupe root folder opened, there is a task "Run local" which runs `local.sh` with the currently focused file. It is set to the default test task, so "Run Test Task" should execute it. You may want to set a keybinding.
+- Tasks are defined in the respective `.vscode/tasks.json` file, where further tasks can be added easily.
+
+<!-- #### Makefile support -->
+<!-- - Install the extension [Makefile Tools](https://marketplace.visualstudio.com/items?itemName=ms-vscode.makefile-tools) -->
+<!-- - Open the Troupe root folder and select the Makefile tab in the left bar -->
+<!-- - Set "Build target" to "all" -->
+
 ## User guide
 
 The current user guide is accessible [here](https://troupe.cs.au.dk/userguide.pdf).
 
+## Building and running
 
-## Running examples that do not require network
+### Running examples that do not require network
 
 For programs that do not require network access, there is a convenient script
 `local.sh` that prompts the Troupe runtime to skip initialization of the p2p
 infrastructure or key generation (which otherwise takes a few seconds).
+
+### Building and naming the snapshot
+
+Script `build.sh` runs `make` and copies the executables to `../bin/<current git HEAD hash>`.
 
 ## Networking
 

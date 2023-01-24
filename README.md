@@ -92,6 +92,13 @@ This will allow to develop on a remote machine, using VSCode on a local machine 
 Now, when having opened the `compiler` folder, the Haskell Language Server should highlight errors and hints, support "Go to definition" and more.
 
 
+#### Syntax support for Troupe files
+
+As Troupe syntax is similar to SML, installing the [SML Environment](https://marketplace.visualstudio.com/items?itemName=vrjuliao.sml-environment) extension is useful. It adds syntax highlighting, some identation support and support for commenting with editor commands.
+
+Use `Ctrl-k m` ("Change language mode") to set the current file's language mode to SML. The suggestions will also allow to generally associate `.trp` files with SML mode.
+
+
 #### Building and running
 
 - **Building the compiler:** When having opened the `compiler` folder, there is a task "Build all", which is set as the default build task, so running "Run build task" (Ctrl-F9) should execute it.

@@ -25,9 +25,7 @@ package-lock.json
 /out
 *.o
 *.hi
-bin/troupec
-bin/irtester
-bin/golden
+bin/*
 node_modules
 yarn.lock
 yarn-error.log 

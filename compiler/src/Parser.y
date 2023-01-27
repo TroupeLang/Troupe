@@ -100,6 +100,7 @@ import Control.Monad.Except
 
 %nonassoc with
 %right '=>' 
+%right '|'
 %right ';'
 %right else 
 %left andalso orelse
@@ -168,8 +169,6 @@ Expr: Form                        { $1 }
     | Expr '::' Expr              { ListCons $1 $3 }
     | Expr 'raisedTo' Expr        { Bin RaisedTo $1 $3 }
 
--- Note there is a shift/reduce conflict in this grammar
--- This is a side-effect of the SML/NJ grammar
 
 Match : Pattern '=>' Expr                      { [($1,$3)] }
       | Pattern '=>' Expr '|' Match            { ($1,$3):$5 }

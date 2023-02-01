@@ -31,7 +31,7 @@ transLit (S.LAtom a)   = T.LAtom a
 
 
 transLambda_aux (S.Lambda pats t) =
-  let args = map (("arg" ++) . show) [1..(length pats)]
+  let args = map (("$arg" ++) . show) [1..(length pats)]
       argPat = zip (map Var args) pats
       t' = foldM compilePattern (transTerm t) (reverse argPat)
   in Lambda args <$> t'

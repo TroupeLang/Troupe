@@ -492,9 +492,9 @@ irExpr2js (Un Basics.UnMinus v) = return $ (text "-") <+> ppId v
 irExpr2js (Un op v) = return $
   text (textOfUnOp op) <> PP.parens (ppId v)
 irExpr2js (Tuple vars) = return $
-   (text "rt.mkTuple") <> (PP.parens $PP.brackets $ PP.hsep $ PP.punctuate (text ",") (map ppId vars))
+   (text "rt.mkTuple") <> (PP.parens $ PP.brackets $ PP.hsep $ PP.punctuate (text ",") (map ppId vars))
 irExpr2js (Record fields) = return $ 
-   PP.parens $ (text "rt.mkRecord" ) <> (PP.parens $PP.brackets $ PP.hsep $ PP.punctuate (text ",") (map ppField fields))
+   PP.parens $ (text "rt.mkRecord" ) <> (PP.parens $ PP.brackets $ PP.hsep $ PP.punctuate (text ",") (map ppField fields))
      where ppField (f, v) = PP.brackets $ (PP.quotes (text f)) <> text "," <> ppId v
 irExpr2js (WithRecord r fields) = return $ 
     text "rt.withRecord" <> (PP.parens $

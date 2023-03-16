@@ -284,7 +284,7 @@ pevalInst i = do
           _ -> keep
 
       MkFunClosures ee _ -> _keep $ markUsed (snd (unzip ee)) 
-      SetBranchFlag -> return $Just i'
+      SetBranchFlag -> return $ Just i'
                           
 
 instance PEval RawTerminator where

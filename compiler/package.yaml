@@ -39,6 +39,10 @@ dependencies:
 - aeson
 - MissingH
 
+build-tools:
+- alex
+- happy
+
 library:
   source-dirs: src
   ghc-options: -Wincomplete-patterns

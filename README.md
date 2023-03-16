@@ -27,8 +27,7 @@ If you want to try out Troupe without manual installation (e.g., for a class exe
 ### Step 2. Install Troupe compiler
 
 1. Get [Haskell stack](https://www.haskellstack.org).
-2. `stack install alex happy`
-3. Change to the `compiler` directory and run `make`
+2. Change to the `compiler` directory and run `make`
 
 The above make script copies the binary of the compiler into the
 bin folder of the project under name `troupec`. That name is then used

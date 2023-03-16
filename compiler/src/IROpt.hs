@@ -208,7 +208,7 @@ irExprPeval e =
                             Basics.Div ->   def_ -- do not mess with divisions -- ii div
                             Basics.IntDiv-> def_
                             Basics.Mod ->   def_ -- ii mod 
-                            Basics.Eq ->    bb (==)
+                            -- Basics.Eq ->    bb (==)
                             Basics.Neq ->   bb(/=)
                             Basics.Le ->    bb (<=)
                             Basics.Lt ->    bb (<)

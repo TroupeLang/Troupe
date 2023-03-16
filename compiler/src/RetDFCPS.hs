@@ -121,7 +121,7 @@ transExplicit (Core.AssertElseError e0 e1 e2 p) = do
   e1' <- transExplicit e1
   trans e0 (\v0 ->
     trans e2 (\v2 ->
-      return $AssertElseError v0 e1' v2 p))
+      return $ AssertElseError v0 e1' v2 p))
 
 
 transExplicit (Core.Tuple ts)  =

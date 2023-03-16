@@ -96,10 +96,10 @@ expr2raw e@(IR.Bin op v1 v2) = do
                     else [ AssertType r1 RawNumber, AssertType s1 RawNumber ] 
             tell $ 
                  asserts ++ 
-                 [ AssignRaw t1 $Bin op r1 s1
-                 , AssignRaw t2 $join r2 s2
-                 , AssignRaw t3 $join r3 s3
-                 , AssignRaw t4 $join t2 pc 
+                 [ AssignRaw t1 $ Bin op r1 s1
+                 , AssignRaw t2 $ join r2 s2
+                 , AssignRaw t3 $ join r3 s3
+                 , AssignRaw t4 $ join t2 pc 
                  ]
             return (t1, t4, pc)
     else case op of      
@@ -110,7 +110,7 @@ expr2raw e@(IR.Bin op v1 v2) = do
             
             tell [ AssertType r1 RawTuple 
                  , AssertType s1 RawNumber
-                 , AssignLVal t0 $ComplexRaw $ Bin op r1 s1
+                 , AssignLVal t0 $ ComplexRaw $ Bin op r1 s1
                  ]
             
             (t1, t2, t3) <- varAccess2raw (IR.VarLocal t0)
@@ -139,10 +139,10 @@ expr2raw e@(IR.Bin op v1 v2) = do
             t4 <- fresh 
             tell [ AssertType r1 RawString 
                  , AssertType s1 RawString
-                 , AssignRaw t1 $Bin op r1 s1
-                 , AssignRaw t2 $join r2 s2
-                 , AssignRaw t3 $join r3 s3
-                 , AssignRaw t4 $join t2 pc 
+                 , AssignRaw t1 $ Bin op r1 s1
+                 , AssignRaw t2 $ join r2 s2
+                 , AssignRaw t3 $ join r3 s3
+                 , AssignRaw t4 $ join t2 pc 
                  ]
             return (t1, t4, pc)
 
@@ -155,7 +155,7 @@ expr2raw e@(IR.Bin op v1 v2) = do
             
             tell [ AssertType s1 RawLevel 
                  , AssignRaw t2 $ Bin Basics.RaisedTo r2 s1
-                 , AssignRaw t2' $join t2 s2 
+                 , AssignRaw t2' $ join t2 s2 
                  , AssignRaw t2'' $ join t2' pc
                  , AssignRaw t3 $ join r3 pc 
                  ]

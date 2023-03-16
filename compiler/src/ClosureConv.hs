@@ -91,8 +91,8 @@ transVar v@(VN vname) = do
     Just (VarNested lev') -> 
       if lev' < lev 
       then do 
-        tell $([], [(v, lev')], []) -- collecting info about free vars 
-        return $VarEnv v 
+        tell $ ([], [(v, lev')], []) -- collecting info about free vars 
+        return $ VarEnv v 
       else 
         return $ VarLocal v 
     Nothing -> 

@@ -36,6 +36,7 @@ class Node extends libp2p {
         defaultPeerValue: 1    // we later set the peer value of Troupe nodes to 1.0
       },
 
+
       modules: {
         transport: [
           TCP,
@@ -56,7 +57,7 @@ class Node extends libp2p {
       dialer: {
         maxParallelDials: 150, // How many multiaddrs we can dial in parallel
         maxDialsPerPeer: 8, // How many multiaddrs we can dial per peer, in parallel
-        dialTimeout: 10e3 // 15 second dial timeout per peer
+        dialTimeout: 10e3, // 15 second dial timeout per peer
       },
       metrics: {
         enabled: true

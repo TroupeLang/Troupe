@@ -1,8 +1,8 @@
-2020-03-16T16:32:07.224Z [RTM] [32minfo[39m: Skipping network creation. Observe that all external IO operations will yield a runtime error.
-[31mPID:6a4c141c-656d-489e-9ef7-2c56c1db88af@{}%{}    [39m [31mPC:{}               [39m [31mBL:{}               [39m [31mHNNORMAL            [39m 
-[31mPID:6a4c141c-656d-489e-9ef7-2c56c1db88af@{}%{}    [39m [31mPC:{}               [39m [31mBL:{}               [39m [31mHNNORMAL            [39m 
-[31mRuntime error in thread 6a4c141c-656d-489e-9ef7-2c56c1db88af@{}%{}[39m
-[31m>> Illegal flow in adv function:[39m
-[31m |    pc: {}[39m
-[31m | block: {alice}[39m
-[31m | value: 2@{alice}%{alice}[39m
+2023-03-17T21:23:23.794Z [RTM] [32minfo[39m: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+PID:26404603-6cd9-4d4f-9a50-c2ec8c804025@{}%{}     PC:{}                BL:{}                HNNORMAL             _sp:21               
+PID:26404603-6cd9-4d4f-9a50-c2ec8c804025@{}%{}     PC:{}                BL:{}                HNNORMAL             _sp:21               
+Runtime error in thread 26404603-6cd9-4d4f-9a50-c2ec8c804025@{}%{}
+>> Illegal flow in adv function:
+ |    pc: {}
+ | block: {alice}
+ | value: 2@{alice}%{alice}

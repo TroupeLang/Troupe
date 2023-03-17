@@ -1,5 +1,6 @@
 import { Thread } from "./Thread";
-import colors = require('colors/safe');
+// import colors = require('colors/safe');
+import chalk from 'chalk'
 import { SchedulerInterface } from "./SchedulerInterface";
 
 export abstract class TroupeError extends Error {
@@ -18,8 +19,8 @@ export abstract class ThreadError extends TroupeError {
 export abstract class StopThreadError extends ThreadError {    
     handleError (sched) {
         let console = this.thread.rtObj.xconsole
-        console.log (colors.red ( "Runtime error in thread " + this.thread.tidErrorStringRep()))
-        console.log (colors.red ( ">> " + this.errorMessage));
+        console.log (chalk.red ( "Runtime error in thread " + this.thread.tidErrorStringRep()))
+        console.log (chalk.red ( ">> " + this.errorMessage));
         sched.stopThreadWithErrorMessage(this.thread, this.errorMessage);
     }
 }
@@ -45,7 +46,7 @@ export class HandlerError extends ThreadError {
           // we are discarding the rest of the current thread and are
           // scheduling the execution of the handler 
           let console = this.thread.rtObj.xconsole
-          console.log (colors.yellow (`Warning: runtime exception in the handler or sandbox: ${this.errstr}`))
+          console.log (chalk.yellow (`Warning: runtime exception in the handler or sandbox: ${this.errstr}`))
           this.thread.next = this.thread.handlerState.getTrapper();
           sched.scheduleThread(this.thread)
     }

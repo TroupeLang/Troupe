@@ -1,6 +1,6 @@
-2021-03-02T00:12:10.900Z [RTM] [32minfo[39m: Skipping network creation. Observe that all external IO operations will yield a runtime error.
-[31mRuntime error in thread 0d9874fc-8f20-44a8-ac34-ea032e155c8c@{}%{}[39m
-[31m>> Insufficient authority for lowering the mailbox clearance[39m
-[31m| authority provided: !{alice}[39m
-[31m| current level of the mailbox: {alice,bob}[39m
-[31m| target level of the mailbox: {alice}[39m
+2023-03-17T21:23:23.690Z [RTM] [32minfo[39m: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+Runtime error in thread 7ed76dc1-d5b4-4c01-8cd1-6422c3c112c7@{}%{}
+>> Insufficient authority for lowering the mailbox clearance
+| authority provided: !{alice}
+| current level of the mailbox: {alice,bob}
+| target level of the mailbox: {alice}

@@ -7,7 +7,7 @@ COPY Makefile .
 RUN make stack
 
 FROM ubuntu:bionic
-ENV TROUPE /troupe
+ENV TROUPE /Troupe
 RUN apt-get update \
   && apt-get install -y curl gnupg build-essential \
   && curl --silent --location https://deb.nodesource.com/setup_14.x | bash - \
@@ -25,8 +25,8 @@ RUN curl -s https://bootstrap.pypa.io/get-pip.py -o get-pip.py && \
 RUN npm install -g typescript    
 COPY package.json .
 RUN yarn install
-WORKDIR /troupe/
-COPY --from=0 /troupe/bin bin
+WORKDIR /Troupe/
+COPY --from=0 /Troupe/bin bin
 COPY rt rt
 COPY trp-rt trp-rt
 COPY patches patches

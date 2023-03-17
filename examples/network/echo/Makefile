@@ -7,7 +7,7 @@ echo-server:
 	$(START) echo-server.trp --id=ids/echo-server.json --port=6789 # --debug --debugp2p
 
 echo-client:
-	$(START) echo-client.trp --id=ids/echo-client.json --aliases=aliases.json  --debug --debugp2p
+	$(START) echo-client.trp --id=ids/echo-client.json --aliases=aliases.json  # --debug --debugp2p
 
 create-network-identifiers:
 	mkdir -p ids 

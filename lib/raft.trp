@@ -216,7 +216,7 @@ let val DURATION = 500
                               (* print currentTerm "timeout, old nonce, ignoring"; *)
                               loop votedFor n
                             , hn (TIMEOUT, k) when k = n =>
-                              print currentTerm "timout, same nonce so no heartbeat from leader, do election";
+                              print currentTerm "timeout, same nonce so no heartbeat from leader, do election";
                               candidate (currentTerm + 1, self (), log, commitIndex, lastApplied) state
                             , hn (APPEND_ENTRIES, term, leaderId, prevLogIndex, prevLogTerm, entries, leaderCommit) =>
                               let val (newLog, newCommitIndex) = append_entries currentTerm log commitIndex term leaderId prevLogIndex prevLogTerm entries leaderCommit

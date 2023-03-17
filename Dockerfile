@@ -36,6 +36,7 @@ COPY Makefile .
 COPY local.sh .
 COPY network.sh .
 COPY examples examples
+COPY tests tests
 COPY pini.sh .
 RUN yarn
 RUN make rt 

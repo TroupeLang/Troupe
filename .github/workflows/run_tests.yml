@@ -2,24 +2,28 @@ name: Build project and run tests
 on: [pull_request, push]
 jobs:
   build_and_test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
+    env:
+        STACK_OPTS: "--system-ghc"
+        TROUPE: ${{github.workspace}}
+        TERM: "xterm-color"
     steps:
-      - name: install missing dependency for ghc 8.4.3
+      - name: install missing dependency for ghc
         # https://gitlab.haskell.org/ghc/ghc/-/issues/15444
         run: |
           sudo apt-get update
-          sudo apt-get install -y libnuma-dev happy alex diffutils
-      - uses: actions/checkout@v2
-      - uses: haskell/actions/setup@v1
+          sudo apt-get install -y libnuma-dev diffutils
+      - uses: actions/checkout@v3
+      - uses: haskell/actions/setup@v2
         with:
-          ghc-version: '8.10.4' # Exact version of ghc to use
+          ghc-version: '9.2.7' # Exact version of ghc to use
           # cabal-version: 'latest'. Omitted, but defaults to 'latest'
           enable-stack: true
           # stack-version: 'latest'
-      - run: |
-          echo "STACK_OPTS=--system-ghc" >> $GITHUB_ENV
-          echo "TROUPE=$GITHUB_WORKSPACE" >> $GITHUB_ENV
-          echo "TERM=xterm-color" >> $GITHUB_ENV
+#      - run: |
+#          echo "STACK_OPTS=--system-ghc" >> $GITHUB_ENV
+#          echo "TROUPE=$GITHUB_WORKSPACE" >> $GITHUB_ENV
+#          echo "TERM=xterm-color" >> $GITHUB_ENV
       - name: compile the compiler
         run: make stack
       - uses: actions/setup-node@v2

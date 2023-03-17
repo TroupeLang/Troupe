@@ -1,11 +1,11 @@
-2021-08-09T20:50:41.662Z [RTM] [32minfo[39m: Skipping network creation. Observe that all external IO operations will yield a runtime error.
->>> Main thread finished with value: (0ea99267-ad33-4d74-9a3f-2bf395951925@{}%{}, 55eb5a45-8e77-483c-8ae5-8ac0d42ad855@{}%{})@{}%{}
-[31mPID:0ea99267-ad33-4d74-9a3f-2bf395951925@{}%{}    [39m [31mPC:{}               [39m [31mBL:{alice,bob}      [39m [31mHNNORMAL            [39m [31m_sp:20              [39m 
-[31mPID:0ea99267-ad33-4d74-9a3f-2bf395951925@{}%{}    [39m [31mPC:{}               [39m [31mBL:{alice}          [39m [31mHNNORMAL            [39m [31m_sp:20              [39m 
-[31mPID:0ea99267-ad33-4d74-9a3f-2bf395951925@{}%{}    [39m [31mPC:{}               [39m [31mBL:{alice,bob}      [39m [31mHNNORMAL            [39m [31m_sp:20              [39m 
-[31mRuntime error in thread 0ea99267-ad33-4d74-9a3f-2bf395951925@{}%{}[39m
-[31m>> Illegal flow in adv function:[39m
-[31m |    pc: {}[39m
-[31m | block: {alice,bob}[39m
-[31m | l_adv: {alice}@{}%{} [39m
-[31m | value: ()@{}%{}[39m
+2023-03-17T21:23:23.433Z [RTM] [32minfo[39m: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+>>> Main thread finished with value: (6a126aef-158f-41f6-a33e-216ff07ad8fc@{}%{}, 834aa8b7-e3ef-46c7-9258-65e563c896d6@{}%{})@{}%{}
+PID:6a126aef-158f-41f6-a33e-216ff07ad8fc@{}%{}     PC:{}                BL:{alice,bob}       HNNORMAL             _sp:20               
+PID:6a126aef-158f-41f6-a33e-216ff07ad8fc@{}%{}     PC:{}                BL:{alice}           HNNORMAL             _sp:20               
+PID:6a126aef-158f-41f6-a33e-216ff07ad8fc@{}%{}     PC:{}                BL:{alice,bob}       HNNORMAL             _sp:20               
+Runtime error in thread 6a126aef-158f-41f6-a33e-216ff07ad8fc@{}%{}
+>> Illegal flow in adv function:
+ |    pc: {}
+ | block: {alice,bob}
+ | l_adv: {alice}@{}%{} 
+ | value: ()@{}%{}

@@ -1,4 +1,4 @@
-2019-03-07T16:06:58.364Z [RTM] [32minfo[39m: Skipping network creation. Observe that all external IO operations will yield a runtime error.
-[31mRuntime error in thread cefa1106-2e46-4b7d-b0e9-5cfc6350710b@{}%{}[39m
-[31m>> Provided authority is not TOP[39m
-[31m | level of the provided authority: {alice}[39m
+2023-03-17T21:23:22.233Z [RTM] [32minfo[39m: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+Runtime error in thread adba5c4b-28c3-4043-9c0a-3efea9e4aa51@{}%{}
+>> Provided authority is not TOP
+ | level of the provided authority: {alice}

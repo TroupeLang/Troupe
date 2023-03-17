@@ -1,7 +1,7 @@
-2020-03-26T16:43:13.379Z [RTM] [32minfo[39m: Skipping network creation. Observe that all external IO operations will yield a runtime error.
-[31mPID:e0b564dd-ff93-4ae5-bc3c-7a292d50bde8@{}%{}    [39m [31mPC:{}               [39m [31mBL:{alice,bob}      [39m [31mHNNORMAL            [39m 
-[31mRuntime error in thread e0b564dd-ff93-4ae5-bc3c-7a292d50bde8@{}%{}[39m
-[31m>> Not enough authority for pini declassification[39m
-[31m | from level of the blocking level: {alice,bob}[39m
-[31m | level of the authority: {alice}[39m
-[31m | to level of the blocking level: {alice}[39m
+2023-03-17T21:23:23.346Z [RTM] [32minfo[39m: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+PID:750fb9d2-3010-43f0-b48d-b40a541ce63d@{}%{}     PC:{}                BL:{alice,bob}       HNNORMAL             _sp:16               
+Runtime error in thread 750fb9d2-3010-43f0-b48d-b40a541ce63d@{}%{}
+>> Not enough authority for pini declassification
+ | from level of the blocking level: {alice,bob}
+ | level of the authority: {alice}
+ | to level of the blocking level: {alice}

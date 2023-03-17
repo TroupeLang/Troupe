@@ -1,5 +1,5 @@
-FROM fpco/stack-build:lts-17.11
-ENV TROUPE /troupe
+FROM fpco/stack-build:lts-20.14
+ENV TROUPE /Troupe
 ENV STACK_OPTS --system-ghc
 WORKDIR $TROUPE
 COPY compiler compiler
@@ -37,7 +37,7 @@ COPY local.sh .
 COPY network.sh .
 COPY examples examples
 COPY pini.sh .
-RUN yarn 
+RUN yarn
 RUN make rt 
 RUN make libs 
 RUN make service

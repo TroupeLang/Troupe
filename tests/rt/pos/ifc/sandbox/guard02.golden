@@ -1,3 +1,3 @@
-2021-08-09T20:19:05.734Z [RTM] [32minfo[39m: Skipping network creation. Observe that all external IO operations will yield a runtime error.
-[33mWarning: runtime exception in the handler or sandbox: guard violation[39m
+2023-03-17T21:23:20.908Z [RTM] [32minfo[39m: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+Warning: runtime exception in the handler or sandbox: guard violation
 >>> Main thread finished with value: 0@{}%{}

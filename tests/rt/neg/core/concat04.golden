@@ -1,3 +1,3 @@
-2021-05-12T14:23:48.807Z [RTM] [32minfo[39m: Skipping network creation. Observe that all external IO operations will yield a runtime error.
-[31mRuntime error in thread 0b328638-cdbf-4949-bd97-2a243e49dad2@{}%{}[39m
-[31m>> value 1 is not a string[39m
+2023-03-17T21:23:22.864Z [RTM] [32minfo[39m: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+Runtime error in thread 7e6d9f3d-d5dd-4c08-906a-e18bc9aafd56@{}%{}
+>> value 1 is not a string

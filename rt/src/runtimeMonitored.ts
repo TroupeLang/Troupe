@@ -1,7 +1,7 @@
 'use strict'
 
 import fs from 'fs';
-import colors from 'colors/safe';
+import chalk from 'chalk';
 import { v4 as uuidv4 } from 'uuid'
 import AggregateError from 'aggregate-error';
 import { __unit } from './UnitVal'
@@ -259,11 +259,11 @@ let rt_debug = function (s) {
   let bl = $t().bl.stringRep()
   let handler_state = __sched.handlerState.toString()
   rt_xconsole.log(
-    colors.red(formatToN("PID:" + tid, 50)),
-    colors.red(formatToN("PC:" + pc, 20)),
-    colors.red(formatToN("BL:" + bl, 20)),
-    colors.red(formatToN("HN" + handler_state, 20)),
-    colors.red(formatToN("_sp:" + $t()._sp, 20)),
+    chalk.red(formatToN("PID:" + tid, 50)),
+    chalk.red(formatToN("PC:" + pc, 20)),
+    chalk.red(formatToN("BL:" + bl, 20)),
+    chalk.red(formatToN("HN" + handler_state, 20)),
+    chalk.red(formatToN("_sp:" + $t()._sp, 20)),
     s 
   );
 }

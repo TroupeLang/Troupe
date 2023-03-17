@@ -1,8 +1,7 @@
 import levels = require ('./options')
 import { LVal, LValCopyAt } from './Lval.js';
 import { HandlerError, ImplementationError, StrThreadError } from './TroupeError.js';
-import colors = require('colors/safe');
-import yargs = require('yargs');
+import yargs from 'yargs';
 let logLevel = yargs.argv.debug? 'debug' : 'info'
 const logger = require('./logger.js').mkLogger('thread',  logLevel);
 const debug = x => logger.debug(x)

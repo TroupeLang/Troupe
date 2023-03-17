@@ -3,7 +3,7 @@ on: push
 jobs: 
   publish_docker:
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/master'
+    if: github.ref == 'refs/heads/ghc-upgrade-2023'
     steps:
       - uses: docker/login-action@v1
         with:
@@ -11,7 +11,7 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: build and push docker image
-        uses: docker/build-push-action@v2
+        uses: docker/build-push-action@v4
         with:
           push: true
           tags: ghcr.io/troupelang/troupe:latest

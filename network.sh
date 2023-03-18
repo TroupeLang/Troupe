@@ -1,6 +1,6 @@
 #!/bin/bash
 
-tmp=`mktemp`
+tmp=`mktemp`.js
 
 $TROUPE/bin/troupec $1 --output=$tmp
 

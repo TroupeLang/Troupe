@@ -10,7 +10,7 @@ fi
 
 # Locate the troupe.js runtime and check if it is built
 script_dir=$(dirname $($readlink -f $0))
-troupe_rt="$script_dir/built/troupe.js"
+troupe_rt="$script_dir/built/troupe.mjs"
 if [ ! -f "$troupe_rt" ]; then
     echo "Could not find Troupe runtime. Try building it using 'make rt'"
     exit 1

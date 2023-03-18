@@ -4,8 +4,9 @@
 // prevent an accidental overwrite of key files
 
 'use strict';
-const fs = require('fs')
-const fsPromises = require('fs').promises
+import * as fs from 'node:fs'
+import * as fsPromises from 'node:fs/promises';
+// const fsPromises = require('fs').promises
 const PeerId = require("peer-id")
 const args = require('yargs').argv;
 

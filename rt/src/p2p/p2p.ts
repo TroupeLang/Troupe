@@ -56,8 +56,6 @@ the libp2p).
 
 
 
-'use strict'
-
 // LOGGING AND DEBUGGING 
 
 let yargs = require('yargs');
@@ -66,8 +64,16 @@ let __port = yargs.argv.port || 0
 
 const _PROTOCOL = "/troupe/1.0.0"
 
+let logger;
+(async() => {
+    let { mkLogger } = await import ('../logger.mjs');
+    logger = mkLogger ('p2p', logLevel)
+})()
 
-const logger = require('../logger.js').mkLogger('p2p',logLevel);
+// const logger = require('../logger.js').mkLogger('p2p',logLevel);
+
+
+
 const info = x => logger.info(x)
 const debug = x => logger.debug(x)
 const error = x => logger.error(x);
@@ -95,7 +101,6 @@ const p2pconfig = require('./p2pconfig.js')
 // const Pushable = require('pull-pushable')
 
 import { v4 as uuidv4} from 'uuid'
-import { Nil } from '../RawList';
 
 
 const MessageType = {
@@ -729,7 +734,7 @@ function processExpectedNetworkErrors (err, source="source unknown") {
   }
 
 
-export default {
+export let p2p = {
     startp2p: startp2p,
     spawnp2p: (arg1, arg2) => _troupeP2P.spawnp2p(arg1, arg2),
     sendp2p: (arg1, arg2, arg3) => _troupeP2P.sendp2p(arg1, arg2, arg3),

@@ -15,7 +15,8 @@
   "license": "ISC",
   "dependencies": {
     "@nodeutils/defaults-deep": "^1.1.0",
-    "chalk": "^4.1.0",
+    "@types/node": "^18.15.3",
+    "chalk": "^5.2.0",
     "find-free-port": "^2.0.0",
     "it-length-prefixed": "^3.0.1",
     "it-pipe": "^1.1.0",

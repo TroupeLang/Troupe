@@ -3,6 +3,7 @@ on: [pull_request, push]
 jobs:
   build_and_test:
     runs-on: ubuntu-22.04
+    if: github.repository_owner == 'TroupeLang' 
     env:
         STACK_OPTS: "--system-ghc"
         TROUPE: ${{github.workspace}}

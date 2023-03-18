@@ -3,7 +3,7 @@ on: push
 jobs: 
   publish_docker:
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/master'
+    if: (github.ref == 'refs/heads/master') && (github.repository_owner == 'TroupeLang') 
     steps:
       - uses: docker/login-action@v1
         with:

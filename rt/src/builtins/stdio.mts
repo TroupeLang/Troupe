@@ -48,7 +48,7 @@ export function BuiltinStdIo<TBase extends Constructor<UserRuntimeZero>>(Base: T
             } else {
                 this.runtime.$t.threadError
                      (`Not sufficient authority in getStdout\n` + 
-                     ` | Provided autohrity level ${arg.val.authorityLevel.stringRep()}\n` +
+                     ` | Provided authority level ${arg.val.authorityLevel.stringRep()}\n` +
                      ` | Required authority level ${__stdio_lev.stringRep()}`)
             }
             

@@ -588,7 +588,7 @@ function TroupeP2P (_rt, _peerInfo) {
         })        
         
         _node.on ('peer:connect', (peerInfo)=>{
-            tryPending ();
+            tryPending (); // this is likely obsolete?? 2023-05-08; AA
             let idStr = peerInfo.id.toB58String();            
             debug (`++ connect: ${idStr}   ${nPeers()}` );
         })

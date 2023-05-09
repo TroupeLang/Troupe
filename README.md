@@ -22,6 +22,7 @@ If you want to try out Troupe without manual installation (e.g., for a class exe
    ```
    Read <a href="https://www.digitalocean.com/community/tutorials/how-to-read-and-set-environmental-and-shell-variables-on-a-linux-vps"> here</a> for more info on environment variables.
 6. Install [TypeScript](https://www.typescriptlang.org/): `npm install -g typescript`
+   - To install to the home directory without root, first run `npm config set prefix ~/.npm` and add `~/.npm/bin` to your PATH
 7. Compile Troupe runtime by typing `make rt`
 
 ### Step 2. Install Troupe compiler
@@ -40,7 +41,10 @@ Type `make stack` (in the repository's root) to compile Troupe's bin scripts
 
 ### Step 4. Install Troupe standard library
 
-Type `make libs` to compile Troupe's built-in libraries, and `make service` to compile the service module placeholder.
+Type
+
+- `make libs` to compile Troupe's built-in libraries, and
+- `make service` to compile the service module placeholder.
 
 
 ### Step 5. Running the test suite

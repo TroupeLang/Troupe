@@ -9,12 +9,13 @@ If you want to try out Troupe without manual installation (e.g., for a class exe
 
 ## Installation
 
+Once all dependencies have been installed, the whole project can be built and Troupe installed to the `bin` directory with `make all`. The following shows step-by-step which dependencies are needed for which parts and how to install them.
 
 ### Step 1. Install JS runtime
 1. Install NodeJS (e.g. `sudo apt-get install nodejs`)
 2. Get [yarn](https://yarnpkg.com/lang/en/) package manager (e.g. `npm install --global yarn`)
 3. Install js dependencies via `yarn install`
-4. Apply local js patches to the dependencies via `yarn patch-package`
+4. Apply local js patches to the dependencies via `yarn patch-package` (might already be executed by `yarn install`)
 5. Set the `TROUPE` environment variable to point to the folder that contains this README. In bash this is done by adding the following lines to a file such as `~/.bashrc` or `~/.bash_profile`:
    ```
    TROUPE=<path to the installation directory>
@@ -119,6 +120,20 @@ Use `Ctrl-k m` ("Change language mode") to set the current file's language mode 
 The current user guide is accessible [here](https://troupe.cs.au.dk/userguide.pdf).
 
 ## Building and running
+### Building
+
+The following commands build specific parts of the project and install the results to the `bin`, `rt/built` and `lib` directories.
+
+- `make all`: build everything (use this whenever significant changes have been made to the project, to be sure that everything is up-to-date)
+- `make` / `make stack`: build the compiler
+- `make rt`: build the runtime (into the `rt/built` directory)
+- `make libs`: compile Troupe's built-in libraries (into the `lib` directory)
+- `make service` compile the service module placeholder
+
+### Tests
+
+- `make test` to run all tests
+- `bin/golden` to run the test suite with options
 
 ### Running examples that do not require network
 

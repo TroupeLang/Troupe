@@ -12,7 +12,7 @@ import { ProcessID } from './process.mjs';
 import { UserRuntime } from './UserRuntime.mjs'
 import * as levels from './options.mjs'
 import * as DS from './deserialize.mjs'
-import { p2p } from './p2p/p2p.js'
+import { p2p } from './p2p/p2p.mjs'
 import { closeReadline } from './builtins/stdio.mjs';
 import { __theRegister } from './builtins/whereis.mjs';
 import { assertIsFunction } from './Asserts.mjs'

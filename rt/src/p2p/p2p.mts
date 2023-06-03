@@ -58,7 +58,7 @@ the libp2p).
 
 // LOGGING AND DEBUGGING 
 
-let yargs = require('yargs');
+import yargs from 'yargs'
 let logLevel = yargs.argv.debugp2p? 'debug':'info'
 let __port = yargs.argv.port || 0
 
@@ -78,10 +78,8 @@ const info = x => logger.info(x)
 const debug = x => logger.debug(x)
 const error = x => logger.error(x);
 
-const lp = require('it-length-prefixed')
 
-
-
+/*
 // 
 // const pull = require('pull-stream')
 const pipe = require('it-pipe')
@@ -94,6 +92,8 @@ const Libp2p = require("./libp2p-bundle")
 const multiaddr = require('multiaddr')
 const AggregateError = require('aggregate-error');
 const p2pconfig = require('./p2pconfig.js')
+
+*/
 
 
 
@@ -112,7 +112,7 @@ const MessageType = {
     WHEREISOK: 5    
 }
 
-
+/*
 
 async function obtainPeerId(nodeId) {    
     let id = null;
@@ -150,7 +150,7 @@ function TroupeP2P (_rt, _peerInfo) {
     // GLOBALS 
     
 
-    let _node = null; // the current node; initalized once upon start
+   /* let _node = null; // the current node; initalized once upon start
     
     let _nodeTable:IHash = {}; // a table of the form [PeerId ↦ Connection]
     // This table is mutable: we populate it upon
@@ -250,8 +250,6 @@ function TroupeP2P (_rt, _peerInfo) {
             }            
         }
     }
-  
-
 
     this.spawnp2p = async (id, data) => {
         const spawnNonce = uuidv4();
@@ -446,7 +444,7 @@ function TroupeP2P (_rt, _peerInfo) {
     }
     */
 
-
+/*
     async function inputHandler(id, input, fromNodeId_) {
         let fromNodeId = fromNodeId_.toB58String()
         debug ("-- input handler")
@@ -626,7 +624,7 @@ function TroupeP2P (_rt, _peerInfo) {
         }
         showNPeers();
         */
-        return;
+ /*       return;
     }
 
 
@@ -634,8 +632,8 @@ function TroupeP2P (_rt, _peerInfo) {
         debug ("node stopping...")
         await _node.stop();
         debug ("node stopped")        
-    }     
-}
+    }*/     
+/*}
 
 
 const _HEALTHCHECKPERIOD = 5000  // 2020-02-10; AA; this should be an option 
@@ -662,11 +660,75 @@ function setupBlockingHealthChecker (period) {
     f ()  
 }
 
+*/
+import type { PeerId } from '@libp2p/interface-peer-id'
+import type { ConnectionManager } from '@libp2p/interface-connection-manager'
+
+import { tcp } from '@libp2p/tcp'
+import { webSockets } from '@libp2p/websockets'
+import { mplex } from '@libp2p/mplex'
+import { yamux } from '@chainsafe/libp2p-yamux'
+import { noise } from '@chainsafe/libp2p-noise'
+import defaultsDeep from '@nodeutils/defaults-deep'
+import { Libp2p, createLibp2p as create } from 'libp2p'
+import { createFromJSON, createEd25519PeerId } from '@libp2p/peer-id-factory'
+import { bootstrap } from '@libp2p/bootstrap'
+import { mdns } from '@libp2p/mdns'
+import { pipe } from 'it-pipe'
+import * as lp from 'it-length-prefixed'
+import map from 'it-map'
+import { fromString as uint8ArrayFromString } from 'uint8arrays/from-string'
+import { toString as uint8ArrayToString } from 'uint8arrays/to-string'
+
+import { pushable } from 'it-pushable'
+
+let bootstrappers = [
+  '/ip4/104.131.131.82/tcp/4001/p2p/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ',
+  '/dnsaddr/bootstrap.libp2p.io/p2p/QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN',
+  '/dnsaddr/bootstrap.libp2p.io/p2p/QmbLHAnMoJPWSCR5Zhtx6BHJX9KiKNN6tpvbUcqanj75Nb',
+  '/dnsaddr/bootstrap.libp2p.io/p2p/QmZa1sAxajnQjVM8WjWXoMbmPd7NsWhfKsPkErzpm9wGkp',
+  '/dnsaddr/bootstrap.libp2p.io/p2p/QmQCU2EcMqAqQPR2i9bChDtGNJchTbq5TbXJJ16u19uLTa',
+  '/dnsaddr/bootstrap.libp2p.io/p2p/QmcZf59bWwK5XFi76CZX8cbJ4BhTzzA3gU1ZjYZcYW3dwt',
+  '/ip4/134.122.54.216/tcp/5555/p2p/QmcQpBNGULxRC3QmvxVGXSw8BarpMvdADYvFtmvKAL5QMe',
+]
+
+
+async function createLibp2p (_options) {
+  const defaults = {
+    transports: [
+      tcp(),
+      webSockets()
+    ],
+    streamMuxers: [
+      yamux(),
+      mplex()
+    ],
+    connectionEncryption: [
+      noise()
+    ],
+    peerDiscovery: [
+      /*bootstrap({
+        list: bootstrappers
+      }),*/
+      mdns({
+        interval: 20e3
+      })
+    ],
+    /*dht: kadDHT({
+      kBucketSize: 20,
+      clientMode: true // Whether to run the WAN DHT in client or server mode (default: client mode)
+    }),*/
+  }
+
+  return create(defaultsDeep(_options, defaults))
+}
+
+
 
 let _troupeP2P = null;
 
-async function startp2p(nodeId, rt) {            
-    // kick off the network initialization by loading the peerid
+async function startp2p(nodeId, rt): Promise<PeerId> {            
+    /*// kick off the network initialization by loading the peerid
     let peerInfo = await obtainPeerId(nodeId);
     debug ("Peer info created/loaded")
     _troupeP2P = new TroupeP2P( rt, peerInfo );        
@@ -675,10 +737,124 @@ async function startp2p(nodeId, rt) {
     return peerInfo.id.toB58String()
     // if (rt) {
     //   rt.networkReady(peerInfo.id.toB58String());
-    // }
+    // }*/
+
+    let id : PeerId = null
+    try {
+      debug ("Creating new pair id...")
+      id = await createEd25519PeerId();
+      debug("Created new pair id");
+    } catch (err) {
+        logger.error("Error creating new peer id");
+        throw err;
+    }
+
+    let nodeListener : Libp2p = await createLibp2p({
+      peerId: id,
+      addresses: {
+        listen: ['/ip4/0.0.0.0/tcp/0']
+      },
+      connectionManager : {
+        maxConnections: Infinity,
+        minConnections: 0
+      }
+    })
+
+    _troupeP2P = nodeListener
+    let connectionManager = (nodeListener as any).components.connectionManager
+
+    await nodeListener.handle('/chat/1.0.0', async ({ stream }) => {
+      console.log('Handling chat')
+      /*// Send stdin to the stream
+      stdinToStream(stream)*/
+      // Read the stream and output to console
+      streamToConsole(stream)
+    })
+
+    nodeListener.addEventListener('peer:discovery', async (evt) => {
+      const peerInfo = evt.detail
+      console.log('Discovered:', peerInfo.id.toString())
+
+      const stream = await nodeListener.dialProtocol(peerInfo.id, '/chat/1.0.0')
+      stdinToStream(stream)
+    })
+
+    nodeListener.addEventListener('peer:connect', (evt) => {
+      const peerId = evt.detail
+      console.log('Connection established to:', peerId.toString())
+
+      /*setTimeout(() => {
+        console.log(connectionManager.getConnections(peerId)[0].streams)
+      }, 5000)*/
+    })
+
+    //console.log((nodeListener as any).components.connectionManager)
+
+    debug(`id is ${id.toString()}`)
+    return id
 }
 
+async function sendp2p(id, procId, obj) {
+  
+}
 
+function setupConnection (peerId, stream) {        
+  let id:string = peerId.toString()
+  debug(`setupConnection with ${id}`);
+  const p = pushable()            
+
+  pipe (p, /*map (JSON.stringify), lp.encode(),*/ stream, /*lp.decode(), map(JSON.parse),*/ 
+      async (source) => {
+          try {
+              for await (const x of source) {
+                  //inputHandler (id, x, peerId)
+                  console.log('Input: ', x)
+              }
+          } catch (err) {
+              debug (`try catch of the source`)
+              //processExpectedNetworkErrors(err, "setupConnection/pipe");
+              throw err;
+          }
+      }
+  )
+  stream.p = p;            
+}
+
+function stdinToStream(stream) {
+  // Read utf-8 from stdin
+  process.stdin.setEncoding('utf8')
+  pipe(
+    // Read from stdin (the source)
+    process.stdin,
+    // Turn strings into buffers
+    (source) => map(source, (string) => uint8ArrayFromString(string)),
+    // Encode with length prefix (so receiving side knows how much data is coming)
+    (source) => lp.encode(source),
+    // Write to the stream (the sink)
+    stream.sink
+  )
+}
+
+function streamToConsole(stream) {
+  pipe(
+    // Read from the stream (the source)
+    stream.source,
+    // Decode length-prefixed data
+    (source) => lp.decode(source),
+    // Turn buffers into strings
+    (source) => map(source, (buf) => uint8ArrayToString(buf.subarray())),
+    // Sink function
+    async function (source) {
+      // For each chunk of data
+      for await (const msg of source) {
+        // Output the data as a utf8 string
+        console.log('> ' + msg.toString().replace('\n', ''))
+      }
+    }
+  )
+}
+
+/*
 function processExpectedNetworkErrors (err, source="source unknown") {    
     debug (`error source: ${source}`);
     if (err instanceof AggregateError) {
@@ -731,16 +907,29 @@ function processExpectedNetworkErrors (err, source="source unknown") {
            throw err;
       }
     }    
-  }
+  }*/
 
 
 export let p2p = {
-    startp2p: startp2p,
-    spawnp2p: (arg1, arg2) => _troupeP2P.spawnp2p(arg1, arg2),
-    sendp2p: (arg1, arg2, arg3) => _troupeP2P.sendp2p(arg1, arg2, arg3),
-    whereisp2p: (arg1, arg2) => _troupeP2P.whereisp2p (arg1, arg2),
-    stopp2p: async () =>{
-            await _troupeP2P.stop()
+    startp2p: (arg1, arg2) => {
+      return startp2p(arg1, arg2)
     },
-    processExpectedNetworkErrors: processExpectedNetworkErrors
+    spawnp2p: (arg1, arg2) => {
+      throw new Error("Spawn p2p")
+    },
+    //_troupeP2P.spawnp2p(arg1, arg2),
+    sendp2p: (arg1, arg2, arg3) => {
+      throw new Error("Send p2p")
+    },
+    //_troupeP2P.sendp2p(arg1, arg2, arg3),
+    whereisp2p: (arg1, arg2) => {
+      throw new Error("WhereIs p2p")
+    },
+    //_troupeP2P.whereisp2p (arg1, arg2),
+    stopp2p: async () => {
+      return await _troupeP2P.stop()
+    },
+    processExpectedNetworkErrors: (arg1, arg2) => {
+      throw new Error("Error p2p")
+    }, //processExpectedNetworkErrors
 }

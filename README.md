@@ -143,7 +143,8 @@ infrastructure or key generation (which otherwise takes a few seconds).
 
 ### Building and naming the snapshot
 
-Script `build.sh` runs `make` and copies the executables to `../bin/<current git HEAD hash>`.
+Script `dev-utils/build.sh` runs `make` and copies the executables to `../bin/<current git HEAD hash>`.
+This is useful when wanting to compile some snapshots to compare how different versions behave.
 
 ## Networking
 

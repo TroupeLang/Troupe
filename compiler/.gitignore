@@ -1,5 +1,4 @@
 .stack-work/
 Troupe-compiler.cabal
 stack.yaml.lock
-src/Parser.hs
 *~

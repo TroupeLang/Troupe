@@ -100,7 +100,7 @@ const p2pconfig = require('./p2pconfig.js')
 
 // const Pushable = require('pull-pushable')
 
-import { v4 as uuidv4} from 'uuid'
+import {v4 as uuidv4} from 'uuid'
 
 
 const MessageType = {
@@ -194,7 +194,7 @@ function TroupeP2P (_rt, _peerInfo) {
         const p = pushable () 
         _nodeTable[id] = p;              
 
-        pipe (p, map (JSON.stringify), lp.encode(), stream,lp.decode(), map(JSON.parse), 
+        pipe (p, map (JSON.stringify), lp.encode(), stream, lp.decode(), map(JSON.parse), 
             async (source) => {
                 try {
                     for await (const x of source) {
@@ -661,7 +661,7 @@ function setupBlockingHealthChecker (period) {
 }
 
 */
-import type { PeerId } from '@libp2p/interface-peer-id'
+import { PeerId } from '@libp2p/interface-peer-id'
 import type { ConnectionManager } from '@libp2p/interface-connection-manager'
 
 import { tcp } from '@libp2p/tcp'
@@ -672,6 +672,7 @@ import { noise } from '@chainsafe/libp2p-noise'
 import defaultsDeep from '@nodeutils/defaults-deep'
 import { Libp2p, createLibp2p as create } from 'libp2p'
 import { createFromJSON, createEd25519PeerId } from '@libp2p/peer-id-factory'
+import { peerIdFromString } from '@libp2p/peer-id'
 import { bootstrap } from '@libp2p/bootstrap'
 import { mdns } from '@libp2p/mdns'
 import { pipe } from 'it-pipe'
@@ -679,8 +680,8 @@ import * as lp from 'it-length-prefixed'
 import map from 'it-map'
 import { fromString as uint8ArrayFromString } from 'uint8arrays/from-string'
 import { toString as uint8ArrayToString } from 'uint8arrays/to-string'
-
 import { pushable } from 'it-pushable'
+//import { PeerId } from '@libp2p/interface-peer-id'
 
 let bootstrappers = [
   '/ip4/104.131.131.82/tcp/4001/p2p/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ',
@@ -723,9 +724,34 @@ async function createLibp2p (_options) {
   return create(defaultsDeep(_options, defaults))
 }
 
+async function obtainPeerId(nodeId) : Promise<PeerId> {    
+  let id : PeerId = null;
+  if (nodeId) {
+    try {
+      id = await createFromJSON(nodeId);
+      debug(`Loaded id from file: ${id.toString()}`);
+    } catch (err) {
+      logger.error("error creating peer id from json");
+      throw err        
+    }
+  } else {
+    try {
+      debug ("Creating new pair id...")
+      id = await createEd25519PeerId();
+      debug("Created new pair id");
+    } catch (err) {
+      logger.error("error creating new peer id");
+      throw err;
+    }
+  }
+  /*let _peerInfo = new PeerInfo(id)    
+  _peerInfo.multiaddrs.add(`/ip4/0.0.0.0/tcp/${__port}`);
+  return _peerInfo;*/
+  return id;
+}
 
-
-let _troupeP2P = null;
+let _node : Libp2p = null;
+let _rt = null;
 
 async function startp2p(nodeId, rt): Promise<PeerId> {            
     /*// kick off the network initialization by loading the peerid
@@ -739,15 +765,7 @@ async function startp2p(nodeId, rt): Promise<PeerId> {
     //   rt.networkReady(peerInfo.id.toB58String());
     // }*/
 
-    let id : PeerId = null
-    try {
-      debug ("Creating new pair id...")
-      id = await createEd25519PeerId();
-      debug("Created new pair id");
-    } catch (err) {
-        logger.error("Error creating new peer id");
-        throw err;
-    }
+    let id : PeerId = await obtainPeerId(nodeId);
 
     let nodeListener : Libp2p = await createLibp2p({
       peerId: id,
@@ -760,64 +778,171 @@ async function startp2p(nodeId, rt): Promise<PeerId> {
       }
     })
 
-    _troupeP2P = nodeListener
-    let connectionManager = (nodeListener as any).components.connectionManager
+    _node = nodeListener
+    _rt = rt
+    //let connectionManager = (nodeListener as any).components.connectionManager
 
-    await nodeListener.handle('/chat/1.0.0', async ({ stream }) => {
-      console.log('Handling chat')
-      /*// Send stdin to the stream
-      stdinToStream(stream)*/
-      // Read the stream and output to console
-      streamToConsole(stream)
+    await nodeListener.handle(_PROTOCOL, async ({ connection, stream }) => {
+      //console.log('Handling protocol')
+      //streamToConsole(stream)
+      setupConnection(connection.remotePeer, stream)
     })
 
     nodeListener.addEventListener('peer:discovery', async (evt) => {
       const peerInfo = evt.detail
-      console.log('Discovered:', peerInfo.id.toString())
+      console.log('Discovered:', peerInfo.id.toString()) // add to PeerStore???
 
-      const stream = await nodeListener.dialProtocol(peerInfo.id, '/chat/1.0.0')
-      stdinToStream(stream)
+      /*setTimeout(() => {
+        console.log('Sending whereIs')
+        let data = "Hello"
+        whereisp2p(peerInfo.id, peerInfo.id.toString())
+      }, 3000)*/
+
+      //await dial(peerInfo.id.toString())
+      //const stream = await nodeListener.dialProtocol(peerInfo.id, _PROTOCOL)
+      //setupConnection(peerInfo.id, stream)
+      //stdinToStream(stream)
     })
 
     nodeListener.addEventListener('peer:connect', (evt) => {
       const peerId = evt.detail
       console.log('Connection established to:', peerId.toString())
-
-      /*setTimeout(() => {
-        console.log(connectionManager.getConnections(peerId)[0].streams)
-      }, 5000)*/
     })
-
-    //console.log((nodeListener as any).components.connectionManager)
 
     debug(`id is ${id.toString()}`)
     return id
 }
 
-async function sendp2p(id, procId, obj) {
+async function sendp2p(id : PeerId, procId, obj) {
+  debug (`sendp2p`)
+
+  let data = {
+    messageType: MessageType.SEND,
+    pid: procId,
+    message: obj
+  }
   
+  push_wrap(id, data)
 }
 
-function setupConnection (peerId, stream) {        
+async function push_wrap(id: any, data: any) {
+  debug (`push_wrap`)
+  //let peerId = PeerId
+  let connections = _node.getConnections(id)
+  let p = null
+  if(connections.length >= 1) {
+    let connection = connections[0]
+    let streams = connection.streams
+    if(streams.length >= 1) {
+      let stream = streams[0]
+      p = (stream as any).p;
+    } else {
+      debug("streams array empty")
+      throw new Error
+    }
+  } else {
+    debug("connections array empty")
+    let stream = await dial(id.toString())
+    debug("dialed to obtain stream")
+    p = (stream as any).p;
+  }
+  
+  debug (`push_wrap; stream obtained`)
+
+  while (true) {
+    try {
+      debug (`push_wrap; pushing`)
+      await p.push (data);
+      debug (`push_wrap; data pushed into the stream`)
+      break 
+    } catch (err) {
+      // the stream we have used is 
+      // no good for whatever reason; 
+      // most likely there are networking 
+      // issues. we report the errors
+      // and redial
+      debug (`push wrap error`)
+      //processExpectedNetworkErrors(err, "push_wrap");   
+      throw err             
+    }            
+  }
+}
+
+function setupConnection(peerId : PeerId, stream) {        
   let id:string = peerId.toString()
   debug(`setupConnection with ${id}`);
-  const p = pushable()            
+  const p = pushable({ objectMode : true })            
 
-  pipe (p, /*map (JSON.stringify), lp.encode(),*/ stream, /*lp.decode(), map(JSON.parse),*/ 
-      async (source) => {
+  pipe (p,
+        (source) => map(source, (json) => JSON.stringify(json)),
+        (source) => map(source, (string) => uint8ArrayFromString(string, 'utf8')),
+        (source) => lp.encode(source),
+        stream,
+        (source) => lp.decode(source),
+        (source) => map(source, (buf) => uint8ArrayToString(buf.subarray())),
+        (source) => map(source, (string) => JSON.parse(string)),
+        async (source) => {
           try {
-              for await (const x of source) {
-                  //inputHandler (id, x, peerId)
-                  console.log('Input: ', x)
-              }
+            for await (const x of source) {
+              //console.log('Input: ', x)
+              inputHandler (id, x, peerId)
+            }
           } catch (err) {
-              debug (`try catch of the source`)
-              //processExpectedNetworkErrors(err, "setupConnection/pipe");
-              throw err;
+            debug (`try catch of the source`)
+            //processExpectedNetworkErrors(err, "setupConnection/pipe");
+            throw err;
+          }
+
+          debug(`deleting entry for  ${id}`);                
+          try {
+            await _node.hangUp(peerId);
+          } catch (err) {
+            throw err;
+          }
+          reissueUnacknowledged(id)
+        }
+  )
+  stream.p = p; // Storing a reference to the pushable on the stream
+                // We rely on the p2p library to keep track of streams
+}
+
+function dial(id)  {                 
+  let i = 0;      
+  let timeout = 2000;      
+  return new Promise((resolve, reject) =>{
+      async function iterate() {
+          try {
+              /*const peerInfo = await getPeerInfoWithRelay(id);
+              debug ("find peer succeeded");        
+              debug (`dialing will use the following addresses:`)
+              peerInfo.multiaddrs.forEach( m => {debug (m.toString() ) });
+              debug (">> -- end of address list -- << ")*/
+              let peerId : PeerId = peerIdFromString(id)
+              debug (`trying to dial ${peerId}, attempt number ${i}`)
+              const stream = await _node.dialProtocol(peerId, _PROTOCOL)
+              debug ("dial successful")        
+              setupConnection (peerId, stream);
+              resolve ( stream );
+          } catch ( err ) {
+              //processExpectedNetworkErrors (err, "dial");
+
+              // if the error is suppressed we move on to trying 10 times
+              // with exponential backoff
+              // 2020-02-10; AA: TODO: this code has a hardcoded constant 
+              if (i <= 10) {
+                  debug (`dial failed, we retry in ${timeout} seconds`)
+                  debug(err)                         
+                  setTimeout (iterate, timeout);
+                  i ++ ;
+                  timeout *= 2
+              } else {
+                  debug (`we are giving up on dialing`)
+                  reject (err);
+              } 
           }
       }
-  )
-  stream.p = p;            
+      iterate ()                
+  })
 }
 
 function stdinToStream(stream) {
@@ -852,6 +977,120 @@ function streamToConsole(stream) {
       }
     }
   )
+}
+
+async function inputHandler(id, input, fromNodeId_) {
+  let fromNodeId = fromNodeId_.toString()
+  debug ("-- input handler")
+  switch (input.messageType) {
+      /*case (MessageType.SPAWN):
+      if (_rt.remoteSpawnOK()) {
+          debug ("RECEIVED SPAWN")
+          let x = await _rt.spawnFromRemote (input.message, fromNodeId)
+
+          push_wrap(id, {
+              messageType: MessageType.SPAWNOK,
+              spawnNonce: input.spawnNonce,
+              message: x
+          });
+          break;
+      } // drop the message otherwise
+
+      case (MessageType.SPAWNOK):
+          debug ("SPAWN OK")
+          let _cb = _spawnNonces[input.spawnNonce];
+          if (_cb) {
+              delete _spawnNonces[input.spawnNonce]; // cleanup
+              _cb(null, input.message); // null means no errors            
+          } else {
+              // something is fishy;
+              debug("something is fishy; no matching callback for the nonce");
+          }
+          break;*/
+
+      case (MessageType.SEND):
+          debug (`SEND  ${fromNodeId}`);
+          _rt.receiveFromRemote (
+            input.pid,
+            input.message,
+            fromNodeId
+          )
+          break;
+
+      case (MessageType.WHEREIS): 
+          debug ("p2p whereis incoming request")
+          let y = await _rt.whereisFromRemote (input.message)
+          push_wrap(id, {
+            messageType: MessageType.WHEREISOK,
+            whereisNonce : input.whereisNonce, 
+            message : y
+          });
+          debug ("p2p whereis replied")
+          break; 
+          
+      case (MessageType.WHEREISOK): 
+          let _cbw = _whereisNonces[input.whereisNonce];
+          if (_cbw) {
+              delete _whereisNonces [input.whereisNonce];
+              _cbw (null, input.message);
+          } else {
+              debug ("cannot find whereis callback")
+          }
+          break;
+
+      case (MessageType.TEST):
+          debug("TEST input");
+          debug(input)
+          break;
+          
+      default:
+          debug (`received data ${input.toString('utf8').replace('\n', '')}`);
+          break;
+  }
+}
+
+async function whereisp2p(id, str) {            
+  let whereisNonce = uuidv4()
+
+  function f () {
+    push_wrap(id, {
+      messageType: MessageType.WHEREIS,
+      whereisNonce : whereisNonce,
+      message : str 
+    });        
+  }
+  addUnacknowledged(id, whereisNonce, f);
+  
+  return new Promise ( (resolve, reject) => {        
+    _whereisNonces[whereisNonce] = (err, data) => {
+      if (err) { reject (err) } else { 
+        removeUnacknowledged (id,whereisNonce)
+        resolve (data)
+      } 
+    }
+    debug ("pushing whereis message")
+    f ();
+  })
+}
+
+let _whereisNonces  = {}; 
+let _unacknowledged:any = {}
+
+function addUnacknowledged (id, uuid, f) {
+    if (!_unacknowledged[id]){ 
+        _unacknowledged[id] = []
+    }
+    _unacknowledged[id][uuid] = f
+}
+
+function removeUnacknowledged (id, uuid) {
+    delete _unacknowledged[id][uuid];
+}
+
+function reissueUnacknowledged (id:string) {
+  for (let uuid in _unacknowledged[id] ) {
+    setImmediate(_unacknowledged[id][uuid])
+  }
 }
 
 /*
@@ -919,15 +1158,15 @@ export let p2p = {
     },
     //_troupeP2P.spawnp2p(arg1, arg2),
     sendp2p: (arg1, arg2, arg3) => {
-      throw new Error("Send p2p")
+      return sendp2p(arg1, arg2, arg3)
     },
     //_troupeP2P.sendp2p(arg1, arg2, arg3),
     whereisp2p: (arg1, arg2) => {
-      throw new Error("WhereIs p2p")
+      return whereisp2p(arg1, arg2)
     },
     //_troupeP2P.whereisp2p (arg1, arg2),
     stopp2p: async () => {
-      return await _troupeP2P.stop()
+      return await _node.stop()
     },
     processExpectedNetworkErrors: (arg1, arg2) => {
       throw new Error("Error p2p")

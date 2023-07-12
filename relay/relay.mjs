@@ -27,9 +27,18 @@ async function main () {
       yamux(),
       mplex()
     ],
-    services: {
+    /*services: {
       identify: identifyService(),
       relay: circuitRelayServer()
+    }*/
+    relay: {
+      enabled: true,
+      hop: {
+        enabled: true
+      },
+      advertise: {
+        enabled: true,
+      }
     }
   })
 

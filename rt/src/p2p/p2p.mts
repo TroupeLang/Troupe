@@ -716,11 +716,6 @@ import { multiaddr } from '@multiformats/multiaddr'
 import { identifyService } from 'libp2p/identify'
 import { circuitRelayTransport } from 'libp2p/circuit-relay'
 
-//import { secio } from 'libp2p-secio'; //AB: deprecated - find out why it's needed
-import pkg from 'libp2p-secio'
-import { nodeTrustLevel } from '../TrustManager.mjs';
-const {secio} = pkg;
-
 
 let bootstrappers = [ //AB: bootstrap known_nodes from config?? Make findNode easier
   '/ip4/104.131.131.82/tcp/4001/p2p/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ',
@@ -738,9 +733,10 @@ async function createLibp2p (_options) {
     transports: [
       tcp(),
       webSockets(),
-      circuitRelayTransport({
-        discoverRelays: 2 //AB: what to set this to?
-      })
+      /*circuitRelayTransport({
+        discoverRelays: 2, //AB: what to set this to?
+        reservationConcurrency : 2,
+      })*/
     ],
     streamMuxers: [
       yamux(),
@@ -757,9 +753,16 @@ async function createLibp2p (_options) {
         interval: 20e3
       })*/
     ],
-    services: {
+    /*services: {
       identify: identifyService()
-    }
+    },*/
+    relay: {
+      enabled: true,
+      autoRelay: {
+        enabled: true,
+        maxListeners: Infinity
+      }
+    },
     /*dht: kadDHT({
       kBucketSize: 20,
       clientMode: true // Whether to run the WAN DHT in client or server mode (default: client mode)
@@ -879,14 +882,20 @@ async function startp2p(nodeId, rt): Promise<PeerId> {
         debug (`deleting relay table entry`)
         delete _relayTable[id.toString()]
       }            
-  }) 
+    })
+    
+    _node.addEventListener('self:peer:update', (evt) => {
+      // Updated self multiaddrs?
+      debug(`Advertising with following addresses:`)
+      _node.getMultiaddrs().forEach((ma) => debug(ma.toString()))
+    })
 
     debug("p2p node started")
 
     /*for (let relay_addr of p2pconfig.relays ) {
       keepAliveRelay(relay_addr);
     }*/
-    keepAliveRelay("/ip4/127.0.0.1/tcp/5555/ws/p2p/12D3KooWShh9qmeS1UEgwWpjAsrjsigu8UGh8DRKyx1UG6HeHzjf")
+    keepAliveRelay("/ip4/134.209.92.133/tcp/5555/ws/p2p/12D3KooWShh9qmeS1UEgwWpjAsrjsigu8UGh8DRKyx1UG6HeHzjf")
 
     debug(`id is ${id.toString()}`)
     return id
@@ -1037,7 +1046,7 @@ async function getPeerInfo(id:string) : Promise<PeerId>{
               } else {
                   debug (`try_find_peer: attempt ${n_attempts} failed with ${nPeers()} nodes connected`)
                   // addPending (try_find_peer);
-                  setTimeout (try_find_peer, 500)
+                  setTimeout (try_find_peer, 5000)
               }   
           }
         }

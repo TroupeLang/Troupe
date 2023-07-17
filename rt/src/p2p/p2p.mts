@@ -733,10 +733,10 @@ async function createLibp2p (_options) {
     transports: [
       tcp(),
       webSockets(),
-      /*circuitRelayTransport({
+      circuitRelayTransport({
         discoverRelays: 2, //AB: what to set this to?
         reservationConcurrency : 2,
-      })*/
+      })
     ],
     streamMuxers: [
       yamux(),
@@ -753,9 +753,9 @@ async function createLibp2p (_options) {
         interval: 20e3
       })*/
     ],
-    /*services: {
+    services: {
       identify: identifyService()
-    },*/
+    },
     relay: {
       enabled: true,
       autoRelay: {
@@ -1046,7 +1046,7 @@ async function getPeerInfo(id:string) : Promise<PeerId>{
               } else {
                   debug (`try_find_peer: attempt ${n_attempts} failed with ${nPeers()} nodes connected`)
                   // addPending (try_find_peer);
-                  setTimeout (try_find_peer, 5000)
+                  setTimeout (try_find_peer, 500)
               }   
           }
         }

@@ -13,9 +13,9 @@ async function main () {
   const node = await createLibp2p({
     peerId : id,
     addresses: {
-      listen: ['/ip4/0.0.0.0/tcp/5555/ws']
+      listen: ['/ip4/0.0.0.0/tcp/5555/ws'],
       // TODO check "What is next?" section
-      // announce: ['/dns4/auto-relay.libp2p.io/tcp/443/wss/p2p/QmWDn2LY8nannvSWJzruUYoLZ4vV83vfCBwd8DipvdgQc3']
+      announce: ['/dns4/auto-relay.libp2p.io/tcp/443/wss/p2p/QmWDn2LY8nannvSWJzruUYoLZ4vV83vfCBwd8DipvdgQc3']
     },
     transports: [
       webSockets()
@@ -27,11 +27,11 @@ async function main () {
       yamux(),
       mplex()
     ],
-    /*services: {
+    services: {
       identify: identifyService(),
       relay: circuitRelayServer()
-    }*/
-    relay: {
+    }
+    /*relay: {
       enabled: true,
       hop: {
         enabled: true
@@ -39,7 +39,7 @@ async function main () {
       advertise: {
         enabled: true,
       }
-    }
+    }*/
   })
 
   await node.handle("/trouperelay/keepalive", async ({ connection, stream }) => {

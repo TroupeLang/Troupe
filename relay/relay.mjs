@@ -13,9 +13,7 @@ async function main () {
   const node = await createLibp2p({
     peerId : id,
     addresses: {
-      listen: ['/ip4/0.0.0.0/tcp/5555/ws'],
-      // TODO check "What is next?" section
-      announce: ['/dns4/auto-relay.libp2p.io/tcp/443/wss/p2p/QmWDn2LY8nannvSWJzruUYoLZ4vV83vfCBwd8DipvdgQc3']
+      listen: ['/ip4/0.0.0.0/tcp/5555/ws']
     },
     transports: [
       webSockets()
@@ -29,22 +27,17 @@ async function main () {
     ],
     services: {
       identify: identifyService(),
-      relay: circuitRelayServer()
+      relay: circuitRelayServer({ // makes the node function as a relay server
+        reservations: {
+          defaultDurationLimit: 2147483647, // the default maximum amount of time a relayed connection can be open for
+          defaultDataLimit: BigInt(4294967295), // the default maximum number of bytes that can be transferred over a relayed connection
+        }
+      }), //AB: find out which settings to use to not cut off connections
     }
-    /*relay: {
-      enabled: true,
-      hop: {
-        enabled: true
-      },
-      advertise: {
-        enabled: true,
-      }
-    }*/
   })
 
   await node.handle("/trouperelay/keepalive", async ({ connection, stream }) => {
     console.log(`Relay handling protocol, id: ${connection.remotePeer}`)
-    //setupConnection(connection.remotePeer, stream)
   })
 
   console.log(`Node started with id ${node.peerId.toString()}`)

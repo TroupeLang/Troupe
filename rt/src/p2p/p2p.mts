@@ -715,7 +715,7 @@ import p2pconfig from './p2pconfig.js'; //AB: ecmascript?
 import { multiaddr } from '@multiformats/multiaddr'
 import { identifyService } from 'libp2p/identify'
 import { circuitRelayTransport } from 'libp2p/circuit-relay'
-
+import { KEEP_ALIVE } from '@libp2p/interface-peer-store/tags'
 
 let bootstrappers = [ //AB: bootstrap known_nodes from config?? Make findNode easier
   '/ip4/104.131.131.82/tcp/4001/p2p/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ',
@@ -755,13 +755,6 @@ async function createLibp2p (_options) {
     ],
     services: {
       identify: identifyService()
-    },
-    relay: {
-      enabled: true,
-      autoRelay: {
-        enabled: true,
-        maxListeners: Infinity
-      }
     },
     /*dht: kadDHT({
       kBucketSize: 20,
@@ -1075,10 +1068,10 @@ async function dialRelay (relay_addr)  {
     ]
   })
   await _node.peerStore.merge(relayId, {
-    tags : {
-      'keep-alive' : {}
+    tags: {
+      [KEEP_ALIVE]: {}
     }
-  });
+  })
   debug (`Added relay address`)
   const conn = await _node.dial(relayId);
   debug (`Got relay connection`)
@@ -1141,7 +1134,7 @@ async function getPeerInfoWithRelay(id:any) {
   debug ("the node is not known; using relay information")
   
   let pi = await getPeerInfo(id)
-  if (_relay_id) {
+  if (_relay_id) { //AB: use all relays as below!
       //pi.multiaddrs.add( multiaddr(`/p2p/${_relay_id}/p2p-circuit/p2p/${id}`))
       await _node.peerStore.patch(pi, {
         multiaddrs: [

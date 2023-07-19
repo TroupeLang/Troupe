@@ -10,7 +10,7 @@ const Multiplex = require('libp2p-mplex')
 const SECIO = require('libp2p-secio')
 const libp2p = require('libp2p')
 const defaultsDeep = require('@nodeutils/defaults-deep')
-const p2pconfig = require('./p2pconfig.js')
+const p2pconfig = require('./p2pconfig.mjs').default
 
 const bootstrapers = [ // TODO: 2020-02-10: check whether this list needs updating 
                        // and ideally make this a configurable option; AA

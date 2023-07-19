@@ -6,7 +6,7 @@ let logger;
     logger = mkLogger ('p2p-config','info');
 })()
 
-const fs = require('fs');
+import { existsSync, readFileSync } from 'fs';
 let relays
 
 let default_relays =
@@ -31,9 +31,9 @@ let known_nodes = [
 ]
   
 
-if (fs.existsSync(P2PCONFIG_FILE)) {
+if (existsSync(P2PCONFIG_FILE)) {
   try {
-    let s = fs.readFileSync(P2PCONFIG_FILE) 
+    let s = readFileSync(P2PCONFIG_FILE) 
     let o = JSON.parse (s);
     console.log (o.relays)
     if (o.relays) {      
@@ -49,4 +49,4 @@ if (fs.existsSync(P2PCONFIG_FILE)) {
   relays = default_relays
 }
 
-module.exports = { relays, known_nodes }
+export default { relays, known_nodes }

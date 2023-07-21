@@ -1,20 +1,22 @@
-import { noise } from '@chainsafe/libp2p-noise'
-import { yamux } from '@chainsafe/libp2p-yamux'
-import { mplex } from '@libp2p/mplex'
-import { webSockets } from '@libp2p/websockets'
-import { createLibp2p } from 'libp2p'
-import { circuitRelayServer } from 'libp2p/circuit-relay'
-import { identifyService } from 'libp2p/identify'
-import { createFromJSON } from '@libp2p/peer-id-factory'
+import { noise } from '@chainsafe/libp2p-noise';
+import { yamux } from '@chainsafe/libp2p-yamux';
+import { mplex } from '@libp2p/mplex';
+import { webSockets } from '@libp2p/websockets';
+import { createLibp2p } from 'libp2p';
+import { circuitRelayServer } from 'libp2p/circuit-relay';
+import { identifyService } from 'libp2p/identify';
+import { createFromJSON } from '@libp2p/peer-id-factory';
 import { pipe } from 'it-pipe';
-import * as lp from 'it-length-prefixed'
-import map from 'it-map'
-import { toString as uint8ArrayToString } from 'uint8arrays/to-string'
+import * as lp from 'it-length-prefixed';
+import map from 'it-map';
+import { toString as uint8ArrayToString } from 'uint8arrays/to-string';
+import { readFileSync } from 'fs';
 
 async function main () {
-  // TODO: change this to the actual relay
-  const id = await createFromJSON({id : "12D3KooWShh9qmeS1UEgwWpjAsrjsigu8UGh8DRKyx1UG6HeHzjf",
-                                   privKey : "CAESQEQ7HBed1HEMpRHdhDmsJOlzHsVNBEWVc7DjEzuQtElv+uET7jQtZlGNKpltf2w4P7UqMdSYm4cYAGzjHcGcSj4="});
+  const relayId = readFileSync("keys/relay.id");
+  const relayKey = readFileSync("keys/relay.priv");
+  const id = await createFromJSON({id : relayId, privKey : relayKey});
+
   const node = await createLibp2p({
     peerId : id,
     addresses: {

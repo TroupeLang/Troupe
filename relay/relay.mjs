@@ -6,8 +6,13 @@ import { createLibp2p } from 'libp2p'
 import { circuitRelayServer } from 'libp2p/circuit-relay'
 import { identifyService } from 'libp2p/identify'
 import { createFromJSON } from '@libp2p/peer-id-factory'
+import { pipe } from 'it-pipe';
+import * as lp from 'it-length-prefixed'
+import map from 'it-map'
+import { toString as uint8ArrayToString } from 'uint8arrays/to-string'
 
 async function main () {
+  // TODO: change this to the actual relay
   const id = await createFromJSON({id : "12D3KooWShh9qmeS1UEgwWpjAsrjsigu8UGh8DRKyx1UG6HeHzjf",
                                    privKey : "CAESQEQ7HBed1HEMpRHdhDmsJOlzHsVNBEWVc7DjEzuQtElv+uET7jQtZlGNKpltf2w4P7UqMdSYm4cYAGzjHcGcSj4="});
   const node = await createLibp2p({
@@ -28,21 +33,56 @@ async function main () {
     services: {
       identify: identifyService(),
       relay: circuitRelayServer({ // makes the node function as a relay server
+        /*
+          The limits are set intentionally very high to avoid the relay cutting off
+          the connection. This can seemingly not be disabled in any other way.
+          (See: https://github.com/libp2p/specs/blob/f5c5829ef9753ef8b8a15d36725c59f0e9af897e/relay/circuit-v2.md?plain=1#L71)
+          There is also no way to distinguish whether the relay cut off the connection
+          because of a time/data limit or the other party cut off the connection. Therefore,
+          it is impossible to know whether to re-establish the connection or not.
+          
+          Two alternatives to giving large limits were considered.
+          - The good solution
+          Implement the connections being intentionally broken by the peers involved
+          before the relay reaches either limit. This would entail both timing and
+          counting all the bytes sent on each relayed connection. This was rejected
+          for being too time consuming, since the relay code might change soon anyway.
+
+          - The hacky solution
+          Use a version of libp2p where the code for breaking a connection is removed.
+          This was rejected to allow for easier upgrading of the libp2p library.
+        */
         reservations: {
-          defaultDurationLimit: 2147483647, // the default maximum amount of time a relayed connection can be open for
-          defaultDataLimit: BigInt(4294967295), // the default maximum number of bytes that can be transferred over a relayed connection
+          defaultDurationLimit: 2147483647,
+          defaultDataLimit: BigInt(4294967295),
         }
-      }), //AB: find out which settings to use to not cut off connections
+      }),
     }
-  })
+  });
 
   await node.handle("/trouperelay/keepalive", async ({ connection, stream }) => {
-    console.log(`Relay handling protocol, id: ${connection.remotePeer}`)
+    let id = connection.remotePeer;
+    console.log(`Relay handling protocol, id: ${id}`);
+    streamToConsole(stream, id);
   })
 
-  console.log(`Node started with id ${node.peerId.toString()}`)
-  console.log('Listening on:')
-  node.getMultiaddrs().forEach((ma) => console.log(ma.toString()))
+  console.log(`Relay node started with id ${node.peerId.toString()}`);
+  console.log('Listening on:');
+  node.getMultiaddrs().forEach((ma) => console.log(ma.toString()));
+}
+
+function streamToConsole (stream, id) {
+  console.log(`Handling keep-alives from ${id}`);
+  pipe(
+    stream.source,
+    (source) => lp.decode(source),
+    (source) => map(source, (buf) => uint8ArrayToString(buf.subarray())),
+    async function (source) {
+      for await (const msg of source) {
+        console.log(`Keep alive message from ${id}: ${msg.toString()}`);
+      }
+    }
+  );
 }
 
 main()

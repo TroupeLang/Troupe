@@ -9,10 +9,12 @@ let logger;
 import { existsSync, readFileSync } from 'fs';
 let relays
 
+
+// TODO: change the relay address to be the actual address
 let default_relays =
   // ["/dns4/relay.troupe-lang.net/tcp/5555/p2p/QmcQpBNGULxRC3QmvxVGXSw8BarpMvdADYvFtmvKAL5QMe"]
   // TODO: dns resolution of the relay has stopped working
-  ["/ip4/134.122.54.216/tcp/5555/p2p/QmcQpBNGULxRC3QmvxVGXSw8BarpMvdADYvFtmvKAL5QMe"]
+  ["/ip4/134.209.92.133/tcp/5555/ws/p2p/12D3KooWShh9qmeS1UEgwWpjAsrjsigu8UGh8DRKyx1UG6HeHzjf"]
   
 let known_nodes = [
     {nodeid:"QmXfj4ysaS4pARJU5uUP59B47aCQP6X6FH6cm5otLhcMPa", ip: "/ip4/134.209.90.7/tcp/6789"},

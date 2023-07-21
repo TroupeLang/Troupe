@@ -1,5 +1,5 @@
 start-relay:
-	./troupe-p2p-relay --key=keys/relay.priv
+	node relay.mjs
 
 generate-relay-key:  
 	mkdir -p keys

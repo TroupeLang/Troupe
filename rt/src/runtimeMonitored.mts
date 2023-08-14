@@ -485,7 +485,7 @@ export async function start(f) {
     debug("network not initialized")
   }
 
-  __nodeManager.setLocalPeerId(peerid.toString());
+  __nodeManager.setLocalPeerId(peerid);
 
   let stopWhenAllThreadsAreDone = !__p2pRunning
   __sched.initScheduler(__nodeManager.getLocalNode()

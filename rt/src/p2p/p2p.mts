@@ -134,7 +134,7 @@ const bootstrappers = [
  * Also sets up the event queue block checker and
  * the connections to relays.
  */
-async function startp2p(nodeId, rt: any): Promise<PeerId> {
+async function startp2p(nodeId, rt: any): Promise<String> {
   // Load or create a peer id
   let id : PeerId = await obtainPeerId(nodeId);
 
@@ -198,7 +198,7 @@ async function startp2p(nodeId, rt: any): Promise<PeerId> {
   // To use more than one relay, make sure to dial them all
   keepAliveRelay(p2pconfig.relays[0]);
 
-  return id;
+  return id.toString();
 }
 
 /**

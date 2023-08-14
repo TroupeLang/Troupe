@@ -235,7 +235,7 @@ function rt_sendMessageNochecks(lRecipientPid, message, ret = true) {
       return $t().returnImmediateLValue(__unit);      
     }
   } else {
-    // debug ("* rt rt_send remote *", recipientPid, message);
+    debug ("* rt rt_send remote *"/*, recipientPid, message*/);
     return sendMessageToRemote(recipientPid, message)
   }
 }
@@ -485,7 +485,7 @@ export async function start(f) {
     debug("network not initialized")
   }
 
-  __nodeManager.setLocalPeerId(peerid);
+  __nodeManager.setLocalPeerId(peerid.toString());
 
   let stopWhenAllThreadsAreDone = !__p2pRunning
   __sched.initScheduler(__nodeManager.getLocalNode()

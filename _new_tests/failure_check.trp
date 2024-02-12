@@ -1,0 +1,4 @@
+let fun loop i = print i ; loop (i + 1)  
+    val p = spawn (fn () => _setFailureRate (1/200); loop 0)
+in ()
+end

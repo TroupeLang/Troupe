@@ -247,7 +247,7 @@ export class Scheduler implements SchedulerInterface {
 
     2018-02-18: AA: a hypothesis about memory management in V8
 
-    It appears that V8's memory management is not very well suited for infinitely
+    It appears tht V8's memory management is not very well suited for infinitely
     running functions. In other words, functions are expected to eventually
     terminate, and all long-running computations are  expected to run through the
     event loop. This is not surprising given the application where V8 is used.
@@ -281,6 +281,23 @@ export class Scheduler implements SchedulerInterface {
                     // if (dest.debugname ) {
                     //     console.log (" -- ", dest.debugname)
                     // }
+                    if (this.__currentThread.failureRate > 0 ) {
+                        if (this.__currentThread.failureStartTime > 0) {
+                            if (Date.now() > this.__currentThread.failureStartTime ) {
+                                this.__currentThread.failureStartTime = 0
+                            }
+                        } else {
+                            let liveOrDie = Math.random ()
+                            // console.log (liveOrDie, this.__currentThread.failureRate )
+                            if (liveOrDie < this.__currentThread.failureRate)  {
+                                console.log ("INDUCING FAILURE")
+                                dest = null;
+                                this.done( ); ;; // 2024-02-12; AA ; ugly hack. 
+                                break;
+                            }
+                        }                                            
+                    }
+                    
                     dest = dest ()
                 }
 

@@ -25,21 +25,26 @@ export function BuiltinDebugUtils <TBase extends Constructor<UserRuntimeZero>> (
 
         _setFailureRate = mkBase((arg) => {
             let _tt = arg.getTroupeType;
-            switch (_tt) {
-                case TroupeType.NUMBER:
-                    this.runtime.$t.failureRate = arg.val
-                    this.runtime.$t.failureStartTime = 0;
-                    break;
-                case TroupeType.TUPLE:
-                    assertIsNTuple(arg, 2)
-                    assertIsNumber (arg.val[0])
-                    assertIsNumber (arg.val[1])
-                    this.runtime.$t.failureRate = arg.val[0].val
-                    this.runtime.$t.failureStartTime = Date.now() + arg.val[1].val
-                    break;
-                default:
-                    this.runtime.$t.threadError ("Invalid argument type in function _setFailureRate");
-            }            
+            assertIsNumber(arg);
+            this.runtime.$t.failureRate = arg.val ;
+            // return this.runtime.ret(new LVal(Math.ceil(arg.val), arg.lev, arg.tlev));
+            
+            // switch (_tt) {
+            //     case TroupeType.NUMBER:
+            //         this.runtime.$t.failureRate = arg.val
+            //         this.runtime.$t.failureStartTime = 0;
+            //         break;
+            //     case TroupeType.TUPLE:
+            //         assertIsNTuple(arg, 2)
+            //         assertIsNumber (arg.val[0])
+            //         assertIsNumber (arg.val[1])
+            //         this.runtime.$t.failureRate = arg.val[0].val
+            //         this.runtime.$t.failureStartTime = Date.now() + arg.val[1].val
+            //         break;
+            //     default:
+            //         this.runtime.$t.threadError ("Invalid argument type in function _setFailureRate");
+            // } 
+                       
             return this.runtime.ret(__unit);
         })
     }

@@ -9,12 +9,13 @@ If you want to try out Troupe without manual installation (e.g., for a class exe
 
 ## Installation
 
+Once all dependencies have been installed, the whole project can be built and Troupe installed to the `bin` directory with `make all`. The following shows step-by-step which dependencies are needed for which parts and how to install them.
 
 ### Step 1. Install JS runtime
 1. Install NodeJS (e.g. `sudo apt-get install nodejs`)
 2. Get [yarn](https://yarnpkg.com/lang/en/) package manager (e.g. `npm install --global yarn`)
 3. Install js dependencies via `yarn install`
-4. Apply local js patches to the dependencies via `yarn patch-package`
+4. Apply local js patches to the dependencies via `yarn patch-package` (might already be executed by `yarn install`)
 5. Set the `TROUPE` environment variable to point to the folder that contains this README. In bash this is done by adding the following lines to a file such as `~/.bashrc` or `~/.bash_profile`:
    ```
    TROUPE=<path to the installation directory>
@@ -22,6 +23,7 @@ If you want to try out Troupe without manual installation (e.g., for a class exe
    ```
    Read <a href="https://www.digitalocean.com/community/tutorials/how-to-read-and-set-environmental-and-shell-variables-on-a-linux-vps"> here</a> for more info on environment variables.
 6. Install [TypeScript](https://www.typescriptlang.org/): `npm install -g typescript`
+   - To install to the home directory without root, first run `npm config set prefix ~/.npm` and add `~/.npm/bin` to your PATH
 7. Compile Troupe runtime by typing `make rt`
 
 ### Step 2. Install Troupe compiler
@@ -40,7 +42,10 @@ Type `make stack` (in the repository's root) to compile Troupe's bin scripts
 
 ### Step 4. Install Troupe standard library
 
-Type `make libs` to compile Troupe's built-in libraries, and `make service` to compile the service module placeholder.
+Type
+
+- `make libs` to compile Troupe's built-in libraries, and
+- `make service` to compile the service module placeholder.
 
 
 ### Step 5. Running the test suite
@@ -92,6 +97,13 @@ This will allow to develop on a remote machine, using VSCode on a local machine 
 Now, when having opened the `compiler` folder, the Haskell Language Server should highlight errors and hints, support "Go to definition" and more.
 
 
+#### Syntax support for Troupe files
+
+As Troupe syntax is similar to SML, installing the [SML Environment](https://marketplace.visualstudio.com/items?itemName=vrjuliao.sml-environment) extension is useful. It adds syntax highlighting, some identation support and support for commenting with editor commands.
+
+Use `Ctrl-k m` ("Change language mode") to set the current file's language mode to SML. The suggestions will also allow to generally associate `.trp` files with SML mode.
+
+
 #### Building and running
 
 - **Building the compiler:** When having opened the `compiler` folder, there is a task "Build all", which is set as the default build task, so running "Run build task" (Ctrl-F9) should execute it.
@@ -108,6 +120,20 @@ Now, when having opened the `compiler` folder, the Haskell Language Server shoul
 The current user guide is accessible [here](https://troupe.cs.au.dk/userguide.pdf).
 
 ## Building and running
+### Building
+
+The following commands build specific parts of the project and install the results to the `bin`, `rt/built` and `lib` directories.
+
+- `make all`: build everything (use this whenever significant changes have been made to the project, to be sure that everything is up-to-date)
+- `make` / `make stack`: build the compiler
+- `make rt`: build the runtime (into the `rt/built` directory)
+- `make libs`: compile Troupe's built-in libraries (into the `lib` directory)
+- `make service` compile the service module placeholder
+
+### Tests
+
+- `make test` to run all tests
+- `bin/golden` to run the test suite with options
 
 ### Running examples that do not require network
 
@@ -117,7 +143,8 @@ infrastructure or key generation (which otherwise takes a few seconds).
 
 ### Building and naming the snapshot
 
-Script `build.sh` runs `make` and copies the executables to `../bin/<current git HEAD hash>`.
+Script `dev-utils/build.sh` runs `make` and copies the executables to `../bin/<current git HEAD hash>`.
+This is useful when wanting to compile some snapshots to compare how different versions behave.
 
 ## Networking
 

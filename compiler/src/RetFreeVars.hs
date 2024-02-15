@@ -62,7 +62,8 @@ instance FreeNames SimpleTerm where
   freeVars (WithRecord x fields) = 
     let _f = map (\(f,x) -> FreeVars ( if x == VN f then Set.empty else Set.singleton x)) fields in 
     unionMany $ (FreeVars (Set.singleton x)): _f
-  freeVars (Proj x _) = FreeVars (Set.singleton x)
+  freeVars (ProjField x _) = FreeVars (Set.singleton x)
+  freeVars (ProjIdx x _) = FreeVars (Set.singleton x)
 
 freeOfLet d vs kt =
    (freeVars d) `unionFreeVars` (restrictFree kt vs)

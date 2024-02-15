@@ -78,6 +78,7 @@ data DefUseOps a = DefUseOps
   }
 
 
+-- | The traversal monad for the Def-Use analysis.
 type UseDefTraversal a = RWS (DefUseOps a) () (TraverseState a)
 type Tr = UseDefTraversal DefUse 
 
@@ -200,21 +201,15 @@ instance Usable RawExpr b where
         Raw.WithRecord x fields -> do 
           use x 
           use (snd (unzip fields))
-        Raw.Proj x _ -> use x
+        Raw.ProjField x _ -> use x
+        Raw.ProjIdx x _ -> use x
         Raw.List xs -> use xs
         Raw.ListCons x y -> use x >> use y
         Raw.Const _ -> return ()
         Raw.Lib _ _ -> return ()
-
-
-instance Usable ComplexExpr b where 
- use e  =  
-      case e of 
         Raw.Base _ -> return ()    
-        Raw.ComplexBin _ x y -> use [x,y]
         Raw.ConstructLVal x y z -> do use x 
                                       use [y,z]
-        Raw.ComplexRaw rexpr -> use rexpr
 
 
 clearZone = do 
@@ -274,6 +269,7 @@ updateZone i = do
   else return ()
 
 
+-- | Def-Use analysis: mark used variables
 instance Usable RawInst b where 
   use i = do 
      updateZone i
@@ -281,12 +277,18 @@ instance Usable RawInst b where
        AssignRaw x e -> use e 
        AssignLVal x e -> use e 
        SetState cmp x -> use x 
-       AssertType r _ -> use r 
-       AssertEqTypes _ x y -> use [x,y]
-       SetBranchFlag -> return ()
+       RTAssertion (AssertType r _) -> use r
+       --  RTAssertion (AssertEqTypes _ x y) -> use [x,y]
+       RTAssertion (AssertTypesBothStringsOrBothNumbers x y) -> use [x,y]
+       RTAssertion (AssertRecordHasField r _) -> use r
+       RTAssertion (AssertTupleLengthGreaterThan r _) -> use r
        MkFunClosures xs _ -> use (snd (unzip xs))
+       -- Instructions without variables
+       InvalidateSparseBit -> return ()
+       SetBranchFlag -> return ()
 
 
+-- | Mark variables that are defined.
 instance Definable RawInst b where 
   define i = do 
     updateZone i 
@@ -294,9 +296,9 @@ instance Definable RawInst b where
        AssignRaw x _ -> define x
        AssignLVal x _ -> define x
        SetState cmp x -> return ()
-       AssertType r _ -> return ()
-       AssertEqTypes _ _ _ -> return ()
+       RTAssertion _ -> return ()
        SetBranchFlag -> return ()
+       InvalidateSparseBit -> return ()
        MkFunClosures _ ys -> mapM_ define (fst (unzip ys))
 
 

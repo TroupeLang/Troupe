@@ -71,7 +71,8 @@ instance Substitutable SimpleTerm where
       Tuple vs -> Tuple (map fwd vs)
       Record fields -> Record $ fwdFields fields
       WithRecord x fields -> WithRecord (fwd x) $ fwdFields fields
-      Proj x f -> Proj (fwd x) f
+      ProjField x f -> ProjField (fwd x) f
+      ProjIdx x idx -> ProjIdx (fwd x) idx
       List vs -> List (map fwd vs)
       ListCons v v' -> ListCons (fwd v) (fwd v')
       ValSimpleTerm sv -> ValSimpleTerm (apply subst sv)
@@ -138,8 +139,9 @@ instance CensusCollectible SimpleTerm where
       Tuple vs -> updateCensus vs 
       Record fs -> let (_,vs) = unzip fs in updateCensus vs 
       WithRecord v fs -> updateCensus v >> (let (_,vs) = unzip fs in updateCensus vs )
-      Proj v _ -> updateCensus v 
-      List vs -> updateCensus vs 
+      ProjField v _ -> updateCensus v
+      ProjIdx v _ -> updateCensus v
+      List vs -> updateCensus vs
       ListCons v vs -> updateCensus v >> updateCensus vs
       Base _ -> return () 
       Lib _ _ -> return ()
@@ -276,12 +278,6 @@ simplifySimpleTerm t =
     u <- look oper1 
     v <- look oper2
     case op of 
-      Basics.Index -> do 
-        case (u, v) of 
-          (St (Tuple xs), St (ValSimpleTerm  (Lit (C.LInt i _)))) ->
-            _subst $  xs !! (fromIntegral  i)             
-          _ -> _nochange       
-
       Basics.HasField -> case v of 
            St (ValSimpleTerm  (Lit (C.LString s))) -> do 
              fs <- fields oper1 
@@ -319,6 +315,7 @@ simplifySimpleTerm t =
               _ -> _nochange 
   Un op operand -> do
     v <- look operand 
+    -- TODO should write out all cases
     case (op,v) of 
         (Basics.IsTuple, St (Tuple _))          -> _ret __trueLit 
         (Basics.IsTuple, St (Record _))         -> _ret __falseLit
@@ -343,20 +340,30 @@ simplifySimpleTerm t =
         (Basics.IsList, St (Tuple _))         -> _ret __falseLit
         (Basics.IsList, St (ValSimpleTerm _)) -> _ret __falseLit
 
-        (Basics.Length, St (Tuple xs)) -> 
+        (Basics.TupleLength, St (Tuple xs)) -> 
+            _ret $ lit (C.LInt (fromIntegral (length xs)) NoPos)
+        -- 2023-08 Revision: Added this case
+        (Basics.ListLength, St (List xs)) -> 
             _ret $ lit (C.LInt (fromIntegral (length xs)) NoPos)
             
    
        
         _ -> _nochange
-  Proj x s ->  do 
+  ProjField x s ->  do 
     fs <- fields x
     case lookup s fs of 
       Just y -> _subst y 
       Nothing -> _nochange
-      
-  ValSimpleTerm (KAbs klam) -> do 
-        klam' <- withResetRetState $ simpl klam 
+  ProjIdx x idx -> do
+    t <- look x
+    case t of
+      St (Tuple vs) | fromIntegral (length vs) > idx ->
+        _subst (vs !! fromIntegral idx)
+      _ -> _nochange
+
+
+  ValSimpleTerm (KAbs klam) -> do
+        klam' <- withResetRetState $ simpl klam
         _ret $ ValSimpleTerm $ KAbs klam'
 {--
   List _ -> _nochange 
@@ -396,7 +403,8 @@ failFree st = case st of
   Tuple _ -> True 
   Record _ -> True 
   WithRecord _ _ -> True 
-  Proj _ _ -> False 
+  ProjField _ _ -> False 
+  ProjIdx _ _ -> False 
   List _ -> True 
   ListCons _ _ -> False 
   Base _ -> True 

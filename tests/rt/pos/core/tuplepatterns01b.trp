@@ -1,0 +1,5 @@
+let fun f () = (1) in
+  case f () of
+    (* list pattern *)
+    [x] => false
+  end

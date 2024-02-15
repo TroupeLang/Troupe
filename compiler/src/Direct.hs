@@ -89,7 +89,8 @@ data Term
     | Tuple [Term]
     | Record Fields 
     | WithRecord Term Fields
-    | Proj Term FieldName
+    | ProjField Term FieldName
+    | ProjIdx Term Word
     | List [Term]
     | ListCons Term Term
     | Bin BinOp Term Term
@@ -166,8 +167,11 @@ ppTerm' (WithRecord t fs) =
   PP.braces $ PP.hsep [ppTerm 0 t, text "with", qqFields fs] 
 
 
-ppTerm' (Proj t fn) = 
-  ppTerm projPrec t PP.<> text "." PP.<> PP.text fn  
+ppTerm' (ProjField t fn) =
+  ppTerm projPrec t PP.<> text "." PP.<> PP.text fn
+
+ppTerm' (ProjIdx t idx) =
+  ppTerm projPrec t PP.<> text "." PP.<> PP.text (show idx)
 
 ppTerm'  (List ts) =
   PP.brackets $
@@ -341,6 +345,7 @@ termPrec (List _ )       = maxPrec
 termPrec (Var _)         = maxPrec
 termPrec (App _ _)       = appPrec
 termPrec (Bin op _ _)    = opPrec op
-termPrec (Proj _ _ )     = projPrec 
+termPrec (ProjField _ _ ) = projPrec 
+termPrec (ProjIdx _ _ ) = projPrec 
 termPrec (ListCons _ _)  = 200
 termPrec _               = 0

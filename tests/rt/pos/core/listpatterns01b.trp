@@ -1,0 +1,4 @@
+let fun f () = [] in
+  case f () of
+    [x] => false
+  end

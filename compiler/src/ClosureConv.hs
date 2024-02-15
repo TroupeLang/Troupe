@@ -168,9 +168,12 @@ cpsToIR (CPS.LetSimple vname@(VN ident) st kt) = do
           x' <- transVar x 
           fields' <- transFields fields
           _assign $ WithRecord x' fields'
-        CPS.Proj x f -> do
+        CPS.ProjField x f -> do
           x' <- transVar x 
-          _assign (Proj x' f)
+          _assign (ProjField x' f)
+        CPS.ProjIdx x idx -> do
+          x' <- transVar x 
+          _assign (ProjIdx x' idx)
         CPS.List lst -> do 
           lst' <- transVars lst 
           _assign (List lst')
@@ -211,12 +214,14 @@ cpsToIR (CPS.LetFun fdefs kt) = do
     let fnBindings = map (\x@(VN i) -> (x, HFN i)) vnames_orig
     return $ (CCIR.MkFunClosures envBindings fnBindings) `consBB` t
 
+-- Special Halt continuation, for exiting program
 cpsToIR (CPS.Halt v) = do 
     v' <- transVar v
     (compileMode,_ , _ , _ ) <- ask 
     let constructor =
           case compileMode of
               Normal -> CCIR.Ret
+              -- Compiling library, then generate export instruction
               Export -> CCIR.LibExport
 
     return $ CCIR.BB [] $ constructor v'

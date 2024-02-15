@@ -1,7 +1,9 @@
 {-- 
+Translation from Stack to JS code.
+The names of most runtime functions are specified at the respective place here.
+However, those for 'RTAssertion' are defined via 'ppRTAssertion'.
 
 TODO
-
 - Port the code for serialization (AA; 2020-12-04)
 
 --}
@@ -9,22 +11,24 @@ TODO
 
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DeriveGeneric #-}
-module Stack2JS where 
+{-# LANGUAGE LambdaCase #-}
+module Stack2JS where
 -- import qualified IR2JS 
 
 import IR (SerializationUnit(..), HFN(..)
           , ppId, ppFunCall, ppArgs, Fields (..), Ident
           , serializeFunDef
           , serializeAtoms )
-import qualified IR           
-import qualified Raw 
+import qualified IR
+import qualified Raw
 
-import Raw (RawExpr (..), ComplexExpr (..), RawType(..), RawVar (..), MonComponent(..), 
-            ppRawExpr, ppComplexExpr)
+import Raw (RawExpr (..), RawType(..), RawVar (..), MonComponent(..), RTAssertion(..),
+            ppRawExpr, ppRTAssertionCode)
 
 import Stack
 
 import qualified Basics
+import Basics(BinOp(..), UnaryOp(..))
 import qualified Core as C
 import RetCPS(VarName(..))
 import qualified RetCPS as CPS
@@ -106,6 +110,7 @@ initState = TheState { freshCounter = 0
 
 a $$+ b  = a $$ (nest 2 b)
 
+-- | Translation monad collecting the generated JS parts when passing through the 'StackProgram' tree.
 class ToJS a where
    toJS :: a -> W PP.Doc
 
@@ -254,22 +259,55 @@ instance ToJS StackInst where
 instance ToJS StackTerminator where 
   toJS = tr2js
 
-instance ToJS RawExpr where 
-  toJS = irExpr2js
+binOpToJS :: BinOp -> String
+binOpToJS = \case
+    -- JS binary operators (some not implemented in IR2Raw)
+    Plus -> "+"
+    Minus -> "-"
+    Mult -> "*"
+    Div -> "/"
+    Mod -> "%"
+    Le -> "<="
+    Lt -> "<"
+    Ge -> ">="
+    Gt -> ">"
+    And -> "&&"
+    Or -> "||"
+    BinAnd -> "&"
+    BinOr -> "|"
+    BinXor -> "^"
+    BinShiftLeft -> "<<"
+    BinShiftRight -> ">>"
+    BinZeroShiftRight -> ">>>"
+    -- Functions defined in UserRuntimeZero.ts
+    IntDiv -> "rt.intdiv"
+    Eq -> "rt.eq"
+    Neq -> "rt.neq"
+    Concat -> "+"
+    HasField -> "rt.hasField"
+    LatticeJoin -> "rt.join"
+    -- No RT operations (should be moved to a different datatype)
+    RaisedTo -> error "Not a runtime operation"
+    -- Not yet implemented in IR2Raw
+    FlowsTo -> error "Not yet implemented: FlowsTo" -- (implemented in tagsets.ts: "rt.flowsTo")
+    LatticeMeet -> error "Not yet implemented: LatticeMeet"
 
-instance ToJS ComplexExpr where 
-  toJS = cexpr2js    
-
-{-- Complex expressions --}
-
-cexpr2js :: ComplexExpr -> W PP.Doc 
-cexpr2js (ConstructLVal r1 r2 r3) = return $
-  ppFunCall  (text "rt.constructLVal")  (map ppId [r1,r2,r3])
-cexpr2js (Base b) = return $
-  ( if b == "$$authorityarg" then text b  else text "rt." <+> text b)
-cexpr2js (ComplexBin binop va1 va2) = return $
-  jsFunCall ((text . textOfBinOp) binop) [ppId va1, ppId va2]  
-cexpr2js (ComplexRaw raw) = toJS raw 
+unaryOpToJS :: UnaryOp -> String
+unaryOpToJS = \case
+    -- Functions defined in UserRuntimeZero.ts
+    IsTuple -> "rt.raw_istuple"
+    IsList -> "rt.raw_islist"
+    IsRecord -> "rt.isRecord"
+    -- Note: Currently lists and tuples are both using the same RT length function.
+    ListLength -> "rt.raw_listLength"
+    TupleLength -> "rt.raw_tupleLength"
+    Head -> "rt.head"
+    Tail -> "rt.tail"
+    UnMinus -> "-"
+    -- Not yet implemented in IR2Raw
+    Fst -> error "Not yet implemented: Fst"
+    Snd -> error "Not yet implemented: Snd"
+    LevelOf -> error "Not yet implemented: LevelOf" -- (implemented in levelops.ts: "rt.levelOf")
 
 {-- INSTRUCTIONS --}
 
@@ -278,20 +316,19 @@ cexpr2js (ComplexRaw raw) = toJS raw
 
 ir2js :: StackInst -> W PP.Doc
 ir2js (AssignRaw tt vn e) = do
-  jj <- irExpr2js e
+  jj <- toJS e
   let pfx = case tt of 
                AssignConst -> text "const"
                AssignLet   -> text "let"
                AssignMut   -> PP.empty 
   return $ semi $ pfx <+> ppId vn <+> text "=" <+> jj 
 
---   return $ semi$ ppLet vn <+> jj 
---  where  
-
+-- Note: Technically this is handled in the same way as 'AssignRaw' (with 'AssignConst'),
+-- because in JS it is just an assignment to a variable.
+-- The only difference to AssignRaw is the type of variable name (here 'VarName', there 'RawVar') (even though both are wrappers for String)
 ir2js (AssignLVal vn cexpr) = do
-  d <- toJS cexpr  
+  d <- toJS cexpr
   return $ semi $ ppLet vn <+> d
-
 
 
 ir2js (FetchStack x i) = return $ 
@@ -302,6 +339,7 @@ ir2js (StoreStack x i) = return $
 
 
 ir2js (MkFunClosures envBindings funBindings) = do
+    -- Create new environment
     env <- freshEnvVar
     let ppEnv = vcat [ semi $ hsep [ ppLet env
                                    , text "new rt.Env()"]
@@ -324,30 +362,7 @@ ir2js (SetState c x) =
 
   in return $ semi $ monStateToJs c <+> "=" <+> rhs 
 
-ir2js (AssertType x t ) = 
-  let dict = [(RawNumber, "rawAssertIsNumber")
-             ,(RawBoolean, "rawAssertIsBoolean")
-             ,(RawString, "rawAssertIsString")
-             ,(RawFunction, "rawAssertIsFunction")
-             ,(RawList, "rawAssertIsList")
-             ,(RawTuple, "rawAssertIsTuple")
-             ,(RawRecord, "rawAssertIsRecord")
-             ,(RawLevel, "rawAssertIsLevel")
-             ]
-
-  in case lookup t dict of 
-        Just s -> return $ jsFunCall (text ("rt." ++ s)) [ppId x]
-        _ -> error $ "type assertion not implemented for " ++ (show t)
-        -- _ -> return $ PP.empty
-
-ir2js (AssertEqTypes opt_ts x y) = 
-  case opt_ts of 
-    Just (Raw.List2OrMore RawNumber RawString []) -> 
-      return $ jsFunCall (text "rt.rawAssertPairsAreStringsOrNumbers") [ppId x, ppId y]
-    _ -> 
-      error "unexpected assertion equality type"
-
-
+ir2js (RTAssertion a) = return $ ppRTAssertionCode jsFunCall a
 
 ir2js (LabelGroup ii) = do 
   ii' <- mapM ppLevelOp ii 
@@ -358,13 +373,18 @@ ir2js (LabelGroup ii) = do
            , text "}"
            ]
     where ppLevelOp (AssignRaw tt vn e) = do
-            jj <- irExpr2js e
+            jj <- toJS e
             let pfx = if tt == AssignConst then text "const" else PP.empty 
             return $ semi $ pfx <+> ppId vn <+> text "=" <+> jj 
           ppLevelOp x = toJS x  
 
 ir2js (SetBranchFlag) = return $
   text "_T.setBranchFlag()"
+ir2js InvalidateSparseBit = return $
+  text "rt.raw_invalidateSparseBit()"
+
+
+
 -- ir2js x = error $ "ir instruction translation not implemented: " ++ (show x)
 
 
@@ -471,57 +491,52 @@ b_slot_absolute_index = do
 -----------------------------------------------------------
 
 
+ppField :: IR.Identifier a => (String, a) -> PP.Doc
+ppField (f, v) = PP.brackets $ PP.quotes (text f) <> text "," <> ppId v
 
-irExpr2js :: RawExpr -> W PP.Doc
-irExpr2js (ProjectState c) = return $ monStateToJs c
+ppFields :: IR.Identifier a => [(String, a)] -> [PP.Doc]
+ppFields fs = PP.punctuate (text ",") (map ppField fs)
 
-irExpr2js e@(ProjectLVal _ _) = return $ ppRawExpr e
-
-irExpr2js (Bin Basics.Concat x y) = return $ 
-  ppId x <+> text "+" <+> ppId y
-irExpr2js (Bin binop va1 va2) = return $
-  let text' = (text . textOfBinOp) binop 
-  in 
-    if binop `elem` infix_binops 
-      then 
-        hsep [ ppId va1, text', ppId va2 ]
-      else 
-        jsFunCall text' [ppId va1, ppId va2]
-irExpr2js (Un Basics.UnMinus v) = return $ (text "-") <+> ppId v
-
-irExpr2js (Un op v) = return $
-  text (textOfUnOp op) <> PP.parens (ppId v)
-irExpr2js (Tuple vars) = return $
-   (text "rt.mkTuple") <> (PP.parens $ PP.brackets $ PP.hsep $ PP.punctuate (text ",") (map ppId vars))
-irExpr2js (Record fields) = return $ 
-   PP.parens $ (text "rt.mkRecord" ) <> (PP.parens $ PP.brackets $ PP.hsep $ PP.punctuate (text ",") (map ppField fields))
-     where ppField (f, v) = PP.brackets $ (PP.quotes (text f)) <> text "," <> ppId v
-irExpr2js (WithRecord r fields) = return $ 
-    text "rt.withRecord" <> (PP.parens $
-        PP.hsep [ppId r, text ",", PP.brackets $ PP.hsep $ PP.punctuate (text ",") (map ppField fields) ] )
-    where ppField (f, v) = PP.brackets $ (PP.quotes (text f)) <> text "," <> ppId v
-irExpr2js (Proj x f) = return $
-  text "rt.getField" <> (PP.parens (ppId x <> text "," <>  PP.quotes (text f ) ))
-irExpr2js (List vars) = return $
-  -- text "rt.mkVal" <> (
-    PP.parens $   (text "rt.mkList") <> (PP.parens $ PP.brackets $ PP.hsep $ PP.punctuate (text ",") (map ppId vars)) 
-    
-irExpr2js (ListCons v1 v2) = return $
-  text "rt.cons" <>  ( PP.parens $ ppId v1 <> text "," <> ppId v2)
-irExpr2js (Const (C.LUnit)) = return $ (text "rt.__unitbase")
-irExpr2js (Const (C.LLabel s)) = return $
-  text "rt.mkLabel" <> (PP.parens . PP.doubleQuotes) (text s)
-irExpr2js (Const lit) = do 
-  case lit of 
-      C.LAtom atom -> tell ([], [atom], [])
-      _ -> return ()
-  return $ CPS.ppLit lit    
-
-irExpr2js (Lib lib'@(Basics.LibName libname) varname) = do
-  tell ([LibAccess lib' varname], [], [])
-  return $
-    text "rt.loadLib" <> (PP.parens  $ (PP.quotes.text) libname <> text ", " <> (PP.quotes.text) varname <> text ", this" )
--- irExpr2js x = error $ "expr2js not implemented: " ++ (show x)
+instance ToJS RawExpr where
+  toJS = \case
+    ProjectState c -> return $ monStateToJs c
+    e@(ProjectLVal _ _) -> return $ ppRawExpr e
+    Bin binop va1 va2 -> return $
+      let text' = (text . binOpToJS) binop in
+        if isInfixBinop binop
+        then hsep [ ppId va1, text', ppId va2 ]
+        else jsFunCall text' [ppId va1, ppId va2]
+    Un op v -> return $ text (unaryOpToJS op) <> PP.parens (ppId v)
+    Tuple vars -> return $
+     text "rt.mkTuple" <> PP.parens (PP.brackets $ PP.hsep $ PP.punctuate (text ",") (map ppId vars))
+    Record fields -> return $
+      PP.parens $ text "rt.mkRecord" <> PP.parens (PP.brackets $ PP.hsep $ ppFields fields)
+    WithRecord r fields -> return $
+      text "rt.withRecord" <> PP.parens (
+        PP.hsep [ppId r, text ",", PP.brackets $ PP.hsep $ ppFields fields ])
+    ProjField x f -> return $
+      text "rt.getField" <> PP.parens (ppId x <> text "," <>  PP.quotes (text f ) )
+    ProjIdx x idx -> return $
+      text "rt.raw_indexTuple" <> PP.parens (ppId x <> text "," <>  text (show idx) )
+    List vars -> return $
+      PP.parens $   text "rt.mkList" <> PP.parens (PP.brackets $ PP.hsep $ PP.punctuate (text ",") (map ppId vars))
+    ListCons v1 v2 -> return $
+      text "rt.cons" <>  PP.parens (ppId v1 <> text "," <> ppId v2)
+    Const C.LUnit -> return $ text "rt.__unitbase"
+    Const (C.LLabel s) -> return $
+      text "rt.mkLabel" <> (PP.parens . PP.doubleQuotes) (text s)
+    Const lit -> do
+      case lit of
+        C.LAtom atom -> tell ([], [atom], [])
+        _ -> return ()
+      return $ CPS.ppLit lit
+    Lib lib'@(Basics.LibName libname) varname -> do
+      tell ([LibAccess lib' varname], [], [])
+      return $
+        text "rt.loadLib" <> PP.parens ((PP.quotes.text) libname <> text ", " <> (PP.quotes.text) varname <> text ", this")
+    ConstructLVal r1 r2 r3 -> return $
+      ppFunCall  (text "rt.constructLVal")  (map ppId [r1,r2,r3])
+    Base b -> return $ text "rt." <+> text b -- Note: The "$$authorityarg" case is handled in IR2Raw
 
 
 
@@ -561,7 +576,34 @@ freshKontName = do
     modify (\s -> s { freshCounter = j + 1})
     return $ VN $  "$$$" ++ s ++ "$$$kont" ++ (show j)
 
-infix_binops = 
-  [Basics.Plus, Basics.Minus , Basics.Mult , Basics.Div , Basics.Mod ,  Basics.Le , Basics.Lt , Basics.Ge , Basics.Gt , Basics.And ,  Basics.Or, 
-   Basics.BinAnd , Basics.BinOr , Basics.BinXor , Basics.BinShiftLeft , Basics.BinShiftRight , 
-   Basics.BinZeroShiftRight ]
+
+isInfixBinop :: Basics.BinOp -> Bool
+isInfixBinop = \case
+  -- Infix
+  Plus -> True
+  Minus -> True
+  Mult -> True
+  Div -> True
+  Mod -> True
+  Le -> True
+  Lt -> True
+  Ge -> True
+  Gt -> True
+  And -> True
+  Or -> True
+  Concat -> True
+  BinAnd -> True
+  BinOr -> True
+  BinXor -> True
+  BinShiftLeft -> True
+  BinShiftRight -> True
+  BinZeroShiftRight -> True
+  -- Not infix
+  Eq -> False
+  Neq -> False
+  RaisedTo -> False
+  FlowsTo -> False
+  IntDiv -> False
+  HasField -> False
+  LatticeJoin -> False
+  LatticeMeet -> False

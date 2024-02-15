@@ -80,6 +80,9 @@ import Control.Monad.Except
 
 
     'raisedTo' { L _ TokenRaisedTo }
+    'isTuple' { L _ TokenIsTuple }
+    'isList' { L _ TokenIsList }
+    'isRecord' { L _ TokenIsRecord }
 
     '('   { L _ TokenLParen }
     ')'   { L _ TokenRParen }
@@ -113,6 +116,9 @@ import Control.Monad.Except
 %right '.'
 
 %left 'raisedTo'
+%left 'isTuple'
+%left 'isList'
+%left 'isRecord'
 %left '^'
 %%
 
@@ -168,6 +174,9 @@ Expr: Form                        { $1 }
     | Expr '~>>' Expr             { Bin BinZeroShiftRight $1 $3 }
     | Expr '::' Expr              { ListCons $1 $3 }
     | Expr 'raisedTo' Expr        { Bin RaisedTo $1 $3 }
+    | 'isTuple' Expr              { Un IsTuple $2 }
+    | 'isList' Expr              { Un IsList $2 }
+    | 'isRecord' Expr              { Un IsRecord $2 }
 
 
 Match : Pattern '=>' Expr                      { [($1,$3)] }
@@ -200,7 +209,8 @@ Atom : '(' Expr ')'                { $2 }
      | '{' '}'                     { Record [] }
      | RecordExpr                  { $1 }
      | ListExpr                    { $1 }
-     | Atom '.' VAR                { Proj $1 (varTok $3) }
+     | Atom '.' VAR                { ProjField $1 (varTok $3) }
+     | Atom '.' NUM                { ProjIdx $1 $ fromInteger (numTok $3) }
 
 
 RecordExpr 

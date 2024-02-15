@@ -1,4 +1,4 @@
-import { assertIsFunctionRaw, rawAssertIsBoolean, rawAssertIsList, rawAssertIsNumber, rawAssertIsRecord, rawAssertIsString, rawAssertIsTuple, rawAssertPairsAreStringsOrNumbers, rawAssertIsLevel } from '../Asserts.mjs'
+import { rawAssertIsFunction, rawAssertIsBoolean, rawAssertIsList, rawAssertIsNumber, rawAssertIsRecord, rawAssertIsString, rawAssertIsTuple, rawAssertPairsAreStringsOrNumbers, rawAssertIsLevel, rawAssertTupleLengthGreaterThan, rawAssertRecordHasField } from '../Asserts.mjs'
 import {UserRuntimeZero, Constructor } from './UserRuntimeZero.mjs'
 
 
@@ -9,9 +9,11 @@ export function RuntimeAssert <TBase extends Constructor<UserRuntimeZero>> (Base
         rawAssertIsBoolean = rawAssertIsBoolean
         rawAssertIsString = rawAssertIsString
         rawAssertIsList = rawAssertIsList
-        rawAssertIsFunction = assertIsFunctionRaw
+        rawAssertIsFunction = rawAssertIsFunction
         rawAssertIsRecord = rawAssertIsRecord
         rawAssertIsTuple = rawAssertIsTuple
+        rawAssertTupleLengthGreaterThan = rawAssertTupleLengthGreaterThan
+        rawAssertRecordHasField = rawAssertRecordHasField
         rawAssertPairsAreStringsOrNumbers = rawAssertPairsAreStringsOrNumbers
         rawAssertIsLevel = rawAssertIsLevel 
     }

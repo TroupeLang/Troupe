@@ -1,0 +1,4 @@
+let val point0 = { x = 0, y = 0 } 
+    val point1 = { point0 with z = 10 }
+in point1 
+end

@@ -20,6 +20,7 @@ import           Control.Monad.Reader
 import           Control.Monad.RWS
 import           Control.Monad.State
 import           Control.Monad.Writer
+import Control.Monad (when)
 import           Data.List
 import qualified Data.ByteString           as BS
 import           Data.Serialize            (Serialize)
@@ -31,8 +32,11 @@ import           Text.PrettyPrint.HughesPJ (hsep, nest, text, vcat, ($$), (<+>))
 import qualified Text.PrettyPrint.HughesPJ as PP
 import           TroupePositionInfo
 
+-- | Describes a variable containing a labelled value.
 data VarAccess
+  -- | Local variable with a labelled value.
   = VarLocal VarName
+  -- | Variable defined in the closure.
   | VarEnv VarName
   deriving (Eq, Show, Generic)
 
@@ -47,36 +51,59 @@ data IRExpr
   | Tuple [VarAccess]
   | Record Fields
   | WithRecord VarAccess Fields 
-  | Proj VarAccess Basics.FieldName
+  | ProjField VarAccess Basics.FieldName
+  -- | Projection of a tuple field at the given index. The maximum allowed index
+  -- is 2^53-1 (9007199254740991), the maximum representable number with 52 bits (unsigned),
+  -- as the runtime uses the IEEE 754 double-precision number format with a mantissa of 52 bits.
+  | ProjIdx VarAccess Word
   | List [VarAccess]
+  -- | List cons of a value to a list.
   | ListCons VarAccess VarAccess
+  -- | Note: This instruction is not generated from source. Constants are stored in function definitions (see 'FunDef').
   | Const C.Lit
+  -- | Predefined base function names.
   | Base Basics.VarName
+  -- | Returns the definition (variable) with the given name
+  -- from the given library.
   | Lib Basics.LibName Basics.VarName
   deriving (Eq, Show, Generic)
 
-
-data IRBBTree = BB [IRInst] IRTerminator deriving (Eq, Show,Generic)
+-- | A block of instructions followed by a terminator, which can contain further 'IRBBTree's.
+data IRBBTree = BB [IRInst] IRTerminator deriving (Eq, Show, Generic)
 
 data IRTerminator
+  -- | Call the function referred to by the first variable with the argument in the second variable.
   = TailCall VarAccess VarAccess
+  -- | Return from the current Call with the given variable as return value.
   | Ret VarAccess
   | If VarAccess IRBBTree IRBBTree
+  -- | Check whether the value of the first variable is true. If yes, continue with the given tree.
+  -- If not, terminate the current thread with a runtime error, printing the message stored in the second variable (which is asserted to be a string) with the given PosInf.
   | AssertElseError VarAccess IRBBTree VarAccess PosInf
+  -- | Make the library available under the given variable.
   | LibExport VarAccess
+  -- | Terminate the current thread with a runtime error, printing the message stored in the variable (which is asserted to be a string) with the given PosInf.
   | Error VarAccess PosInf
+  -- | Execute the first BB, store the returned result in the given variable
+  -- and then execute the second BB, which can refer to this variable and
+  -- where PC is reset to the level before entering the first BB.
+  -- Represents a "let x = ... in ..." format.
   | Call VarName IRBBTree IRBBTree
   deriving (Eq,Show,Generic)
 
 
 data IRInst
   = Assign VarName IRExpr
+  -- | A closure instruction consists of
+  -- - A list of variables that need to be in the environment
+  -- - A list of closures with their name and the corresponding compiler-generated name of the function
   | MkFunClosures [(VarName, VarAccess)] [(VarName, HFN)]
   
  deriving (Eq, Show, Generic)
 
 
 
+-- | A literal together with the variable name the constant is accessed through.
 type Consts = [(VarName, C.Lit)]
 -- Function definition
 data FunDef = FunDef 
@@ -229,7 +256,7 @@ instance WellFormedIRCheck IRExpr where
     -- that it is important to do this check at the level
     -- of the IR because we otherwise may get a malformed
     -- code over wire. Such malformed code would result
-    -- in a JS output returing a runtime error (which should
+    -- in a JS output returning a runtime error (which should
     -- generally be avoided)
      if  fname `elem`[ 
                        "$$authorityarg"
@@ -302,6 +329,10 @@ instance WellFormedIRCheck IRExpr where
                      ]
         then return ()
         else throwError $ "bad base function: " ++ fname
+  wfir (ProjIdx _ idx) =
+    when (idx > 9007199254740991) $ -- 2^53-1
+      throwError $ "ProjIdx: illegal index: " ++ show idx ++ " (max index: 9007199254740991)"
+
   wfir _ = return ()
 
 
@@ -355,12 +386,10 @@ ppFunDef (FunDef hfn  arg consts insts)
 
 
 ppIRExpr :: IRExpr -> PP.Doc
-ppIRExpr (Bin Basics.Index va1 va2) =
-  ppId va1 <> text "[" <> ppId va2 <> text "]"
 ppIRExpr (Bin binop va1 va2) =
-  ppId va1 <+> text (textOfBinOp binop) <+> ppId va2
+  ppId va1 <+> text (show binop) <+> ppId va2
 ppIRExpr (Un op v) =
-  text (textOfUnOp op) <> PP.parens (ppId v)
+  text (show op) <> PP.parens (ppId v)
 ppIRExpr (Tuple vars) =
   PP.parens $ PP.hsep $ PP.punctuate (text ",") (map ppId vars)
 ppIRExpr (List vars) =
@@ -375,8 +404,10 @@ ppIRExpr (Base v) = if v == "$$authorityarg" -- special casing; hack; 2018-10-18
 ppIRExpr (Lib (Basics.LibName l) v) = text l <> text "." <> text v
 ppIRExpr (Record fields) = PP.braces $ qqFields fields
 ppIRExpr (WithRecord x fields) = PP.braces $ PP.hsep[ ppId x, text "with", qqFields fields]
-ppIRExpr (Proj x f) = 
+ppIRExpr (ProjField x f) = 
   (ppId x) PP.<> PP.text "." PP.<> PP.text f
+ppIRExpr (ProjIdx x idx) = 
+  (ppId x) PP.<> PP.text "." PP.<> PP.text (show idx)
     
 qqFields fields =
   PP.hsep $ PP.punctuate (text ",") (map ppField fields)
@@ -462,43 +493,4 @@ ppArgs args = PP.parens( PP.hcat (PP.punctuate PP.comma args))
 ppFunCall fn args = fn <+> ppArgs args
 
 
-textOfBinOp Basics.Plus     = "rt.plus"
-textOfBinOp Basics.Minus    = "rt.minus"
-textOfBinOp Basics.Mult     = "rt.mult"
-textOfBinOp Basics.Div      = "rt.div"
-textOfBinOp Basics.IntDiv   = "rt.intdiv"
-textOfBinOp Basics.Mod      = "rt.mod"
-textOfBinOp Basics.Eq       = "rt.eq"
-textOfBinOp Basics.Neq      = "rt.neq"
-textOfBinOp Basics.Le       = "rt.le"
-textOfBinOp Basics.Lt       = "rt.lt"
-textOfBinOp Basics.Ge       = "rt.ge"
-textOfBinOp Basics.Gt       = "rt.gt"
-textOfBinOp Basics.And      = "rt.and"
-textOfBinOp Basics.Or       = "rt.or"
-textOfBinOp Basics.Index    = "rt.index"
-textOfBinOp Basics.RaisedTo = "rt.raisedTo"
-textOfBinOp Basics.FlowsTo  = "rt.flowsTo"
-textOfBinOp Basics.Concat   = "rt.stringConcat"
-textOfBinOp Basics.HasField = "rt.hasField"
-textOfBinOp Basics.BinAnd = "rt.binand"
-textOfBinOp Basics.BinOr = "rt.binor"
-textOfBinOp Basics.BinXor = "rt.binxor"
-textOfBinOp Basics.BinShiftLeft = "rt.shiftleft"
-textOfBinOp Basics.BinShiftRight = "rt.shiftright"
-textOfBinOp Basics.BinZeroShiftRight = "rt.zeroshiftright"
-textOfBinOp Basics.LatticeJoin = "<join>"
-textOfBinOp Basics.LatticeMeet = "<meet>"
-
-
-textOfUnOp Basics.IsList  = "rt.raw_islist"
-textOfUnOp Basics.IsTuple = "rt.istuple"
-textOfUnOp Basics.Head    = "rt.head"
-textOfUnOp Basics.Tail    = "rt.tail"
-textOfUnOp Basics.Fst     = "rt.fst"
-textOfUnOp Basics.Snd     = "rt.snd"
-textOfUnOp Basics.Length  = "rt.length"
-textOfUnOp Basics.LevelOf = "rt.levelOf"
-textOfUnOp Basics.UnMinus = "rt.unaryMinus"
-textOfUnOp Basics.IsRecord = "rt.isRecord"
 

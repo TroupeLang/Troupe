@@ -134,8 +134,14 @@ export function flowsTo (l1:Level, l2:Level):boolean {
     return true;
 }
 
-
-
+/**
+ * TODO Review and document the semantics of this.
+ * Seems to simply strip off "{" and "}" from the beginning and end of the string (if both exist),
+ * returns top level only if the whole remaining string is "#TOP", otherwise considers everything
+ * between commas, trimmed and lowercased, as a label tag (The further processing of which is not obvious;
+ * for caching, this unchecked input set is rendered into a string, and it seems that the actual tag set
+ * of the resulting Level also just becomes this set.).
+ */
 function fromString (str2): Level {
     // debug (str2.toString())
     // the implementation is slightly over-protected

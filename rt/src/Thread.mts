@@ -11,14 +11,12 @@ let flowsTo = levels.flowsTo
 import { v4 as uuidv4} from 'uuid'
 
 import { TroupeType } from './TroupeTypes.mjs'
-import { assertIsFunction, assertIsFunctionRaw } from './Asserts.mjs'
 import { RuntimeInterface } from './RuntimeInterface.mjs';
 import { __unit } from './UnitVal.mjs';
 import { Level } from './Level.mjs';
 import { SchedulerInterface } from './SchedulerInterface.mjs';
 import { getRuntimeObject } from './SysState.mjs';
-import SandboxStatus, { HnState } from './SandboxStatus.mjs';
-import HandlerState from './SandboxStatus.mjs';
+import { HnState } from './SandboxStatus.mjs';
 
 
 let isPiniMode = yargs.argv.pini?true:false;
@@ -264,7 +262,7 @@ export class Thread {
 
         -- AA; 2020-02-12 
 
-        prev_sp | pc_at_ret_point | ret_cb | mclear | brach_bit |     <... locals ... > 
+        prev_sp | pc_at_ret_point | ret_cb | mclear | branch_bit |     <... locals ... > 
                                                                 ^
                                                                 |
                                                                 |
@@ -372,7 +370,8 @@ export class Thread {
         this.callStack[this.boundSlot] = false;
     }
 
-    checkDataBoundsEntry (x) {
+    // Check whether the label of R0 (argument), the data level of R0 and the given one are bound by PC.
+    checkDataBoundsEntry (x: Level) {
         const _pc = this.pc 
         let y = 
              flowsTo(this.r0_lev, _pc) 
@@ -388,7 +387,10 @@ export class Thread {
         return y;
     }
 
-    checkDataBounds (x) {
+    // Check whether the label of R0 (return value) and the data level of R0 are bound by PC.
+    // Return false if x is false.
+    // TODO Better check x directly and do not call this function if false (now that _isDataBoundByPC is not updated).
+    checkDataBounds (x: boolean) {
         const _pc = this.pc 
         let y = 
              x? flowsTo(this.r0_lev, _pc) 

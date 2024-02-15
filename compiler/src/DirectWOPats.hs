@@ -51,7 +51,8 @@ data Term
     | Tuple [Term]
     | Record Fields 
     | WithRecord Term Fields
-    | Proj Term FieldName 
+    | ProjField Term FieldName 
+    | ProjIdx Term Word
     | List [Term]
     | ListCons Term Term
     | Bin BinOp Term Term
@@ -120,8 +121,11 @@ ppTerm' (Record fs) =
 ppTerm' (WithRecord e fs) =
     PP.braces $ PP.hsep [ ppTerm 0 e, text "with", qqFields fs ]
 
-ppTerm' (Proj t fn) = 
-  ppTerm projPrec t PP.<> text "." PP.<> PP.text fn  
+ppTerm' (ProjField t fn) =
+  ppTerm projPrec t PP.<> text "." PP.<> PP.text fn
+
+ppTerm' (ProjIdx t idx) =
+  ppTerm projPrec t PP.<> text "." PP.<> PP.text (show idx)
 
 
 ppTerm'  (List ts) =

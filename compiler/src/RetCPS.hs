@@ -63,7 +63,8 @@ data SimpleTerm
    | Tuple [VarName]
    | Record Fields 
    | WithRecord VarName Fields
-   | Proj VarName Basics.FieldName
+   | ProjField VarName Basics.FieldName
+   | ProjIdx VarName Word
    | List [VarName]
    | ListCons VarName VarName
    | Base Basics.VarName
@@ -151,8 +152,10 @@ ppSimpleTerm (Record fields) = PP.braces $ qqFields fields
 ppSimpleTerm (WithRecord x fields) = 
     PP.braces $ PP.hsep [textv x, text "with", qqFields fields]
 
-ppSimpleTerm (Proj x f) = 
+ppSimpleTerm (ProjField x f) =
   textv x PP.<> text "." PP.<> PP.text f
+ppSimpleTerm (ProjIdx x idx) =
+  textv x PP.<> text "." PP.<> PP.text (show idx)
 
 qqFields fields =
   PP.hcat $

@@ -1,0 +1,10 @@
+let fun f x n =     
+  if n > 0 then 
+  	let val  y = sqrt x in 
+	print y;
+	f y (n -1)
+	end
+  else () 
+in f (65536*65536) 16;
+   f (10000000000000000) 10
+end 

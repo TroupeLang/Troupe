@@ -90,11 +90,11 @@ trInsts ii = work [] [] ii  where
         (Stack.AssignLVal x e):(store (Raw.AssignableLVal x))            
       Raw.SetState cmp x -> return [Stack.SetState cmp x]
       Raw.SetBranchFlag -> return [Stack.SetBranchFlag]
+      Raw.InvalidateSparseBit -> return [Stack.InvalidateSparseBit]
       Raw.MkFunClosures envmap vars -> do 
         let stores = concat $ map (store . Raw.AssignableLVal) (fst (unzip vars))      
         return $ (Stack.MkFunClosures envmap vars):stores
-      Raw.AssertType r t -> return [Stack.AssertType r t]
-      Raw.AssertEqTypes opt_ts x y -> return [Stack.AssertEqTypes opt_ts x y]
+      Raw.RTAssertion a -> return [Stack.RTAssertion a]
 
   translateGroup [] = return []
   translateGroup insts = do 

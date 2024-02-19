@@ -9,6 +9,7 @@ import qualified Stack
 import qualified Stack2JS
 
 
+-- RT calls this to compile received code.
 ir2Stack :: SerializationUnit -> Stack.StackUnit
 ir2Stack = Raw2Stack.raw2Stack . RawOpt.rawopt . IR2Raw.ir2raw 
 

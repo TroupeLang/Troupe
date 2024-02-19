@@ -39,7 +39,8 @@ instance Substitutable IRExpr where
             Tuple xs -> Tuple (map (apply subst) xs)
             Record fields -> Record (_ff fields)
             WithRecord x fields -> WithRecord (apply subst x) (_ff fields)
-            Proj x f -> Proj (apply subst x) f
+            ProjField x f -> ProjField (apply subst x) f
+            ProjIdx x idx -> ProjIdx (apply subst x) idx
             List xs  -> List (map (apply subst) xs)
             ListCons x y -> ListCons (apply subst x) (apply subst y)
             Const x -> Const x
@@ -77,6 +78,7 @@ instance Substitutable IRBBTree where
 
 
 
+-- | Partial value.
 data PValue = Unknown
             | TupleVal [VarAccess]
             | ListVal
@@ -118,6 +120,7 @@ markUsed x = tell $ Set.singleton x -- collect the use of the local
 markUsed' (VarEnv _) = return ()
 markUsed' (VarLocal x) = markUsed x 
 
+-- | Get evaluation of a variable.
 varPEval :: VarAccess -> Opt PValue 
 varPEval (VarEnv _) = return Unknown
 varPEval (VarLocal x) = do 
@@ -167,15 +170,6 @@ irExprPeval e =
                     r_ (BoolConst False, Const (C.LBool False))
                 _ -> r_ (Unknown, e)
         
-
-        Bin Basics.Index x y -> do 
-            v1 <- varPEval x 
-            v2 <- varPEval y 
-            case (v1, v2) of 
-                (TupleVal xs, IntConst i) -> do
-                    setChangeFlag
-                    return $ RMov (xs !! (fromIntegral  i))
-                _ -> def_
 
         Bin Basics.HasField x y -> do 
             v1 <- varPEval x 
@@ -233,7 +227,7 @@ irExprPeval e =
                                                RecordVal f0 -> f0
                                                _ -> [] )
                     r_ (RecordVal fields', e)
-        Proj x s -> do 
+        ProjField x s -> do 
             v <- varPEval x 
             case v of 
                 RecordVal fs -> 
@@ -244,10 +238,25 @@ irExprPeval e =
                             -- r_ (BoolConst True, Const (C.LBool True))
                         Nothing -> def_ 
                 _ -> def_ 
-        
-        
+        -- TODO Implement optimization for ProjIdx
+        ProjIdx x idx -> def_
+        -- ProjIdx x idx -> do 
+        --     v <- varPEval x 
+        --     case v of 
+        --         TupleVal vs -> 
+        --         _ -> def_ 
 
+        -- Previous Index:
+        -- Bin Basics.Index x y -> do 
+        --     v1 <- varPEval x 
+        --     v2 <- varPEval y 
+        --     case (v1, v2) of 
+        --         (TupleVal xs, IntConst i) -> do
+        --             setChangeFlag
+        --             return $ RMov (xs !! (fromIntegral  i))
+        --         _ -> def_
 
+        
 
 -- irExprPeval e@(Bin Basics.Index x y) = do 
 --     v1 <- varPEval x 
@@ -284,7 +293,7 @@ irExprPeval e =
         (Lib _ _) -> do 
             r_ (Unknown, e)
 
-        (Un Basics.Length x) -> do 
+        (Un Basics.TupleLength x) -> do 
             v <- varPEval x 
             case v of 
                 TupleVal vars -> do  
@@ -292,6 +301,11 @@ irExprPeval e =
                     let n = fromIntegral $ length vars
                     r_ (IntConst n, Const (C.LInt n NoPos))    
                 _ -> r_ (Unknown, e)    
+        -- Not possible as not tracking list content:
+        -- (Un Basics.ListLength x) -> do 
+        --     v <- varPEval x 
+        --     case v of 
+        --         ListVal -> do  
 
         (Un _ x) -> do 
             markUsed' x 

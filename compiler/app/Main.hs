@@ -8,6 +8,7 @@ import qualified Core as Core
 import RetDFCPS
 import qualified CaseElimination as C
 import System.Environment
+import Util.FileUtil
 import qualified ClosureConv as CC
 import qualified IR as CCIR 
 -- import qualified IROpt
@@ -36,7 +37,6 @@ import System.Console.GetOpt
 import Data.List as List
 import Data.Maybe (fromJust)
 import System.FilePath
-import System.Directory
 
 -- import System.Console.Haskeline
 -- import System.Process
@@ -167,19 +167,6 @@ process flags fname input = do
       exitSuccess
 
 
-
--- A thin wrapper around system writeFile that creates a missing
--- directory; this is useful for creating out directories for
--- libraries and when the working project folder is just fetched from
--- the repo; 2018-07-15: AA
-
-writeFileD filename x = do
-  let dirpath = takeDirectory filename
-  createDirectoryIfMissing False dirpath -- do not create parent dirs
-                                         -- because this should never
-                                         -- be required in our use
-                                         -- cases
-  writeFile filename x
 
 
 writeExports jsF exports =

@@ -1,5 +1,6 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DefaultSignatures #-}
+{-# LANGUAGE LambdaCase #-}
 
 module Basics
 where
@@ -11,10 +12,11 @@ type VarName = String
 type AtomName = String
 type FieldName = String
 
-data BinOp = Plus | Minus | Mult | Div | Mod |  Eq | Neq | Le | Lt | Ge | Gt | And | Or | Index | RaisedTo | FlowsTo | Concat| IntDiv | BinAnd | BinOr | BinXor | BinShiftLeft | BinShiftRight | BinZeroShiftRight | HasField | LatticeJoin | LatticeMeet
+-- | Eq and Neq: deep equality check on the two parameters, including the types (any type inequality results in false being returned).
+data BinOp = Plus | Minus | Mult | Div | Mod |  Eq | Neq | Le | Lt | Ge | Gt | And | Or | RaisedTo | FlowsTo | Concat| IntDiv | BinAnd | BinOr | BinXor | BinShiftLeft | BinShiftRight | BinZeroShiftRight | HasField | LatticeJoin | LatticeMeet
   deriving (Eq,Generic, Ord)
 instance Serialize BinOp
-data UnaryOp = IsList | IsTuple | IsRecord | Head | Tail | Fst | Snd | Length | LevelOf | UnMinus
+data UnaryOp = IsList | IsTuple | IsRecord | Head | Tail | Fst | Snd | ListLength | TupleLength | LevelOf | UnMinus
   deriving (Eq, Generic, Ord)
 instance Serialize UnaryOp
 
@@ -33,7 +35,6 @@ instance Show BinOp where
   show Gt    = ">"  
   show And   = "&&"
   show Or    = "||"
-  show Index = "!!"
   show RaisedTo = "raisedTo"
   show FlowsTo  = "flowsTo"
   show Concat   = "^"
@@ -47,8 +48,6 @@ instance Show BinOp where
   show LatticeJoin = "join"
   show LatticeMeet = "meet"
 
-
-
 instance Show UnaryOp where
   show IsList = "is-list"
   show IsTuple = "is-tuple"
@@ -56,9 +55,10 @@ instance Show UnaryOp where
   show Tail = "list-tail"
   show Fst = "fst"
   show Snd = "snd"
-  show Length = "length"
+  show ListLength = "list-length"
+  show TupleLength = "tuple-length"
   show LevelOf = "levelOf"
-  show UnMinus = "-"
+  show UnMinus = "un-minus"
   show IsRecord = "is-record"
 
 
@@ -94,7 +94,6 @@ opPrec Ge    = 50
 opPrec Gt    = 50
 opPrec And   = 50
 opPrec Or    = 50
-opPrec Index = 50
 opPrec FlowsTo    = 50
 opPrec RaisedTo   = 50
 opPrec HasField   = 50

@@ -141,10 +141,15 @@ transExplicit (Core.WithRecord e fields) =
   trans e (\x -> transFieldsExplicit (WithRecord x) fields)
   
 
-transExplicit (Core.Proj t f)= do
+transExplicit (Core.ProjField t f)= do
   x <- freshV
   trans t (\x' ->
-    return $ LetSimple x (CPS.Proj x' f) (KontReturn x))
+    return $ LetSimple x (CPS.ProjField x' f) (KontReturn x))
+
+transExplicit (Core.ProjIdx t idx) = do
+  x <- freshV
+  trans t (\x' ->
+    return $ LetSimple x (CPS.ProjIdx x' idx) (KontReturn x))
 
 transExplicit (Core.List ts) =
   transList ts []
@@ -269,11 +274,15 @@ trans (Core.WithRecord  e fields) context =
   trans e (\ rr -> transFields (WithRecord rr) fields context )
     
 
-trans (Core.Proj t f) context = do
+trans (Core.ProjField t f) context = do
   x <- freshV
   kterm <- context x
-  trans t (\z -> return $ LetSimple x (CPS.Proj z f) kterm)
+  trans t (\z -> return $ LetSimple x (CPS.ProjField z f) kterm)
 
+trans (Core.ProjIdx t idx) context = do
+  x <- freshV
+  kterm <- context x
+  trans t (\z -> return $ LetSimple x (CPS.ProjIdx z idx) kterm)
 
 trans (Core.List ts) context =
   transList ts [] context

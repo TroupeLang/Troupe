@@ -1,0 +1,4 @@
+let fun f () = (1) in
+  case f () of
+    (1) => true
+  end

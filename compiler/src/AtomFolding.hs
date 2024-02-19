@@ -41,8 +41,10 @@ visitTerm atms (Tuple terms) =
 visitTerm atms (Record fields) =  Record (visitFields atms fields)    
 visitTerm atms (WithRecord e fields) = 
     WithRecord (visitTerm atms e) (visitFields atms fields)
-visitTerm atms (Proj t f) =
-    Proj (visitTerm atms t) f
+visitTerm atms (ProjField t f) =
+    ProjField (visitTerm atms t) f
+visitTerm atms (ProjIdx t idx) =
+    ProjIdx (visitTerm atms t) idx
 visitTerm atms (List terms) =
   List (map (visitTerm atms) terms)
 visitTerm atms (ListCons t1 t2) =

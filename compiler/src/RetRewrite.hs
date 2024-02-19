@@ -68,7 +68,8 @@ instance Substitutable SimpleTerm where
       Tuple vs -> Tuple (map fwd vs)
       Record fields -> Record $ fwdFields fields
       WithRecord x fields -> WithRecord (fwd x) $ fwdFields fields
-      Proj x f -> Proj (fwd x) f
+      ProjField x f -> ProjField (fwd x) f
+      ProjIdx x idx -> ProjIdx (fwd x) idx
       List vs -> List (map fwd vs)
       ListCons v v' -> ListCons (fwd v) (fwd v')
       ValSimpleTerm sv -> ValSimpleTerm (apply subst sv)

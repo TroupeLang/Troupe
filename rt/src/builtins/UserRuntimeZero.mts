@@ -7,7 +7,6 @@ import { loadLibsAsync } from '../loadLibsAsync.mjs';
 import * as levels from '../options.mjs'
 import { BaseFunctionWithExplicitArg, ServiceFunction } from '../BaseFunction.mjs'
 import { Atom } from '../Atom.mjs'
-import { assertIsString, assertPairAreNumbers, assertPairAreStringsOrNumbers, assertIsBoolean, assertIsListOrTuple, assertIsNumber, rawAssertIsList} from '../Asserts.mjs'
 import { __unit } from '../UnitVal.mjs'
 import { RuntimeInterface } from '../RuntimeInterface.mjs';
 import { Record } from '../Record.mjs'
@@ -15,6 +14,9 @@ import { TroupeType } from '../TroupeTypes.mjs'
 import { RawClosure } from '../RawClosure.mjs'
 import { __unitbase } from '../UnitBase.mjs'
 import { Thread } from '../Thread.mjs'
+import { TroupeRawValue } from '../TroupeRawValue.mjs'
+import { RawTuple } from '../RawTuple.mjs'
+import { Level } from '../Level.mjs'
 
 // import { builtin_sandbox } from './builtins/sandox'
 
@@ -41,19 +43,33 @@ class LibEnv {
 
 
 export function mkBase(f,name=null) {
-    return new LVal(BaseFunctionWithExplicitArg(f,name), levels.BOT);
+    return BaseFunctionWithExplicitArg(f,name)
 }
 
 export function mkService(f, name = null) {
-    return new LVal(ServiceFunction(f, name), levels.BOT);
+    return ServiceFunction(f, name)
 }
 
+/**
+ * Exposes functions available to generated code, used by the Stack2JS module.
+ * (TODO: Categorize into assertions, special instructions and general instructions, e.g. using interfaces.
+ * Separate from other functions not used by generated code.)
+ * Functions used by the generated code are either "SimpleRT" or "ComplexRT" functions (and marked accordingly),
+ * where the former just return a plain value which by the generated code is embedded
+ * into a labelled value, and the latter return a labelled value, where the label
+ * is used by the generated code to compute the eventual label. All operations take plain values as arguments
+ * (and not labelled values) unless otherwise noted.
+ * Functions marked with "SpecialRT" do not work on values and are special control instructions.
+ */
 export class UserRuntimeZero {
     runtime: RuntimeInterface
     
     mkuuid: any
+    // SimpleRT with array of labelled values as parameter
     mkRecord = Record.mkRecord    
+    // SimpleRT with array of labelled values as parameter
     mkTuple = mkTuple
+    // SimpleRT with array of labelled values as parameter
     mkList = mkList
     sandbox: any
     sleep: any
@@ -76,10 +92,6 @@ export class UserRuntimeZero {
         this.runtime.ret (x)
     }
 
-    eq(x, y) {
-        return runtimeEquals(x, y)
-    }
-
     join (...xs) {
         if (this.runtime.$t._isDataBoundByPC) {
             return this.runtime.$t.pc 
@@ -96,201 +108,124 @@ export class UserRuntimeZero {
         
     }
 
+    // SpecialRT
+    raw_invalidateSparseBit() {
+        this.runtime.$t.invalidateSparseBit()
+    }
 
-    neq(x, y) {
+    // SpecialRT
+    rawErrorPos(x: TroupeRawValue, pos: string) {
+        if (pos != '') {
+            this.runtime.$t.threadError(x + " at " + pos);
+        } else {
+            this.runtime.$t.threadError("" + x);
+        }
+    }
+
+    // ComplexRT
+    eq(x: TroupeRawValue, y: TroupeRawValue): LVal {
+        return runtimeEquals(x, y)
+    }
+
+    // ComplexRT
+    neq(x: TroupeRawValue, y: TroupeRawValue): LVal {
         let b = runtimeEquals(x, y);
         b.val = !b.val;
         return b;
     }
 
-    stringConcat(x, y) {
-        assertIsString(x);
-        assertIsString(y);
-        return new LVal((x.val + y.val), lub(x.lev, y.lev), levels.BOT);
+    // SimpleRT
+    intdiv(x: number, y: number): number {
+        return Math.trunc(x / y)
     }
 
-
-    plus(x, y) {
-        assertPairAreNumbers(x, y);
-        return new LVal((x.val + y.val), lub(x.lev, y.lev), levels.BOT)
-    }
-
-    minus(x, y) {
-        assertPairAreNumbers(x, y);
-        let rv = new LVal((x.val - y.val), lub(x.lev, y.lev), levels.BOT)
-        return rv;
-    }
-
-    mult(x, y) {
-        assertPairAreNumbers(x, y);
-        return new LVal((x.val * y.val), lub(x.lev, y.lev), levels.BOT)
-    }
-
-    div(x, y) {
-        assertPairAreNumbers(x, y);
-        return new LVal((x.val / y.val), lub(x.lev, y.lev), levels.BOT)
-    }
-
-    intdiv(x, y) {
-        return Math.trunc(x / y) ;
-        // assertPairAreNumbers(x, y);
-        // return new LVal(Math.trunc(x.val / y.val), lub(x.lev, y.lev), levels.BOT)
-    }
-
-    mod(x, y) {
-        assertPairAreNumbers(x, y);
-        return new LVal(x.val % y.val, lub(x.lev, y.lev), levels.BOT)
-    }
-
-    binand (x,y) {
-        assertPairAreNumbers(x, y);
-        return new LVal(x.val & y.val, lub(x.lev, y.lev), levels.BOT)
-    }
-
-    binor (x,y) {
-        assertPairAreNumbers(x, y);
-        return new LVal(x.val | y.val, lub(x.lev, y.lev), levels.BOT)
-    }
-
-    binxor (x,y) {
-        assertPairAreNumbers(x, y);
-        return new LVal(x.val ^ y.val, lub(x.lev, y.lev), levels.BOT)
-    }
-
-    shiftleft (x,y) {
-        assertPairAreNumbers(x, y);
-        return new LVal(x.val << y.val, lub(x.lev, y.lev), levels.BOT)
-    }
-
-    shiftright (x,y) {
-        assertPairAreNumbers(x, y);
-        return new LVal(x.val >> y.val, lub(x.lev, y.lev), levels.BOT)
-    }
-
-    zeroshiftright (x,y) {
-        assertPairAreNumbers(x, y);
-        return new LVal(x.val >>> y.val, lub(x.lev, y.lev), levels.BOT)
-    }
-
-
-
-
-
-    le(x, y) {
-        assertPairAreStringsOrNumbers(x, y);
-        return new LVal((x.val <= y.val), lub(x.lev, y.lev), levels.BOT)
-    }
-
-    lt(x, y) {
-        assertPairAreStringsOrNumbers(x, y);
-        return new LVal((x.val < y.val), lub(x.lev, y.lev), levels.BOT)
-    }
-
-    ge(x, y) {
-        assertPairAreStringsOrNumbers(x, y);
-        return new LVal((x.val >= y.val), lub(x.lev, y.lev), levels.BOT)
-    }
-
-    gt(x, y) {
-        assertPairAreStringsOrNumbers(x, y);
-        return new LVal((x.val > y.val), lub(x.lev, y.lev), levels.BOT)
-    }
-
-    and(x, y) {
-        assertIsBoolean(x);
-        assertIsBoolean(y);
-        return new LVal((x.val && y.val), lub(x.lev, y.lev), levels.BOT)
-    }
-
-    or(x, y) {
-        assertIsBoolean(x);
-        assertIsBoolean(y);
-        return new LVal((x.val || y.val), lub(x.lev, y.lev), levels.BOT)
-    }
-
-    index(x:LVal, y:LVal) {
-        assertIsListOrTuple(x);
-        assertIsNumber(y);
-        let z = x.val._troupeType == TroupeType.TUPLE ? x.val[y.val] : x.val.index(y.val)
-        return new LVal(z.val, lub(lub(x.lev, y.lev), z.lev), z.tlev)
-    }
-
-    raw_index (x,y) {
+    // ComplexRT
+    raw_indexTuple(x: TroupeRawValue, y: number): LVal {
         return x[y];
     }
 
-    raw_islist(x) {
-        return isListFlagSet(x)
+    // SimpleRT
+    raw_islist(x: TroupeRawValue): boolean {
+        return isListFlagSet(x) // TODO check _troupeType instead?
     }
 
-    islist(x) {
-        return new LVal(isListFlagSet(x.val), x.lev, x.tlev)
-    }
-
-    istuple(x) {
-        return new LVal(Array.isArray(x.val) && isTupleFlagSet(x.val), x.lev, x.tlev)
-    }
-
-    raw_istuple(x) {
+    // SimpleRT
+    raw_istuple(x: TroupeRawValue): boolean {
         return (x._troupeType == TroupeType.TUPLE)
     }
 
-    getField (x:Record,f:string) {
-        return x.getField (f)
-        /*
-        // assertIsRecordWithField (x,f)        
-        let v = x.val.getField (f)
-        let l = lub(x.lev, v.lev)
-        return new LVal (v.val, l, l)
-        */
+    // ComplexRT
+    getField(x: Record, f: string): LVal {
+        return x.getField(f)
     }
 
-    hasField (x:Record,f:string) {
-        return x.hasField (f)
-        // return new LVal ( x.val._troupeType == TroupeType.RECORD && 
-                        //   x.val.hasField(f.val), lub(x.lev, f.lev), levels.BOT)
+    // SimpleRT
+    hasField(x: Record, f: string): boolean {
+        return x.hasField(f)
     }
 
-    isRecord (x:LVal) {
+    // SimpleRT
+    isRecord(x: TroupeRawValue): boolean {
         return (x._troupeType == TroupeType.RECORD)
     }
 
-    withRecord (r:Record, fields) {
-        // assertIsRecord(r)
-        return Record.mkWithRecord(r,fields)
+    // SimpleRT
+    withRecord(r: Record, fields: Array<[string, LVal]>): Record {
+        return Record.mkWithRecord(r, fields)
     }
 
-    cons (a, b) {
-        rawAssertIsList(b) // 2019-03-07: AA; consider forcing the elements of the list to be of the same type (unless nil)
-        return new Cons (a,b)
-        // return new LVal(new Cons(a, b.val), b.lev, levels.BOT)
+    // SimpleRT
+    cons(a: LVal, b: RawList): RawList {
+        return new Cons(a, b)
     }
 
-    length(x) {
-        assertIsListOrTuple(x);
-        return new LVal(x.val.length, x.lev, levels.BOT)
-    }
-
-    raw_length (x) {
+    // SimpleRT
+    raw_listLength(x: RawList): number {
         return x.length
     }
 
-
-    head(x) {
-        rawAssertIsList(x)
-        return x.head;
-        // return new LVal(y.val, lub(y.lev, x.lev), lub(y.tlev, x.lev))
+    // SimpleRT
+    raw_tupleLength(x: RawTuple): number {
+        return x.length
     }
 
-    tail = function (x) {
-        rawAssertIsList(x)
+    // ComplexRT
+    head(x: RawList): LVal {
+        return x.head;
+    }
+
+    // SimpleRT
+    tail(x: RawList): RawList {
         return x.tail
     }
-    
-    getVal = function (x) {
-        return x.val
+
+    // SimpleRT
+    mkLabel(x: string): Level {
+        return levels.mkLevel(x)
     }
 
+    /**
+     * ComplexRT.
+     * Lookup a definition from a library.
+     * @param lib the library
+     * @param decl the declaration to look up
+     * @param obj the object to store the result in, under "libs["lib.decl"]"
+     * @returns the unlabelled value from the definition
+     */
+    loadLib(lib: string, decl: string, obj: { libs: { [x: string]: any } }): any {
+        // load the lib from the linked data structure
+        let r = obj.libs[lib + "." + decl];
+        // rt_debug("loading lib " + decl);
+        return r;
+    }
+
+
+    /*
+     * ==============================================================
+     * The remaining functions are not referred to by generated code.
+     * ==============================================================
+     */
+    
     branch = function (x) {
         this.runtime.$t.setBranchFlag()
         this.runtime.$t.raiseCurrentThreadPC(x.lev);
@@ -304,7 +239,6 @@ export class UserRuntimeZero {
         this.runtime.$t.raiseBlockingThreadLev(x.lev);
     }
 
-
     default_mkVal(x) {
         return this.runtime.$t.mkVal(x)        
     }
@@ -316,7 +250,6 @@ export class UserRuntimeZero {
     mkCopy (x):LVal {
         return this.runtime.$t.mkCopy(x)
     }
-
 
 
     libLoadingPseudoThread = new Thread(null, null, null, __unit, levels.BOT, levels.BOT, null, this, null);
@@ -346,56 +279,17 @@ export class UserRuntimeZero {
     // }
 
 
-    loadLib(lib, decl, obj) {
-        // load the lib from the linked data structure
-        let r = obj.libs[lib + "." + decl];  
-        let rv = this.mkVal(r);
-        // rt_debug("loading lib " + decl);
-        return rv;
-    }
-
     async linkLibs (f) {
         await loadLibsAsync(f, this)
     }
 
-    mkLabel(x) {
-        // debug ("mkLabel", x, x === "secret");
-        return levels.mkLevel (x)
-        // return new LVal(levels.mkLevel(x), this.runtime.$t.pc);
-    }
-
-    raisedTo (x,y) {
-        this.runtime.$t.invalidateSparseBit()        
-        return lub (x,y) // just a wrapper around join ; 2021-05-07; AA
-    }
-    
-    // raisedTo (x, y) {
-    //     assertIsLevel(y)
-    //     return new LCopyVal(x, lub(lub(x.lev, y.val), y.lev), lubs([x.tlev, y.tlev, this.runtime.$t.pc]) )
-    // }
-
-    unaryMinus (x) {
-        assertIsNumber(x);
-        return new LVal(-x.val, x.lev, levels.BOT)
-    }
-
-    errorPos (x, pos) {
+    errorPos (x: { val: string }, pos: string) {
         if (pos != '') {
             this.runtime.$t.threadError(x.val + " at " + pos);
         } else {
             this.runtime.$t.threadError(x.val);
         }    
     }
-
-
-    rawErrorPos (x, pos) {
-        if (pos != '') {
-            this.runtime.$t.threadError(x+ " at " + pos);
-        } else {
-            this.runtime.$t.threadError(x);
-        }    
-    }
-    
 
 }
 

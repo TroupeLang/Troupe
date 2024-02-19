@@ -8,7 +8,7 @@ import { assertIsRecord } from './Asserts.mjs'
 
 export class Record implements TroupeAggregateRawValue {    
     _troupeType = TroupeType.RECORD
-    _dataLevel:  Level = levels.TOP  // 
+    _dataLevel:  Level = levels.TOP  // TODO compute data level?
     __obj : Map<string, LVal>
 
     stringRep (omitLevels?: boolean, taintRef?: any) {
@@ -23,8 +23,8 @@ export class Record implements TroupeAggregateRawValue {
         return s 
     }
 
-    constructor(_theArray) {
-        this.__obj = new Map (_theArray)
+    constructor(fields: Iterable<readonly [string, LVal]>) {
+        this.__obj = new Map (fields)
     }
 
     hasField (fieldName:string):boolean {        
@@ -39,13 +39,13 @@ export class Record implements TroupeAggregateRawValue {
         return this._dataLevel
     }
 
-    static mkRecord(arg) {
-        return new Record (arg)
+    static mkRecord(fields: Iterable<readonly [string, LVal]>): Record {
+        return new Record(fields)
     }  
 
-    static mkWithRecord(r:Record, arg) { 
-        let a = Array.from(r.__obj) 
-        let b = a.concat (arg)
-        return new Record (b)
+    static mkWithRecord(r: Record, fields: ConcatArray<[string, LVal]>): Record {
+        let a = Array.from(r.__obj)
+        let b = a.concat(fields)
+        return new Record(b)
     }
 }

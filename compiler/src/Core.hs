@@ -86,8 +86,11 @@ instance GetPosInfo Lit where
 type Fields = [(FieldName, Term)]
 
 data VarAccess
+    -- | A normal variable
     = RegVar VarName
+    -- | Referring to a definition from a library
     | LibVar LibName VarName
+    -- | A predefined name (e.g. send, receive)
     | BaseName VarName
  deriving (Eq)
 data Term
@@ -101,7 +104,8 @@ data Term
     | Tuple [Term]
     | Record Fields 
     | WithRecord Term Fields
-    | Proj Term FieldName 
+    | ProjField Term FieldName 
+    | ProjIdx Term Word
     | List [Term]
     | ListCons Term Term
     | Bin BinOp Term Term
@@ -190,7 +194,8 @@ lower (D.AssertElseError e1 e2 e3 p) = AssertElseError (lower e1 ) (lower e2) (l
 lower (D.Tuple terms) = Tuple (map lower terms)
 lower (D.Record fields) = Record (map (\(f, t) -> (f, lower t)) fields)
 lower (D.WithRecord  e fields) = WithRecord (lower e) (map (\(f, t) -> (f, lower t)) fields)
-lower (D.Proj t f) = Proj (lower t) f
+lower (D.ProjField t f) = ProjField (lower t) f
+lower (D.ProjIdx t idx) = ProjIdx (lower t) idx
 lower (D.List terms) = List (map lower terms)
 lower (D.ListCons t1 t2) = ListCons (lower t1) (lower t2)
 
@@ -208,6 +213,7 @@ lower (D.Un op e) = Un op (lower e)
 
 -- This is the only function that is exported here
 
+renameProg :: Prog -> Prog
 renameProg (Prog imports (Atoms atms) term) =
   let alist = map (\ a -> (a, a)) atms
       initEnv    = Map.fromList alist
@@ -327,9 +333,12 @@ rename (WithRecord e fields) m = do
                    t' <- rename t m 
                    return (f, t')
   
-rename (Proj t f) m = do 
-  t' <- rename t m 
-  return $ Proj t' f
+rename (ProjField t f) m = do
+  t' <- rename t m
+  return $ ProjField t' f
+rename (ProjIdx t idx) m = do
+  t' <- rename t m
+  return $ ProjIdx t' idx
 rename (List terms) m =
   List <$> mapM (flip rename m) terms
 rename (ListCons t1 t2) m = do
@@ -430,9 +439,11 @@ ppTerm' (Record fs) = PP.braces $ qqFields fs
 ppTerm' (WithRecord e fs) = 
     PP.braces $ PP.hsep [ ppTerm 0 e, text "with", qqFields fs]
 
-ppTerm' (Proj t fn) = 
-  ppTerm projPrec t PP.<> text "." PP.<> PP.text fn  
+ppTerm' (ProjField t fn) =
+  ppTerm projPrec t PP.<> text "." PP.<> PP.text fn
 
+ppTerm' (ProjIdx t idx) =
+  ppTerm projPrec t PP.<> text "." PP.<> PP.text (show idx)
 
 
 ppTerm' (ListCons hd tl) =

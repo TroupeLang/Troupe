@@ -68,12 +68,12 @@ export function rawAssertIsBoolean(x:any) {
 
 export function assertIsFunction(x: any, internal = false) {
     _thread().raiseBlockingThreadLev(x.tlev);
-    assertIsFunctionRaw (x.val)
+    rawAssertIsFunction (x.val, internal)
 }
 
-export function assertIsFunctionRaw (x, internal = false) { 
+export function rawAssertIsFunction(x, internal = false) {
     if (x._troupeType != TroupeType.CLOSURE) {
-        _thread().threadError("value "+ __stringRep(x) + " is not a function", internal)
+        _thread().threadError("value " + __stringRep(x) + " is not a function", internal)
     }
 }
 
@@ -139,12 +139,19 @@ export function rawAssertIsTuple (x)  {
     } 
 }
 
+/**
+ * Assumes `x` is a tuple and asserts it has at least length `n`.
+ */
+export function rawAssertTupleLengthGreaterThan (x, n: number) {
+    if (x.length <= n) {
+        err("Index out of bounds: tuple " + __stringRep(x) + " does not have length more than " + n)
+    }
+}
 
-export function assertIsRecordWithField (x: any, field:string) {
-    _thread().raiseBlockingThreadLev(x.lev);
-    assertIsRecord(x)
-    if (!x.val.hasField(field)) {
-        err (`value ${__stringRep(x)} does not have the field \'${field}\'`)
+
+export function rawAssertRecordHasField (x, field: string) {
+    if (!x.hasField(field)) {
+        err (`record ${__stringRep(x)} does not have field \'${field}\'`)
     }
 }
 
@@ -264,6 +271,7 @@ export function assertPairAreNumbers(x: any, y: any) {
     assertIsNumber(y);
 }
 
+/*
 export function assertPairAreStringsOrNumbers(x: any, y: any) {
     _thread().raiseBlockingThreadLev(x.tlev);
     switch (typeof x.val) {
@@ -272,11 +280,13 @@ export function assertPairAreStringsOrNumbers(x: any, y: any) {
         default: err("values " + __stringRep(x) + " and " + __stringRep(y) + " are of different types")
     }
 }
+*/
 
 export function rawAssertPairsAreStringsOrNumbers (x:any, y:any) {
     switch (typeof x) {
         case 'number': rawAssertIsNumber(y); break 
         case 'string': rawAssertIsString(y); break 
-        default: err("values " + __stringRep(x) + " and " + __stringRep(y) + " are of different types")
+        default: err("value " + __stringRep(x) + " is not a number or a string")
+        // default: err("values " + __stringRep(x) + " and " + __stringRep(y) + " are of different types")
     }
 }

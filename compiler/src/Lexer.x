@@ -88,6 +88,9 @@ tokens:-
 <0>   andalso                        { mkL TokenAndAlso }
 <0>   orelse                         { mkL TokenOrElse }
 <0>   raisedTo                       { mkL TokenRaisedTo }
+<0>   isTuple                        { mkL TokenIsTuple }
+<0>   isList                         { mkL TokenIsList }
+<0>   isRecord                       { mkL TokenIsRecord }
 <0>   pini                           { mkL TokenPini}
 <0>   when                           { mkL TokenWhen }
 <0>   with                           { mkL TokenWith }
@@ -214,6 +217,9 @@ data Token
   | TokenRBracket
   | TokenEOF
   | TokenRaisedTo
+  | TokenIsTuple
+  | TokenIsList
+  | TokenIsRecord
   | TokenFlowsTo
   | TokenLevelOf
   | TokenLabel String

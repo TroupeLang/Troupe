@@ -14,9 +14,9 @@ import           IR ( Identifier(..)
                     , VarAccess(..), HFN (..), Fields (..), Ident
                     , ppId,ppFunCall,ppArgs
                     )
-import qualified IR (textOfBinOp,textOfUnOp,FunDef (..))
-import Raw (RawExpr (..), ComplexExpr (..), RawType(..), RawVar (..), MonComponent(..), 
-            ppComplexExpr, ppRawExpr, Assignable (..), List2OrMore(..), Consts, ppConsts)
+import qualified IR (FunDef (..))
+import Raw (RawExpr (..), RawType(..), RawVar (..), MonComponent(..),
+            ppRawExpr, Assignable (..), Consts, ppConsts, RTAssertion(..), ppRTAssertion)
 
 import qualified Core                      as C
 import qualified RetCPS                    as CPS
@@ -64,14 +64,14 @@ data RawAssignType = AssignConst | AssignLet | AssignMut deriving (Eq, Ord, Show
 data StackInst
   = AssignRaw RawAssignType RawVar RawExpr
   | LabelGroup [StackInst]
-  | AssignLVal VarName ComplexExpr 
+  | AssignLVal VarName RawExpr
   | FetchStack Assignable StackPos
   | StoreStack Assignable StackPos
   | SetState MonComponent RawVar 
-  | AssertType RawVar RawType  
-  | AssertEqTypes (Maybe (List2OrMore RawType)) RawVar RawVar  -- the list includes an optional list of okay types
   | SetBranchFlag 
+  | InvalidateSparseBit
   | MkFunClosures [(VarName, VarAccess)] [(VarName, HFN)]
+  | RTAssertion RTAssertion
    deriving (Eq, Show)
 
 -- Function definition
@@ -124,12 +124,12 @@ ppEsc esc =
 
 ppIR :: StackInst -> PP.Doc
 ppIR SetBranchFlag = text "<setbranchflag>"
+ppIR InvalidateSparseBit = text "<invalidate sparse bit>"
 ppIR (AssignRaw  _ vn st) = ppId vn <+> text "=" <+> ppRawExpr st
 ppIR (AssignLVal vn expr) = 
-  ppId vn <+> text "=" <+> ppComplexExpr expr
-ppIR (AssertType x t) = text "assert" <+> ppId x <+> text "has type" <+> text (show t)
-ppIR (AssertEqTypes Nothing x y) = text "assertEqTypes" <+> ppId x <+> ppId y
-ppIR (AssertEqTypes (Just (List2OrMore a1 a2 as)) x y) = text "assertEqTypes" <+> (PP.hsep (map (text.show) (a1:a2:as))) <+> ppId x <+> ppId y
+  ppId vn <+> text "=" <+> ppRawExpr expr
+ppIR (RTAssertion a) = ppRTAssertion a
+
 ppIR (SetState comp v) = 
   ppId comp <+> text "<-" <+> ppId v
 ppIR (FetchStack x i) = 
@@ -176,37 +176,3 @@ ppTr (Error va _)  = (text "error") <> (ppId va)
 
 
 ppBB (BB insts tr) = vcat $ (map ppIR insts) ++ [ppTr tr]
-
-
-
-textOfBinOp Basics.LatticeJoin  = "rt.join"
-textOfBinOp Basics.LatticeMeet  = "<meet>"
-textOfBinOp Basics.Plus = "+"
-textOfBinOp Basics.Minus= "-"
-textOfBinOp Basics.Mult = "*"
-textOfBinOp Basics.Div= "/"
-textOfBinOp Basics.Mod = "%"
-textOfBinOp Basics.Le= "<="
-textOfBinOp Basics.Lt= "<"
-textOfBinOp Basics.Ge= ">="
-textOfBinOp Basics.Gt= ">"
-textOfBinOp Basics.And= "&&"
-textOfBinOp Basics.Or= "||"
-textOfBinOp Basics.IntDiv= "rt.intdiv"
-textOfBinOp Basics.BinAnd = "&"
-textOfBinOp Basics.BinOr = "|"
-textOfBinOp Basics.BinXor = "^"
-textOfBinOp Basics.BinShiftLeft = "<<"
-textOfBinOp Basics.BinShiftRight = ">>"
-textOfBinOp Basics.BinZeroShiftRight = ">>>"
-
-
-
-
-textOfBinOp Basics.Index = "rt.raw_index"
-textOfBinOp x = IR.textOfBinOp x
-
-
-textOfUnOp Basics.IsTuple = "rt.raw_istuple"
-textOfUnOp Basics.Length = "rt.raw_length"
-textOfUnOp x = IR.textOfUnOp x

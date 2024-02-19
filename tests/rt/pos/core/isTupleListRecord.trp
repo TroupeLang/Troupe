@@ -1,0 +1,9 @@
+let val t = (1,2,3)
+    val l = [1,2,3]
+    val r = {a=1, b=2, c=3}
+in (isTuple t, isList l, isRecord r,
+    isList t, isRecord l, isTuple r,
+    isRecord t, isTuple l, isList r,
+    isTuple 0, isList 0, isRecord 0,
+    isTuple "", isList "", isRecord "")
+end

@@ -1,0 +1,3 @@
+let val r = {a = 5, b = 42, c = 10}
+in r.z
+end

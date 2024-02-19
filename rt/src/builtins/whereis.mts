@@ -9,7 +9,7 @@ import { assertNormalState, assertIsNTuple, assertIsString, assertIsProcessId, a
 import { __unit } from '../UnitVal.mjs';
 import { nodeTrustLevel } from '../TrustManager.mjs';
 export let __theRegister = {}
-import {p2p} from '../p2p/p2p.js'
+import {p2p} from '../p2p/p2p.mjs'
 
 // import runId from '../runId.mjs';
 

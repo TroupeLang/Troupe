@@ -26,5 +26,12 @@ export function BuiltinMath <TBase extends Constructor<UserRuntimeZero>> (Base:T
             assertIsNumber(arg);
             return this.runtime.ret(new LVal(Math.floor(arg.val), arg.lev, arg.tlev));
         })
+
+        sqrt = mkBase((arg) => {
+            assertIsNumber(arg);
+            return this.runtime.ret(new LVal(Math.sqrt(arg.val), arg.lev, arg.tlev));
+        })
+
+        
     }
 }

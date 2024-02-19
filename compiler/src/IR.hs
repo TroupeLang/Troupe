@@ -292,6 +292,7 @@ instance WellFormedIRCheck IRExpr where
                      , "_setFailureRate"
                      , "sleep"
                      , "spawn"
+                     , "sqrt"
                      , "substring"
                      , "stringToInt"
                      , "restore"

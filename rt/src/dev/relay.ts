@@ -10,7 +10,7 @@ const  KadDHT = require ( 'libp2p-kad-dht')
 const  Multiplex = require ( 'libp2p-mplex')
 const SECIO = require( 'libp2p-secio')
 const Libp2p = require('libp2p')
-import fs from 'fs'
+import * as fs from 'node:fs';
 import yargs from 'yargs'
 const PeerId = require("peer-id")
 const PeerInfo = require ("peer-info")

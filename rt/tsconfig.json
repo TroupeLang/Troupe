@@ -2,9 +2,9 @@
     "compilerOptions": {
         "outDir": "./built",
         "allowJs": true,
-        "moduleResolution": "node",
-        "module": "commonjs",
-        "target": "ES2017",
+        "moduleResolution": "node16",
+        "module": "Node16",
+        "target": "ES2022",
         "esModuleInterop": true,
         "incremental": true,
         
@@ -12,5 +12,5 @@
     "include": [
         "src/**/*"
     ],
-    "exclude": ["../../trp-rt/**"]
+    "exclude": ["../../trp-rt/**", "src/dev/*"]
 }

@@ -1,4 +1,4 @@
-MKID=node $(TROUPE)/rt/built/p2p/mkid.js
+MKID=node $(TROUPE)/rt/built/p2p/mkid.mjs
 MKALIASES=node $(TROUPE)/rt/built/p2p/mkaliases.js
 START=$(TROUPE)/network.sh
 

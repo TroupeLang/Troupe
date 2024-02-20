@@ -1,3 +1,5 @@
+{-# LANGUAGE RecordWildCards #-}
+
 import Test.Tasty (defaultMain, TestTree, testGroup)
 import Test.Tasty.Golden (goldenVsStringDiff,  goldenVsString, findByExtension)
 import System.Directory
@@ -10,6 +12,17 @@ import System.Info
 import System.Environment 
 -- import qualified System.IO.Strict
 
+-- When having multiple optimizations / optional compiler stages or
+-- other flags changing the output, probably want to generate all combinations
+-- and run the tests on them.
+newtype TestConfig = TestConfig { tcRawOpt :: Bool }
+
+ppTestConfig TestConfig{..} =
+    if tcRawOpt
+    then "Raw optimized"
+    else "Raw NOT optimized"
+
+
 getOptionalInput :: String -> IO String 
 getOptionalInput testfile = do 
     inputExists <- doesFileExist $ testfile ++ ".input"
@@ -20,52 +33,66 @@ getOptionalInput testfile = do
         return ""        
 
 
+mkRunArgs :: TestConfig -> [String]
+mkRunArgs TestConfig{..} =
+  if tcRawOpt
+  then []
+  else ["--no-rawopt"]
 
-runLocal testname = do 
-    input <- getOptionalInput testname 
-    readProcessWithExitCode "./local.sh" [testname] input
+runLocal :: String -> TestConfig -> IO (ExitCode, String, String)
+runLocal testname tc = do
+    input <- getOptionalInput testname
+    readProcessWithExitCode "./local.sh" (mkRunArgs tc ++ [testname]) input
 
 -- We use this to test the commands with timeouts.
 -- Observe the current value for the timeout is 2 seconds.
 
-runTimeout n testname = do 
-    let timeout = if os == "darwin" then "gtimeout" else "timeout"        
-    readProcessWithExitCode timeout [show n, "./local.sh", testname] ""
+runTimeout :: Int -> String -> TestConfig -> IO (ExitCode, String, String)
+runTimeout n testname tc = do
+    let timeout = if os == "darwin" then "gtimeout" else "timeout"
+    readProcessWithExitCode timeout ([show n, "./local.sh"] ++ mkRunArgs tc ++ [testname]) ""
 
 
-runPositiveTimeout :: Int -> String -> IO LBS.ByteString 
-runPositiveTimeout t testname = do 
-    (code, out, err) <- runTimeout t testname 
+runPositiveTimeout :: Int -> String -> TestConfig -> IO LBS.ByteString
+runPositiveTimeout t testname tc = do
+    (code, out, err) <- runTimeout t testname tc
     case code of 
         ExitFailure _ -> return $ (LBS.fromStrict . Data.ByteString.Char8.pack) (out ++ err)
         ExitSuccess -> fail testname 
         
 
 
-runPositive :: String -> IO LBS.ByteString 
-runPositive testname = do 
-    (code, out, err) <- runLocal testname 
+runPositive :: String -> TestConfig -> IO LBS.ByteString
+runPositive testname tc = do
+    (code, out, err) <- runLocal testname tc
     case code of 
         ExitSuccess -> return $ (LBS.fromStrict . Data.ByteString.Char8.pack) out
         ExitFailure _ -> fail testname 
 
 
-runNegative :: String -> IO LBS.ByteString 
-runNegative testname = do 
-    (code, out, err) <- runLocal testname 
+runNegative :: String -> TestConfig -> IO LBS.ByteString
+runNegative testname tc = do
+    (code, out, err) <- runLocal testname tc
     case code of 
         ExitFailure _ -> return $ (LBS.fromStrict . Data.ByteString.Char8.pack) err
         ExitSuccess -> fail testname 
         
 
 main :: IO () 
-main = do 
+main = do
          troupeDir <- getEnv "TROUPE"
          setCurrentDirectory troupeDir
-         defaultMain =<< goldenTests 
+         -- Create tests
+         tests <- mapM goldenTests
+           [ TestConfig { tcRawOpt = True }
+           , TestConfig { tcRawOpt = False }
+           ]
+         -- Run tests
+         defaultMain $ testGroup "Troupe golden tests" tests
 
 
-goldenTests = do 
+goldenTests :: TestConfig -> IO TestTree
+goldenTests tc = do
     let extensions =  [".trp", ".pico", ".atto", ".picox", ".femto"] 
     negativeTestsForCompiler <- findByExtension extensions "tests/cmp"
     positiveTestsForRuntime  <- findByExtension extensions "tests/rt/pos"
@@ -74,19 +101,19 @@ goldenTests = do
     timeoutTestsForRuntime   <- findByExtension extensions "tests/rt/timeout/blocking"
     divergingTestsForRuntime <- findByExtension extensions "tests/rt/timeout/diverging"
 
-    return $ (testGroup "Troupe golden tests" 
+    return $ (testGroup ("Troupe golden tests (" ++ ppTestConfig tc ++ ")") $ map ($ tc)
                                 [ compilerTests negativeTestsForCompiler
                                 , runtimeTests $ concat [positiveTestsForRuntime, negativeTestsForRuntime, warningTestsForRuntime]
                                 , timeoutTests timeoutTestsForRuntime
                                 , divergingTests divergingTestsForRuntime ] )
 
 
-compilerTests testFiles =
+compilerTests testFiles tc =
     testGroup "Compiler (negative) tests"
         [goldenVsString 
             troupeFile 
             goldenFile 
-            (runNegative troupeFile) 
+            (runNegative troupeFile tc)
         | troupeFile <- testFiles 
         , let goldenFile = replaceExtension troupeFile ".golden"
         ]
@@ -103,39 +130,38 @@ diff_n ref new = ["tests/_util/diff_n.sh", ref, new ]
 
 -- 2019-03-04: AA: we should probably use type classes... 
 
-runtimeTests testFiles =
+runtimeTests testFiles tc =
     testGroup "Runtime tests" 
         [ goldenVsStringDiff  
             troupeFile
             diff 
             goldenFile 
-            (runPositive troupeFile) 
+            (runPositive troupeFile tc)
         | troupeFile <- testFiles 
         , let goldenFile = replaceExtension troupeFile ".golden"
         ] 
 
 
-timeoutTests testFiles = 
+timeoutTests testFiles tc =
     testGroup "Timeout tests" 
         [ goldenVsStringDiff  
             troupeFile            
             diff 
             goldenFile 
-            (runPositiveTimeout 8 troupeFile) 
+            (runPositiveTimeout 8 troupeFile tc)
         | troupeFile <- testFiles 
         , let goldenFile = replaceExtension troupeFile ".golden"
         ] 
 
 
-divergingTests testFiles = 
+divergingTests testFiles tc =
     testGroup "Diverging tests" 
         [ goldenVsStringDiff  
             troupeFile            
             diff_n
             goldenFile 
-            (runPositiveTimeout 8 troupeFile)
+            (runPositiveTimeout 8 troupeFile tc)
         | troupeFile <- testFiles 
         , let goldenFile = replaceExtension troupeFile ".golden"
-        ] 
+        ]
 
-        

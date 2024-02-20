@@ -10,19 +10,19 @@ import qualified CaseElimination as C
 import System.Environment
 import Util.FileUtil
 import qualified ClosureConv as CC
-import qualified IR as CCIR 
+import qualified IR as CCIR
 -- import qualified IROpt
 -- import qualified RetRewrite as Rewrite
 import qualified CPSOpt as CPSOpt
-import qualified IR2JS 
-import qualified IR2Raw 
+import qualified IR2JS
+import qualified IR2Raw
 -- import qualified Stack 
 import qualified Raw2Stack
-import qualified Stack2JS 
+import qualified Stack2JS
 import qualified RawOpt
 -- import System.IO (isEOF)
 import qualified Data.ByteString as BS
-import Data.ByteString.Base64 (decode) 
+import Data.ByteString.Base64 (decode)
 import qualified Data.ByteString.Char8  as BSChar8
 import qualified Data.ByteString.Lazy.Char8 as BSLazyChar8
 import System.IO
@@ -48,16 +48,18 @@ data Flag
   = IRMode
   | JSONIRMode
   | LibMode
+  | NoRawOpt
   | OutputFile String
   | Verbose
   | Help
-  | Debug 
+  | Debug
   deriving (Show, Eq)
 
 options :: [OptDescr Flag]
 options =
   [ Option ['i']      ["ir"]     (NoArg IRMode)              "ir interactive mode"
   , Option ['j']      ["json"]   (NoArg JSONIRMode)          "ir json interactive mode"
+  , Option []         ["no-rawopt"] (NoArg NoRawOpt) "disable Raw optimization"
   , Option ['v']      ["verbose"] (NoArg Verbose)            "verbose output"
   , Option ['d']      ["debug"]  (NoArg Debug)               "debugging information in the .js file"
   , Option ['l']      ["lib"]    (NoArg LibMode)             "compiling a library"
@@ -76,7 +78,8 @@ process flags fname input = do
         if elem LibMode flags then Export
         else Normal
 
-  let verbose = elem Verbose flags
+  let verbose = Verbose `elem` flags
+      noRawOpt = NoRawOpt `elem` flags
 
   case ast of
     Left err -> do
@@ -146,24 +149,29 @@ process flags fname input = do
 
       ----- RAW OPT --------------------------------------
 
-      let rawopt = RawOpt.rawopt raw
-      when verbose $ printSep  "OPTIMIZING RAW OPT"
-      when verbose $ writeFileD "out/out.rawopt" (show rawopt)
+      rawopt <- do
+            if noRawOpt
+            then return raw
+            else do
+              let opt = RawOpt.rawopt raw
+              when verbose $ printSep  "OPTIMIZING RAW OPT"
+              when verbose $ writeFileD "out/out.rawopt" (show opt)
+              return opt
 
       ----- STACK ----------------------------------------
-      let stack = Raw2Stack.rawProg2Stack rawopt 
+      let stack = Raw2Stack.rawProg2Stack rawopt
       when verbose $ printSep "GENARTING STACK"
       when verbose $ writeFileD "out/out.stack" (show stack)
-      let stackjs = Stack2JS.irProg2JSString compileMode debugOut stack 
+      let stackjs = Stack2JS.irProg2JSString compileMode debugOut stack
       let jsFile = outFile flags (fromJust fname)
-      writeFile jsFile stackjs 
+      writeFile jsFile stackjs
 
-    
+
       case exports of
         Nothing -> return ()
         Just es -> writeExports jsFile es
       when verbose printHr
-      
+
       exitSuccess
 
 

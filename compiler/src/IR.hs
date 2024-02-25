@@ -8,6 +8,7 @@
 
 module IR where
 
+import           Consts
 import qualified Basics
 import           RetCPS                    (VarName (..))
 
@@ -53,8 +54,7 @@ data IRExpr
   | WithRecord VarAccess Fields 
   | ProjField VarAccess Basics.FieldName
   -- | Projection of a tuple field at the given index. The maximum allowed index
-  -- is 2^53-1 (9007199254740991), the maximum representable number with 52 bits (unsigned),
-  -- as the runtime uses the IEEE 754 double-precision number format with a mantissa of 52 bits.
+  -- is 2^31-1 (2147483647).
   | ProjIdx VarAccess Word
   | List [VarAccess]
   -- | List cons of a value to a list.
@@ -331,8 +331,8 @@ instance WellFormedIRCheck IRExpr where
         then return ()
         else throwError $ "bad base function: " ++ fname
   wfir (ProjIdx _ idx) =
-    when (idx > 9007199254740991) $ -- 2^53-1
-      throwError $ "ProjIdx: illegal index: " ++ show idx ++ " (max index: 9007199254740991)"
+    when (idx > (fromIntegral Consts.llvm_maxIndex :: Word)) $
+      throwError $ "ProjIdx: illegal index: " ++ show idx ++ " (max index: " ++ show Consts.llvm_maxIndex ++ ")"
 
   wfir _ = return ()
 

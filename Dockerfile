@@ -1,4 +1,4 @@
-FROM fpco/stack-build:lts-20.14
+FROM fpco/stack-build:lts-21.25
 ENV TROUPE /Troupe
 ENV STACK_OPTS --system-ghc
 WORKDIR $TROUPE

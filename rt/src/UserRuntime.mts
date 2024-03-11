@@ -28,6 +28,7 @@ import { BuiltinLocalArrays } from './builtins/localarrays.mjs'
 import { RuntimeAssert } from './builtins/runtimeassert.mjs'
 import { BuiltinService } from './builtins/service.mjs'
 import { BuiltinString } from './builtins/string.mjs'
+import { BuiltinRecordReflection } from './builtins/recordReflection.mjs'
 
 let BuiltSpawnSendReceive = x => BuiltinSpawn(BuiltinSend(BuiltinReceive(x)))
 
@@ -58,4 +59,6 @@ export const UserRuntime =
     BuiltinPini(
     BuiltinDebugUtils(
     BuiltinMath(
-    BuiltinStdIo(UserRuntimeZero)))))))))))))))))))))))))))
+    BuiltinRecordReflection(
+    BuiltinStdIo(UserRuntimeZero)
+    )))))))))))))))))))))))))))

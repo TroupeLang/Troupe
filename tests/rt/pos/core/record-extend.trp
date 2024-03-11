@@ -1,0 +1,8 @@
+let val r = {} 
+    val r2 = {r with b = 2}
+    val field = "a"
+    val value = 10 
+    val r3 = recordExtend (r2, field, value)
+    val field2 = "c" raisedTo `{alice}`
+ in recordExtend (r3, field2, 55)
+end

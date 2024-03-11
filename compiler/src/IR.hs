@@ -305,6 +305,7 @@ instance WellFormedIRCheck IRExpr where
                      , "raiseTrust"
                      , "random"
                      , "receive"
+                     , "recordExtend"
                      , "register"
                      , "_resetScheduler"
                      , "rcv"

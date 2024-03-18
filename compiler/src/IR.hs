@@ -281,6 +281,7 @@ instance WellFormedIRCheck IRExpr where
                      , "fprintlnWithLabels"
                      , "fwrite"                     
                      , "getTime"
+                     , "getType"
                      , "getNanoTime"
                      , "getStdout"
                      , "guard"

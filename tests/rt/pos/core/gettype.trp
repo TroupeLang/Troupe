@@ -1,0 +1,9 @@
+(* we want a simple function 
+   getType x that returns 
+   the information about the type
+*)
+import lists 
+let val ls = [ "hello", fn x => x + 1, 2, () , {x = 2}]
+in map getType ls 
+end 
+

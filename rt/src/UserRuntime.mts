@@ -29,6 +29,7 @@ import { RuntimeAssert } from './builtins/runtimeassert.mjs'
 import { BuiltinService } from './builtins/service.mjs'
 import { BuiltinString } from './builtins/string.mjs'
 import { BuiltinRecordReflection } from './builtins/recordReflection.mjs'
+import { BuiltinTypeInformation } from './builtins/types.mjs'
 
 let BuiltSpawnSendReceive = x => BuiltinSpawn(BuiltinSend(BuiltinReceive(x)))
 
@@ -60,5 +61,6 @@ export const UserRuntime =
     BuiltinDebugUtils(
     BuiltinMath(
     BuiltinRecordReflection(
-    BuiltinStdIo(UserRuntimeZero)
-    )))))))))))))))))))))))))))
+    BuiltinTypeInformation(
+    BuiltinStdIo(UserRuntimeZero)    
+    ))))))))))))))))))))))))))))

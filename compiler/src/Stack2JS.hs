@@ -92,9 +92,9 @@ addLibs xs = vcat (map addOneLib xs)
 
 data TheState = TheState { freshCounter :: Integer
                          , frameSize    :: Int
-                         , boundSlot    :: Int
-                         , consts       :: Raw.Consts 
-                         , stHFN        :: IR.HFN } 
+                         , sparseSlot    :: Int
+                         , consts       :: Raw.Consts
+                         , stHFN        :: IR.HFN }
 
 type RetKontText = PP.Doc
 
@@ -103,7 +103,7 @@ type W = RWS Bool  ([LibAccess], [Basics.AtomName], [RetKontText]) TheState
 
 initState = TheState { freshCounter = 0
                      , frameSize = error "frameSize should not be accessed yet"
-                     , boundSlot = error "boundSlot should not be accessed yet"
+                     , sparseSlot = error "sparseSlot should not be accessed yet"
                      , consts = error "consts should not be accessed yet"
                      , stHFN = error "stHFN should not be accessed yet"
                      }
@@ -207,7 +207,7 @@ constsToJS consts =
 instance ToJS FunDef where 
     toJS fdef@(FunDef hfn stacksize consts bb irfdef) = do
        {--
-          |  |  | ... | <bound_slot> | 
+          |  |  | ... | <sparse slot> | 
           ^           ^
           |           |
           SP          stacksize 
@@ -215,14 +215,13 @@ instance ToJS FunDef where
        --}       
        let _frameSize = stacksize + 1 
 
-       modify (\s -> s { frameSize = _frameSize, boundSlot = stacksize, stHFN = hfn, consts = consts } ) -- + 1 for the _data_bound_by_pc flag; 2021-03-17; AA
-       let lits = constsToJS consts 
+       modify (\s -> s { frameSize = _frameSize, sparseSlot = stacksize, stHFN = hfn, consts = consts } ) -- + 1 for the sparse flag; 2021-03-17; AA
+       let lits = constsToJS consts
        jj <- toJS bb
        debug <- ask
-       let (irdeps, libdeps, atomdeps ) = IR.ppDeps irfdef           
-           b_slot_index = text "_SP + " PP.<> (PP.int stacksize)
-           data_bound_by_pc_slot = text "_STACK[ " PP.<> b_slot_index PP.<> "]"
-            
+       let (irdeps, libdeps, atomdeps ) = IR.ppDeps irfdef
+       sparseSlotIdxPP <- ppSparseSlotIdx
+
        return $
           vcat [text "this." PP.<>  ppId hfn <+> text "=" <+> ppArgs ["$env"] <+> text "=> {"
                , if debug then nest 2 $ text "rt.debug" <+> (PP.parens . PP.quotes.  ppId) hfn
@@ -232,8 +231,11 @@ instance ToJS FunDef where
                   "let _STACK = _T.callStack",
                   "let _SP = _T._sp",
                   "let _SP_OLD",
-                  data_bound_by_pc_slot <+> " = _T.checkDataBoundsEntry($env.__dataLevel)",
-                  "_T.boundSlot = " <+> b_slot_index,
+                  -- Update sparse bit at function entry:
+                  -- Check whether environment's data level, and the label and data level of R0 are bound by PC.
+                  -- Requires sparseSlot to be updated first.
+                  "_T.sparseSlot = " <+> sparseSlotIdxPP,
+                  "_T.updateSparseBitOnEntry($env.__dataLevel)",
                   lits,
                   jj]
                , text "}"
@@ -285,7 +287,7 @@ binOpToJS = \case
     Neq -> "rt.neq"
     Concat -> "+"
     HasField -> "rt.hasField"
-    LatticeJoin -> "rt.join"
+    LatticeJoin -> "rt.raw_join"
     -- No RT operations (should be moved to a different datatype)
     RaisedTo -> error "Not a runtime operation"
     -- Not yet implemented in IR2Raw
@@ -350,25 +352,22 @@ ir2js (MkFunClosures envBindings funBindings) = do
        where ppEnvIds env ls =
                 vcat (
                       (map (\(a,b) -> semi $ (ppId env) PP.<> text "." PP.<> (ppId a) <+> text "=" <+> ppId b ) ls)
-                      ++ 
-                      [ppId env PP.<> text ".__dataLevel = " <+> (jsFunCall "rt.join" (map (\(_, b) -> ppId b <> text ".dataLevel") ls )) ]
+                      ++
+                      [ppId env PP.<> text ".__dataLevel = " <+> jsFunCall (text $ binOpToJS Basics.LatticeJoin) (map (\(_, b) -> ppId b <> text ".dataLevel") ls ) ]
                 )
              hsepc ls = semi $ PP.hsep (PP.punctuate (text ",") ls)
 
 
-ir2js (SetState c x) = 
-  let rhs = case c of MonBlock -> ppFunCall "rt.wrap_block_rhs" [ppId x]
-                      _     -> ppId x 
-
-  in return $ semi $ monStateToJs c <+> "=" <+> rhs 
+ir2js (SetState c x) = return $ semi $ monStateToJs c <+> "=" <+> ppId x
 
 ir2js (RTAssertion a) = return $ ppRTAssertionCode jsFunCall a
 
-ir2js (LabelGroup ii) = do 
-  ii' <- mapM ppLevelOp ii 
-  b_slot <- data_bounded_by_pc_slot
+ir2js (LabelGroup ii) = do
+  ii' <- mapM ppLevelOp ii
+  sparseSlot <- ppSparseSlot
   return $ vcat $
-           [ "if (!" <+> b_slot <+> ") {"
+           [ -- "if (! _T.getSparseBit()) {" -- Alternative, but involves extra call to RT
+             "if (!" <+> sparseSlot <+> ") {"
            , nest 2 (vcat ii')
            , text "}"
            ]
@@ -391,30 +390,33 @@ ir2js InvalidateSparseBit = return $
 {-- TERMINATORS --}
 
 
-tr2js (Call bb bb2) = do 
-    _frameSize <- frameSize <$> get 
-    _boundSlot <- boundSlot <$> get 
-    _consts    <- consts <$> get 
-    modify (\s -> s {frameSize = 0, boundSlot = _boundSlot - _frameSize - 5})
+tr2js (Call bb bb2) = do
+    _frameSize <- gets frameSize
+    _sparseSlot <- gets sparseSlot
+    _consts <- gets consts
+    modify (\s -> s {frameSize = 0, sparseSlot = _sparseSlot - _frameSize - 5})
         -- AA; 2021-04-24; Because 
     js <- toJS bb
-    modify (\s -> s { frameSize = _frameSize, boundSlot = _boundSlot }) 
+    modify (\s -> s { frameSize = _frameSize, sparseSlot = _sparseSlot })
         -- TODO: AA; 2021-04-24; we should really be using a reader monad here for frame size
         -- #codedebt
     js2 <- toJS bb2
-    kname <- freshKontName 
-    b_slot <- data_bounded_by_pc_slot
-    b_slot_index <- b_slot_absolute_index
-    let jsKont = 
-           vcat ["this." PP.<> ppId kname <+> text "= () => {",                 
-                  nest 2 $ 
-                        vcat [                          
+    kname <- freshKontName
+    sparseSlotIdxPP <- ppSparseSlotIdx
+    let jsKont =
+           vcat ["this." PP.<> ppId kname <+> text "= () => {",
+                  nest 2 $
+                        vcat [
                           "let _T = rt.runtime.$t",
                           "let _STACK = _T.callStack",
                           "let _SP = _T._sp",
+                          -- TODO Do we need this? It seems to be only used zero or one time in the generated places.
+                          -- So we could instead just use the let where it is actually set.
                           "let _SP_OLD",
-                          b_slot <+> "= _T.checkDataBounds(" <+> b_slot <+> ")" , 
-                          "_T.boundSlot =" <+> b_slot_index ,
+                          -- Check data bound at return point (could have received labelled information or raised).
+                          -- Requires sparseSlot to be updated first.
+                          "_T.sparseSlot =" <+> sparseSlotIdxPP,
+                          "_T.updateSparseBitOnReturn()",
                           constsToJS _consts , -- 2021-05-18; TODO: optimize by including only the _used_ constants
                           js2
                         ],
@@ -479,15 +481,16 @@ monStateToJs c =
         R0_TLev -> text "r0_tlev"
 
 
-data_bounded_by_pc_slot  :: W PP.Doc 
-data_bounded_by_pc_slot = do    
-   _b <- boundSlot <$> get 
-   return $ text "_STACK[ _SP + "  PP.<> (text (show (_b)))  PP.<> text "]"
+ppSparseSlotIdx :: W PP.Doc
+ppSparseSlotIdx = do
+  s <- gets sparseSlot
+  return $ text "_SP + " PP.<+> PP.int s
 
-b_slot_absolute_index :: W PP.Doc 
-b_slot_absolute_index = do 
-  _b <- boundSlot<$> get  
-  return $ text "_SP +" PP.<+> (PP.int _b)
+ppSparseSlot :: W PP.Doc 
+ppSparseSlot = do    
+   idx <- ppSparseSlotIdx
+   return $ text "_STACK[ "  PP.<> idx PP.<> text "]"
+
 -----------------------------------------------------------
 
 
@@ -563,16 +566,16 @@ jsFunCall a b = semi $ ppFunCall a b
 
 
 freshEnvVar :: W VarName
-freshEnvVar = do 
-    k <- freshCounter <$>  get 
-    modify (\s -> s { freshCounter = k + 1  } )  
+freshEnvVar = do
+    k <- gets freshCounter
+    modify (\s -> s { freshCounter = k + 1  } )
     return $ VN  $ "$$$env" ++ (show k)
 
- 
+
 freshKontName :: W VarName
-freshKontName = do 
-    j <- freshCounter <$> get 
-    HFN s <- stHFN <$> get 
+freshKontName = do
+    j <- gets freshCounter
+    HFN s <- gets stHFN
     modify (\s -> s { freshCounter = j + 1})
     return $ VN $  "$$$" ++ s ++ "$$$kont" ++ (show j)
 

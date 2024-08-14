@@ -212,9 +212,7 @@ export class Thread {
     next :  () => any;
     callStack : any []
     _sp : number;
-    boundSlot : number;
-    
-    _isDataBoundByPC: boolean = false;
+    sparseSlot : number; // slot on the stack holding the sparse bit (whether data is bounded by PC)
     
     processDebuggingName: string;
 
@@ -250,7 +248,7 @@ export class Thread {
         ---> stack growth direction --->
 
         |---------+-------------------+--------------+-----------------------------+---------------+-------------------------+--------------------|
-        | sp_prev | pc at return site | ret callback | mclear at the time of entry | branching bit | [escaping locals]       | bound_slot         |
+        | sp_prev | pc at return site | ret callback | mclear at the time of entry | branching bit | [escaping locals]       | sparse slot        |
         |---------+-------------------+--------------+-----------------------------+---------------+-------------------------+--------------------|
         | sp - 5  | sp - 4            | sp - 3       | sp - 2                      | sp - 1        | sp ... (sp + framesize) | sp + framesize + 1 |
 
@@ -329,7 +327,7 @@ export class Thread {
 
     showStack ()  {
         console.log ("======== SHOW STACK ========= ")
-        console.log (`sp = ${this._sp} boundslot = ${this.boundSlot}`)
+        console.log (`sp = ${this._sp} sparseSlot = ${this.sparseSlot}`)
         let j = this._sp - 1 
         let stack = this.callStack
         while ( j > 0) {
@@ -365,46 +363,51 @@ export class Thread {
         return f;
     }
 
-
-    invalidateSparseBit () {
-        this.callStack[this.boundSlot] = false;
+    getSparseBit() {
+        return this.callStack[this.sparseSlot]
     }
 
-    // Check whether the label of R0 (argument), the data level of R0 and the given one are bound by PC.
-    checkDataBoundsEntry (x: Level) {
-        const _pc = this.pc 
-        let y = 
-             flowsTo(this.r0_lev, _pc) 
-              && 
-                flowsTo (x, _pc)
-                    && (this.r0_val._troupeType == undefined 
-                                ? true
-                                : flowsTo (this.r0_val.dataLevel, _pc)
-                        )
-             
-                                    
-        // this._isDataBoundByPC = y;    
-        return y;
+    invalidateSparseBit() {
+        this.callStack[this.sparseSlot] = false;
     }
 
-    // Check whether the label of R0 (return value) and the data level of R0 are bound by PC.
-    // Return false if x is false.
-    // TODO Better check x directly and do not call this function if false (now that _isDataBoundByPC is not updated).
-    checkDataBounds (x: boolean) {
-        const _pc = this.pc 
-        let y = 
-             x? flowsTo(this.r0_lev, _pc) 
-                    && (this.r0_val._troupeType == undefined 
-                                ? true
-                                : flowsTo (this.r0_val.dataLevel, _pc)
-                        )
-             : false 
-                                    
-        // this._isDataBoundByPC = y;    
-        return y;
+    private setSparseBit(b: boolean) {
+        this.callStack[this.sparseSlot] = b;
     }
 
-    
+    /**
+     * Check whether the label of R0 (argument), the data level of R0 and the given label are bound by PC
+     * and update sparse bit accordingly.
+     */
+    updateSparseBitOnEntry(x: Level) {
+        const _pc = this.pc
+        // Only non-basic types (_troupeType is defined) have a data level. For those, it
+        // is sufficient to check r0_val.dataLevel ⊑ _pc, as r0_lev ⊑ r0_val.dataLev. For
+        // base types, we instead have to check r0_lev ⊑ _pc.
+        if (this.r0_val._troupeType != undefined) {
+            this.setSparseBit(flowsTo(x, _pc) && flowsTo(this.r0_val.dataLevel, _pc))
+        } else {
+            this.setSparseBit(flowsTo(x, _pc) && flowsTo(this.r0_lev, _pc))
+        }
+    }
+
+    /**
+     * If the sparse bit is set, check whether it is still valid for the returned value (and reset it if not):
+     * Check whether the label of R0 (return value) and the data level of R0 are bound by PC.
+     */
+    updateSparseBitOnReturn() {
+        const _pc = this.pc
+        if (this.getSparseBit()) {
+            // Only non-basic types (_troupeType is defined) have a data level. For those, it
+            // is sufficient to check r0_val.dataLevel ⊑ _pc, as r0_lev ⊑ r0_val.dataLev. For
+            // base types, we instead have to check r0_lev ⊑ _pc.
+            if (this.r0_val._troupeType != undefined) {
+                this.setSparseBit(flowsTo(this.r0_val.dataLevel, _pc))
+            } else {
+                this.setSparseBit(flowsTo(this.r0_lev, _pc))
+            }
+        }
+    }
 
 
     runNext (theFun, args, nm)  {
@@ -619,8 +622,7 @@ export class Thread {
 
 
     blockdeclto (auth, bl_to = this.pc) {        
-        let is_bounded_by_pc = flowsTo (this.pc, bl_to);
-        if (!is_bounded_by_pc) {
+        if (! flowsTo (this.pc, bl_to)) {
             this.threadError ("The provided target blocking level is lower than the current pc\n" + 
                               ` | the current pc: ${this.pc.stringRep()}\n` +
                               ` | target blocking level: ${bl_to.stringRep()}`)

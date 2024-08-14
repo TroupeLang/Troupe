@@ -92,20 +92,9 @@ export class UserRuntimeZero {
         this.runtime.ret (x)
     }
 
-    join (...xs) {
-        if (this.runtime.$t._isDataBoundByPC) {
-            return this.runtime.$t.pc 
-        } 
+    // SimpleRT
+    raw_join(...xs) : Level {
         return lub.apply (null, xs)
-    }
-
-    wrap_block_rhs (x) {
-        if (this.runtime.$t._isDataBoundByPC) {
-            return this.runtime.$t.bl 
-        } else {
-            return x;
-        }
-        
     }
 
     // SpecialRT

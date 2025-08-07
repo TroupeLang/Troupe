@@ -13,7 +13,7 @@ visitTerm :: [AtomName] -> Term -> Term
 visitTerm atms (Lit lit) = Lit lit
 visitTerm atms (Var nm) =
   if (elem nm atms)
-  then Lit (LAtom nm)
+  then Record [("tag", Just (Lit (LString nm)))] -- Convert atom into a tagged record
   else Var nm
 visitTerm atms (Abs lam) =
   Abs (visitLambda atms lam)
@@ -66,7 +66,7 @@ visitFields atms fs  =  map visitField fs
 visitPattern :: [AtomName] -> DeclPattern -> DeclPattern
 visitPattern atms pat@(VarPattern nm) =
   if (elem nm atms)
-  then ValPattern (LAtom nm)
+  then RecordPattern [("tag", Just (ValPattern (LString nm)))] ExactMatch -- Convert atom match into a record match
   else pat
 visitPattern _ pat@(ValPattern _) = pat
 visitPattern atms (AtPattern p l) = AtPattern (visitPattern atms p) l
@@ -81,3 +81,4 @@ visitPattern atms (RecordPattern fields mode) = RecordPattern (map visitField fi
 visitLambda :: [AtomName] -> Lambda -> Lambda
 visitLambda atms (Lambda pats term) =
   (Lambda (map (visitPattern atms) pats) (visitTerm atms term))
+

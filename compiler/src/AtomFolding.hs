@@ -2,7 +2,6 @@ module AtomFolding ( visitProg )
 where
 import Basics
 import Direct
-import Data.Maybe
 import Control.Monad
 
 visitProg :: Prog -> Prog
@@ -13,7 +12,7 @@ visitTerm :: [AtomName] -> Term -> Term
 visitTerm atms (Lit lit) = Lit lit
 visitTerm atms (Var nm) =
   if (elem nm atms)
-  then Record [("tag", Just (Lit (LString nm)))] -- Convert atom into a tagged record
+  then Record [("tag", Just (Lit (LString nm)))] True -- Convert atom into a tagged record
   else Var nm
 visitTerm atms (Abs lam) =
   Abs (visitLambda atms lam)
@@ -38,7 +37,7 @@ visitTerm atms (If t1 t2 t3) =
   If (visitTerm atms t1) (visitTerm atms t2) (visitTerm atms t3)
 visitTerm atms (Tuple terms) =
   Tuple (map (visitTerm atms) terms)
-visitTerm atms (Record fields) =  Record (visitFields atms fields)    
+visitTerm atms (Record fields tag) =  Record (visitFields atms fields) tag 
 visitTerm atms (WithRecord e fields) = 
     WithRecord (visitTerm atms e) (visitFields atms fields)
 visitTerm atms (ProjField t f) =

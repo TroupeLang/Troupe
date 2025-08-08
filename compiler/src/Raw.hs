@@ -104,7 +104,7 @@ data RawExpr
   | ProjectLVal VarAccess LValField
   | ProjectState MonComponent
   | Tuple [VarAccess]
-  | Record Fields
+  | Record Fields Basics.ADTTag
   | WithRecord RawVar Fields 
   | ProjField RawVar Basics.FieldName
   | ProjIdx RawVar Word
@@ -290,7 +290,7 @@ ppRawExpr (Const lit) = ppLit lit
 --                       then text v 
 --                       else text v <> text "$base"
 ppRawExpr (Lib (Basics.LibName l) v) = text l <> text "." <> text v
-ppRawExpr (Record fields) = PP.braces $ qqFields fields
+ppRawExpr (Record fields _) = PP.braces $ qqFields fields
 ppRawExpr (WithRecord x fields) = PP.braces $ PP.hsep[ ppId x, text "with", qqFields fields]
 ppRawExpr (ProjField x f) =
   PP.text "ProjField" PP.<+> (ppId x) PP.<+> PP.text f

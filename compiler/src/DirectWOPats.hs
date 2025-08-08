@@ -16,6 +16,7 @@ import Text.PrettyPrint.HughesPJ (
 import ShowIndent
 import DCLabels
 import TroupePositionInfo
+import Data.List (find)
 
 data Decl
     = ValDecl VarName Term
@@ -51,7 +52,7 @@ data Term
     | If Term Term Term
     | AssertElseError Term Term Term PosInf
     | Tuple [Term]
-    | Record Fields 
+    | Record Fields ADTTag
     | WithRecord Term Fields
     | ProjField Term FieldName 
     | ProjIdx Term Word
@@ -117,8 +118,13 @@ ppTerm'  (Tuple ts) =
   PP.hcat $
   PP.punctuate (text ",") (map (ppTerm 0) ts)
 
-ppTerm' (Record fs) = 
+ppTerm' (Record fs False) = 
     PP.braces $  qqFields fs
+ppTerm' (Record fs True) = -- We should not be able to git the "MissingADT" cases - 2025-08-08: ASL
+  case find (\x -> fst x == "tag") fs of
+    Just (_, Lit (LString nm)) -> text nm
+    Just _ -> text "MissingADT"
+    Nothing -> text "MissingADT"
 
 ppTerm' (WithRecord e fs) =
     PP.braces $ PP.hsep [ ppTerm 0 e, text "with", qqFields fs ]

@@ -78,7 +78,7 @@ instance Substitutable SimpleTerm where
       Bin op v1 v2 -> Bin op (fwd v1) (fwd v2)
       Un op v -> Un op (fwd v)
       Tuple vs -> Tuple (map fwd vs)
-      Record fields -> Record $ fwdFields fields
+      Record fields tag -> Record (fwdFields fields) tag
       WithRecord x fields -> WithRecord (fwd x) $ fwdFields fields
       ProjField x f -> ProjField (fwd x) f
       ProjIdx x idx -> ProjIdx (fwd x) idx
@@ -146,7 +146,7 @@ instance CensusCollectible SimpleTerm where
       Un _ v -> updateCensus v 
       ValSimpleTerm sv -> updateCensus sv 
       Tuple vs -> updateCensus vs 
-      Record fs -> let (_,vs) = unzip fs in updateCensus vs 
+      Record fs _ -> let (_,vs) = unzip fs in updateCensus vs 
       WithRecord v fs -> updateCensus v >> (let (_,vs) = unzip fs in updateCensus vs )
       ProjField v _ -> updateCensus v
       ProjIdx v _ -> updateCensus v
@@ -256,14 +256,14 @@ censusInfo x = do
 fields x = do 
     w <- look x 
     case w of 
-      St (Record xs) -> return xs 
+      St (Record xs _) -> return xs 
       St (WithRecord y ys) ->  do
         xs <- fields y 
         return $ xs ++ ys 
       _ -> return []
 
 
-isRecordTerm (St (Record _)) = True 
+isRecordTerm (St (Record _ _)) = True 
 isRecordTerm (St (WithRecord _ _ )) = True 
 isRecordTerm _ = False
 
@@ -327,14 +327,14 @@ simplifySimpleTerm t =
     -- TODO should write out all cases
     case (op,v) of 
         (Basics.IsTuple, St (Tuple _))          -> _ret __trueLit 
-        (Basics.IsTuple, St (Record _))         -> _ret __falseLit
+        (Basics.IsTuple, St (Record _ _))       -> _ret __falseLit
         (Basics.IsTuple, St (WithRecord _ _))   -> _ret __falseLit
         (Basics.IsTuple, St (List _))           -> _ret __falseLit
         (Basics.IsTuple, St (ListCons _ _))     -> _ret __falseLit
         (Basics.IsTuple, St (ValSimpleTerm _))  -> _ret __falseLit
 
 
-        (Basics.IsRecord, St (Record _))        -> _ret __trueLit
+        (Basics.IsRecord, St (Record _ _))      -> _ret __trueLit
         (Basics.IsRecord, St (WithRecord _ _))  -> _ret __trueLit 
         (Basics.IsRecord, St (Tuple _))         -> _ret __falseLit
         (Basics.IsRecord, St (List _))          -> _ret __falseLit
@@ -344,7 +344,7 @@ simplifySimpleTerm t =
 
         (Basics.IsList, St (List _))          -> _ret __trueLit
         (Basics.IsList, St (ListCons _ _))    -> _ret __trueLit
-        (Basics.IsList, St (Record _))        -> _ret __falseLit
+        (Basics.IsList, St (Record _ _))      -> _ret __falseLit
         (Basics.IsList, St (WithRecord _ _))  -> _ret __falseLit 
         (Basics.IsList, St (Tuple _))         -> _ret __falseLit
         (Basics.IsList, St (ValSimpleTerm _)) -> _ret __falseLit
@@ -410,7 +410,7 @@ failFree st = case st of
   Un _ _ -> False  -- Unary operations can fail (e.g., head on empty list, arithmetic on non-numbers)
   ValSimpleTerm _ -> True 
   Tuple _ -> True 
-  Record _ -> True 
+  Record _ _ -> True 
   WithRecord _ _ -> True 
   ProjField _ _ -> False  -- Field projection can fail if field doesn't exist
   ProjIdx _ _ -> False    -- Index projection can fail if index out of bounds

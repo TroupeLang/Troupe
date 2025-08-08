@@ -34,6 +34,7 @@ import           ShowIndent
 
 import           TroupePositionInfo
 import           DCLabels
+import Data.List (find)
 
 --------------------------------------------------
 -- AST is the same as Direct, but lambda are unary (or nullary)
@@ -108,7 +109,7 @@ data Term
     | If Term Term Term
     | AssertElseError Term Term Term PosInf
     | Tuple [Term]
-    | Record Fields 
+    | Record Fields ADTTag
     | WithRecord Term Fields
     | ProjField Term FieldName 
     | ProjIdx Term Word
@@ -199,7 +200,7 @@ lower (D.Let decls e) =
 lower (D.If e1 e2 e3) = If (lower e1) (lower e2) (lower e3)
 lower (D.AssertElseError e1 e2 e3 p) = AssertElseError (lower e1 ) (lower e2) (lower e3) p
 lower (D.Tuple terms) = Tuple (map lower terms)
-lower (D.Record fields) = Record (map (\(f, t) -> (f, lower t)) fields)
+lower (D.Record fields tag) = Record (map (\(f, t) -> (f, lower t)) fields) tag
 lower (D.WithRecord  e fields) = WithRecord (lower e) (map (\(f, t) -> (f, lower t)) fields)
 lower (D.ProjField t f) = ProjField (lower t) f
 lower (D.ProjIdx t idx) = ProjIdx (lower t) idx
@@ -333,8 +334,8 @@ rename (AssertElseError t1 t2 t3 p) m = do
 rename (Tuple terms) m =
   Tuple <$> mapM (flip rename m) terms
 
-rename (Record fields) m = 
-  Record <$> mapM renameField fields 
+rename (Record fields tag) m = 
+  (\x -> Record x tag) <$> mapM renameField fields 
      where renameField (f, t) = do 
                    t' <- rename t m 
                    return (f, t')
@@ -448,7 +449,12 @@ ppTerm'  (List ts) =
   PP.hcat $
   PP.punctuate (text ",") (map (ppTerm 0) ts)
 
-ppTerm' (Record fs) = PP.braces $ qqFields fs
+ppTerm' (Record fs False) = PP.braces $ qqFields fs
+ppTerm' (Record fs True) = -- We should not be able to git the "MissingADT" cases - 2025-08-08: ASL
+  case find (\x -> fst x == "tag") fs of
+    Just (_, Lit (LString nm)) -> text nm
+    Just _ -> text "MissingADT"
+    Nothing -> text "MissingADT"
 
 ppTerm' (WithRecord e fs) = 
     PP.braces $ PP.hsep [ ppTerm 0 e, text "with", qqFields fs]

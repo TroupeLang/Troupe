@@ -428,9 +428,9 @@ expr2rawComp = \case
       , cValLbl = PC
       , cTyLbl = PC
       }
-  IR.Record fs ->
+  IR.Record fs tag ->
     return SimpleRawComp
-      { cVal = RExpr $ Record fs
+      { cVal = RExpr $ Record fs tag
       , cValLbl = PC
       , cTyLbl = PC
       }

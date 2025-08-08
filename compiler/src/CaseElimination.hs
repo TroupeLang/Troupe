@@ -260,9 +260,9 @@ transTerm (S.If t1 t2 t3) = do
 transTerm (S.Tuple tms) = do
   tms' <- mapM transTerm tms
   return (T.Tuple tms')
-transTerm (S.Record fields) = do
+transTerm (S.Record fields tag) = do
   fields' <- transFields fields
-  return (T.Record fields')
+  return (T.Record fields' tag)
 transTerm (S.WithRecord e fields) = do
   e' <- transTerm e
   fields' <- transFields fields

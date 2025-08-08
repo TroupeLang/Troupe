@@ -591,7 +591,7 @@ instance ToJS RawExpr where
       Un op v -> return $ text (unaryOpToJS op) <> PP.parens (ppId v)
       Tuple vars -> return $
         text "rt.mkTuple" <> PP.parens (PP.brackets $ PP.hsep $ PP.punctuate (text ",") (map ppVarName vars))
-      Record fields -> do
+      Record fields _ -> do
         jsFields <- fieldsToJS fields 
         return $
           PP.parens $ text "rt.mkRecord" <> PP.parens (PP.brackets $ PP.hsep $ jsFields )

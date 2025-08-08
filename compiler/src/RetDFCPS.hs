@@ -134,8 +134,8 @@ transExplicit (Core.Tuple ts)  =
     transTuple (t:ts) acc  =
       trans t (\v -> transTuple ts (v:acc) )
 
-transExplicit (Core.Record fields) = 
-    transFieldsExplicit Record fields 
+transExplicit (Core.Record fields tag) = 
+    transFieldsExplicit (\fds -> Record fds tag)  fields 
   
 transExplicit (Core.WithRecord e fields) =
   trans e (\x -> transFieldsExplicit (WithRecord x) fields)
@@ -268,7 +268,7 @@ trans (Core.Tuple ts) context =
     transTuple (t:ts) acc context =
       trans t (\v -> transTuple ts (v:acc) context)
 
-trans (Core.Record fields) context = transFields Record fields context
+trans (Core.Record fields tag) context = transFields (\fds -> Record fds tag) fields context
 
 trans (Core.WithRecord  e fields) context = 
   trans e (\ rr -> transFields (WithRecord rr) fields context )

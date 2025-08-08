@@ -61,7 +61,7 @@ data SimpleTerm
    | Un UnaryOp VarName
    | ValSimpleTerm SVal
    | Tuple [VarName]
-   | Record Fields 
+   | Record Fields Basics.ADTTag
    | WithRecord VarName Fields
    | ProjField VarName Basics.FieldName
    | ProjIdx VarName Word
@@ -149,7 +149,7 @@ ppSimpleTerm (ListCons v1 v2) =
   PP.parens $ textv v1 PP.<> text "::" PP.<> textv v2
 ppSimpleTerm (Base b) = text b PP.<> text "$base"
 ppSimpleTerm (Lib (Basics.LibName lib) v) = text lib <+> text "." <+> text v
-ppSimpleTerm (Record fields) = PP.braces $ qqFields fields 
+ppSimpleTerm (Record fields _) = PP.braces $ qqFields fields
 ppSimpleTerm (WithRecord x fields) = 
     PP.braces $ PP.hsep [textv x, text "with", qqFields fields]
 

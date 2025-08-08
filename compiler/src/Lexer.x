@@ -195,7 +195,6 @@ data Token
   | TokenWhen
   | TokenWith
   | TokenDatatype
-  | TokenAtoms
   | TokenIntDiv 
   | TokenMod  
   | TokenFn

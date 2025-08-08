@@ -1,0 +1,17 @@
+datatype Day = MONDAY
+	     | TUESDAY
+	     | WEDNESDAY
+	     | THURSDAY
+	     | FRIDAY
+	     | SATURDAY
+	     | SUNDAY
+	     
+let fun next_day MONDAY    = TUESDAY
+      | next_day TUESDAY   = WEDNESDAY
+      | next_day WEDNESDAY = THURSDAY
+      | next_day THURSDAY  = FRIDAY
+      | next_day FRIDAY    = SATURDAY
+      | next_day SATURDAY  = SUNDAY
+      | next_day SUNDAY    = MONDAY
+in next_day TUESDAY
+end

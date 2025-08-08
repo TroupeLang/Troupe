@@ -41,7 +41,6 @@ import Control.Monad.Except
     of    { L _ TokenOf }
     import { L _ TokenImport }
     datatype { L _ TokenDatatype }
-    Atoms { L _ TokenAtoms }
     fn    { L _ TokenFn }
     hn    { L _ TokenHn }
     pini  { L _ TokenPini }
@@ -134,17 +133,17 @@ import Control.Monad.Except
 
 
 
-Prog : ImportDecl AtomsDecl Expr                       { Prog (Imports $1) (Atoms $2) $3 }
+Prog : ImportDecl DataTypeDecl Expr                       { Prog (Imports $1) (DataTypes $2) $3 }
 
 ImportDecl: import  VAR ImportDecl { ((LibName (varTok $2), Nothing)): $3  }
           | { [] }
 
 
-AtomsDecl : datatype Atoms '=' VAR AtomsList    { (varTok $4):$5 }
+DataTypeDecl : datatype VAR '=' VAR DataTypeList DataTypeDecl { (varTok $2, (varTok $4):$5):$6 }
           |  {[]}
 
-AtomsList : { [] }
-          | '|' VAR AtomsList  { (varTok $2): $3 }
+DataTypeList : { [] }
+          | '|' VAR DataTypeList  { (varTok $2): $3 }
 
 
 Expr: Form                        { $1 }

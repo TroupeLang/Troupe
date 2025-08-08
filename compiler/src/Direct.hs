@@ -5,8 +5,9 @@ module Direct ( Lambda (..)
               , Lit(..)
               , DeclPattern(..)
               , RecordPatternMode(..)
-              , AtomName
-              , Atoms(..)
+              , DataTypeName
+              , TypeConstructorName
+              , DataTypes(..)
               , Prog(..)
               , Handler(..)
               , FieldName
@@ -78,7 +79,7 @@ data Lit
     | LString String --SrcPosInf
     | LLabel String --SrcPosInf
     | LDCLabel DCLabelExp
-    | LAtom AtomName --SrcPosInf
+    | LDataType TypeConstructorName --SrcPosInf
   deriving (Eq, Show)
 
 
@@ -106,11 +107,11 @@ data Term
     | Error Term
           deriving (Eq)
 
-data Atoms = Atoms [AtomName]
+data DataTypes = DataTypes [DataTypeDef]
       deriving (Eq, Show)
 
 
-data Prog = Prog Imports Atoms Term
+data Prog = Prog Imports DataTypes Term
   deriving (Eq, Show)
 
 
@@ -130,13 +131,13 @@ instance ShowIndent Prog where
 
 
 ppProg :: Prog -> PP.Doc
-ppProg (Prog (Imports imports) (Atoms atoms) term) =
-  let ppAtoms =
-        if null atoms
-          then PP.empty
-          else (text "datatype Atoms = ") <+>
-               (hsep $ PP.punctuate (text " |") (map text atoms))
-
+ppProg (Prog (Imports imports) (DataTypes datatypes) term) =
+  let ppDataTypes =
+        if null datatypes
+        then PP.empty
+        else vcat $ flip map datatypes (\dt -> (text "datatype ") <+>
+                                         (text $ fst dt) <+>
+                                         (hsep $ PP.punctuate (text " |") (map text $ snd dt)))
       ppImports =
         if null imports then PP.empty
         else
@@ -144,7 +145,7 @@ ppProg (Prog (Imports imports) (Atoms atoms) term) =
           in
             (vcat $ (map ppLibName imports)) $$ PP.text ""
   in vcat [ ppImports
-          , ppAtoms
+          , ppDataTypes
           , ppTerm 0 term ]
 
 
@@ -352,7 +353,7 @@ ppLit (LUnit )       = text "()"
 ppLit (LBool True  )  = text "true"
 ppLit (LBool False) = text "false"
 ppLit (LLabel s ) = PP.braces (text s)
-ppLit (LAtom s) = text s 
+ppLit (LDataType s) = text s 
 
 
 termPrec :: Term -> Precedence

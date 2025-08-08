@@ -10,8 +10,11 @@ import Data.Serialize (Serialize)
 
 type VarName = String
 type AtomName = String
+type DataTypeName = String
+type TypeConstructorName = String
+type DataTypeDef = (DataTypeName, [TypeConstructorName])
 type FieldName = String
-type ADTTag = Bool -- ASL 2025-08-08: Boolean initially, could be changed for be the ADT identifier at a later stage.
+type ADTTag = Bool
 
 -- | Eq and Neq: deep equality check on the two parameters, including the types (any type inequality results in false being returned).
 data BinOp = Plus | Minus | Mult | Div | Mod |  Eq | Neq | Le | Lt | Ge | Gt | And | Or | RaisedTo | FlowsTo | Concat| IntDiv | BinAnd | BinOr | BinXor | BinShiftLeft | BinShiftRight | BinZeroShiftRight | HasField | LatticeJoin | LatticeMeet

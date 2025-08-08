@@ -5,10 +5,11 @@ import Direct
 import Control.Monad
 
 visitProg :: Prog -> Prog
-visitProg (Prog imports (Atoms atms) tm) =
-  Prog imports (Atoms atms) (visitTerm atms tm)
+visitProg (Prog imports (DataTypes datatypes) tm) =
+  let tcs = concat $ map snd datatypes 
+  in Prog imports (DataTypes datatypes) (visitTerm tcs tm)
 
-visitTerm :: [AtomName] -> Term -> Term
+visitTerm :: [TypeConstructorName] -> Term -> Term
 visitTerm atms (Lit lit) = Lit lit
 visitTerm atms (Var nm) =
   if (elem nm atms)
@@ -62,7 +63,7 @@ visitFields atms fs  =  map visitField fs
     where visitField (f, Nothing) = (f, Nothing) 
           visitField (f, Just t) = (f, Just (visitTerm atms t))
 
-visitPattern :: [AtomName] -> DeclPattern -> DeclPattern
+visitPattern :: [TypeConstructorName] -> DeclPattern -> DeclPattern
 visitPattern atms pat@(VarPattern nm) =
   if (elem nm atms)
   then RecordPattern [("tag", Just (ValPattern (LString nm)))] ExactMatch -- Convert atom match into a record match
@@ -77,7 +78,7 @@ visitPattern atms (RecordPattern fields mode) = RecordPattern (map visitField fi
       where visitField pat@(_, Nothing) = pat 
             visitField (f, Just p) = (f, Just (visitPattern atms p))
 
-visitLambda :: [AtomName] -> Lambda -> Lambda
+visitLambda :: [TypeConstructorName] -> Lambda -> Lambda
 visitLambda atms (Lambda pats term) =
   (Lambda (map (visitPattern atms) pats) (visitTerm atms term))
 

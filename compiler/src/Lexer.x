@@ -102,7 +102,6 @@ tokens:-
 <0>   andb                           { mkL TokenBinAnd }
 <0>   orb                            { mkL TokenBinOr }
 <0>   xorb                           { mkL TokenBinXor }
-<0>   Atoms                          { mkL TokenAtoms }
 <0>   "#true"                        { mkL TokenDCTrue }
 <0>   "#false"                       { mkL TokenDCFalse }
 <state_dclabel> "#root-confidentiality" { mkL TokenDCRootConf }

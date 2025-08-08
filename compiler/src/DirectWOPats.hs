@@ -3,8 +3,9 @@ module DirectWOPats ( Lambda (..)
               , Decl (..)
               , FunDecl (..)
               , Lit(..)
-              , AtomName
-              , Atoms(..)
+              , DataTypeName
+              , TypeConstructorName
+              , DataTypes(..)
               , Prog(..)            
               )
 where
@@ -33,7 +34,7 @@ data Lit
     | LDCLabel DCLabelExp
     | LUnit
     | LBool Bool
-    | LAtom AtomName
+    | LDataType DataTypeName
   deriving (Eq, Show)
 
 
@@ -63,15 +64,11 @@ data Term
     | Error Term PosInf
     deriving (Eq)
 
-data Atoms = Atoms [AtomName]
+data DataTypes = DataTypes [DataTypeDef]
       deriving (Eq, Show)
 
-data Prog = Prog Imports Atoms Term
+data Prog = Prog Imports DataTypes Term
   deriving (Eq, Show)
-
-
-
-
 
 
 --------------------------------------------------
@@ -89,14 +86,15 @@ instance ShowIndent Prog where
 
 
 ppProg :: Prog -> PP.Doc
-ppProg (Prog (Imports imports) (Atoms atoms) term) =
-  let ppAtoms =
-        if null atoms
-          then PP.empty
-          else (text "datatype Atoms = ") <+>
-               (hsep $ PP.punctuate (text " |") (map text atoms))
+ppProg (Prog (Imports imports) (DataTypes datatypes) term) =
+  let ppDataTypes =
+        if null datatypes
+        then PP.empty
+        else vcat $ flip map datatypes (\dt -> (text "datatype ") <+>
+                                              (text $ fst dt) <+>
+                                              (hsep $ PP.punctuate (text " |") (map text $ snd dt)))
       ppImports = if null imports then PP.empty else text "<<imports>>\n"
-  in ppImports $$ ppAtoms $$ ppTerm 0 term
+  in ppImports $$ ppDataTypes $$ ppTerm 0 term
 
 
 ppTerm :: Precedence -> Term -> PP.Doc
@@ -229,9 +227,7 @@ ppLit (LDCLabel dc) = ppDCLabelExpLit dc
 ppLit LUnit         = text "()"
 ppLit (LBool True)  = text "true"
 ppLit (LBool False) = text "false"
-ppLit (LAtom a) = text a
-
-
+ppLit (LDataType a) = text a
 
 
 termPrec :: Term -> Precedence

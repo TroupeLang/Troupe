@@ -243,10 +243,10 @@ function constructCurrent(compilerOutput: string) {
                 case Ty.TroupeType.RECORD:
                     // for reords, the serialization format is  [[key, value_json], ...]
                     let a = [];
-                    for (let i = 0; i < obj.length; i++) {
-                        a.push ([ obj[i][0], mkValue(obj[i][1]) ])
+                    for (let i = 0; i < obj.fields.length; i++) {
+                        a.push ([ obj.fields[i][0], mkValue(obj.fields[i][1]) ])
                     }
-                    return Record.mkRecord(a);
+                    return Record.mkRecord(a, obj.isADT); // 2025-08-08 ASL: This is a place holder
                 case Ty.TroupeType.LIST:
                     return mkList(deserializeArray(obj))
                 case Ty.TroupeType.TUPLE:

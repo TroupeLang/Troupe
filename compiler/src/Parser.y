@@ -139,12 +139,18 @@ ImportDecl: import  VAR ImportDecl { ((LibName (varTok $2), Nothing)): $3  }
           | { [] }
 
 
-DataTypeDecl : datatype VAR '=' VAR DataTypeList DataTypeDecl { (varTok $2, (varTok $4):$5):$6 }
+DataTypeDecl : datatype VAR '=' DataTypeConstructor DataTypeList DataTypeDecl { (varTok $2, $4:$5):$6 }
           |  {[]}
-
+		
 DataTypeList : { [] }
-          | '|' VAR DataTypeList  { (varTok $2): $3 }
+          | '|' DataTypeConstructor DataTypeList  { $2: $3 } 	
 
+DataTypeConstructor : VAR { (varTok $1, []) }
+	            | VAR of DataTypeConstructorArgs { (varTok $1, $3) }
+
+DataTypeConstructorArgs : VAR { (varTok $1):[] }
+	                | VAR '*' DataTypeConstructorArgs { (varTok $1):$3 }
+	                | '(' DataTypeConstructorArgs ')' { $2 }	
 
 Expr: Form                        { $1 }
     | let pini Expr Decs in Expr end  { Let (piniDecl $3 $4)  $6 }

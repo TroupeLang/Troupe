@@ -6,7 +6,7 @@ module Direct ( Lambda (..)
               , DeclPattern(..)
               , RecordPatternMode(..)
               , DataTypeName
-              , TypeConstructorName
+              , TypeConstructor
               , DataTypes(..)
               , Prog(..)
               , Handler(..)
@@ -137,7 +137,10 @@ ppProg (Prog (Imports imports) (DataTypes datatypes) term) =
         then PP.empty
         else vcat $ flip map datatypes (\dt -> (text "datatype ") <+>
                                          (text $ fst dt) <+>
-                                         (hsep $ PP.punctuate (text " |") (map text $ snd dt)))
+                                         (hsep $ PP.punctuate (text " |") (map ppConstructor $ snd dt)))
+        where ppConstructor (s, []) = text s
+              ppConstructor (s, x:[]) = text s <+> text " of " <+> text x
+              ppConstructor (s, xs) = text s <+> text " of " <+> PP.parens (hsep $ PP.punctuate (text " *") (map text xs))
       ppImports =
         if null imports then PP.empty
         else
@@ -353,7 +356,7 @@ ppLit (LUnit )       = text "()"
 ppLit (LBool True  )  = text "true"
 ppLit (LBool False) = text "false"
 ppLit (LLabel s ) = PP.braces (text s)
-ppLit (LDataType s) = text s 
+ppLit (LDataType s) = text s
 
 
 termPrec :: Term -> Precedence

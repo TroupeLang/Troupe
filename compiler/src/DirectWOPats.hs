@@ -4,7 +4,7 @@ module DirectWOPats ( Lambda (..)
               , FunDecl (..)
               , Lit(..)
               , DataTypeName
-              , TypeConstructorName
+              , TypeConstructor
               , DataTypes(..)
               , Prog(..)            
               )
@@ -92,7 +92,10 @@ ppProg (Prog (Imports imports) (DataTypes datatypes) term) =
         then PP.empty
         else vcat $ flip map datatypes (\dt -> (text "datatype ") <+>
                                               (text $ fst dt) <+>
-                                              (hsep $ PP.punctuate (text " |") (map text $ snd dt)))
+                                              (hsep $ PP.punctuate (text " |") (map ppConstructor $ snd dt)))
+        where ppConstructor (s, []) = text s
+              ppConstructor (s, x:[]) = text s <+> text " of " <+> text x
+              ppConstructor (s, xs) = text s <+> text " of " <+> PP.parens (hsep $ PP.punctuate (text " *") (map text xs))
       ppImports = if null imports then PP.empty else text "<<imports>>\n"
   in ppImports $$ ppDataTypes $$ ppTerm 0 term
 

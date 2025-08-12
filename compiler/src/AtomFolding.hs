@@ -3,18 +3,26 @@ where
 import Basics
 import Direct
 import Control.Monad
+import Data.List (find, any)
 
 visitProg :: Prog -> Prog
 visitProg (Prog imports (DataTypes datatypes) tm) =
   let tcs = concat $ map snd datatypes 
   in Prog imports (DataTypes datatypes) (visitTerm tcs tm)
 
-visitTerm :: [TypeConstructorName] -> Term -> Term
+visitTerm :: [TypeConstructor] -> Term -> Term
 visitTerm atms (Lit lit) = Lit lit
 visitTerm atms (Var nm) =
-  if (elem nm atms)
-  then Record [("tag", Just (Lit (LString nm)))] True -- Convert atom into a tagged record
-  else Var nm
+  let tag = "tag"
+      value = "value"
+      var = "v"
+  in case find (\x -> (fst x) == nm) atms of
+    Nothing -> Var nm
+    Just (t, []) -> Record [(tag, Just (Lit (LString nm)))] True -- Convert atom into a tagged record
+    Just (t, _) ->
+      Abs (Lambda [VarPattern var] (Record [(tag, Just (Lit (LString nm)))
+                                           , (value, Just (Var var))
+                                           ] True))
 visitTerm atms (Abs lam) =
   Abs (visitLambda atms lam)
 visitTerm atms (Hnd (Handler pat maybePat maybeTerm term)) =
@@ -63,9 +71,9 @@ visitFields atms fs  =  map visitField fs
     where visitField (f, Nothing) = (f, Nothing) 
           visitField (f, Just t) = (f, Just (visitTerm atms t))
 
-visitPattern :: [TypeConstructorName] -> DeclPattern -> DeclPattern
+visitPattern :: [TypeConstructor] -> DeclPattern -> DeclPattern
 visitPattern atms pat@(VarPattern nm) =
-  if (elem nm atms)
+  if any (\x -> x == (nm, [])) atms
   then RecordPattern [("tag", Just (ValPattern (LString nm)))] ExactMatch -- Convert atom match into a record match
   else pat
 visitPattern _ pat@(ValPattern _) = pat
@@ -78,7 +86,7 @@ visitPattern atms (RecordPattern fields mode) = RecordPattern (map visitField fi
       where visitField pat@(_, Nothing) = pat 
             visitField (f, Just p) = (f, Just (visitPattern atms p))
 
-visitLambda :: [TypeConstructorName] -> Lambda -> Lambda
+visitLambda :: [TypeConstructor] -> Lambda -> Lambda
 visitLambda atms (Lambda pats term) =
   (Lambda (map (visitPattern atms) pats) (visitTerm atms term))
 

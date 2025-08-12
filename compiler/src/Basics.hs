@@ -12,7 +12,8 @@ type VarName = String
 type AtomName = String
 type DataTypeName = String
 type TypeConstructorName = String
-type DataTypeDef = (DataTypeName, [TypeConstructorName])
+type TypeConstructor = (TypeConstructorName, [VarName])
+type DataTypeDef = (DataTypeName, [TypeConstructor])
 type FieldName = String
 type ADTTag = Bool
 

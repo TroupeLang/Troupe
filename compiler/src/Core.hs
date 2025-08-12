@@ -159,7 +159,7 @@ lowerProg (D.Prog imports atms term) = Prog imports (trans atms) (lower term)
 -- the rest of the declarations in this part are not exported
 
 trans :: D.DataTypes -> Atoms
-trans (D.DataTypes atms) = Atoms (concat $ map snd atms)
+trans (D.DataTypes atms) = Atoms [] -- (concat $ map snd atms)
 
 lowerLam (D.Lambda vs t) =
   case vs of

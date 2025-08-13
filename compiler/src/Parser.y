@@ -195,6 +195,8 @@ Expr: Form                        { $1 }
 
 Match : Pattern '=>' Expr                      { [($1,$3)] }
       | Pattern '=>' Expr '|' Match            { ($1,$3):$5 }
+      |	DataTypePattern '=>' Expr              { [($1,$3)] }
+      |	DataTypePattern '=>' Expr '|' Match    { ($1,$3):$5 }
 
 
 Form :: { Term }
@@ -270,6 +272,8 @@ ListExpr : '[' ']'                 { List []   }
 CSExpr : Expr ','                  { [$1] }
      | CSExpr Expr ','             { ($2:$1) }
 
+DataTypePattern : VAR Pattern                 { DataTypePattern (varTok $1) $2 }
+	        | VAR '(' DataTypePattern ')' { DataTypePattern (varTok $1) $3 }
 
 Pattern : VAR                               { VarPattern (varTok $1) }
     | '(' Pattern ')'                       { $2 }
@@ -279,8 +283,7 @@ Pattern : VAR                               { VarPattern (varTok $1) }
     | Lit                                   { ValPattern $1 }
     | '(' CSPattern Pattern ')'             { TuplePattern (reverse ($3:$2)) }
     | FieldPattern                          { $1 }
-    | ListPattern   { $1}
-
+    | ListPattern                           { $1 }
 
 FieldPattern :
       '{' '}'                                        { RecordPattern [] ExactMatch }
@@ -339,8 +342,10 @@ OtherFunOption : '|' VAR FunArgs '=' Expr { Lambda $3 $5}
 FunDecl    : fun VAR FunOptions { FunDecl (varTok $2) $3 (pos $2) }
 AndFunDecl : and VAR FunOptions { FunDecl (varTok $2) $3 (pos $2) }
 
-FunArgs : Pattern                        { [$1]  }
-        | Pattern FunArgs                { $1 : $2}
+FunArgs : Pattern                         { [$1]  }
+        | Pattern FunArgs                 { $1 : $2}
+	| '(' DataTypePattern ')'         { [$2] }
+	| '(' DataTypePattern ')' FunArgs { $2 : $4 }
 
 {
 

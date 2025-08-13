@@ -85,6 +85,10 @@ visitPattern atms (ListPattern pats) = ListPattern (map (visitPattern atms) pats
 visitPattern atms (RecordPattern fields mode) = RecordPattern (map visitField fields) mode
       where visitField pat@(_, Nothing) = pat 
             visitField (f, Just p) = (f, Just (visitPattern atms p))
+visitPattern atms (DataTypePattern nm pat) =
+  RecordPattern [("tag", Just (ValPattern (LString nm)))
+                ,("value", Just (visitPattern atms pat))] ExactMatch
+                 
 
 visitLambda :: [TypeConstructor] -> Lambda -> Lambda
 visitLambda atms (Lambda pats term) =

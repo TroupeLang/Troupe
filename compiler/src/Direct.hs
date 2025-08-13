@@ -59,6 +59,7 @@ data DeclPattern
     | ConsPattern DeclPattern DeclPattern --SrcPosInf
     | ListPattern [DeclPattern] --SrcPosInf
     | RecordPattern [(FieldName, Maybe DeclPattern)] RecordPatternMode
+    | DataTypePattern TypeConstructorName DeclPattern
       deriving (Eq)
 
 data RecordPatternMode = ExactMatch | WildcardMatch

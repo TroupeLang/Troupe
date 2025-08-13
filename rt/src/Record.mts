@@ -15,8 +15,9 @@ export class Record implements TroupeAggregateRawValue {
     stringRep (omitLevels?: boolean, taintRef?: any) {
 	if (this._isADT) {
 	    if (this.__obj.has("value")) {
-		return "(" + this.__obj.get("tag").val.toString() + " "
-		    + "(" + this.__obj.get("value").stringRep(omitLevels, taintRef) + ")" + ")"
+		let tag = this.__obj.get("tag").val.toString()
+		let val = this.__obj.get("value").stringRep(omitLevels, taintRef)
+		return "(" + tag + " " + "(" + val + ")" + ")"
 	    } else {
 		return this.__obj.get("tag").val.toString()
 	    }

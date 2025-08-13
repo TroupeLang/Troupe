@@ -1,0 +1,2 @@
+datatype option = NONE | SOME of a
+(NONE, SOME 28)

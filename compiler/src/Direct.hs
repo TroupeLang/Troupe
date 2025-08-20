@@ -348,6 +348,10 @@ ppDeclPattern (RecordPattern fields mode) =
               wildcard = case mode of
                 ExactMatch -> []
                 WildcardMatch -> [text ".."]
+ppDeclPattern (DataTypePattern nm pat) =
+  text nm PP.<> PP.space PP.<>
+  case pat of DataTypePattern _ _ -> PP.parens $ ppDeclPattern pat
+              otherwise -> ppDeclPattern pat
 
 ppLit :: Lit -> PP.Doc
 ppLit (LInt i _ )      = PP.integer i

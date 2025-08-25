@@ -10,8 +10,6 @@ let fun map f list =
     in mapj 0 list
     end
     
-    
-
     fun foldl f y [] = y
       | foldl f y (x::xs) = foldl f (f (x,y)) xs
 
@@ -36,7 +34,7 @@ let fun map f list =
             [] => l2
           | x::l => x::(append l l2)
 
-    fun nth (x::l) 1 = x
+    fun nth (x::l) 0 = x
       | nth (x::l) n = nth l (n - 1)
 
     fun lookup list key default =
@@ -54,10 +52,17 @@ let fun map f list =
                         if f x then partition_aux (x::a, b) xs 
                                else partition_aux (a, x::b) xs
             
-      
       in  partition_aux ([],[]) ls 
       end   
+    
+    fun hd [] = 0
+      | hd (x::xs) = x
 
+    fun tl [] = []
+      | tl (x::xs) = xs
+
+    fun null [] = true
+      | null xs = false
 in
     [ ("map",     map)
     , ("mapi",    mapi)
@@ -69,5 +74,9 @@ in
     , ("length",  length)
     , ("append",  append)
     , ("partition", partition) 
+    , ("hd", hd)
+    , ("tl", tl)
+    , ("nth", nth)
+    , ("null", null)
     ]
 end

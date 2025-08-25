@@ -1,0 +1,74 @@
+import lazy
+import lists
+import streams
+
+datatype Atoms = NIL
+
+let
+    fun assertEq (got, exp, msg) = 
+        if got = exp then print (msg ^ ": ok")
+        else print (msg ^ ": failed")
+
+    val c = 2
+    val empty = {F = fn () => NIL, LenF = 0, R = fn () => NIL, LenR = 0}
+    fun isEmpty {LenF = lenF, LenR = lenR, F = _, R = _} = (lenF + lenR = 0)
+
+    fun queue {F = f, LenF = lenF, R = r, LenR = lenR} =
+        if lenF > c * lenR + 1 then
+            let val i = (lenF + lenR) div 2
+                val j = lenF + lenR - i
+                val f' = take i f
+                val r' = streamAppend r (streamReverse (drop i f))
+            in {F = f', LenF = i, R = r', LenR = lenR} end
+        else if lenR > c * lenF + 1 then
+            let val i = (lenF + lenR) div 2
+                val j = lenF + lenR - i
+                val f' = streamAppend f (streamReverse (drop j r))
+                val r' = take j r
+            in {F = f', LenF = i, R = r', LenR = lenR} end
+        else {F = f, LenF = lenF, R = r, LenR = lenR}
+
+    fun cons {F = f, LenF = lenF, R = r, LenR = lenR} x =
+        queue {F = fn () => (x, f), LenF = lenF + 1, R = r, LenR = lenR}
+    fun head {F = f, R = r, LenF = _, LenR = _} =
+        case (force f) of
+            (x, _) => x
+          | _ => case (force r) of
+                    NIL => print "EMPTY!"
+                  | (x, _) => x 
+    fun tail {F = f, R = r, LenF = lenF, LenR = lenR} =
+        case (force f) of
+            (x, f') => queue {F = f', LenF = lenF - 1, R = r, LenR = lenR}
+          | _ => case (force r) of
+                    NIL => print "EMPTY!"
+                  | (x, _) => empty 
+
+    fun snoc {F = f, LenF = lenF, R = r, LenR = lenR} x =
+        queue {F = f, LenF = lenF, R = fn () => (x, r), LenR = lenR + 1}
+    fun last {F = f, R = r, LenF = _, LenR = _} =
+        case (force r) of
+            (x, _) => x
+          | _ => case (force f) of
+                    NIL => print "EMPTY!"
+                  | (x, _) => x 
+    fun init {F = f, R = r, LenF = lenF, LenR = lenR} =
+        case (force r) of
+            (x, r') => queue {F = f, LenF = lenF, R = r', LenR = lenR - 1}
+          | _ => case (force f) of
+                    NIL => print "EMPTY!"
+                  | (x, _) => empty 
+
+    fun dequeToList {F = f, R = r, LenF = _, LenR = lenR} =
+        append (streamToList f) (streamToList r) 
+
+    val q0 = empty
+    val q1 = snoc q0 1
+    val q2 = snoc q1 2
+    val q3 = cons q2 0
+    val _ = assertEq (head q3 = 0, true, "check head")
+    val _ = assertEq (last q3 = 2, true, "check last")
+    val _ = assertEq (dequeToList (tail q3) = [1, 2], true, "check tail")
+    val _ = assertEq (dequeToList (init q3) = [0, 1], true, "check init")
+in
+    print "success!"
+end

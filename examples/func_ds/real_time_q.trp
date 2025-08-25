@@ -1,0 +1,52 @@
+import lazy
+import lists
+import streams
+
+datatype Atoms = NIL
+
+let
+    fun assertEq (got, exp, msg) = 
+        if got = exp then print (msg ^ "ok")
+        else print (msg ^ "failed")
+
+    val new = {F = fn () => NIL, R = [], S = fn () => NIL}
+    fun isEmpty {F = f, R = r, S = s} = (force f = NIL)
+
+    fun rotate (f, r, a) = fn () => (
+            case (force f, r, a) of
+                (NIL, y::[], a) => (y, a)
+              | ((x, f'), y::r', a) => (x, rotate (f', r', fn () => (y, a)))
+        ) 
+
+    fun queue {F = f, R = r, S = s'} = (
+        case (force s') of
+            (x, s) => {F = f, R = r, S = s}
+          | NIL => let val f' = rotate (f, r, fn () => NIL)
+                   in {F = f', R = [], S = f'} end
+        )
+
+    fun snoc {F = f, R = r, S = s} x = queue {F = f, R = x::r, S = s}
+
+    fun head {F = f', R = _, S = _} = (
+        case (force f') of
+            NIL => NIL
+          | (x, f) => x
+    )
+
+    fun tail {F = f', R = r, S = s} = (
+        case (force f') of
+            NIL => NIL
+          | (x, f) => {F = f, R = r, S = s}
+    )
+
+    val q0 = new
+    val _ = assertEq ("isEmpty new queue", isEmpty q0, true)
+
+    val q1 = snoc q0 42
+    val _ = assertEq ("isEmpty after one snoc", isEmpty q1, false)
+    val _ = assertEq ("head after one snoc", head q1, 42)
+    val q1' = tail q1
+    val _ = assertEq ("tail returns empty after one snoc", isEmpty q1', true)
+in
+    print "success!"
+end

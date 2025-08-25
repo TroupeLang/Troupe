@@ -1,0 +1,58 @@
+import lazy
+import lists
+import streams
+
+datatype Atoms = NIL
+
+let
+    fun assertEq (got, exp, msg) = 
+        if got = exp then print (msg ^ ": ok")
+        else print (msg ^ ": failed")
+
+    fun new less = {Less = less, Size = 0, Segments = []}
+
+    fun merge less (xs, ys) = 
+        let fun mrg (xs, ys) = case (force xs) of
+           NIL => ys
+         | (x, xs') => case (force ys) of
+                    NIL => xs
+                  | (y, ys') => if less (x, y) then fn () => (x, mrg (xs', ys))
+                                else fn () => (y, mrg (xs, ys'))
+            in mrg (xs, ys) end
+
+    fun exec1 [] = []
+      | exec1 (fst::sched) = case (force fst) of
+            NIL => exec1 sched
+          | (x, xs) => xs::sched
+
+    fun exec2PerSeg [] = []
+      | exec2PerSeg ((xs, sched)::segs) = (xs, exec1 (exec1 sched))::exec2PerSeg segs
+
+    fun add (x, {Less = less, Size = size, Segments = segs}) = 
+        let fun addSeg (xs, segs, size, rsched) = 
+            if size mod 2 = 0 then (xs, reverse (xs::rsched))::segs
+            else let val ((xs', [])::segs') = segs
+                 in addSeg (merge less (xs, xs'), segs', size div 2, xs::rsched) end 
+            val segs' = addSeg (fn () => (x, fn () => NIL), segs, size, [])
+        in {Less = less, Size = size + 1, Segments = exec2PerSeg segs'} end
+
+    fun sort {Less = less, Size = _, Segments = segs} = 
+        let fun mergeAll (xs, []) = xs
+              | mergeAll (xs, (xs', sched)::segs) = mergeAll(merge less (xs,xs'), segs)
+            fun streamToList stream = 
+                case (force stream) of
+                    NIL => []
+                  | (x, xs) => x :: streamToList xs
+            in streamToList (mergeAll (fn () => NIL, segs)) end
+
+    val sorter = new (fn (a, b) => a < b)
+    val sorter1 = add (3, sorter)
+    val sorter2 = add (1, sorter1)
+    val sorter3 = add (4, sorter2)
+    val sorter4 = add (1, sorter3)
+    val sorter5 = add (5, sorter4)
+
+    val _ = assertEq([1, 1, 3, 4, 5] = sort sorter5, true, "sorted list")
+in
+    print "success"
+end

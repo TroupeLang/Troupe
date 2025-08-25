@@ -1,0 +1,71 @@
+import lazy
+
+datatype Atoms = NIL
+
+let
+    val empty_stream = fn () => NIL
+    val test_stream = fn () => (1, fn () => (2, fn () => (3, fn () => NIL)))
+
+    fun take n s = fn () => (
+        case n of
+            0 => NIL
+          | _ => case force s of 
+                    NIL => NIL
+                  | (x , s') => (x, take (n - 1) s')
+        ) 
+
+    fun streamAppend s1 s2 = fn () => (
+        case force s1 of
+            NIL => force s2
+          | (x, s') => (x, streamAppend s' s2)
+        )
+
+    fun drop n s = 
+        let fun dropHelper n c =
+            case n of
+                0 => force c
+              | _ => case force c of
+                        NIL => NIL
+                      | (x, s') => dropHelper (n - 1) s'
+        in fn () => (dropHelper n s) end
+
+    fun streamReverse s = 
+        let fun reverseHelper f r =
+            case force f of
+                NIL => r
+              | (x, thunk) => reverseHelper thunk (x, fn () => r)
+        in fn () => reverseHelper s NIL end
+
+    fun streamRepeat x = 
+        let fun repHelper x = (x, fn () => repHelper x)
+    in fn () => (repHelper x) end
+
+    fun streamMap f s = 
+        case force s of
+            NIL => fn () => NIL
+          | (x, thunk) => fn () => (f x, streamMap f thunk)
+    
+    fun streamFromSeed f seed = fn () => (seed, streamFromSeed f (f seed))
+
+    fun streamIndex s n = 
+        case force s of 
+            NIL => NIL
+          | (x, thunk) => if n = 0 then x else streamIndex thunk (n - 1) 
+
+    fun streamToList s =
+        case force s of
+            NIL => []
+          | (x, thunk) => x :: streamToList thunk 
+in
+    [
+        ("take", take),
+        ("streamAppend", streamAppend),
+        ("drop", drop),
+        ("streamReverse", streamReverse),
+        ("streamRepeat", streamRepeat),
+        ("streamMap", streamMap),
+        ("streamFromSeed", streamFromSeed),
+        ("streamIndex", streamIndex),
+        ("streamToList", streamToList)
+    ]
+end

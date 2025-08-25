@@ -1,0 +1,28 @@
+import lists
+import lazy
+
+datatype Atoms = NIL
+
+let
+    fun less (a, b) = a < b
+    fun new {Less = less} = {Less = less, Size = 0, Segments = fn () => []} 
+
+    fun merge less (xs, ys) = 
+        let fun mrg ([], ys) = ys
+              | mrg (xs, []) = xs
+              | mrg (x::xs, y::ys) = if less(x,y) then x::mrg(xs, y::ys)
+                                     else y::mrg(x::xs, ys)
+        in mrg(xs, ys) end
+
+    fun add x {Less = less, Size = size, Segments = segs} = 
+        let fun addSeg (seg, segs, size) = 
+            if size mod 2 = 0 then seg::segs
+            else addSeg (merge less (seg, hd segs), tl segs, size div 2)
+        in {Less = less, Size = size + 1, Segments = fn () => addSeg([x], force segs, size)} end
+
+    fun addList xs heap = foldl (fn (x, q) => add x q) heap xs
+
+    fun sort {Less = less, Segments = segs, Size = _} = foldl (merge less) [] (force segs)
+in 
+    sort (addList [1, 7, 6, 1000, 999] (new {Less = less}))
+end

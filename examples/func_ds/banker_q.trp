@@ -1,0 +1,35 @@
+import lists
+import lazy
+import streams
+
+datatype Atoms = NIL
+
+let 
+    val empty_queue = {F = fn () => NIL, Len_F = 0, R = fn () => NIL, Len_R = 0}
+    val test_stream = fn () => (1, fn () => (2, fn () => (3, fn () => NIL)))
+
+    fun isEmpty q = (q.len_f = 0) 
+
+    fun queue {F = f, Len_F = lf, R = r, Len_R = lr} = 
+        if lr <= lf then {F = f, Len_F = lf, R = r, Len_R = lr}
+        else {F = streamAppend f (streamReverse r), Len_F = lf + lr, R = fn () => NIL, Len_R = 0}
+    
+    fun snoc {F = f, Len_F = lf, R = r, Len_R = lr} x = 
+        queue {F = f, Len_F = lf, R = fn () => (x, r), Len_R = lr + 1}
+
+    fun head {F = f, Len_F = _, R = _, Len_R = _} = case force f of
+        NIL => print "Error: Empty Queue"
+      | (x, thunk) => x
+
+    fun tail {F = f, Len_F = lf, R = r, Len_R = lr} = case force f of
+        NIL => print "Error: Empty Queue" 
+      | (x, thunk) => queue {F = thunk, Len_F = lf - 1, R = r, Len_R = lr}
+
+    fun printQueue {F = f, Len_F = lf, R = r, Len_R = lr} = print (append (streamToList f) (streamToList r))
+
+    val append1 = snoc empty_queue 1
+    val {F = f, Len_F = _, R = _, Len_R = _} = append1 
+    val append2 = snoc append1 2
+in 
+    printQueue append2
+end

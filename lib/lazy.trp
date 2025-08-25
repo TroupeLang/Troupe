@@ -1,0 +1,11 @@
+let
+    fun force thunk = thunk ()
+    fun curry f x y = f (x, y)
+    fun uncurry f (x, y) = f x y
+in
+    [
+        ("force", force)
+    ,   ("curry", curry)
+    ,   ("uncurry", uncurry)
+    ]
+end

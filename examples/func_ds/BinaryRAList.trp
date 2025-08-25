@@ -1,0 +1,59 @@
+import lists
+
+datatype Atoms = NONE
+
+let
+    fun assertEq (got, exp, msg) = 
+        if got = exp then print (msg ^ ": ok")
+        else print (msg ^ ": failed")
+
+    val empty = []
+    fun isEmpty ts = null ts
+
+    fun size {Size = sz, Left = _, Right = _, Tag = _, Val = _} = sz
+    fun link (t1, t2) = {Size = size t1 + size t2, Left = t1, Right = t2, Tag = "Node", Val = NONE}
+    fun insTree (t, []) = [{Tag = "One", Tree = t}]
+      | insTree (t, {Tag = "Zero", Tree = _}::ts) = {Tag = "One", Tree = t}::ts
+      | insTree (t1, {Tag = "One", Tree = t2}::ts) = {Tag = "Zero", Tree = NONE}::insTree(link(t1, t2), ts)
+    fun borrowTree [] = print "Empty!"
+      | borrowTree ({Tag = "One", Tree = t}::[]) = (t, [])
+      | borrowTree ({Tag = "One", Tree = t}::ts) = (t, {Tag = "Zero", Tree = NONE}::ts) 
+      | borrowTree ({Tag = "Zero", Tree = 0}::ts) = let val ({Tag = "Node", Size = _, Left = t1, Right = t2, Val = _}, ts') = borrowTree ts
+                                                    in (t1, {Tag = "One", Tree = t2}::ts') end
+    
+    fun cons(x, ts) = insTree ({Tag = "Leaf", Size = 1, Left = NONE, Right = NONE, Val = x}, ts)
+    fun head ts = let val ({Tag = "Leaf", Val = x, Size = _, Left = _, Right = _}, _) = borrowTree ts in x end
+    fun tail ts = let val (_, ts') = borrowTree ts in ts' end
+
+    fun lookupTree ({Tag = "Leaf", Val = x, Left = _, Right = _, Size = _}, 0) = x
+      | lookupTree ({Tag = "Leaf", Val = x, Left = _, Right = _, Size = _}, i) = print "Invalid Index!"
+      | lookupTree ({Tag = "Node", Val = _, Left = t1, Right = t2, Size = w}, i) = 
+            if i < w div 2 then lookupTree(t1, i) else lookupTree(t2, i - w div 2)
+    fun updateTree ({Tag = "Leaf", Val = x, Left = _, Right = _, Size = _}, 0, y) = {Tag = "Leaf", Val = y, Left = NONE, Right = NONE, Size = 1}
+      | updateTree ({Tag = "Leaf", Val = x, Left = _, Right = _, Size = _}, i, y) = print "Invalid Index!"
+      | updateTree ({Tag = "Node", Left = t1, Right = t2, Val = NONE, Size = w}, i, y) = 
+            if i < w div 2 then {Tag = "Node", Size = w, Left = updateTree(t1, i, y), Right = t2, Val = NONE}
+            else {Tag = "Node", Size = w, Left = t1, Right = updateTree(t2, i - w div 2, y), Val = NONE}
+    fun lookup ([], i) = print "Invalid Index!" 
+      | lookup ({Tag = "Zero", Tree = _}::ts, i) = lookup (ts, i)
+      | lookup ({Tag = "One", Tree = t}::ts, i) = 
+        if i < size t then lookupTree(t, i) else lookup (ts, i - size t)
+    fun update ([], i, y) = print "Invalid Index!" 
+      | update ({Tag = "Zero", Tree = _}::ts, i, y) = update (ts, i, y)
+      | update ({Tag = "One", Tree = t}::ts, i, y) = 
+            if i < size t then {Tag = "One", Tree = updateTree(t, i, y)}::ts else {Tag = "One", Tree = t}::update(ts, i - size t, y)
+
+    fun ofList xs = foldl (fn (x, acc) => cons(x, acc)) empty (reverse xs)
+
+    val s0 = empty
+    val _ = assertEq (isEmpty s0, true, "check empty")
+    val s1 = cons(7, s0)
+    val _ = assertEq (head s1 = 7, true, "head singleton")
+    val _ = assertEq (tail s1 = [{Tag = "Zero", Tree = NONE}], true, "tail singleton")
+    val s = ofList [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+    val s' = update(s, 4, 42)
+    val _ = assertEq (lookup (s', 4) = 42, true, "check update")
+    val _ = assertEq (lookup (s', 3) = 3, true, "check false update")
+in
+    print "success!"
+end

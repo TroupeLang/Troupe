@@ -560,7 +560,7 @@ ppSparseSlot = do
 fieldToJS :: ToJS a => (String, a) -> W PP.Doc
 fieldToJS (f, v) = do 
     d <- toJS v 
-    return $ PP.brackets $ PP.quotes (text f) <> text "," <> d
+    return $ PP.brackets $ PP.doubleQuotes (text f) <> text "," <> d
 
 fieldsToJS :: ToJS a => [(String, a)] -> W [PP.Doc]
 fieldsToJS fs = do 

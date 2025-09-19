@@ -52,8 +52,8 @@ data Term
     | Let [Decl] Term    
     | If Term Term Term
     | AssertElseError Term Term Term PosInf
-    | Tuple [Term]
-    | Record Fields ADTTag
+    | Tuple [Term] ADTTag
+    | Record Fields
     | WithRecord Term Fields
     | ProjField Term FieldName 
     | ProjIdx Term Word

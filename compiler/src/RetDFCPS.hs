@@ -124,18 +124,18 @@ transExplicit (Core.AssertElseError e0 e1 e2 p) = do
       return $ AssertElseError v0 e1' v2 p))
 
 
-transExplicit (Core.Tuple ts)  =
+transExplicit (Core.Tuple ts tag)  =
   transTuple ts []
   where
     transTuple :: [Core.Term] -> [CPS.VarName] -> S KTerm
     transTuple [] acc  = do
       v <- freshV
-      return $ LetSimple v (Tuple (reverse acc)) (KontReturn v)
+      return $ LetSimple v (Tuple (reverse acc) tag) (KontReturn v)
     transTuple (t:ts) acc  =
       trans t (\v -> transTuple ts (v:acc) )
 
-transExplicit (Core.Record fields tag) = 
-    transFieldsExplicit (\fds -> Record fds tag)  fields 
+transExplicit (Core.Record fields) = 
+    transFieldsExplicit Record fields 
   
 transExplicit (Core.WithRecord e fields) =
   trans e (\x -> transFieldsExplicit (WithRecord x) fields)

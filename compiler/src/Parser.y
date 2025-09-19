@@ -240,8 +240,8 @@ Atom : '(' Expr ')'                { $2 }
      | Lit                         { Lit $1 }
      | VAR                         { Var (varTok $1) }
      | '(' ')'                     { Lit LUnit }
-     | '(' CSExpr Expr ')'         { Tuple (reverse ($3:$2)) }
-     | '{' '}'                     { Record [] False }
+     | '(' CSExpr Expr ')'         { Tuple (reverse ($3:$2)) False }
+     | '{' '}'                     { Record [] }
      | RecordExpr                  { $1 }
      | ListExpr                    { $1 }
      | Atom '.' VAR                { ProjField $1 (varTok $3) }
@@ -249,7 +249,7 @@ Atom : '(' Expr ')'                { $2 }
 
 
 RecordExpr 
-     : '{' RecordFields  '}'                           { Record $2 False }
+     : '{' RecordFields  '}'                           { Record $2 }
      | '{' Atom with RecordFields'}'                   { WithRecord $2 $4 }
      
 

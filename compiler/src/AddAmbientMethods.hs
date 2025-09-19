@@ -21,14 +21,14 @@ printDecl :: FunDecl
 printDecl = FunDecl "print"  
     [Lambda [VarPattern "x"] $
         Let [ValDecl (VarPattern "out") (App (Var "getStdout") [Var "authority"]) NoPos]
-            (App (Var "fprintln") [Tuple [Var "out", Var "x"]])
+            (App (Var "fprintln") [Tuple [Var "out", Var "x"] False])
     ] NoPos
 
 printWithLabelsDecl :: FunDecl 
 printWithLabelsDecl = FunDecl "printWithLabels" 
     [Lambda [VarPattern "x"] $
         Let [ValDecl (VarPattern "out") (App (Var "getStdout") [Var "authority"]) NoPos]
-            (App (Var "fprintlnWithLabels") [Tuple [Var "out", Var "x"]])
+            (App (Var "fprintlnWithLabels") [Tuple [Var "out", Var "x"] False])
     ] NoPos
 
 
@@ -36,7 +36,7 @@ printStringDecl :: FunDecl
 printStringDecl = FunDecl "printString"
     [Lambda [VarPattern "x"] $
         Let [ValDecl (VarPattern "out") (App (Var "getStdout") [Var "authority"]) NoPos]
-            (App (Var "fwrite") [Tuple [Var "out", Bin Concat (Var "x") (Lit (LString "\\n"))]])
+            (App (Var "fwrite") [Tuple [Var "out", Bin Concat (Var "x") (Lit (LString "\\n"))] False])
     ] NoPos
 
 

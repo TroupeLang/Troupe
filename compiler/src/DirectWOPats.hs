@@ -114,18 +114,16 @@ ppTerm' (Lit literal) = ppLit literal
 
 ppTerm' (Error t _) = text "error " PP.<> ppTerm' t
 
-ppTerm'  (Tuple ts) =
+ppTerm'  (Tuple ts False) =
   PP.parens $
   PP.hcat $
   PP.punctuate (text ",") (map (ppTerm 0) ts)
+ppTerm' (Tuple ts True) =
+  case ts of [Lit (LString nm)] -> text nm
+             [Lit (LString nm), t] -> text nm PP.<> PP.space PP.<> ppTerm 0 t
+             otherwise -> text "error: MissingADT"
 
-ppTerm' (Record fs False) = 
-    PP.braces $  qqFields fs
-ppTerm' (Record fs True) = -- We should not be able to git the "MissingADT" cases - 2025-08-08: ASL
-  case find (\x -> fst x == "tag") fs of
-    Just (_, Lit (LString nm)) -> text nm
-    Just _ -> text "MissingADT"
-    Nothing -> text "MissingADT"
+ppTerm' (Record fs) = PP.braces $  qqFields fs
 
 ppTerm' (WithRecord e fs) =
     PP.braces $ PP.hsep [ ppTerm 0 e, text "with", qqFields fs ]
@@ -235,7 +233,7 @@ ppLit (LDataType a) = text a
 
 termPrec :: Term -> Precedence
 termPrec (Lit _)         = maxPrec
-termPrec (Tuple _)       = maxPrec
+termPrec (Tuple _ _)       = maxPrec
 termPrec (List _ )       = maxPrec
 termPrec (Var _)         = maxPrec
 termPrec (App _ _)       = appPrec

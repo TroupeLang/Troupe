@@ -72,7 +72,7 @@ export function serialize(w:LVal, pclev:Level) {
 
         switch (_tt) {
             case Ty.TroupeType.RECORD:
-                jsonObj = { fields: [], isADT: x._isADT };
+                jsonObj = { fields: [] };
                 for (let [k,v] of x.__obj.entries()) {
                     jsonObj.fields.push ([k, walk(v)])
                 }
@@ -86,9 +86,9 @@ export function serialize(w:LVal, pclev:Level) {
                 }
                 break;
             case Ty.TroupeType.TUPLE:
-                jsonObj = [];                                                
+                jsonObj = { vals: [], isADT: x._isADT };                                                
                 for (let i = 0; i < x.length; i++) {
-                    jsonObj.push(walk(x[i]));
+                    jsonObj.vals.push(walk(x[i]));
                 }
                 break;
             case Ty.TroupeType.CLOSURE:

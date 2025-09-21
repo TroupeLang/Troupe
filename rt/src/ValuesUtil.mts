@@ -13,8 +13,8 @@ export function isTupleFlagSet (x:any) {
 /**
  * Takes an array of labelled values and makes a new Troupe tuple object out of it.
  */
-export function mkTuple(x: LVal[]) {
-  return new RawTuple(x)
+export function mkTuple(x: LVal[], isADT: boolean) {
+  return new RawTuple(x, isADT)
 }
 
 

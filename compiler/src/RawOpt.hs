@@ -146,8 +146,8 @@ instance MarkUsed RawExpr where
     Un _ x -> markUsed x
     ProjectLVal x _ -> markUsed x
     ProjectState _ -> return ()
-    Tuple xs -> markUsed xs 
-    Record fields _ -> markUsed (snd (unzip fields))
+    Tuple xs _ -> markUsed xs 
+    Record fields -> markUsed (snd (unzip fields))
     WithRecord x fields -> do 
       markUsed x 
       markUsed (snd (unzip fields))
@@ -241,10 +241,10 @@ guessType = \case
     Basics.Tail -> Nothing
     Basics.LevelOf -> Just RawLevel
 
-  Tuple _ -> Just RawTuple
+  Tuple _ _ -> Just RawTuple
   List _ -> Just RawList
   ListCons _ _ -> Just RawList
-  Record _ _ -> Just RawRecord
+  Record _ -> Just RawRecord
   WithRecord _ _  -> Just RawRecord
   -- Revision 2023-08: Added missing cases
   ProjField _ _ -> Nothing

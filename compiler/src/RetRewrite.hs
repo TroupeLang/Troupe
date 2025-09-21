@@ -65,8 +65,8 @@ instance Substitutable SimpleTerm where
     case simpleTerm of
       Bin op v1 v2 -> Bin op (fwd v1) (fwd v2)
       Un op v -> Un op (fwd v)
-      Tuple vs -> Tuple (map fwd vs)
-      Record fields tag -> Record (fwdFields fields) tag
+      Tuple vs tag -> Tuple (map fwd vs) tag
+      Record fields -> Record (fwdFields fields)
       WithRecord x fields -> WithRecord (fwd x) $ fwdFields fields
       ProjField x f -> ProjField (fwd x) f
       ProjIdx x idx -> ProjIdx (fwd x) idx

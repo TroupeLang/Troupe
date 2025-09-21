@@ -20,6 +20,6 @@ tcs = map (second mkP)
     )
   ,
     ( "TreeAssign"
-    , BB [Assign (VN "r") (Tuple [])] (Ret (mkV "r"))
+    , BB [Assign (VN "r") (Tuple [] False)] (Ret (mkV "r"))
     )
   ]

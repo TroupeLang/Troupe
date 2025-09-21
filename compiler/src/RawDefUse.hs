@@ -196,8 +196,8 @@ instance Usable RawExpr b where
         Raw.Un _ x -> use x
         Raw.ProjectLVal x _ -> use x
         Raw.ProjectState _ -> return ()
-        Raw.Tuple xs -> use xs 
-        Raw.Record fields _ -> use (snd (unzip fields))
+        Raw.Tuple xs _ -> use xs 
+        Raw.Record fields -> use (snd (unzip fields))
         Raw.WithRecord x fields -> do 
           use x 
           use (snd (unzip fields))

@@ -103,8 +103,8 @@ data RawExpr
   | Un Basics.UnaryOp RawVar
   | ProjectLVal VarAccess LValField
   | ProjectState MonComponent
-  | Tuple [VarAccess]
-  | Record Fields Basics.ADTTag
+  | Tuple [VarAccess] Basics.ADTTag
+  | Record Fields
   | WithRecord RawVar Fields 
   | ProjField RawVar Basics.FieldName
   | ProjIdx RawVar Word
@@ -278,7 +278,7 @@ ppRawExpr (Bin binop _ va1 va2) = -- TODO: 2025-07-31; also print the fast flag
   ppId va1 <+> text (show binop) <+> ppId va2
 ppRawExpr (Un op v) =
   text (show op) <> PP.parens (ppId v)
-ppRawExpr (Tuple vars) =
+ppRawExpr (Tuple vars _) =
   PP.parens $ PP.hsep $ PP.punctuate (text ",") (map ppId vars)
 ppRawExpr (List vars) =
   PP.brackets $ PP.hsep $ PP.punctuate (text ",") (map ppId vars)
@@ -290,7 +290,7 @@ ppRawExpr (Const lit) = ppLit lit
 --                       then text v 
 --                       else text v <> text "$base"
 ppRawExpr (Lib (Basics.LibName l) v) = text l <> text "." <> text v
-ppRawExpr (Record fields _) = PP.braces $ qqFields fields
+ppRawExpr (Record fields) = PP.braces $ qqFields fields
 ppRawExpr (WithRecord x fields) = PP.braces $ PP.hsep[ ppId x, text "with", qqFields fields]
 ppRawExpr (ProjField x f) =
   PP.text "ProjField" PP.<+> (ppId x) PP.<+> PP.text f

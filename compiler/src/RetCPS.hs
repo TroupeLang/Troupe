@@ -60,8 +60,8 @@ data SimpleTerm
    = Bin BinOp VarName VarName
    | Un UnaryOp VarName
    | ValSimpleTerm SVal
-   | Tuple [VarName]
-   | Record Fields Basics.ADTTag
+   | Tuple [VarName] Basics.ADTTag
+   | Record Fields 
    | WithRecord VarName Fields
    | ProjField VarName Basics.FieldName
    | ProjIdx VarName Word
@@ -141,7 +141,7 @@ ppSimpleTerm (ValSimpleTerm (Lit lit)) =
   ppLit lit
 ppSimpleTerm (ValSimpleTerm (KAbs klam)) =
   ppKLambda klam
-ppSimpleTerm (Tuple vars) =
+ppSimpleTerm (Tuple vars _) =
   PP.parens $ PP.hsep $ PP.punctuate (text ",") (map textv vars)
 ppSimpleTerm (List vars) =
   PP.brackets $ PP.hsep $ PP.punctuate (text ",") (map textv vars)
@@ -149,7 +149,7 @@ ppSimpleTerm (ListCons v1 v2) =
   PP.parens $ textv v1 PP.<> text "::" PP.<> textv v2
 ppSimpleTerm (Base b) = text b PP.<> text "$base"
 ppSimpleTerm (Lib (Basics.LibName lib) v) = text lib <+> text "." <+> text v
-ppSimpleTerm (Record fields _) = PP.braces $ qqFields fields
+ppSimpleTerm (Record fields) = PP.braces $ qqFields fields
 ppSimpleTerm (WithRecord x fields) = 
     PP.braces $ PP.hsep [textv x, text "with", qqFields fields]
 

@@ -52,8 +52,8 @@ type Fields =  [(Basics.FieldName, VarAccess)]
 data IRExpr
   = Bin Basics.BinOp VarAccess VarAccess
   | Un Basics.UnaryOp VarAccess
-  | Tuple [VarAccess]
-  | Record Fields Basics.ADTTag
+  | Tuple [VarAccess] Basics.ADTTag
+  | Record Fields
   | WithRecord VarAccess Fields 
   | ProjField VarAccess Basics.FieldName
   -- | Projection of a tuple field at the given index. The maximum allowed index
@@ -404,7 +404,7 @@ ppIRExpr (Bin binop va1 va2) =
   ppId va1 <+> text (show binop) <+> ppId va2
 ppIRExpr (Un op v) =
   text (show op) <> PP.parens (ppId v)
-ppIRExpr (Tuple vars) =
+ppIRExpr (Tuple vars _) =
   PP.parens $ PP.hsep $ PP.punctuate (text ",") (map ppId vars)
 ppIRExpr (List vars) =
   PP.brackets $ PP.hsep $ PP.punctuate (text ",") (map ppId vars)
@@ -416,7 +416,7 @@ ppIRExpr (Base v) = if v == "$$authorityarg" -- special casing; hack; 2018-10-18
                       then text v 
                       else text v <> text "$base"
 ppIRExpr (Lib (Basics.LibName l) v) = text l <> text "." <> text v
-ppIRExpr (Record fields _) = PP.braces $ qqFields fields
+ppIRExpr (Record fields) = PP.braces $ qqFields fields
 ppIRExpr (WithRecord x fields) = PP.braces $ PP.hsep[ ppId x, text "with", qqFields fields]
 ppIRExpr (ProjField x f) = 
   (ppId x) PP.<> PP.text "." PP.<> PP.text f

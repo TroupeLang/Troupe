@@ -589,12 +589,14 @@ instance ToJS RawExpr where
           then hsep [ ppId va1, text', ppId va2 ]
           else jsFunCall text' [ppId va1, ppId va2]
       Un op v -> return $ text (unaryOpToJS op) <> PP.parens (ppId v)
-      Tuple vars -> return $
-        text "rt.mkTuple" <> PP.parens (PP.brackets $ PP.hsep $ PP.punctuate (text ",") (map ppVarName vars))
-      Record fields tag -> do
+      Tuple vars tag -> return $
+        text "rt.mkTuple" <> PP.parens ((PP.brackets $ PP.hsep $ PP.punctuate (text ",") (map ppVarName vars)) <> text "," <> tagToJS tag)
+        where tagToJS True  = text "true"
+              tagToJS False = text "false"
+      Record fields -> do
         jsFields <- fieldsToJS fields 
         return $
-          PP.parens $ text "rt.mkRecord" <> PP.parens (PP.hsep [PP.brackets $ PP.hsep $ jsFields, text ",", tagToJS tag])
+          PP.parens $ text "rt.mkRecord" <> PP.parens (PP.hsep [PP.brackets $ PP.hsep $ jsFields])
         where tagToJS True = text "true"
               tagToJS False = text "false"
       WithRecord r fields -> do 

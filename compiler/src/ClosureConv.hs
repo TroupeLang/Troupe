@@ -162,12 +162,12 @@ cpsToIR (CPS.LetSimple vname@(VN ident) st kt) = do
         CPS.Un unop v -> do 
           v' <- transVar v
           _assign (Un unop v')
-        CPS.Tuple lst -> do 
+        CPS.Tuple lst tag -> do 
           lst' <- transVars lst 
-          _assign (Tuple lst')
-        CPS.Record fields tag -> do
+          _assign (Tuple lst' tag)
+        CPS.Record fields -> do
           fields' <- transFields fields
-          _assign (Record fields' tag)
+          _assign (Record fields')
         CPS.WithRecord x fields -> do
           x' <- transVar x 
           fields' <- transFields fields

@@ -9,11 +9,23 @@ export class RawTuple extends Array<LVal> implements TroupeAggregateRawValue {
   _troupeType = TroupeType.TUPLE;
   isTuple = true;
   stringRep = null;
+  _isADT: boolean;  
 
-  constructor(x: LVal[]) {
+  constructor(x: LVal[], isADT: boolean) {
     super(...x)
+    this._isADT = isADT;  
     this.stringRep = function (omitLevels = false, taintRef = null) {
-      return ("(" + listStringRep(x, omitLevels, taintRef) + ")");
+	if (this._isADT) {
+	    if (this.length === 2) {
+		let tag = this[0].val.toString()
+		let val = this[1].stringRep(omitLevels, taintRef)
+		return "(" + tag + " " + val + ")"
+	    } else {
+		return this[0].val.toString()
+	    }
+	} else {
+	    return ("(" + listStringRep(x, omitLevels, taintRef) + ")");
+	}
     };
 
     let dataLevels = x.map(lv => lv.dataLevel);

@@ -18,10 +18,10 @@ visitTerm atms (Var nm) =
       var = "v"
   in case find (\x -> (fst x) == nm) atms of
     Nothing -> Var nm
-    Just (t, []) -> Record [(tag, Just (Lit (LString nm)))] True -- Convert atom into a tagged record
+    Just (t, []) -> Tuple [Lit (LString nm)] True -- Convert atom into a tuple
     Just (t, _) ->
-      Abs (Lambda [VarPattern var] (Record [(tag, Just (Lit (LString nm)))
-                                           , (value, Just (Var var))
+      Abs (Lambda [VarPattern var] (Tuple  [ Lit (LString nm)
+                                           , Var var
                                            ] True))
 visitTerm atms (Abs lam) =
   Abs (visitLambda atms lam)
@@ -44,9 +44,9 @@ visitTerm atms (Case t declTermList p) =
   p
 visitTerm atms (If t1 t2 t3) =
   If (visitTerm atms t1) (visitTerm atms t2) (visitTerm atms t3)
-visitTerm atms (Tuple terms) =
-  Tuple (map (visitTerm atms) terms)
-visitTerm atms (Record fields tag) =  Record (visitFields atms fields) tag 
+visitTerm atms (Tuple terms tag) =
+  Tuple (map (visitTerm atms) terms) tag
+visitTerm atms (Record fields) = Record (visitFields atms fields)
 visitTerm atms (WithRecord e fields) = 
     WithRecord (visitTerm atms e) (visitFields atms fields)
 visitTerm atms (ProjField t f) =
@@ -74,7 +74,7 @@ visitFields atms fs  =  map visitField fs
 visitPattern :: [TypeConstructor] -> DeclPattern -> DeclPattern
 visitPattern atms pat@(VarPattern nm) =
   if any (\x -> x == (nm, [])) atms
-  then RecordPattern [("tag", Just (ValPattern (LString nm)))] ExactMatch -- Convert atom match into a record match
+  then TuplePattern [ValPattern (LString nm)] -- Convert atom match into a record match
   else pat
 visitPattern _ pat@(ValPattern _) = pat
 visitPattern atms (AtPattern p l) = AtPattern (visitPattern atms p) l
@@ -86,8 +86,7 @@ visitPattern atms (RecordPattern fields mode) = RecordPattern (map visitField fi
       where visitField pat@(_, Nothing) = pat 
             visitField (f, Just p) = (f, Just (visitPattern atms p))
 visitPattern atms (DataTypePattern nm pat) =
-  RecordPattern [("tag", Just (ValPattern (LString nm)))
-                ,("value", Just (visitPattern atms pat))] ExactMatch
+  TuplePattern [ ValPattern (LString nm), visitPattern atms pat]
                  
 
 visitLambda :: [TypeConstructor] -> Lambda -> Lambda

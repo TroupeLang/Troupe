@@ -416,9 +416,9 @@ expr2rawComp = \case
 
   -- The following constructor operations take labelled values as arguments,
   -- but these labels do not affect the labels of the resulting compound value.
-  IR.Tuple vs ->
+  IR.Tuple vs tag ->
     return SimpleRawComp
-      { cVal = RExpr $ Tuple vs
+      { cVal = RExpr $ Tuple vs tag
       , cValLbl = PC
       , cTyLbl = PC
       }
@@ -428,9 +428,9 @@ expr2rawComp = \case
       , cValLbl = PC
       , cTyLbl = PC
       }
-  IR.Record fs tag ->
+  IR.Record fs ->
     return SimpleRawComp
-      { cVal = RExpr $ Record fs tag
+      { cVal = RExpr $ Record fs
       , cValLbl = PC
       , cTyLbl = PC
       }

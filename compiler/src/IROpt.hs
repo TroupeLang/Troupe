@@ -37,8 +37,8 @@ instance Substitutable IRExpr where
         case e of 
             Bin op x y -> Bin op (apply subst x) (apply subst y)
             Un op x -> Un op (apply subst x)
-            Tuple xs -> Tuple (map (apply subst) xs)
-            Record fields tag -> Record (_ff fields) tag
+            Tuple xs tag -> Tuple (map (apply subst) xs) tag
+            Record fields -> Record (_ff fields)
             WithRecord x fields -> WithRecord (apply subst x) (_ff fields)
             ProjField x f -> ProjField (apply subst x) f
             ProjIdx x idx -> ProjIdx (apply subst x) idx
@@ -193,8 +193,8 @@ canFailOrHasEffects expr = case expr of
     Lib _ _ -> True
     
     -- These are generally safe
-    Tuple _ -> False
-    Record _ _ -> False
+    Tuple _ _ -> False
+    Record _ -> False
     WithRecord _ _ -> False  -- Assuming the base is a record
     List _ -> False
     Const _ -> False 
@@ -295,8 +295,8 @@ irExprPeval e =
               markUsed' x 
               markUsed' y
               def_
-        Record fields _tag -> do mapM pevalField fields 
-                                 r_ (RecordVal fields, e)
+        Record fields  -> do mapM pevalField fields 
+                             r_ (RecordVal fields, e)
                             -- def_
             where pevalField (_, x) = markUsed' x
         WithRecord r fields -> do   
@@ -394,7 +394,7 @@ irExprPeval e =
             r_ (Unknown, e)
 
 
-        (Tuple xs) -> do
+        (Tuple xs _) -> do
             mapM_ markUsed' xs 
             r_ (TupleVal xs, e)
 

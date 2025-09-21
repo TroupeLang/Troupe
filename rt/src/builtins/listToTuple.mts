@@ -21,7 +21,7 @@ export function BuiltinListToTuple<TBase extends Constructor<UserRuntimeZero>>(B
             }
             
             // Create the tuple from the array
-            let tuple = mkTuple(arr);
+            let tuple = mkTuple(arr, false);
             
             // Return the tuple with the combined security level
             return this.runtime.ret(new LVal(tuple, combinedLevel));

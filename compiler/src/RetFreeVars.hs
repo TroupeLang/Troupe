@@ -51,12 +51,12 @@ instance FreeNames SimpleTerm where
   freeVars (Bin _ v1 v2) = FreeVars (Set.fromList [v1, v2])
   freeVars (Un _ v) = FreeVars (Set.singleton v)
   freeVars (ValSimpleTerm sval) = freeVars sval
-  freeVars (Tuple vs) = FreeVars (Set.fromList vs)
+  freeVars (Tuple vs _) = FreeVars (Set.fromList vs)
   freeVars (List vs)  = FreeVars (Set.fromList vs)
   freeVars (ListCons v1 v2) = FreeVars (Set.fromList [v1, v2])
   freeVars (Base _ ) = FreeVars $ Set.empty
   freeVars (Lib _ _) = FreeVars $ Set.empty
-  freeVars (Record fields _) = unionMany $ 
+  freeVars (Record fields) = unionMany $ 
       map (\(f,x) -> FreeVars (if x == VN f then Set.empty else Set.singleton x))
       fields
   freeVars (WithRecord x fields) = 

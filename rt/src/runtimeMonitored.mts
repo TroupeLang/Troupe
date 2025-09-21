@@ -510,7 +510,7 @@ export async function start(f) {
   if (__p2pRunning) {
     let service_arg = 
       new LVal ( new Record([ ["authority", mainAuthority], 
-                              ["options", __unit]], false), 
+                              ["options", __unit]]), 
               levels.BOT);
     __sched.scheduleNewThreadAtLevel(__service['service']
           , service_arg

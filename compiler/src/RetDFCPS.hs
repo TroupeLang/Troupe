@@ -258,17 +258,17 @@ trans (Core.AssertElseError e0 e1 e2 p) context = do
 
 
 
-trans (Core.Tuple ts) context =
+trans (Core.Tuple ts tag) context =
   transTuple ts [] context
   where
     transTuple [] acc context = do
       v <- freshV
       e' <- context v
-      return $ LetSimple v (Tuple (reverse acc)) e'
+      return $ LetSimple v (Tuple (reverse acc) tag) e'
     transTuple (t:ts) acc context =
       trans t (\v -> transTuple ts (v:acc) context)
 
-trans (Core.Record fields tag) context = transFields (\fds -> Record fds tag) fields context
+trans (Core.Record fields) context = transFields Record fields context
 
 trans (Core.WithRecord  e fields) context = 
   trans e (\ rr -> transFields (WithRecord rr) fields context )

@@ -67,7 +67,7 @@ instance Substitutable IRTerminator where
                 AssertElseError (apply subst x) (apply subst bb) (apply subst y) pos 
             LibExport x -> LibExport (apply subst x)
             Error x pos -> Error (apply subst x) pos 
-            Call decVar bb1 bb2 -> Call decVar (apply subst bb1) (apply subst bb2)
+            StackExpand decVar bb1 bb2 -> StackExpand decVar (apply subst bb1) (apply subst bb2)
 
 instance Substitutable IRBBTree where 
     apply subst (BB insts tr) = 
@@ -462,7 +462,7 @@ trPeval (AssertElseError x bb y_err pos) = do
                 return $ BB [] (AssertElseError x bb' y_err pos)     
 
 
-trPeval (Call x bb1 bb2) = do 
+trPeval (StackExpand x bb1 bb2) = do 
     bb1' <- peval bb1 
     bb2' <- peval bb2
 
@@ -473,7 +473,7 @@ trPeval (Call x bb1 bb2) = do
             setChangeFlag           
             return $ BB (insts1 ++ insts2) tr2
         _ -> 
-            return $ BB [] (Call x bb1' bb2')
+            return $ BB [] (StackExpand x bb1' bb2')
 
 trPeval tr@(Ret x) = do 
     markUsed' x 

@@ -188,7 +188,7 @@ trTr (Raw.LibExport v) = do
      return $ Stack.LibExport v 
 trTr (Raw.Error r1 p) = do 
      return $ Stack.Error r1 p 
-trTr (Raw.Call bb1 bb2) = do 
+trTr (Raw.StackExpand bb1 bb2) = do 
    __callDepth <- localCallDepth <$> ask 
    bb1' <- local (\tenv -> tenv { localCallDepth = __callDepth + 1 } ) $ trBB bb1 
    n <- getBlockNumber
@@ -205,7 +205,7 @@ trTr (Raw.Call bb1 bb2) = do
                     | x <-  filter filterConsts (Set.elems varsToLoad) ]   
    bb2'@(Stack.BB inst_2 tr_2) <- trBB bb2
 
-   return $ Stack.Call bb1' (Stack.BB (loads ++ inst_2) tr_2)
+   return $ Stack.StackExpand bb1' (Stack.BB (loads ++ inst_2) tr_2)
 
 
 trBB :: Raw.RawBBTree -> Tr Stack.StackBBTree 

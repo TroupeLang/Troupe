@@ -201,7 +201,7 @@ cpsToIR (CPS.LetSimple vname@(VN ident) st kt) = do
 cpsToIR (CPS.LetRet (CPS.Cont arg kt') kt) = do
     t  <- cpsToIR kt
     t' <- local (insVar arg) (cpsToIR kt')
-    return $ CCIR.BB [] $ Call arg t t'
+    return $ CCIR.BB [] $ StackExpand arg t t'
 cpsToIR (CPS.LetFun fdefs kt) = do 
     let vnames_orig = map (\(CPS.Fun fname _) -> fname) fdefs
     let localExt = local (insVars vnames_orig)

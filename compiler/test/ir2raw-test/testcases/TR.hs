@@ -30,8 +30,8 @@ tcs = map (second mkP)
        (BB [Assign (VN "b1") (Base "v1") ] (LibExport (mkV "b1")))
        (BB [Assign (VN "b2") (Base "v2") ] (LibExport (mkV "b2")))
   ),
-  ( "Call"
-  , Call (VN "x")
+  ( "StackExpand"
+  , StackExpand (VN "x")
        (BB [Assign (VN "b1") (Base "v1") ] (LibExport (mkV "b1")))
        (BB [Assign (VN "b2") (Base "v2") ] (LibExport (mkV "b2")))
   ),

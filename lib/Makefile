@@ -9,6 +9,7 @@ build:
 	$(COMPILER) ./String.trp -l
 	$(COMPILER) ./Hash.trp -l
 	$(COMPILER) ./Unit.trp -l
+	$(COMPILER) ./Map.trp -l
 	$(COMPILER) ./StencilVector.trp -l
 	$(COMPILER) ./HashMap.trp -l
 	$(COMPILER) ./HashSet.trp -l
@@ -21,7 +22,6 @@ build:
 	$(COMPILER) ./stdio.trp -l
 	$(COMPILER) ./raft.trp -l
 	$(COMPILER) ./raft_debug.trp -l
-	$(COMPILER) ./bst.trp -l
 	$(COMPILER) ./localregistry.trp -l
 
 clean:

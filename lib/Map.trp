@@ -1,0 +1,193 @@
+import Number
+import List
+
+let (* TODO: The map is implemented as an unbalanced binary search tree. This opens up the
+     *       possibility for an adversary to induce a denial of service by choosing a bad
+     *       order of insertion.
+     *)
+
+    (*--- Construction ---*)
+
+    (** Returns an empty map using the comparator, `cmp`. *)
+    fun empty cmp = (cmp, ())
+
+    (** Returns a map using the comparator function, `cmp` with the single `key`-`value` pair. *)
+    fun singleton cmp key value = (cmp, ((), (key , value), ()))
+
+    (** Returns the map with the given `key`-`value` pair inserted. *)
+    fun insert (cmp,t) key value =
+        let fun insertRec ()            = ((), (key, value), ())
+              | insertRec (l, (k,v), r) =
+                if key = k
+                then (l, (k, value), r)
+                else if cmp key k then (insertRec l, (k,v), r) else (l, (k,v), insertRec r)
+        in (cmp, insertRec t) end
+
+    (*--- Queries ---*)
+
+    (** Returns `true` if the map is empty. *)
+    fun null (_, ()) = true
+      | null _       = false
+
+    (** Returns the `[value]` associated with the `key` if it exists; otherwise, `[]`. *)
+    (* HACK (#53): Use option type instead of list. *)
+    fun findOpt (cmp,t) key =
+        let fun findRec ()            = []
+              | findRec (l, (k,v), r) = if key = k then [v]
+                                        else if cmp key k then findRec l else findRec r
+        in findRec t end
+
+    (** Returns the value associated with the `key`. *)
+    fun find m key = case findOpt m key of [v] => v
+
+    (** Returns `true` if the given key is associated with a value. *)
+    fun mem m key = case findOpt m key of [] => false
+                                        | _  => true
+
+    (** Number of key-value pairs stored in the given map. *)
+    (* TODO (Optimisation): Store size at root to make this O(1)? *)
+    fun size (_,t) =
+        let fun sizeRec ()            = 0
+              | sizeRec (l, (_,_), r) = (sizeRec l) + 1 + (sizeRec r)
+        in sizeRec t end
+
+    (** Depth of the tree. *)
+    fun depth (_,t) =
+        let fun depthRec ()            = 0
+              | depthRec (l, (_,_), r) = 1 + Number.max ((depthRec l), (depthRec r))
+        in depthRec t end
+
+    (*--- Priority Queue ---*)
+
+    (** The smallest `[(key,value)]` if it exists; otherwise, `[]`. *)
+    fun minOpt (_,t) =
+        let fun minRec ()             = []
+              | minRec ((), (k,v), _) = [(k,v)]
+              | minRec (l,  (_,_), _) = minRec l
+        in minRec t
+        end
+
+    (** The smallest `(key,value)`. *)
+    fun min m = case minOpt m of [kv] => kv
+
+    (** The smallest `[(key,value)]` (if any) together with the tree updated to not include said
+     *  value. If the tree is empty, then `[]` is returned. *)
+    fun extractMinOpt (cmp, t) =
+        let fun extractMinRec ()             = ([], ())
+              | extractMinRec ((), (k,v), r) = ([(k,v)], r)
+              | extractMinRec (l, (k,v), r)  = let val (kv', l') = extractMinRec l
+                                               in (kv', (l', (k,v), r)) end
+
+            val (kv', t') = extractMinRec t
+        in (kv', (cmp, t')) end
+
+    (** The smallest `(key,value)` together with the tree updated to not include said value. *)
+    fun extractMin m = case extractMinOpt m of ([kv], m') => (kv, m')
+
+    (*--- Destruction ---*)
+
+    (** Returns the map without the given `key` and its value removed. *)
+    fun remove (cmp,t) key =
+        let fun removeRec ()              = ()
+              | removeRec (l,  (k,v), ()) = if key = k then l else (l,  (k,v), ())
+              | removeRec ((), (k,v), r)  = if key = k then r else ((), (k,v), r)
+              | removeRec (l,  (k,v), r)  =
+                if key = k
+                then let val ((k',v'), (_,r')) = extractMin (cmp, r)
+                     in (l, (k',v'), r') end
+                else if cmp key k then (removeRec l, (k,v), r) else (l, (k,v), removeRec r)
+        in (cmp, removeRec t) end
+
+    (*--- Manipulation ---*)
+
+    (** Fold function `f` over all key-value pairs in the map in order of the keys.
+     *  Not tail-recursive. *)
+    fun foldl f y (_,t) =
+        let fun foldlRec y' ()            = y'
+              | foldlRec y' (l, (k,v), r) = foldlRec (f ((k,v), foldlRec y' l)) r
+        in foldlRec y t end
+
+    (** Fold function `f` over all key-value pairs in the map in reverse order of the keys.
+     *  Not tail-recursive. *)
+    fun foldr f y (_,t) =
+        let fun foldrRec y' ()            = y'
+              | foldrRec y' (l, (k,v), r) = foldrRec (f ((k,v), foldrRec y' r)) l
+        in foldrRec y t end
+
+    (** Map function `f` onto all key-value pairs in the map. The new map uses the comparator `cmp`.
+     *  Not tail-recursive. *)
+    fun map cmp f m =
+        let fun f' (kv, m') = let val (k', v') = f kv
+                              in insert m' k' v' end
+        in foldl f' (empty cmp) m end
+
+    (** Filters key-value pairs in the given map. Not tail-recursive. *)
+    fun filter f (cmp, t) =
+        let fun filterRec () = ()
+              | filterRec (l,  kv, ()) = if f kv then (filterRec l, kv, ()) else filterRec l
+              | filterRec ((), kv, r ) = if f kv then ((), kv, filterRec r) else filterRec r
+              | filterRec (l,  kv, r ) =
+                if f kv
+                then (filterRec l, kv, filterRec r)
+                else case filterRec r of () => filterRec l
+                                       | r' => let val (kv', (_, r'')) = extractMin (cmp, r')
+                                               in (filterRec l, kv', r'') end
+        in (cmp, filterRec t) end
+
+    (* TODO: merge / union, split. *)
+
+    (*--- Comparison ---*)
+
+    (* TODO *)
+
+    (*--- List Conversion ---*)
+
+    (** A list of all keys stored in the given map in ascending order. *)
+    fun keys m = foldr (fn ((k,_), acc) => k::acc) [] m
+
+    (** A list of all keys stored in the given map. *)
+    fun values m = foldr (fn ((_,v), acc) => v::acc) [] m
+
+    (** A list of key-value pairs stored in the given map. *)
+    fun toDescList m = foldl (fn ((k,v), acc) => (k,v)::acc) [] m
+
+    (** A list of key-value pairs stored in the given map. *)
+    fun toAscList m = foldr (fn ((k,v), acc) => (k,v)::acc) [] m
+
+    (** Alias for `toAscList`. *)
+    val toList = toAscList
+
+    (** The map (using the provided comparator function) that contains all key-value pairs in the
+     *  given list. Tail-recursive. *)
+    fun fromList cmp xs = List.foldl (fn ((k,v), m) => insert m k v) (empty cmp) xs
+
+    (*--- Module ---*)
+    val Map = {
+        empty,
+        singleton,
+        insert,
+        null,
+        size,
+        depth,
+        findOpt,
+        find,
+        mem,
+        minOpt,
+        min,
+        extractMinOpt,
+        extractMin,
+        remove,
+        foldl,
+        foldr,
+        map,
+        filter,
+        keys,
+        values,
+        toDescList,
+        toAscList,
+        toList,
+        fromList
+    }
+
+in [ ("Map", Map) ]
+end

@@ -1,0 +1,312 @@
+import Unit
+import Map
+
+let fun lt a b = a < b
+    fun gt a b = a > b
+
+    val empty     = Map.empty lt
+    val singleton = Map.singleton lt
+    val fromList  = Map.fromList lt
+
+    val tests = Unit.group "Map" [
+            (* -- Empty, size, and findOpt (mem, find) -- *)
+            let val m = empty
+            in Unit.group "empty" [
+                    Unit.it "is null"                         (Unit.isTrue  (Map.null m))
+                  , Unit.it "has size 0"                      (Unit.isEq 0  (Map.size m))
+                  , Unit.it "has depth 0"                     (Unit.isEq 0  (Map.depth m))
+                  , Unit.it "does not contain 0"              (Unit.isFalse (Map.mem m 0))
+                  , Unit.it "returns [] for findOpt 0"        (Unit.isEq [] (Map.findOpt m 0))
+                  , Unit.it "does not contain 1"              (Unit.isFalse (Map.mem m 1))
+                  , Unit.it "returns [] for findOpt 1"        (Unit.isEq [] (Map.findOpt m 1))
+                  , Unit.it "is not equal to 'empty >'"       (Unit.isNeq   (Map.empty gt) m)
+                  , Unit.it "returns [] for minOpt"           (Unit.isEq [] (Map.minOpt m))
+                  , Unit.it "returns [], Ø for extractMinOpt"
+                            (Unit.isEq ([], empty) (Map.extractMinOpt m))
+                ]
+            end,
+            (* -- Insert / Singleton, size, and findOpt (mem, find) -- *)
+            let val m = Map.insert (empty) 0 42
+            in Unit.group "insert (empty) 0 42" [
+                    Unit.it "is not null"                 (Unit.isFalse   (Map.null m))
+                  , Unit.it "has size 1"                  (Unit.isEq 1    (Map.size m))
+                  , Unit.it "has depth 1"                 (Unit.isEq 1    (Map.depth m))
+                  , Unit.it "contains 0"                  (Unit.isTrue    (Map.mem m 0))
+                  , Unit.it "returns [42] for findOpt 0"  (Unit.isEq [42] (Map.findOpt m 0))
+                  , Unit.it "returns 42 for find 0"       (Unit.isEq 42   (Map.find m 0))
+                  , Unit.it "does not contain 1"          (Unit.isFalse   (Map.mem m 1))
+                  , Unit.it "returns [] for findOpt 1"    (Unit.isEq []   (Map.findOpt m 1))
+                  , Unit.it "returns [(0,42)] for minOpt" (Unit.isEq [(0,42)] (Map.minOpt m))
+                  , Unit.it "returns [(0,42)], Ø for extractMinOpt"
+                            (Unit.isEq ([(0,42)], empty) (Map.extractMinOpt m))
+                ]
+            end,
+            let val m = singleton 0 42
+            in Unit.group "singleton 0 42" [
+                    Unit.it "is equivalent to 'insert (empty) 0 42'"
+                            (Unit.isEq (Map.insert empty 0 42) m)
+                ]
+            end,
+            (* -- Insert (fromList), size, findOpt (mem, find), min / extractMin -- *)
+            let val m = fromList [(0,42)]
+            in Unit.group "fromList [(0,42)]" [
+                    Unit.it "is equivalent to 'insert (empty) 0 42'"
+                            (Unit.isEq (Map.insert empty 0 42) m)
+                ]
+            end,
+            let val m = fromList [(1,42)]
+            in Unit.group "fromList [(1,42)]" [
+                    Unit.it "is not null"                 (Unit.isFalse   (Map.null m))
+                  , Unit.it "has size 1"                  (Unit.isEq 1    (Map.size m))
+                  , Unit.it "has depth 1"                 (Unit.isEq 1    (Map.depth m))
+                  , Unit.it "does not contain 0"          (Unit.isFalse   (Map.mem m 0))
+                  , Unit.it "returns [] for findOpt 0"    (Unit.isEq []   (Map.findOpt m 0))
+                  , Unit.it "contains 1"                  (Unit.isTrue    (Map.mem m 1))
+                  , Unit.it "returns [42] for findOpt 1"  (Unit.isEq [42] (Map.findOpt m 1))
+                  , Unit.it "returns 42 for find 1"       (Unit.isEq 42   (Map.find m 1))
+                  , Unit.it "returns [(0,42)] for minOpt" (Unit.isEq [(1,42)] (Map.minOpt m))
+                  , Unit.it "returns [(0,42)], Ø for extractMinOpt"
+                            (Unit.isEq ([(1,42)], empty) (Map.extractMinOpt m))
+                ]
+            end,
+            let val m = Map.insert (fromList [(0,42)]) 0 "a"
+            in Unit.group "insert (fromList [(0,42)]) 0 'a'" [
+                    Unit.it "is not null"                  (Unit.isFalse    (Map.null m))
+                  , Unit.it "has size 1"                   (Unit.isEq 1     (Map.size m))
+                  , Unit.it "has depth 1"                  (Unit.isEq 1     (Map.depth m))
+                  , Unit.it "contains 0"                   (Unit.isTrue     (Map.mem m 0))
+                  , Unit.it "returns ['a'] for findOpt 0"  (Unit.isEq ["a"] (Map.findOpt m 0))
+                  , Unit.it "returns 'a' for find 0"       (Unit.isEq "a"   (Map.find m 0))
+                  , Unit.it "does not contain 1"           (Unit.isFalse    (Map.mem m 1))
+                  , Unit.it "returns [] for findOpt 1"     (Unit.isEq []    (Map.findOpt m 1))
+                  , Unit.it "returns [(0,'a')] for minOpt" (Unit.isEq [(0,"a")] (Map.minOpt m))
+                  , Unit.it "returns [(0,'a')], Ø for extractMinOpt"
+                            (Unit.isEq ([(0,"a")], empty) (Map.extractMinOpt m))
+                ]
+            end,
+            let val m = fromList [(1,42), (0,21)]
+            in Unit.group "fromList [(1,42), (0,21)]" [
+                    Unit.it "is not null"                 (Unit.isFalse   (Map.null m))
+                  , Unit.it "has size 2"                  (Unit.isEq 2    (Map.size m))
+                  , Unit.it "has depth 2"                 (Unit.isEq 2    (Map.depth m))
+                  , Unit.it "contains 0"                  (Unit.isTrue    (Map.mem m 0))
+                  , Unit.it "returns [21] for findOpt 0"  (Unit.isEq [21] (Map.findOpt m 0))
+                  , Unit.it "returns 21 for find 0"       (Unit.isEq 21   (Map.find m 0))
+                  , Unit.it "contains 1"                  (Unit.isTrue    (Map.mem m 1))
+                  , Unit.it "returns [42] for findOpt 1"  (Unit.isEq [42] (Map.findOpt m 1))
+                  , Unit.it "returns 42 for find 1"       (Unit.isEq 42   (Map.find m 1))
+                  , Unit.it "returns [(0,42)] for minOpt" (Unit.isEq [(0,21)] (Map.minOpt m))
+                  , Unit.it "returns [(0,42)], .. for extractMinOpt"
+                            (Unit.isEq ([(0,21)], fromList [(1,42)]) (Map.extractMinOpt m))
+                ]
+            end,
+            let val m = fromList [(0,21),(1,42)]
+            in Unit.group "fromList [(0,21), (1,42)]" [
+                    Unit.it "is not null"                 (Unit.isFalse   (Map.null m))
+                  , Unit.it "has size 2"                  (Unit.isEq 2    (Map.size m))
+                  , Unit.it "has depth 2"                 (Unit.isEq 2    (Map.depth m))
+                  , Unit.it "contains 0"                  (Unit.isTrue    (Map.mem m 0))
+                  , Unit.it "returns [21] for findOpt 0"  (Unit.isEq [21] (Map.findOpt m 0))
+                  , Unit.it "returns 21 for find 0"       (Unit.isEq 21   (Map.find m 0))
+                  , Unit.it "contains 1"                  (Unit.isTrue    (Map.mem m 1))
+                  , Unit.it "returns [42] for findOpt 1"  (Unit.isEq [42] (Map.findOpt m 1))
+                  , Unit.it "returns 42 for find 1"       (Unit.isEq 42   (Map.find m 1))
+                  , Unit.it "returns [(0,42)] for minOpt" (Unit.isEq [(0,21)] (Map.minOpt m))
+                  , Unit.it "returns [(0,42)], .. for extractMinOpt"
+                            (Unit.isEq ([(0,21)], fromList [(1,42)]) (Map.extractMinOpt m))
+                ]
+            end,
+            let val m = fromList [(1,42),(0,21),(2,7)]
+            in Unit.group "fromList [(0,21), (1,42), (2,7)]" [
+                    Unit.it "is not null"                 (Unit.isFalse   (Map.null m))
+                  , Unit.it "has size 3"                  (Unit.isEq 3    (Map.size m))
+                  , Unit.it "has depth 2"                 (Unit.isEq 2    (Map.depth m))
+                  , Unit.it "contains 0"                  (Unit.isTrue    (Map.mem m 0))
+                  , Unit.it "returns [21] for findOpt 0"  (Unit.isEq [21] (Map.findOpt m 0))
+                  , Unit.it "returns 21 for find 0"       (Unit.isEq 21   (Map.find m 0))
+                  , Unit.it "contains 1"                  (Unit.isTrue    (Map.mem m 1))
+                  , Unit.it "returns [42] for findOpt 1"  (Unit.isEq [42] (Map.findOpt m 1))
+                  , Unit.it "returns 42 for find 1"       (Unit.isEq 42   (Map.find m 1))
+                  , Unit.it "contains 2"                  (Unit.isTrue    (Map.mem m 2))
+                  , Unit.it "returns [7] for findOpt 2"   (Unit.isEq [7]  (Map.findOpt m 2))
+                  , Unit.it "returns 7 for find 2"        (Unit.isEq 7    (Map.find m 2))
+                  , Unit.it "returns [(0,42)] for minOpt" (Unit.isEq [(0,21)] (Map.minOpt m))
+                  , Unit.it "returns [(0,42)], .. for extractMinOpt"
+                            (Unit.isEq ([(0,21)], fromList [(1,42),(2,7)]) (Map.extractMinOpt m))
+                ]
+            end,
+            let val m = fromList [(2,7),(1,42),(0,21)]
+            in Unit.group "fromList [(2,7), (1,42), (0,21)]" [
+                    Unit.it "is not null"                 (Unit.isFalse   (Map.null m))
+                  , Unit.it "has size 3"                  (Unit.isEq 3    (Map.size m))
+                  , Unit.it "has depth 3"                 (Unit.isEq 3    (Map.depth m))
+                  , Unit.it "contains 0"                  (Unit.isTrue    (Map.mem m 0))
+                  , Unit.it "returns [21] for findOpt 0"  (Unit.isEq [21] (Map.findOpt m 0))
+                  , Unit.it "returns 21 for find 0"       (Unit.isEq 21   (Map.find m 0))
+                  , Unit.it "contains 1"                  (Unit.isTrue    (Map.mem m 1))
+                  , Unit.it "returns [42] for findOpt 1"  (Unit.isEq [42] (Map.findOpt m 1))
+                  , Unit.it "returns 42 for find 1"       (Unit.isEq 42   (Map.find m 1))
+                  , Unit.it "contains 2"                  (Unit.isTrue    (Map.mem m 2))
+                  , Unit.it "returns [7] for findOpt 2"   (Unit.isEq [7]  (Map.findOpt m 2))
+                  , Unit.it "returns 7 for find 2"        (Unit.isEq 7    (Map.find m 2))
+                  , Unit.it "returns [(0,42)] for minOpt" (Unit.isEq [(0,21)] (Map.minOpt m))
+                  , Unit.it "returns [(0,42)], .. for extractMinOpt"
+                            (Unit.isEq ([(0,21)], fromList [(2,7),(1,42)]) (Map.extractMinOpt m))
+                ]
+            end,
+            let val m = fromList [(0,21),(1,42),(2,7)]
+            in Unit.group "fromList [(0,21), (1,42), (2,7)]" [
+                    Unit.it "is not null"                 (Unit.isFalse   (Map.null m))
+                  , Unit.it "has size 3"                  (Unit.isEq 3    (Map.size m))
+                  , Unit.it "has depth 3"                 (Unit.isEq 3    (Map.depth m))
+                  , Unit.it "contains 0"                  (Unit.isTrue    (Map.mem m 0))
+                  , Unit.it "returns [21] for findOpt 0"  (Unit.isEq [21] (Map.findOpt m 0))
+                  , Unit.it "returns 21 for find 0"       (Unit.isEq 21   (Map.find m 0))
+                  , Unit.it "contains 1"                  (Unit.isTrue    (Map.mem m 1))
+                  , Unit.it "returns [42] for findOpt 1"  (Unit.isEq [42] (Map.findOpt m 1))
+                  , Unit.it "returns 42 for find 1"       (Unit.isEq 42   (Map.find m 1))
+                  , Unit.it "contains 2"                  (Unit.isTrue    (Map.mem m 2))
+                  , Unit.it "returns [7] for findOpt 2"   (Unit.isEq [7]  (Map.findOpt m 2))
+                  , Unit.it "returns 7 for find 2"        (Unit.isEq 7    (Map.find m 2))
+                  , Unit.it "returns [(0,42)] for minOpt" (Unit.isEq [(0,21)] (Map.minOpt m))
+                  , Unit.it "returns [(0,42)], empty for extractMinOpt"
+                            (Unit.isEq ([(0,21)], fromList [(1,42),(2,7)]) (Map.extractMinOpt m))
+                ]
+            end,
+            (* -- Insert (fromList), delete, size, and findOpt (mem and find) -- *)
+            let val m = Map.remove (fromList [(0,21)]) 0
+            in Unit.group "remove (fromList [(0,42)]) 0" [
+                    Unit.it "is equivalent to 'empty'" (Unit.isEq empty m)
+                ]
+            end,
+            let val m = fromList [(1,42)]
+                val m' = Map.remove m 0
+            in Unit.group "remove (fromList [(1,42)]) 0" [
+                    Unit.it "is equivalent to itself" (Unit.isEq m m')
+                ]
+            end,
+            let val m = fromList [(1,42)]
+                val m' = Map.remove m 2
+            in Unit.group "remove (fromList [(1,42)]) 2" [
+                    Unit.it "is equivalent to itself" (Unit.isEq m m')
+                ]
+            end,
+            let val m = Map.remove (fromList [(1,42),(0,21),(2,7)]) 0
+            in Unit.group "remove (fromList [(1,42),(0,21),(2,7)]) 0" [
+                    Unit.it "is equivalent to 'fromList [(1,42), (2,7)]'"
+                            (Unit.isEq (fromList [(1,42), (2,7)]) m)
+                ]
+            end,
+            let val m = Map.remove (fromList [(1,42),(0,21),(2,7)]) 1
+            in Unit.group "remove (fromList [(1,42),(0,21),(2,7)]) 1" [
+                    Unit.it "is equivalent to 'fromList [(2,7), (0,21)]'"
+                            (Unit.isEq (fromList [(2,7), (0,21)]) m)
+                ]
+            end,
+            let val m = Map.remove (fromList [(1,42),(0,21),(2,7)]) 2
+            in Unit.group "remove (fromList [(1,42),(0,21),(2,7)]) 2" [
+                    Unit.it "is equivalent to 'fromList [(1,42), (0,21)]'"
+                            (Unit.isEq (fromList [(1,42), (0,21)]) m)
+                ]
+            end,
+            (* -- foldl, foldlr, and its derivatives: map, keys, values, and toList -- *)
+            let fun f (kv,x) = kv::x
+            in Unit.group "foldl" [
+                    Unit.it "folds fromList []"
+                            (Unit.isEq []             (Map.foldl f [] (fromList [])))
+                  , Unit.it "folds fromList [(1,2)]"
+                            (Unit.isEq [(1,2)]        (Map.foldl f [] (fromList [(1,2)])))
+                  , Unit.it "folds fromList [(2,0), (1,3)]"
+                            (Unit.isEq [(2,0), (1,3)] (Map.foldl f [] (fromList [(2,0),(1,3)])))
+                ]
+            end,
+            let fun f (kv,x) = kv::x
+            in Unit.group "foldr" [
+                    Unit.it "folds fromList []"
+                            (Unit.isEq []             (Map.foldr f [] (fromList [])))
+                  , Unit.it "folds fromList [(1,2)]"
+                            (Unit.isEq [(1,2)]        (Map.foldr f [] (fromList [(1,2)])))
+                  , Unit.it "folds fromList [(2,0), (1,3)]"
+                            (Unit.isEq [(1,3), (2,0)] (Map.foldr f [] (fromList [(2,0),(1,3)])))
+                ]
+            end,
+            Unit.group "map" [
+                Unit.it "mirrors > (x -> x) (fromList [(2,0), (1,3)])"
+                        (Unit.isEq (Map.fromList gt [(1,3), (2,0)])
+                                   (Map.map gt (fn kv => kv) (fromList [(2,0), (1,3)])))
+              , Unit.it "maps keys > ((k,v) -> (-k,v)) (fromList [(2,0), (1,3)])"
+                        (Unit.isEq (Map.fromList gt [(-1,3), (-2,0)])
+                                   (Map.map gt (fn (k,v) => (-k,v)) (fromList [(2,0), (1,3)])))
+              , Unit.it "maps values > ((k,v) -> (k,-v)) (fromList [(2,0), (1,3)])"
+                        (Unit.isEq (Map.fromList gt [(1,-3), (2,-0)])
+                                   (Map.map gt (fn (k,v) => (k,-v)) (fromList [(2,0), (1,3)])))
+            ],
+            Unit.group "keys, values, and toList" [
+                let val m   = fromList []
+                in Unit.it "converts []" [
+                        (Unit.isEq [] (Map.keys m))
+                      , (Unit.isEq [] (Map.values m))
+                      , (Unit.isEq [] (Map.toList m))
+                      , (Unit.isEq [] (Map.toAscList m))
+                      , (Unit.isEq [] (Map.toDescList m))
+                    ]
+                end
+              , let val m   = fromList [(0,"a")]
+                in Unit.it "converts [(0,'a')]" [
+                        (Unit.isEq [0] (Map.keys m))
+                      , (Unit.isEq ["a"] (Map.values m))
+                      , (Unit.isEq [(0,"a")] (Map.toList m))
+                      , (Unit.isEq [(0,"a")] (Map.toAscList m))
+                      , (Unit.isEq [(0,"a")] (Map.toDescList m))
+                    ]
+                end
+              , let val m   = fromList [(1,"b"), (0,"a")]
+                in Unit.it "converts [(1,'b'), (0,'a')]" [
+                        (Unit.isEq [0, 1] (Map.keys m))
+                      , (Unit.isEq ["a", "b"] (Map.values m))
+                      , (Unit.isEq [(0,"a"), (1,"b")] (Map.toList m))
+                      , (Unit.isEq [(0,"a"), (1,"b")] (Map.toAscList m))
+                      , (Unit.isEq [(1,"b"), (0,"a")] (Map.toDescList m))
+                    ]
+                end
+              , let val m   = fromList [(1,"b"), (0,"a"), (2,"c")]
+                in Unit.it "converts [(1, 'b'), (0,'a'), (2, 'c')]" [
+                        (Unit.isEq [0, 1, 2] (Map.keys m))
+                      , (Unit.isEq ["a", "b", "c"] (Map.values m))
+                      , (Unit.isEq [(0, "a"), (1, "b"), (2, "c")] (Map.toList m))
+                      , (Unit.isEq [(0, "a"), (1, "b"), (2, "c")] (Map.toAscList m))
+                      , (Unit.isEq [(2, "c"), (1, "b"), (0, "a")] (Map.toDescList m))
+                    ]
+                end,
+              (* -- filter -- *)
+              let val m = fromList [(1,2), (2,0), (0,3), (3,1)]
+              in  Unit.group "filter" [
+                  Unit.it "flushes (_ -> false)"
+                          (Unit.isEq (fromList [])
+                                     (Map.filter (fn _ => false) m))
+                , Unit.it "copies (_ -> true)"
+                          (Unit.isEq (fromList [(1,2), (2,0), (0,3), (3,1)])
+                                     (Map.filter (fn _ => true) m))
+                , Unit.it "filters for even keys ((k,_) -> k % 2 = 0)"
+                          (Unit.isEq (fromList [(2,0), (0,3)])
+                                     (Map.filter (fn (k,_) => (k mod 2) = 0) m))
+                , Unit.it "filters for odd keys ((k,_) -> k % 2 = 1)"
+                          (Unit.isEq (fromList [(1,2), (3,1)])
+                                     (Map.filter (fn (k,_) => (k mod 2) = 1) m))
+                , Unit.it "filters for small keys ((k,_) -> k < 2)"
+                          (Unit.isEq (fromList [(1,2), (0,3)])
+                                     (Map.filter (fn (k,_) => k < 2) m))
+                , Unit.it "filters for large keys ((k,_) -> k > 1)"
+                          (Unit.isEq (fromList [(2,0), (3,1)])
+                                     (Map.filter (fn (k,_) => k > 1) m))
+                , Unit.it "filters for even values ((_,v) -> v % 2 = 0)"
+                          (Unit.isEq (fromList [(1,2), (2,0)])
+                                     (Map.filter (fn (_,v) => (v mod 2) = 0) m))
+                , Unit.it "filters for odd values ((k,_) -> v % 2 = 1)"
+                          (Unit.isEq (fromList [(3,1), (0,3)])
+                                     (Map.filter (fn (_,v) => (v mod 2) = 1) m))
+              ]
+              end
+            ]
+        ]
+in Unit.run authority tests end

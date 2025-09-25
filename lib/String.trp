@@ -70,17 +70,18 @@ let (** The maximum length of a string.
 
     (*--- Module ---*)
     val String = {
-        maxSize    = maxSize,
-        size       = size,
-        sub        = sub,
-        subCode    = subCode,
-        substring  = substring,
-        concat     = concat,
-        concatWith = concatWith,
-        implode    = implode,
-        explode    = explode,
-        map        = map,
-        translate  = translate
+        maxSize,
+        size,
+        sub,
+        subCode,
+        substring,
+        concat,
+        concatWith,
+        implode,
+        explode,
+        map,
+        translate
     }
+
 in [("String", String)]
 end

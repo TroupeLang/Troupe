@@ -47,21 +47,17 @@ let (* NOTE: The set is implemented as a HashMap with dummy values, `()`. This i
 
     (*--- Module ---*)
     val HashSet = {
-        (* Construction *)
-        empty     = empty,
-        singleton = singleton,
-        insert    = insert,
-        remove    = remove,
-        (* Queries *)
-        null      = null,
-        size      = size,
-        mem       = mem,
-        (* Manipulation *)
-        fold      = fold,
-        (* List Conversion*)
-        elems     = elems,
-        toList    = toList,
-        fromList  = fromList
+        empty,
+        singleton,
+        insert,
+        remove,
+        null,
+        size,
+        mem,
+        fold,
+        elems,
+        toList,
+        fromList
     }
 
 in [ ("HashSet", HashSet) ]

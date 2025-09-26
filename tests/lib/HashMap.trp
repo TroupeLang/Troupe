@@ -82,7 +82,7 @@ let (* Hash based on the lowest ten bits only. This way we can easily force vari
                 ]
             end,
             let val m = fromList [(0,21),(1,42)]
-            in Unit.group "fromList [(1,42), (0,21)]" [
+            in Unit.group "fromList [(0,21), (1,42)]" [
                     Unit.it "is not null"                (Unit.isFalse   (HashMap.null m))
                   , Unit.it "has size 2"                 (Unit.isEq 2    (HashMap.size m))
                   , Unit.it "contains 0"                 (Unit.isTrue    (HashMap.mem m 0))

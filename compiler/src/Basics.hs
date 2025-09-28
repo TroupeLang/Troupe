@@ -10,10 +10,10 @@ import Data.Serialize (Serialize)
 
 type VarName = String
 type AtomName = String
-type DataTypeName = String
-type TypeConstructorName = String
-type TypeConstructor = (TypeConstructorName, [VarName])
-type DataTypeDef = (DataTypeName, [TypeConstructor])
+type SyntacticVariantName = String
+type SyntacticVariantConstructorName = String
+type SyntacticVariantConstructor = (SyntacticVariantConstructorName, [VarName])
+type SyntacticVariantDef = (SyntacticVariantName, [SyntacticVariantConstructor])
 type FieldName = String
 type SynVariantTag = Bool
 

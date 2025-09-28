@@ -58,7 +58,7 @@ data Lit
     | LDCLabel DCLabelExp
     | LUnit
     | LBool Bool
-    | LAtom TypeConstructorName
+    | LAtom SyntacticVariantConstructorName
   deriving (Show, Generic)
 instance Serialize Lit
 instance Eq Lit where 
@@ -158,8 +158,8 @@ lowerProg (D.Prog imports atms term) = Prog imports (trans atms) (lower term)
 
 -- the rest of the declarations in this part are not exported
 
-trans :: D.DataTypes -> Atoms
-trans (D.DataTypes atms) = Atoms [] -- (concat $ map snd atms)
+trans :: D.SyntacticVariants -> Atoms
+trans (D.SyntacticVariants atms) = Atoms [] -- (concat $ map snd atms)
 
 lowerLam (D.Lambda vs t) =
   case vs of
@@ -173,7 +173,7 @@ lowerLit (D.LLabel s) = LLabel s
 lowerLit (D.LDCLabel dc) = LDCLabel dc
 lowerLit D.LUnit = LUnit
 lowerLit (D.LBool b) = LBool b
-lowerLit (D.LDataType n) = LAtom n
+lowerLit (D.LSyntacticVariant n) = LAtom n
 
 lower :: D.Term -> Core.Term
 lower (D.Lit l) = Lit (lowerLit l)

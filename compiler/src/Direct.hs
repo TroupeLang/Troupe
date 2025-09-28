@@ -5,9 +5,9 @@ module Direct ( Lambda (..)
               , Lit(..)
               , DeclPattern(..)
               , RecordPatternMode(..)
-              , DataTypeName
-              , TypeConstructor
-              , DataTypes(..)
+              , SyntacticVariantName
+              , SyntacticVariantConstructor
+              , SyntacticVariants(..)
               , Prog(..)
               , Handler(..)
               , FieldName
@@ -59,7 +59,7 @@ data DeclPattern
     | ConsPattern DeclPattern DeclPattern --SrcPosInf
     | ListPattern [DeclPattern] --SrcPosInf
     | RecordPattern [(FieldName, Maybe DeclPattern)] RecordPatternMode
-    | DataTypePattern TypeConstructorName DeclPattern
+    | SyntacticVariantPattern SyntacticVariantConstructorName DeclPattern
       deriving (Eq)
 
 data RecordPatternMode = ExactMatch | WildcardMatch
@@ -80,7 +80,7 @@ data Lit
     | LString String --SrcPosInf
     | LLabel String --SrcPosInf
     | LDCLabel DCLabelExp
-    | LDataType TypeConstructorName --SrcPosInf
+    | LSyntacticVariant SyntacticVariantConstructorName --SrcPosInf
   deriving (Eq, Show)
 
 
@@ -108,11 +108,11 @@ data Term
     | Error Term
           deriving (Eq)
 
-data DataTypes = DataTypes [DataTypeDef]
+data SyntacticVariants = SyntacticVariants [SyntacticVariantDef]
       deriving (Eq, Show)
 
 
-data Prog = Prog Imports DataTypes Term
+data Prog = Prog Imports SyntacticVariants Term
   deriving (Eq, Show)
 
 
@@ -132,8 +132,8 @@ instance ShowIndent Prog where
 
 
 ppProg :: Prog -> PP.Doc
-ppProg (Prog (Imports imports) (DataTypes datatypes) term) =
-  let ppDataTypes =
+ppProg (Prog (Imports imports) (SyntacticVariants datatypes) term) =
+  let ppSyntacticVariants =
         if null datatypes
         then PP.empty
         else vcat $ flip map datatypes (\dt -> (text "datatype ") <+>
@@ -149,7 +149,7 @@ ppProg (Prog (Imports imports) (DataTypes datatypes) term) =
           in
             (vcat $ (map ppLibName imports)) $$ PP.text ""
   in vcat [ ppImports
-          , ppDataTypes
+          , ppSyntacticVariants
           , ppTerm 0 term ]
 
 
@@ -345,9 +345,9 @@ ppDeclPattern (RecordPattern fields mode) =
               wildcard = case mode of
                 ExactMatch -> []
                 WildcardMatch -> [text ".."]
-ppDeclPattern (DataTypePattern nm pat) =
+ppDeclPattern (SyntacticVariantPattern nm pat) =
   text nm PP.<> PP.space PP.<>
-  case pat of DataTypePattern _ _ -> PP.parens $ ppDeclPattern pat
+  case pat of SyntacticVariantPattern _ _ -> PP.parens $ ppDeclPattern pat
               otherwise -> ppDeclPattern pat
 
 ppLit :: Lit -> PP.Doc
@@ -358,7 +358,7 @@ ppLit (LUnit )       = text "()"
 ppLit (LBool True  )  = text "true"
 ppLit (LBool False) = text "false"
 ppLit (LLabel s ) = PP.braces (text s)
-ppLit (LDataType s) = text s
+ppLit (LSyntacticVariant s) = text s
 
 
 termPrec :: Term -> Precedence

@@ -3,9 +3,9 @@ module DirectWOPats ( Lambda (..)
               , Decl (..)
               , FunDecl (..)
               , Lit(..)
-              , DataTypeName
-              , TypeConstructor
-              , DataTypes(..)
+              , SyntacticVariantName
+              , SyntacticVariantConstructor
+              , SyntacticVariants(..)
               , Prog(..)            
               )
 where
@@ -34,7 +34,7 @@ data Lit
     | LDCLabel DCLabelExp
     | LUnit
     | LBool Bool
-    | LDataType DataTypeName
+    | LSyntacticVariant SyntacticVariantName
   deriving (Eq, Show)
 
 
@@ -64,10 +64,10 @@ data Term
     | Error Term PosInf
     deriving (Eq)
 
-data DataTypes = DataTypes [DataTypeDef]
+data SyntacticVariants = SyntacticVariants [SyntacticVariantDef]
       deriving (Eq, Show)
 
-data Prog = Prog Imports DataTypes Term
+data Prog = Prog Imports SyntacticVariants Term
   deriving (Eq, Show)
 
 
@@ -86,8 +86,8 @@ instance ShowIndent Prog where
 
 
 ppProg :: Prog -> PP.Doc
-ppProg (Prog (Imports imports) (DataTypes datatypes) term) =
-  let ppDataTypes =
+ppProg (Prog (Imports imports) (SyntacticVariants datatypes) term) =
+  let ppSyntacticVariants =
         if null datatypes
         then PP.empty
         else vcat $ flip map datatypes (\dt -> (text "datatype ") <+>
@@ -97,7 +97,7 @@ ppProg (Prog (Imports imports) (DataTypes datatypes) term) =
               ppConstructor (s, x:[]) = text s <+> text " of " <+> text x
               ppConstructor (s, xs) = text s <+> text " of " <+> PP.parens (hsep $ PP.punctuate (text " *") (map text xs))
       ppImports = if null imports then PP.empty else text "<<imports>>\n"
-  in ppImports $$ ppDataTypes $$ ppTerm 0 term
+  in ppImports $$ ppSyntacticVariants $$ ppTerm 0 term
 
 
 ppTerm :: Precedence -> Term -> PP.Doc
@@ -228,7 +228,7 @@ ppLit (LDCLabel dc) = ppDCLabelExpLit dc
 ppLit LUnit         = text "()"
 ppLit (LBool True)  = text "true"
 ppLit (LBool False) = text "false"
-ppLit (LDataType a) = text a
+ppLit (LSyntacticVariant a) = text a
 
 
 termPrec :: Term -> Precedence

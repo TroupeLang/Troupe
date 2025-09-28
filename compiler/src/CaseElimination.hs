@@ -31,8 +31,8 @@ trans mode (S.Prog imports atms tm) = do
   tm'' <- transTerm tm'
   return (T.Prog imports atms' tm'')
 
-transAtoms :: S.DataTypes -> Trans T.DataTypes
-transAtoms (S.DataTypes atms) = return (T.DataTypes atms)
+transAtoms :: S.SyntacticVariants -> Trans T.SyntacticVariants
+transAtoms (S.SyntacticVariants atms) = return (T.SyntacticVariants atms)
 
 transLit :: S.Lit -> T.Lit
 transLit (S.LInt n pi)    = T.LInt n pi
@@ -41,7 +41,7 @@ transLit (S.LLabel s)  = T.LLabel s
 transLit (S.LDCLabel dc)  = T.LDCLabel dc
 transLit (S.LUnit)     = T.LUnit
 transLit (S.LBool b)   = T.LBool b
-transLit (S.LDataType a)   = T.LDataType a
+transLit (S.LSyntacticVariant a)   = T.LSyntacticVariant a
 
 
 transLambda_aux :: S.Lambda -> ReaderT T.Term Trans Lambda

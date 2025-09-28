@@ -6,11 +6,11 @@ import Control.Monad
 import Data.List (find, any)
 
 visitProg :: Prog -> Prog
-visitProg (Prog imports (DataTypes datatypes) tm) =
+visitProg (Prog imports (SyntacticVariants datatypes) tm) =
   let tcs = concat $ map snd datatypes 
-  in Prog imports (DataTypes datatypes) (visitTerm tcs tm)
+  in Prog imports (SyntacticVariants datatypes) (visitTerm tcs tm)
 
-visitTerm :: [TypeConstructor] -> Term -> Term
+visitTerm :: [SyntacticVariantConstructor] -> Term -> Term
 visitTerm atms (Lit lit) = Lit lit
 visitTerm atms (Var nm) =
   let tag = "tag"
@@ -71,7 +71,7 @@ visitFields atms fs  =  map visitField fs
     where visitField (f, Nothing) = (f, Nothing) 
           visitField (f, Just t) = (f, Just (visitTerm atms t))
 
-visitPattern :: [TypeConstructor] -> DeclPattern -> DeclPattern
+visitPattern :: [SyntacticVariantConstructor] -> DeclPattern -> DeclPattern
 visitPattern atms pat@(VarPattern nm) =
   if any (\x -> x == (nm, [])) atms
   then TuplePattern [ValPattern (LString nm)] -- Convert atom match into a record match
@@ -85,11 +85,11 @@ visitPattern atms (ListPattern pats) = ListPattern (map (visitPattern atms) pats
 visitPattern atms (RecordPattern fields mode) = RecordPattern (map visitField fields) mode
       where visitField pat@(_, Nothing) = pat 
             visitField (f, Just p) = (f, Just (visitPattern atms p))
-visitPattern atms (DataTypePattern nm pat) =
+visitPattern atms (SyntacticVariantPattern nm pat) =
   TuplePattern [ ValPattern (LString nm), visitPattern atms pat]
                  
 
-visitLambda :: [TypeConstructor] -> Lambda -> Lambda
+visitLambda :: [SyntacticVariantConstructor] -> Lambda -> Lambda
 visitLambda atms (Lambda pats term) =
   (Lambda (map (visitPattern atms) pats) (visitTerm atms term))
 

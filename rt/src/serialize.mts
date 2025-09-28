@@ -86,7 +86,7 @@ export function serialize(w:LVal, pclev:Level) {
                 }
                 break;
             case Ty.TroupeType.TUPLE:
-                jsonObj = { vals: [], isADT: x._isADT };                                                
+                jsonObj = { vals: [], isSynVariant: x._isSynVariant };                                                
                 for (let i = 0; i < x.length; i++) {
                     jsonObj.vals.push(walk(x[i]));
                 }

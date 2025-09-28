@@ -250,7 +250,7 @@ function constructCurrent(compilerOutput: string) {
                 case Ty.TroupeType.LIST:
                     return mkList(deserializeArray(obj))
                 case Ty.TroupeType.TUPLE:
-                    return mkTuple(deserializeArray(obj.vals), obj.isADT)
+                    return mkTuple(deserializeArray(obj.vals), obj.isSynVariant)
                 case Ty.TroupeType.CLOSURE:
                     return mkClosure(obj.ClosureID)
                 case Ty.TroupeType.NUMBER: 

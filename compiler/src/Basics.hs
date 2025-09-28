@@ -15,7 +15,7 @@ type TypeConstructorName = String
 type TypeConstructor = (TypeConstructorName, [VarName])
 type DataTypeDef = (DataTypeName, [TypeConstructor])
 type FieldName = String
-type ADTTag = Bool
+type SynVariantTag = Bool
 
 -- | Eq and Neq: deep equality check on the two parameters, including the types (any type inequality results in false being returned).
 data BinOp = Plus | Minus | Mult | Div | Mod |  Eq | Neq | Le | Lt | Ge | Gt | And | Or | RaisedTo | FlowsTo | Concat| IntDiv | BinAnd | BinOr | BinXor | BinShiftLeft | BinShiftRight | BinZeroShiftRight | HasField | LatticeJoin | LatticeMeet

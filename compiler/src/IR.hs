@@ -52,7 +52,7 @@ type Fields =  [(Basics.FieldName, VarAccess)]
 data IRExpr
   = Bin Basics.BinOp VarAccess VarAccess
   | Un Basics.UnaryOp VarAccess
-  | Tuple [VarAccess] Basics.ADTTag
+  | Tuple [VarAccess] Basics.SynVariantTag
   | Record Fields
   | WithRecord VarAccess Fields 
   | ProjField VarAccess Basics.FieldName

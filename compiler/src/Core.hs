@@ -108,7 +108,7 @@ data Term
     | Let Decl Term
     | If Term Term Term
     | AssertElseError Term Term Term PosInf
-    | Tuple [Term] ADTTag
+    | Tuple [Term] SynVariantTag
     | Record Fields
     | WithRecord Term Fields
     | ProjField Term FieldName 
@@ -446,7 +446,7 @@ ppTerm' (Tuple ts False) =
 ppTerm' (Tuple ts True) =
   case ts of [Lit (LString nm)] -> text nm
              [Lit (LString nm), t] -> text nm PP.<> PP.space PP.<> ppTerm 0 t
-             otherwise -> text "error: MissingADT"
+             otherwise -> text "error: Missing syntactic variant"
 
 ppTerm'  (List ts) =
   PP.brackets $

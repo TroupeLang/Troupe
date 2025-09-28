@@ -60,7 +60,7 @@ data SimpleTerm
    = Bin BinOp VarName VarName
    | Un UnaryOp VarName
    | ValSimpleTerm SVal
-   | Tuple [VarName] Basics.ADTTag
+   | Tuple [VarName] Basics.SynVariantTag
    | Record Fields 
    | WithRecord VarName Fields
    | ProjField VarName Basics.FieldName

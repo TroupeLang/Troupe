@@ -103,7 +103,7 @@ data RawExpr
   | Un Basics.UnaryOp RawVar
   | ProjectLVal VarAccess LValField
   | ProjectState MonComponent
-  | Tuple [VarAccess] Basics.ADTTag
+  | Tuple [VarAccess] Basics.SynVariantTag
   | Record Fields
   | WithRecord RawVar Fields 
   | ProjField RawVar Basics.FieldName

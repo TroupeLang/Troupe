@@ -1,12 +1,20 @@
 .PHONY: test
 
+all: build install
+
 build: VERBOSITY_FLAG =
 build:
 	stack $(VERBOSITY_FLAG) build $(STACK_OPTS)
-	mkdir  -p ./../bin
-	stack $(VERBOSITY_FLAG) install $(STACK_OPTS) --local-bin-path ./../bin/
 build/verbose:
 	$(MAKE) $(MAKE_FLAGS) build VERBOSITY_FLAG="-v"
+
+install: VERBOSITY_FLAG =
+install:
+	$(MAKE) $(MAKE_FLAGS) build
+	mkdir  -p ./../bin
+	stack $(VERBOSITY_FLAG) install $(STACK_OPTS) --local-bin-path ./../bin/
+install/verbose:
+	$(MAKE) $(MAKE_FLAGS) install VERBOSITY_FLAG="-v"
 
 clean:
 	rm *.cabal

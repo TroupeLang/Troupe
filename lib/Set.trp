@@ -1,0 +1,118 @@
+import List
+import Map
+
+let (*--- Set Construction ---*)
+
+    (** Returns an empty set using the comparator, `cmp`. *)
+    val empty = Map.empty
+
+    (** Returns a set using the comparator function, `cmp` with the single value `x` pair. *)
+    fun singleton cmp x = Map.singleton cmp x ()
+
+    (** Returns the set with the given value, `x`, inserted. *)
+    fun insert s x = Map.insert s x ()
+
+    (*--- Set Queries ---*)
+
+    (** Returns `true` if the set is empty. *)
+    val null = Map.null
+
+    (** Returns `true` if the value `x` is in the set. *)
+    val mem = Map.mem
+
+    (** Number of elements stored in the set. *)
+    val size = Map.size
+
+    (** Depth of the tree representation of the set. *)
+    val depth = Map.depth
+
+    (*--- Priority Queue ---*)
+
+    (** The smallest element in the set, if it exists. Otherwise, `[]`. *)
+    fun minOpt s = case Map.minOpt s of []      => []
+                                      | [(k,_)] => [k]
+
+    (** The smallest element in the non-empty set. *)
+    fun min s = case minOpt s of [k] => k
+
+    (** The smallest element (if any) together with an updated set that does not include it. If the
+     *  tree is empty, then `[]` is returned. *)
+    fun extractMinOpt s = case Map.extractMinOpt s of ([],      m') => ([],  m')
+                                                    | ([(k,_)], m') => ([k], m')
+
+    (** The smallest element together with an updated set that does not include said value. *)
+    fun extractMin s = case extractMinOpt s of ([k], m') => (k, m')
+
+    (*--- Set Destruction ---*)
+
+    (** Returns the set with the given value `x` removed. *)
+    fun remove s x = Map.remove s x
+
+    (*--- Manipulation ---*)
+
+    (** Fold function `f` over all elements in the set in-order. Not tail-recursive. *)
+    fun foldl f y s =
+        let fun f' ((k,_), y') = f (k,y')
+        in Map.foldl f' y s end
+
+    (** Fold function `f` over all elements in the set in reverse order. Not tail-recursive. *)
+    fun foldr f y s =
+        let fun f' ((k,_), y') = f (k,y')
+        in Map.foldr f' y s end
+
+    (** Map function `f` onto all elements in the set. The new set uses the comparator `cmp`.
+     *  Not tail-recursive. *)
+    fun map cmp f s =
+        let fun f' (k,_) = (f k, ())
+        in Map.map cmp f' s end
+
+    (** Filters key-value pairs in the given map. Not tail-recursive. *)
+    fun filter f s =
+        let fun f' (k,_) = f k
+        in Map.filter f' s end
+
+    (*--- Comparison ---*)
+
+    (* TODO *)
+
+    (*--- List Conversion ---*)
+
+    (** A list of elements stored in the given set in descending order. *)
+    fun toDescList m = foldl (fn (x,xs) => x::xs) [] m
+
+    (** A list of elements stored in the given map in ascending order. *)
+    fun toAscList m = foldr (fn (x,xs) => x::xs) [] m
+
+    (** Alias for `toAscList`. *)
+    val toList = toAscList
+
+    (** Returns the set (using the provided comparator function, `cmp`) that contains all key-value
+        pairs in the given list. Tail-recursive. *)
+    fun fromList cmp xs = List.foldl (fn (k, s) => insert s k) (empty cmp) xs
+
+    (*--- Module ---*)
+    val Set = {
+        empty,
+        singleton,
+        insert,
+        null,
+        mem,
+        size,
+        depth,
+        minOpt,
+        min,
+        extractMinOpt,
+        extractMin,
+        remove,
+        foldl,
+        foldr,
+        map,
+        filter,
+        toDescList,
+        toAscList,
+        toList,
+        fromList
+    }
+
+in [ ("Set", Set) ]
+end

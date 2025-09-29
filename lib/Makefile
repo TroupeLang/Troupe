@@ -10,6 +10,7 @@ build:
 	$(COMPILER) ./Hash.trp -l
 	$(COMPILER) ./Unit.trp -l
 	$(COMPILER) ./Map.trp -l
+	$(COMPILER) ./Set.trp -l
 	$(COMPILER) ./StencilVector.trp -l
 	$(COMPILER) ./HashMap.trp -l
 	$(COMPILER) ./HashSet.trp -l

@@ -1,0 +1,261 @@
+import Unit
+import Set
+
+let (* Simple less-than comparator. *)
+    fun lt a b = a < b
+    fun gt a b = a > b
+
+    val empty     = Set.empty lt
+    val singleton = Set.singleton lt
+    val fromList  = Set.fromList lt
+
+    val tests = Unit.group "Set" [
+            (* -- Empty, size, and findOpt (mem, find) -- *)
+            let val m = empty
+            in Unit.group "empty" [
+                    Unit.it "is null"                         (Unit.isTrue  (Set.null m))
+                  , Unit.it "has size 0"                      (Unit.isEq 0  (Set.size m))
+                  , Unit.it "has depth 0"                     (Unit.isEq 0  (Set.depth m))
+                  , Unit.it "does not contain 0"              (Unit.isFalse (Set.mem m 0))
+                  , Unit.it "does not contain 1"              (Unit.isFalse (Set.mem m 1))
+                  , Unit.it "is not equal to 'empty >'"       (Unit.isNeq   (Set.empty gt) m)
+                  , Unit.it "returns [] for minOpt"           (Unit.isEq [] (Set.minOpt m))
+                  , Unit.it "returns [], Ø for extractMinOpt" (Unit.isEq ([], empty) (Set.extractMinOpt m))
+                ]
+            end,
+            (* -- Insert / Singleton, size, and findOpt (mem, find) -- *)
+            let val m = Set.insert (empty) 0
+            in Unit.group "insert (empty) 0" [
+                    Unit.it "is not null"                 (Unit.isFalse   (Set.null m))
+                  , Unit.it "has size 1"                  (Unit.isEq 1    (Set.size m))
+                  , Unit.it "has depth 1"                 (Unit.isEq 1    (Set.depth m))
+                  , Unit.it "contains 0"                  (Unit.isTrue    (Set.mem m 0))
+                  , Unit.it "does not contain 1"          (Unit.isFalse   (Set.mem m 1))
+                  , Unit.it "returns [0] for minOpt"      (Unit.isEq [0]  (Set.minOpt m))
+                  , Unit.it "returns 0 for min"           (Unit.isEq 0    (Set.min m))
+                  , Unit.it "returns [0], Ø for extractMinOpt"
+                            (Unit.isEq ([0], empty) (Set.extractMinOpt m))
+                  , Unit.it "returns 0, Ø for extractMin"
+                            (Unit.isEq (0, empty) (Set.extractMin m))
+                ]
+            end,
+            let val m = singleton 0
+            in Unit.group "singleton 0 42" [
+                    Unit.it "is equivalent to 'insert (empty) 0'" (Unit.isEq (Set.insert empty 0) m)
+                ]
+            end,
+            (* -- Insert (fromList), size, findOpt (mem, find), min / extractMin -- *)
+            let val m = fromList [0]
+            in Unit.group "fromList [(0,42)]" [
+                    Unit.it "is equivalent to 'insert (empty) 0'" (Unit.isEq (Set.insert empty 0) m)
+                ]
+            end,
+            let val m = fromList [1]
+            in Unit.group "fromList [1]" [
+                    Unit.it "is not null"                 (Unit.isFalse   (Set.null m))
+                  , Unit.it "has size 1"                  (Unit.isEq 1    (Set.size m))
+                  , Unit.it "has depth 1"                 (Unit.isEq 1    (Set.depth m))
+                  , Unit.it "does not contain 0"          (Unit.isFalse   (Set.mem m 0))
+                  , Unit.it "contains 1"                  (Unit.isTrue    (Set.mem m 1))
+                  , Unit.it "returns [1] for minOpt"      (Unit.isEq [1]  (Set.minOpt m))
+                  , Unit.it "returns 1 for minOpt"        (Unit.isEq 1    (Set.min m))
+                  , Unit.it "returns [1], Ø for extractMinOpt"
+                            (Unit.isEq ([1], empty) (Set.extractMinOpt m))
+                  , Unit.it "returns 1, Ø for extractMin"
+                            (Unit.isEq (1, empty) (Set.extractMin m))
+                ]
+            end,
+            let val m = Set.insert (fromList [0]) 0
+            in Unit.group "insert (fromList [0]) 0" [
+                    Unit.it "is equivalent to 'insert (empty) 0'" (Unit.isEq (Set.insert empty 0) m)
+                ]
+            end,
+            let val m = fromList [1,0]
+            in Unit.group "fromList [1,0]" [
+                    Unit.it "is not null"                 (Unit.isFalse   (Set.null m))
+                  , Unit.it "has size 2"                  (Unit.isEq 2    (Set.size m))
+                  , Unit.it "has depth 2"                 (Unit.isEq 2    (Set.depth m))
+                  , Unit.it "contains 0"                  (Unit.isTrue    (Set.mem m 0))
+                  , Unit.it "contains 1"                  (Unit.isTrue    (Set.mem m 1))
+                  , Unit.it "returns [0] for minOpt"      (Unit.isEq [0] (Set.minOpt m))
+                  , Unit.it "returns 0 for min"           (Unit.isEq 0 (Set.min m))
+                  , Unit.it "returns [0], .. for extractMinOpt"
+                            (Unit.isEq ([0], fromList [1]) (Set.extractMinOpt m))
+                  , Unit.it "returns 0, .. for extractMin"
+                            (Unit.isEq (0, fromList [1]) (Set.extractMin m))
+                ]
+            end,
+            let val m = fromList [0,1]
+            in Unit.group "fromList [0,1]" [
+                    Unit.it "is not null"                 (Unit.isFalse   (Set.null m))
+                  , Unit.it "has size 2"                  (Unit.isEq 2    (Set.size m))
+                  , Unit.it "has depth 2"                 (Unit.isEq 2    (Set.depth m))
+                  , Unit.it "contains 0"                  (Unit.isTrue    (Set.mem m 0))
+                  , Unit.it "contains 1"                  (Unit.isTrue    (Set.mem m 1))
+                  , Unit.it "returns [0] for minOpt"      (Unit.isEq [0] (Set.minOpt m))
+                  , Unit.it "returns 0 for min"           (Unit.isEq 0 (Set.min m))
+                  , Unit.it "returns [0], .. for extractMinOpt"
+                            (Unit.isEq ([0], fromList [1]) (Set.extractMinOpt m))
+                  , Unit.it "returns 0, .. for extractMin"
+                            (Unit.isEq (0, fromList [1]) (Set.extractMin m))
+                ]
+            end,
+            let val m = Set.insert (fromList [1,2]) 1
+            in Unit.group "insert (fromList [1,2]) 1" [
+                    Unit.it "is equivalent to 'fromList [1,2]'" (Unit.isEq (fromList [1,2]) m)
+                ]
+            end,
+            let val m = Set.insert (fromList [1,2]) 2
+            in Unit.group "insert (fromList [1,2]) 2" [
+                    Unit.it "is equivalent to 'fromList [1,2]'" (Unit.isEq (fromList [1,2]) m)
+                ]
+            end,
+            let val m = fromList [1,0,2]
+            in Unit.group "fromList [1,0,2]" [
+                    Unit.it "is not null"                 (Unit.isFalse   (Set.null m))
+                  , Unit.it "has size 3"                  (Unit.isEq 3    (Set.size m))
+                  , Unit.it "has depth 2"                 (Unit.isEq 2    (Set.depth m))
+                  , Unit.it "contains 0"                  (Unit.isTrue    (Set.mem m 0))
+                  , Unit.it "contains 1"                  (Unit.isTrue    (Set.mem m 1))
+                  , Unit.it "contains 2"                  (Unit.isTrue    (Set.mem m 2))
+                  , Unit.it "returns [0] for minOpt"      (Unit.isEq [0]  (Set.minOpt m))
+                  , Unit.it "returns 0 for min"           (Unit.isEq 0    (Set.min m))
+                  , Unit.it "returns [0], .. for extractMinOpt"
+                            (Unit.isEq ([0], fromList [1,2]) (Set.extractMinOpt m))
+                  , Unit.it "returns 0, .. for extractMin"
+                            (Unit.isEq (0, fromList [1,2]) (Set.extractMin m))
+                ]
+            end,
+            let val m = fromList [0,1,2]
+            in Unit.group "fromList [0,1,2]" [
+                    Unit.it "is not null"                 (Unit.isFalse   (Set.null m))
+                  , Unit.it "has size 3"                  (Unit.isEq 3    (Set.size m))
+                  , Unit.it "has depth 3"                 (Unit.isEq 3    (Set.depth m))
+                  , Unit.it "contains 0"                  (Unit.isTrue    (Set.mem m 0))
+                  , Unit.it "contains 1"                  (Unit.isTrue    (Set.mem m 1))
+                  , Unit.it "contains 2"                  (Unit.isTrue    (Set.mem m 2))
+                  , Unit.it "returns [0] for minOpt"      (Unit.isEq [0]  (Set.minOpt m))
+                  , Unit.it "returns 0 for min"           (Unit.isEq 0    (Set.min m))
+                  , Unit.it "returns [0], .. for extractMinOpt"
+                            (Unit.isEq ([0], fromList [1,2]) (Set.extractMinOpt m))
+                  , Unit.it "returns 0, .. for extractMin"
+                            (Unit.isEq (0, fromList [1,2]) (Set.extractMin m))
+                ]
+            end,
+            let val m = fromList [2,1,0]
+            in Unit.group "fromList [2,1,0]" [
+                    Unit.it "is not null"                 (Unit.isFalse   (Set.null m))
+                  , Unit.it "has size 3"                  (Unit.isEq 3    (Set.size m))
+                  , Unit.it "has depth 3"                 (Unit.isEq 3    (Set.depth m))
+                  , Unit.it "contains 0"                  (Unit.isTrue    (Set.mem m 0))
+                  , Unit.it "contains 1"                  (Unit.isTrue    (Set.mem m 1))
+                  , Unit.it "contains 2"                  (Unit.isTrue    (Set.mem m 2))
+                  , Unit.it "returns [0] for minOpt"      (Unit.isEq [0]  (Set.minOpt m))
+                  , Unit.it "returns 0 for min"           (Unit.isEq 0    (Set.min m))
+                  , Unit.it "returns [0], .. for extractMinOpt"
+                            (Unit.isEq ([0], fromList [2,1]) (Set.extractMinOpt m))
+                  , Unit.it "returns 0, .. for extractMin"
+                            (Unit.isEq (0, fromList [2,1]) (Set.extractMin m))
+                ]
+            end,
+            (* -- Insert (fromList), delete, size, and findOpt (mem and find) -- *)
+            let val m = Set.remove (fromList [0]) 0
+            in Unit.group "remove (fromList [0]) 0" [
+                    Unit.it "is equivalent to 'empty'" (Unit.isEq empty m)
+                ]
+            end,
+            let val m = fromList [1]
+                val m' = Set.remove m 0
+            in Unit.group "remove (fromList [1]) 0" [
+                    Unit.it "is equivalent to itself" (Unit.isEq m m')
+                ]
+            end,
+            let val m = fromList [1]
+                val m' = Set.remove m 2
+            in Unit.group "remove (fromList [1]) 2" [
+                    Unit.it "is equivalent to itself" (Unit.isEq m m')
+                ]
+            end,
+            let val m = Set.remove (fromList [1,0,2]) 0
+            in Unit.group "remove (fromList [1,0,2]) 0" [
+                    Unit.it "is equivalent to 'fromList [1,2]'"
+                            (Unit.isEq (fromList [1,2]) m)
+                ]
+            end,
+            let val m = Set.remove (fromList [1,0,2]) 1
+            in Unit.group "remove (fromList [1,0,2]) 1" [
+                    Unit.it "is equivalent to 'fromList [2,0]'"
+                            (Unit.isEq (fromList [2,0]) m)
+                ]
+            end,
+            let val m = Set.remove (fromList [1,0,2]) 2
+            in Unit.group "remove (fromList [1,0,2]) 2" [
+                    Unit.it "is equivalent to 'fromList [1,0]'"
+                            (Unit.isEq (fromList [1,0]) m)
+                ]
+            end,
+            (* -- foldl, foldlr, and its derivatives: map, keys, values, and toList -- *)
+            let fun f (x,xs) = x::xs
+            in Unit.group "foldl" [
+                    Unit.it "folds fromList []"
+                            (Unit.isEq []   (Set.foldl f [] (fromList [])))
+                  , Unit.it "folds fromList [1]"
+                            (Unit.isEq [1]  (Set.foldl f [] (fromList [1])))
+                  , Unit.it "folds fromList [2,1]"
+                            (Unit.isEq [2,1] (Set.foldl f [] (fromList [2,1])))
+                  , Unit.it "folds fromList [2,1,3]"
+                            (Unit.isEq [3,2,1] (Set.foldl f [] (fromList [2,1,3])))
+                ]
+            end,
+            let fun f (x,xs) = x::xs
+            in Unit.group "foldr" [
+                    Unit.it "folds fromList []"
+                            (Unit.isEq []    (Set.foldr f [] (fromList [])))
+                  , Unit.it "folds fromList [1]"
+                            (Unit.isEq [1]   (Set.foldr f [] (fromList [1])))
+                  , Unit.it "folds fromList [2,1]"
+                            (Unit.isEq [1,2] (Set.foldr f [] (fromList [2,1])))
+                  , Unit.it "folds fromList [2,1,3]"
+                            (Unit.isEq [1,2,3] (Set.foldr f [] (fromList [2,1,3])))
+                ]
+            end,
+            Unit.group "map" [
+                Unit.it "mirrors > (x -> x) (fromList [2,1])"
+                        (Unit.isEq (Set.fromList gt [1,2])
+                                   (Set.map gt (fn x => x) (fromList [2,1])))
+              , Unit.it "maps keys > (x -> -x) (fromList [2,1])"
+                        (Unit.isEq (Set.fromList gt [-1, -2])
+                                   (Set.map gt (fn x => -x) (fromList [2,1])))
+            ],
+            Unit.group "keys, values, and toList" [
+                let val s = fromList []
+                in Unit.it "converts []" [
+                        (Unit.isEq [] (Set.toDescList s))
+                      , (Unit.isEq [] (Set.toAscList s))
+                      , (Unit.isEq [] (Set.toList s))
+                    ]
+                end
+              , let val s = fromList [0]
+                in Unit.it "converts [0]" [
+                        (Unit.isEq [0] (Set.toDescList s))
+                      , (Unit.isEq [0] (Set.toAscList s))
+                      , (Unit.isEq [0] (Set.toList s))
+                    ]
+                end
+              , let val s = fromList [1,0]
+                in Unit.it "converts [1,0]" [
+                        (Unit.isEq [1,0] (Set.toDescList s))
+                      , (Unit.isEq [0,1] (Set.toAscList s))
+                      , (Unit.isEq [0,1] (Set.toList s))
+                    ]
+                end
+              , let val s = fromList [1,0,2]
+                in Unit.it "converts [1,0,2]" [
+                        (Unit.isEq [2,1,0] (Set.toDescList s))
+                      , (Unit.isEq [0,1,2] (Set.toAscList s))
+                      , (Unit.isEq [0,1,2] (Set.toList s))
+                    ]
+                end
+            ]
+        ]
+in Unit.run authority tests end

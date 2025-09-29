@@ -21,9 +21,8 @@ import qualified Raw2Stack
 import qualified Stack2JS
 import qualified RawOpt
 -- import System.IO (isEOF)
-import qualified Data.ByteString as BS
+import qualified Data.ByteString.Char8 as BS
 import Data.ByteString.Base64 (decode)
-import qualified Data.ByteString.Char8  as BSChar8
 import qualified Data.ByteString.Lazy.Char8 as BSLazyChar8
 import System.IO
 import System.Exit
@@ -220,7 +219,7 @@ fromStdinIR = do
     input <- BS.getLine
     if BS.isPrefixOf "!ECHO " input
     then let response = BS.drop 6 input
-          in do BSChar8.putStrLn response
+          in do BS.putStrLn response
 --                  debugOut "echo"
     else
       case decode input of
@@ -244,7 +243,7 @@ fromStdinIRJson = do
     input <- BS.getLine
     if BS.isPrefixOf "!ECHO " input
     then let response = BS.drop 6 input
-          in BSChar8.putStrLn response
+          in BS.putStrLn response
     else
       case decode input of
         Right bs ->

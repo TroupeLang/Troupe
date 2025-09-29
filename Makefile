@@ -12,7 +12,7 @@ rt:
 
 COMPILER=./bin/troupec
 compiler:
-	cd compiler; $(MAKE) all
+	cd compiler; $(MAKE) build
 
 p2p-tools:
 	cd p2p-tools; tsc

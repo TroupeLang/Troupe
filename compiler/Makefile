@@ -1,6 +1,6 @@
 .PHONY: test
 
-all:
+build:
 	stack -v build $(STACK_OPTS)
 	mkdir  -p ./../bin
 	stack -v install $(STACK_OPTS) --local-bin-path ./../bin/

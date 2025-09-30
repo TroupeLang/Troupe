@@ -22,14 +22,14 @@ clean:
 	rm -rf ../bin
 # If problems still persist after this, remove all GHC compilers in ~/.stack/programs/**/
 
-ghci-irtester:
-	stack ghci --main-is Troupe-compiler:exe:irtester --no-load
-
-ghci-troupec:
-	stack ghci --main-is Troupe-compiler:exe:troupec --no-load
-
 test:
 	stack test $(STACK_OPTS)
 
 parser-info:
 	stack exec happy -- -i src/Parser.y
+
+ghci/irtester:
+	stack ghci --main-is Troupe-compiler:exe:irtester --no-load
+
+ghci/troupec:
+	stack ghci --main-is Troupe-compiler:exe:troupec --no-load

@@ -777,7 +777,7 @@ fun2raw irfdef@(IR.FunDef hfn vname consts (IR.BB irInsts irTr)) =
 -- Revision 2023-08: unchanged
 ir2raw :: IR.SerializationUnit -> RawUnit
 ir2raw (IR.FunSerialization f) = FunRawUnit (fun2raw f)
-ir2raw (IR.AtomsSerialization c) = AtomRawUnit c
+ir2raw (IR.SyntacticVariantsSerialization c) = SyntacticVariantRawUnit c
 ir2raw (IR.ProgramSerialization prog) = ProgramRawUnit (prog2raw prog)
 
 -- Revision 2023-08: unchanged

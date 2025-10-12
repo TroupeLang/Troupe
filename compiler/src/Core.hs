@@ -7,9 +7,8 @@ module Core (   Lambda (..)
               , Decl (..)
               , FunDecl (..)
               , Lit(..)
-              , AtomName
-              , Atoms(..)
               , Prog(..)
+              , SyntacticVariants(..)
               , VarAccess(..)
               , lowerProg
               , renameProg
@@ -58,7 +57,7 @@ data Lit
     | LDCLabel DCLabelExp
     | LUnit
     | LBool Bool
-    | LAtom SyntacticVariantConstructorName
+    | LSynVar SyntacticVariantConstructorName
   deriving (Show, Generic)
 instance Serialize Lit
 instance Eq Lit where 
@@ -67,7 +66,7 @@ instance Eq Lit where
   (LLabel l) == (LLabel l') = l == l' 
   LUnit == LUnit = True 
   (LBool x) == (LBool y) = x == y 
-  (LAtom x) == (LAtom y) = x == y
+  (LSynVar x) == (LSynVar y) = x == y
   (LDCLabel dc) == (LDCLabel dc') = dc == dc' 
   _ == _ = False
 instance Ord Lit where 
@@ -76,15 +75,15 @@ instance Ord Lit where
   (LLabel x)   <= (LLabel y)   = x <=y
   (LUnit)      <= (LUnit)      = True 
   (LBool x)    <= (LBool y)    = x <=y
-  (LAtom x)    <= (LAtom y)    = x <=y
+  (LSynVar x)  <= (LSynVar y)  = x <=y
   (LDCLabel x) <= (LDCLabel y) = x <= y
   (LInt _ _)   <= (LString _)  = True 
   (LString _)  <= (LLabel _)   = True 
   (LLabel _)   <= (LUnit)      = True 
   (LUnit)      <= (LBool _)    = True 
-  (LBool _)    <= (LAtom _)    = True 
-  (LAtom _)    <= (LDCLabel _) = True
-  _ <= _                       = False 
+  (LBool _)    <= (LSynVar _)  = True 
+  (LSynVar _)  <= (LDCLabel _) = True
+  _            <= _            = False 
 
 instance GetPosInfo Lit where
   posInfo (LInt _ p) = p
@@ -121,12 +120,12 @@ data Term
   deriving (Eq)
 
 
-data Atoms = Atoms [AtomName]
+data SyntacticVariants = SyntacticVariants [SyntacticVariantName]
   deriving (Eq, Show, Generic)
-instance Serialize Atoms
+instance Serialize SyntacticVariants
 
 
-data Prog = Prog Imports Atoms Term
+data Prog = Prog Imports SyntacticVariants Term
   deriving (Eq, Show)
 
 
@@ -158,8 +157,8 @@ lowerProg (D.Prog imports atms term) = Prog imports (trans atms) (lower term)
 
 -- the rest of the declarations in this part are not exported
 
-trans :: D.SyntacticVariants -> Atoms
-trans (D.SyntacticVariants atms) = Atoms [] -- (concat $ map snd atms)
+trans :: D.SyntacticVariants -> SyntacticVariants
+trans (D.SyntacticVariants atms) = SyntacticVariants [] -- (concat $ map snd atms)
 
 lowerLam (D.Lambda vs t) =
   case vs of
@@ -173,7 +172,7 @@ lowerLit (D.LLabel s) = LLabel s
 lowerLit (D.LDCLabel dc) = LDCLabel dc
 lowerLit D.LUnit = LUnit
 lowerLit (D.LBool b) = LBool b
-lowerLit (D.LSyntacticVariant n) = LAtom n
+lowerLit (D.LSyntacticVariant n) = LSynVar n
 
 lower :: D.Term -> Core.Term
 lower (D.Lit l) = Lit (lowerLit l)
@@ -222,13 +221,13 @@ lower (D.Un op e) = Un op (lower e)
 -- This is the only function that is exported here
 
 renameProg :: Prog -> Prog
-renameProg (Prog imports (Atoms atms) term) =
+renameProg (Prog imports (SyntacticVariants atms) term) =
   let alist = map (\ a -> (a, a)) atms
       initEnv    = Map.fromList alist
       initReader = mapFromImports imports
       initState  = 0
       (term', _) = evalRWS (rename term initEnv) initReader initState
-  in Prog imports (Atoms atms) term'
+  in Prog imports (SyntacticVariants atms) term'
 
 -- The rest of the declarations here are not exported
 
@@ -414,15 +413,15 @@ instance ShowIndent Prog where
 
 
 ppProg :: Prog -> PP.Doc
-ppProg (Prog (Imports imports) (Atoms atoms) term) =
-  let ppAtoms =
+ppProg (Prog (Imports imports) (SyntacticVariants atoms) term) =
+  let ppSyntacticVariants =
         if null atoms
           then PP.empty
           else (text "datatype Atoms = ") <+>
                (hsep $ PP.punctuate (text " |") (map text atoms))
 
       ppImports = if null imports then PP.empty else text "<<imports>>\n"
-  in ppImports $$ ppAtoms $$ ppTerm 0 term
+  in ppImports $$ ppSyntacticVariants $$ ppTerm 0 term
 
 
 ppTerm :: Precedence -> Term -> PP.Doc
@@ -554,13 +553,13 @@ ppDecl (FunDecs fs) = ppFuns fs
 
 
 ppLit :: Lit -> PP.Doc
-ppLit (LInt i _)      = PP.integer i
+ppLit (LInt i _)    = PP.integer i
 ppLit (LString s)   = PP.doubleQuotes (text s)
 ppLit (LLabel s)    = PP.braces (text s)
 ppLit LUnit         = text "()"
 ppLit (LBool True)  = text "true"
 ppLit (LBool False) = text "false"
-ppLit (LAtom a) = text a
+ppLit (LSynVar a)   = text a
 ppLit (LDCLabel dc) = ppDCLabelExpLit dc
 
 

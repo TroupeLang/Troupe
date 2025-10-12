@@ -189,7 +189,7 @@ typeOfLit lit =
       Core.LString _ -> Just RawString
       Core.LLabel _ -> Just RawLevel               
       Core.LBool _ -> Just RawBoolean 
-      Core.LAtom _ -> Nothing
+      Core.LSynVar _ -> Nothing
       Core.LDCLabel _ -> Just RawDCLabel
       
 
@@ -596,10 +596,10 @@ instance RawOptable RawProgram where
 instance RawOptable FunDef where 
   rawopt = funopt 
 
-instance RawOptable Core.Atoms where 
+instance RawOptable Core.SyntacticVariants where 
   rawopt = id 
 
 instance RawOptable RawUnit where 
   rawopt (FunRawUnit f) = FunRawUnit (rawopt f)
-  rawopt (AtomRawUnit c) = AtomRawUnit (rawopt c)
+  rawopt (SyntacticVariantRawUnit c) = SyntacticVariantRawUnit (rawopt c)
   rawopt (ProgramRawUnit p) = ProgramRawUnit (rawopt p)

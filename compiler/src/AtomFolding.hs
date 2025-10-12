@@ -13,16 +13,14 @@ visitProg (Prog imports (SyntacticVariants datatypes) tm) =
 visitTerm :: [SyntacticVariantConstructor] -> Term -> Term
 visitTerm atms (Lit lit) = Lit lit
 visitTerm atms (Var nm) =
-  let tag = "tag"
-      value = "value"
-      var = "v"
-  in case find (\x -> (fst x) == nm) atms of
+  case find (\x -> (fst x) == nm) atms of
     Nothing -> Var nm
     Just (t, []) -> Tuple [Lit (LString nm)] True -- Convert atom into a tuple
     Just (t, _) ->
-      Abs (Lambda [VarPattern var] (Tuple  [ Lit (LString nm)
-                                           , Var var
-                                           ] True))
+      let var = "v"
+      in Abs (Lambda [VarPattern var] (Tuple  [ Lit (LString nm)
+                                              , Var var
+                                              ] True))
 visitTerm atms (Abs lam) =
   Abs (visitLambda atms lam)
 visitTerm atms (Hnd (Handler pat maybePat maybeTerm term)) =

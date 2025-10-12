@@ -9,7 +9,6 @@ import GHC.Generics(Generic)
 import Data.Serialize (Serialize)
 
 type VarName = String
-type AtomName = String
 type SyntacticVariantName = String
 type SyntacticVariantConstructorName = String
 type SyntacticVariantConstructor = (SyntacticVariantConstructorName, [VarName])

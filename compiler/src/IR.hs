@@ -118,7 +118,7 @@ data FunDef = FunDef
 
 -- An IR program is just a collection of atoms declarations 
 -- and function definitions
-data IRProgram = IRProgram C.Atoms [FunDef] deriving (Generic)
+data IRProgram = IRProgram C.SyntacticVariants [FunDef] deriving (Generic)
 
 -----------------------------------------------------------
 -- Dependency calculation
@@ -127,14 +127,14 @@ data IRProgram = IRProgram C.Atoms [FunDef] deriving (Generic)
 -- For dependencies, we only need the function dependencies
 
 class ComputesDependencies a where
-  dependencies :: a -> Writer ([HFN], [Basics.LibName], [Basics.AtomName])  ()
+  dependencies :: a -> Writer ([HFN], [Basics.LibName], [Basics.SyntacticVariantName])  ()
 
 instance ComputesDependencies IRInst where 
    dependencies (MkFunClosures _ fdefs) = 
         mapM_ (\(_, hfn) -> tell ([hfn],[],[])) fdefs
    dependencies (Assign _ (Lib libname _)) = 
         tell ([], [libname],[])
-   dependencies (Assign _ (Const (C.LAtom a))) = 
+   dependencies (Assign _ (Const (C.LSynVar a))) = 
         tell ([], [], [a])
                                        
    dependencies _ = return ()
@@ -182,7 +182,7 @@ instance Serialize IRBBTree
 -----------------------------------------------------------
 data SerializationUnit
   = FunSerialization FunDef
-  | AtomsSerialization C.Atoms
+  | SyntacticVariantsSerialization C.SyntacticVariants
   | ProgramSerialization IRProgram
   deriving (Generic)
 
@@ -192,11 +192,11 @@ instance Serialize SerializationUnit
 serializeFunDef :: FunDef -> BS.ByteString
 serializeFunDef fdef = Serialize.runPut ( Serialize.put (FunSerialization fdef) )
 
-serializeAtoms :: C.Atoms -> BS.ByteString
-serializeAtoms atoms = Serialize.runPut (Serialize.put (AtomsSerialization atoms))
+serializeSyntacticVariants :: C.SyntacticVariants -> BS.ByteString
+serializeSyntacticVariants atoms = Serialize.runPut (Serialize.put (SyntacticVariantsSerialization atoms))
 
-deserializeAtoms :: BS.ByteString -> Either String C.Atoms
-deserializeAtoms bs = Serialize.runGet (Serialize.get) bs
+deserializeSyntacticVariants :: BS.ByteString -> Either String C.SyntacticVariants
+deserializeSyntacticVariants bs = Serialize.runGet (Serialize.get) bs
 
 deserialize :: BS.ByteString -> Either String SerializationUnit
 deserialize bs =
@@ -498,7 +498,7 @@ instance Identifier HFN where
 instance Identifier Basics.LibName where 
   ppId (Basics.LibName s) = text s
 
-instance Identifier Basics.AtomName where 
+instance Identifier Basics.SyntacticVariantName where 
   ppId = text
 
 

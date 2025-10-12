@@ -85,11 +85,11 @@ data FunDef = FunDef
 
 -- An IR program is just a collection of atoms declarations 
 -- and function definitions
-data StackProgram = StackProgram C.Atoms [FunDef] 
+data StackProgram = StackProgram C.SyntacticVariants [FunDef] 
 
 data StackUnit 
   = FunStackUnit FunDef 
-  | AtomStackUnit C.Atoms 
+  | SyntacticVariantStackUnit C.SyntacticVariants 
   | ProgramStackUnit StackProgram
 
 -----------------------------------------------------------

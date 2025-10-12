@@ -19,7 +19,7 @@ module Stack2JS where
 import IR (SerializationUnit(..), HFN(..)
           , ppFunCall, ppArgs, Fields (..), Ident
           , serializeFunDef
-          , serializeAtoms )
+          , serializeSyntacticVariants )
 import qualified Data.ByteString.Lazy.Char8 as BL
 import qualified IR
 import qualified Raw
@@ -64,7 +64,7 @@ data LibAccess = LibAccess Basics.LibName Basics.VarName
 data JSOutput = JSOutput { libs :: [LibAccess] 
                          , fname:: Maybe String 
                          , code :: String 
-                         , atoms :: [Basics.AtomName]
+                         , atoms :: [Basics.SyntacticVariantName]
                          } deriving (Show, Generic)
 
 instance Aeson.ToJSON Basics.LibName 
@@ -104,7 +104,7 @@ data TheState = TheState { freshCounter :: Integer
 
 type RetKontText = PP.Doc
 
-type W = RWS Bool  ([LibAccess], [Basics.AtomName], [RetKontText]) TheState
+type W = RWS Bool  ([LibAccess], [Basics.SyntacticVariantName], [RetKontText]) TheState
 
 
 initState = TheState { freshCounter = 0
@@ -134,7 +134,7 @@ instance Identifier HFN where
 instance Identifier Basics.LibName where 
   ppId (Basics.LibName s) = text s
 
-instance Identifier Basics.AtomName where 
+instance Identifier Basics.SyntacticVariantName where 
   ppId = text
 
 instance Identifier RawVar where 
@@ -192,7 +192,7 @@ stack2JSON x =
 
 instance ToJS StackUnit where
   toJS (FunStackUnit fdecl) = toJS fdecl
-  toJS (AtomStackUnit ca) = toJS ca
+  toJS (SyntacticVariantStackUnit ca) = toJS ca
   toJS (ProgramStackUnit p) = error "not implemented"
 
 instance ToJS IR.VarAccess where 
@@ -232,13 +232,13 @@ instance ToJS StackProgram where
           
 
 
-instance ToJS C.Atoms where
-  toJS catoms@(C.Atoms atoms) = return $
+instance ToJS C.SyntacticVariants where
+  toJS catoms@(C.SyntacticVariants atoms) = return $
     vcat [ vcat $ (map  (\a -> hsep ["const"
                                     , text a
-                                    , "= new rt.Atom"
+                                    , "= new rt.SyntacticVariant"
                                                   , (PP.parens ( (PP.quotes.text) a))]) atoms)
-         , text "this.serializedatoms =" <+> (pickle.serializeAtoms) catoms]
+         , text "this.serializedatoms =" <+> (pickle.serializeSyntacticVariants) catoms]
 
 
 jsonValueToString :: Value -> String
@@ -617,7 +617,7 @@ instance ToJS RawExpr where
         text "rt.mkV1Label" <> (PP.parens . PP.doubleQuotes) (text s)
       Const lit -> do
         case lit of
-          C.LAtom atom -> tell ([], [atom], [])
+          C.LSynVar atom -> tell ([], [atom], [])
           _ -> return ()
         return $ ppLit lit
       Lib lib'@(Basics.LibName libname) varname -> do

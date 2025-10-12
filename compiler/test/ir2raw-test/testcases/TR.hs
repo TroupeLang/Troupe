@@ -9,7 +9,7 @@ import TroupePositionInfo
 
 
 mkP :: IRTerminator -> IRProgram
-mkP tr = IRProgram (Core.Atoms []) [FunDef (HFN "main") (VN "arg") [] body]
+mkP tr = IRProgram (Core.SyntacticVariants []) [FunDef (HFN "main") (VN "arg") [] body]
   where body = BB [] tr
 
 tcs :: [(String, IRProgram)]

@@ -196,7 +196,7 @@ data FunDef = FunDef
 
 -- An IR program is just a collection of atoms declarations 
 -- and function definitions
-data RawProgram = RawProgram C.Atoms [FunDef] 
+data RawProgram = RawProgram C.SyntacticVariants [FunDef] 
 
 
 -----------------------------------------------------------
@@ -204,7 +204,7 @@ data RawProgram = RawProgram C.Atoms [FunDef]
 -----------------------------------------------------------
 data RawUnit 
   = FunRawUnit FunDef 
-  | AtomRawUnit C.Atoms 
+  | SyntacticVariantRawUnit C.SyntacticVariants 
   | ProgramRawUnit RawProgram 
 
 

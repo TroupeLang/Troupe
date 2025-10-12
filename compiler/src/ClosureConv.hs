@@ -45,7 +45,7 @@ type CC = RWS
             FreshCounter                  -- state:  the counter for fresh name generation
 
 
-type CCEnv   = (CompileMode, C.Atoms, NestingLevel, Map VarName VarLevel, Maybe VarName)
+type CCEnv   = (CompileMode, C.SyntacticVariants, NestingLevel, Map VarName VarLevel, Maybe VarName)
 type Frees   = [(VarName, NestingLevel)]
 type FunDefs = [CCIR.FunDef]
 type ConstEntry = (VarName, C.Lit)
@@ -87,7 +87,7 @@ incLev fname (compileMode, atms, lev, vmap, _) =
 
 transVar :: VarName -> CC VarAccess
 transVar v@(VN vname) = do 
-  (_, C.Atoms atms, lev, vmap, maybe_fname) <- ask
+  (_, C.SyntacticVariants atms, lev, vmap, maybe_fname) <- ask
   case maybe_fname of 
     Just fname | fname == v  -> return $ VarFunSelfRef
     _ -> 
@@ -263,8 +263,8 @@ cpsToIR (CPS.Error v p) = do
 ------------------------------------------------------------
 
 closureConvert :: CompileMode -> CPS.Prog -> Except String CCIR.IRProgram
-closureConvert compileMode (CPS.Prog (C.Atoms atms) t) =
-  let atms' = C.Atoms atms
+closureConvert compileMode (CPS.Prog (C.SyntacticVariants atms) t) =
+  let atms' = C.SyntacticVariants atms
       initEnv = ( compileMode
                 , atms'
                 , 0 -- initial nesting counter
@@ -282,7 +282,7 @@ closureConvert compileMode (CPS.Prog (C.Atoms atms) t) =
       consts = (fst.unzip) consts_wo_levs
       main = FunDef (HFN toplevel) (VN argumentName) consts bb
 
-      irProg = CCIR.IRProgram (C.Atoms atms) $ fdefs++[main]
+      irProg = CCIR.IRProgram (C.SyntacticVariants atms) $ fdefs++[main]
     in do CCIR.wfIRProg irProg 
           return irProg
     -- then irProg

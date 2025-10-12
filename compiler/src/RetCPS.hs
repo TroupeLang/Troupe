@@ -111,9 +111,6 @@ ppKTerm parentPrec t =
    let thisTermPrec = 1000
    in PP.maybeParens (thisTermPrec < parentPrec   )  $ ppKTerm' t
 
-   -- uncomment to pretty print explicitly; 2017-10-14: AA
-   -- in PP.maybeParens (thisTermPrec < 10000)  $ ppTerm'       Core.LAtom _ -> Nothingt
-
 -- ppLit :: C.Lit -> PP.Doc
 -- ppLit = C.ppLit 
 -- ppLit  (C.LInt i pi) = PP.integer i 

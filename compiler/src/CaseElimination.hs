@@ -27,12 +27,12 @@ trans mode (S.Prog imports atms tm) = do
                   S.Let [ S.ValDecl (S.VarPattern "authority") (S.Var "$$authorityarg") _srcRT ]
                         tm
               Export -> tm
-  atms' <- transAtoms atms
+  atms' <- transSynVars atms
   tm'' <- transTerm tm'
   return (T.Prog imports atms' tm'')
 
-transAtoms :: S.SyntacticVariants -> Trans T.SyntacticVariants
-transAtoms (S.SyntacticVariants atms) = return (T.SyntacticVariants atms)
+transSynVars :: S.SyntacticVariants -> Trans T.SyntacticVariants
+transSynVars (S.SyntacticVariants atms) = return (T.SyntacticVariants atms)
 
 transLit :: S.Lit -> T.Lit
 transLit (S.LInt n pi)    = T.LInt n pi

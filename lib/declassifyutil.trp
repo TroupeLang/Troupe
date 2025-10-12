@@ -2,7 +2,7 @@
 (* Author: Aslan Askarov, aslan@askarov.net     *)
 (* Creation date: 2018-10-19                    *)
 
-import lists
+import List
 
 let 
     (* these are our primitive declassifiers; obs: mutual recursion *)
@@ -67,7 +67,7 @@ let
 
 
     and declassifylist (xs, a, lev) = 
-        map (fn x => declassifydeep (x, a, lev) ) xs
+        List.map (fn x => declassifydeep (x, a, lev) ) xs
     
     and declassifydeep (x, a, lev)  = 
       (* we declassify the blocking label before touching the value *) 

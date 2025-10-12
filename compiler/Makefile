@@ -5,7 +5,7 @@ all:
 	mkdir  -p ./../bin
 	stack -v install $(STACK_OPTS) --local-bin-path ./../bin/
 
-clear:
+clean:
 	rm *.cabal
 	stack clean --full
 	rm -rf ../bin

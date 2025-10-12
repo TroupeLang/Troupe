@@ -10,7 +10,7 @@ After analyzing the HAMT implementation and benchmarking results, I've identifie
 **Current limitation:** Using linked lists for child arrays with O(n) access
 ```sml
 (* Current slow implementation *)
-fun arrayGet arr idx = 
+fun arrayGet arr idx =
   case (idx, arr) of
     (0, x::xs) => x
   | (n, x::xs) => arrayGet xs (n - 1)
@@ -39,7 +39,7 @@ fun positionInBitmap bitmap pos =
 
 **Needed primitives:**
 - `ctz(n)` - Count trailing zeros
-- `clz(n)` - Count leading zeros  
+- `clz(n)` - Count leading zeros
 - `popcnt(n)` - Native popcount (currently emulated)
 - `bsr(n)` - Bit scan reverse (find highest set bit)
 - `pdep(n, mask)` - Parallel bit deposit
@@ -160,7 +160,7 @@ Until these primitives are available:
 
 The HAMT implementation is well-optimized given current constraints, but is fundamentally limited by:
 1. Lack of O(1) array access
-2. Missing hardware bit manipulation instructions  
+2. Missing hardware bit manipulation instructions
 3. Absence of native hash functions
 
 Adding these primitives would transform HAMT from a good functional data structure to a competitive alternative to mutable hash tables, with performance approaching imperative implementations while maintaining persistence and thread-safety.

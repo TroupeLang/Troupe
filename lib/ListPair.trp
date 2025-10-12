@@ -1,0 +1,85 @@
+import List
+
+let (* -- ListPair Generation -- *)
+
+    (** Merge two lists into a single list of pairs; the remainder of the longer list is ignored.
+     *  Tail-recursive. *)
+    fun zip xs ys =
+        let fun zip_inner []      _       acc = List.reverse acc
+              | zip_inner _       []      acc = List.reverse acc
+              | zip_inner (x::xs) (y::ys) acc = zip_inner xs ys ((x,y)::acc)
+        in zip_inner xs ys [] end
+
+    (** Unmerge a list of pairs into a pair of two lists. Tail-recursive. *)
+    fun unzip xys =
+        let fun unzip_inner []         (xs,ys) = (List.reverse xs, List.reverse ys)
+              | unzip_inner (x,y)::xys (xs,ys) = unzip_inner xys (x::xs, y::ys)
+        in unzip_inner xys ([], []) end
+
+    (* -- ListPair Information -- *)
+
+    (** Returns `true` if the given list of pairs is empty. *)
+    val null = List.null
+
+    (** Returns the length of the given list of pairs. Tail-recursive. *)
+    val length = List.length
+
+    (* -- List Manipulation -- *)
+
+    (** ListPair reversal. Tail-recursive. *)
+    val reverse = List.reverse
+
+    (** Catenate two lists of pairs. Not tail-recursive (length of the first argument). *)
+    val append = List.append
+
+    (** Catenate two lists, reversing the first. Tail-recursive. *)
+    val revAppend = List.revAppend
+
+    (* -- ListPair as an Associated List -- *)
+
+    (** Returns the first `[value]` associated with the `key` if it exists; otherwise, `[]`.
+     *  Tail-recursive. *)
+    (* HACK (#53): Use option type instead of list. *)
+    fun findOpt []     _   = []
+      | find (x,v)::xs key = if x = key
+                             then [v]
+                             else findOpt xs key
+
+    (** Returns the first value associated with the `key`. *)
+    fun find xs key = case findOpt xs key of [v] => v
+
+    (** Returns `true` if the given key is associated with at least one value. *)
+    fun mem m key = case findOpt m key of [] => false
+                                        | _  => true
+
+    (* -- List Iterators -- *)
+
+    (* TODO: Implement separately to skip the intermediate `zip`. *)
+
+    (** Equivalent to `List.map f (zip xs ys)`. *)
+    fun map f xs ys = List.map f (zip xs ys)
+
+    (** Equivalent to `List.foldl f z (zip xs ys)`. *)
+    fun foldl f z xs ys = List.foldl f z (zip xs ys)
+
+    (*--- Module ---*)
+    val ListPair = {
+        zip       = zip,
+        unzip     = unzip,
+
+        null      = null,
+        length    = length,
+
+        reverse   = reverse,
+        append    = append,
+        revAppend = revAppend,
+
+        findOpt   = findOpt,
+        find      = find,
+        mem       = mem,
+
+        map       = map,
+        foldl     = foldl
+    }
+
+in [ ("ListPair", ListPair) ] end

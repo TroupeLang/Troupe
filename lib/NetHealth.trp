@@ -1,7 +1,7 @@
 (* NetHealth - Network Testing Health and Monitoring Library *)
 (* Common patterns for P2P and network testing *)
 
-import lists
+import List
 import timeout
 
 let
@@ -41,8 +41,8 @@ let
 
     (* Batch test results reporting - simplified with lists library *)
     fun reportTestSummary({print, auth, ..}, nodeName, results) =
-        let (* Use lists.filter to count passed tests *)
-            val passedTests = filter (fn (name, passed) => passed) results
+        let (* Use List.filter to count passed tests *)
+            val passedTests = List.filter (fn (name, passed) => passed) results
             val total = length results
             val passed = length passedTests
             
@@ -52,7 +52,7 @@ let
             val _ = print (nodeName ^ ": Failed: " ^ intToString(total - passed))
             
             (* Use lists.map to report each result *)
-            val _ = map (fn (name, passed) =>
+            val _ = List.map (fn (name, passed) =>
                         print ("  - " ^ name ^ ": " ^ 
                               (if passed then "PASSED" else "FAILED")))
                        results
@@ -147,7 +147,7 @@ let
 
     (* Count passed tests - simplified with lists library *)
     fun countPassedTests(results) =
-        length (filter (fn (name, passed) => passed) results)
+        length (List.filter (fn (name, passed) => passed) results)
 
     (* Count total tests - simplified with lists library *)
     fun countTotalTests(results) =

@@ -1,0 +1,171 @@
+import List
+
+let (*--- Constants ---*)
+
+    (** Using 32 bit integers bitmasks, we have a branch factor of 32 which
+     *  requires 5 bits *)
+    val maskBits = 5
+
+    (** Maximum length of stencil vector: 2^`maskBits -1` *)
+    val maskMax = (1 << maskBits) - 1
+
+    (** Maximum value for a 32 bit unsigned integer *)
+    val max_int32 = 4294967296 - 1
+
+    (*--- Bitmap ---*)
+
+    (** An empty bitmap. *)
+    val bitmapEmpty = 0
+
+    (** Bitmap with the `i`th bit set to `true` *)
+    fun bitmapPos i = (1 << i)
+
+    (** Get whether the `i`th bit is set to true in the given bitmap `bm` *)
+    fun bitmapGet bm i = ((bitmapPos i) andb bm) <> bitmapEmpty
+
+    (** A bitmap that is like `bm` but with the `i`th bit to `true`. *)
+    fun bitmapSet bm i = bm orb (bitmapPos i)
+
+    (** Returns a bitmap that is like `bm` but with the `i`th bit to `false`. *)
+    fun bitmapUnset bm i = bm andb (max_int32 xorb (bitmapPos i))
+
+    (** Count the number of `true` bits in the given bitmap `bm` *)
+    fun bitmapPopcount bm =
+        let (* Uses parallel bit counting - ~30x faster than bit-by-bit. The following are masks to
+             * extract a disjoint set of bytes. Here, we can abuse the fact, that the '+' operator
+             * can sum several numbers together, if each number is shifted (and one does not
+             * overflow into the other). See also: Gödel Numbers. *)
+            val m1 = 1431655765 (* 0b_01010101010101010101010101010101 *)
+            val m2 = 858993459  (* 0b_00110011001100110011001100110011 *)
+            val m4 = 252645135  (* 0b_00001111000011110000111100001111 *)
+            val m8 = 16843009   (* 0b_00000001000000010000000100000001 *)
+
+            (* Count bits in groups of 2. This makes each pair of bits contain the number of
+             * 'true' bits set. *)
+            val bm1 = (bm andb m1)  + ((bm  >> 1) andb m1)
+
+            (* Count bits in groups of 4. Same as above, but now in 4-bit (nibble) subresults. *)
+            val bm2 = (bm1 andb m2) + ((bm1 >> 2) andb m2)
+
+            (* Count bits in groups of 8. Same as above, but now in 8-bit (byte) subresults. *)
+            val bm4 = (bm2 andb m4) + ((bm2 >> 4) andb m4)
+        in
+            (* At this point, each group of 8 bits can cover 32+ different values. Since the
+             * original number is 32 bits, they cannot overflow into each other. Hence, we can now
+             * safely multiply this with `m8` which sums all groups together in bits 25..32; this
+             * byte can then be moved back down. *)
+            ((bm4 * m8) >> 24) andb 255
+        end
+
+    (** Count the number of `true` bits prior to the given index. *)
+    fun bitmapPopcountPos bm i =
+        let val iMask = (bitmapPos i) - 1
+            val bmMasked = bm andb iMask
+        in bitmapPopcount bmMasked
+        end
+
+    (*--- Stencil Vector ---*)
+
+    (* A Stencil Vector is represented as a tuple `(bitmap, array)` where `bitmap` is a 32 bit
+     * accessed with the functions above and `array` is a `list` which simulates an immutable
+     * array.
+     *
+     * The documentation comments for most of these are lifted from the Racket documentation.
+     *)
+
+    (** The empty stencil vector. *)
+    val empty = (bitmapEmpty, [])
+
+    (** Returns the stencil vector with slot `i` storing `x`. *)
+    fun singleton i x = ((bitmapPos i), [x])
+
+    (** Returns `true` if a value is stored at slot `i`. *)
+    fun mem (bm, xs) i = bitmapGet bm i
+
+    (** Get the element stored in slot `i` in the given stencil vector. The first slot is `0`, and
+     *  the last slot is at `mask`. *)
+    fun get (bm, xs) i = List.nth xs (bitmapPopcountPos bm i)
+
+    (** Get the element stored in slot `i` if it exists; otherwise, the default value `d` is
+        returned. *)
+    fun getOrDefault sv i d = if mem sv i then get sv i else d
+
+    (** Inserts `x` into slot `i` on the given stencil vector. If the slot already is occupied, then
+     *  the element is replaced with the new value. *)
+    fun set (bm, xs) i x =
+        let val idx = (bitmapPopcountPos bm i)
+            val bm' = bitmapSet bm i
+            val xs' = if bm = bm'
+                      then List.mapi (fn (j,y) => if j = idx then x else y) xs
+                      else let fun go j []    = [x]
+                                 | go 0 ys    = x::ys
+                                 | go j y::ys = y::(go (j-1) ys)
+                           in go idx xs end
+        in (bm', xs')
+        end
+
+    (** Removes the element stored in slot `i` in the given stencil vector. If the slot is empty,
+     *  then the vector is unchanged. *)
+    fun unset (bm, xs) i =
+        let val idx = bitmapPopcountPos bm i
+            val bm' = bitmapUnset bm i
+            val xs' = if bm = bm'
+                      then xs
+                      else List.filteri (fn (j,_) => j <> idx) xs
+        in (bm', xs')
+        end
+
+    (** Returns `true` if the given value is a valid stencil vector. *)
+    fun valid (bm, xs) =
+        if "number" = getType bm
+        then if bm = floor bm
+             then if isList xs
+                  then (bitmapPopcount bm) = (List.length xs)
+                  else false
+             else false
+        else false
+      | valid _        = false
+
+    (** Returns `true` if the stencil vector is empty. *)
+    fun null (0, _) = true
+      | null _      = false
+
+    (** Returns the mask of a stencil vector. Note that the mask of a stencil vector is determined
+     *  at creation time and cannot be changed later. *)
+    fun mask (bm, _) = bm
+
+    (** Returns the length of a stencil vector (i.e., the number of slots occupied). *)
+    fun length (bm, _) = bitmapPopcount bm
+
+    (** Map over all values in the given stencil vector; the slot indices are preserved.
+     *  Not tail-recursive. *)
+    fun map f (bm, xs) = (bm, List.map f xs)
+
+    (** Fold over all values in the given stencil vector. Tail-recursive. *)
+    fun fold f y (_, xs) = List.foldl f y xs
+
+    (* TODO: Lift list functions `mapi`, `find` and `filter`? *)
+
+    val StencilVector = {
+        (* Constants *)
+        maskBits     = maskBits,
+        maskMax      = maskMax,
+        (* Functions *)
+        empty        = empty,
+        singleton    = singleton,
+        get          = get,
+        getOrDefault = getOrDefault,
+        set          = set,
+        unset        = unset,
+        mem          = mem,
+        valid        = valid,
+        null         = null,
+        mask         = mask,
+        length       = length,
+        map          = map,
+        fold         = fold
+    }
+in  (* Export public functions *)
+    [ ("StencilVector", StencilVector)
+    ]
+end

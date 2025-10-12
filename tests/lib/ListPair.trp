@@ -1,0 +1,83 @@
+import Unit
+import ListPair
+
+let val tests = Unit.group "ListPair" [
+            Unit.group "zip" [
+                Unit.it "merges [] []"        (Unit.isEq []            (ListPair.zip [] []))
+              , Unit.it "merges [42] ['a']"   (Unit.isEq [(42,"a")]    (ListPair.zip [42] ["a"]))
+              , Unit.it "merges ['a'] [42]"   (Unit.isEq [("a",42)]    (ListPair.zip ["a"] [42]))
+              , Unit.it "merges [0,1] [2,3]"  (Unit.isEq [(0,2),(1,3)] (ListPair.zip [0,1] [2,3]))
+              , Unit.it "drops [] [42]"       (Unit.isEq []            (ListPair.zip [] [42]))
+              , Unit.it "drops [] [42]"       (Unit.isEq []            (ListPair.zip [42] []))
+              , Unit.it "drops [0,1,2] [3,4]" (Unit.isEq [(0,3),(1,4)] (ListPair.zip [0,1,2] [3,4]))
+              , Unit.it "drops [0,1] [2,3,4]" (Unit.isEq [(0,2),(1,3)] (ListPair.zip [0,1] [2,3,4]))
+            ],
+            Unit.group "unzip" [
+                Unit.it "splits []"             (Unit.isEq ([],[])        (ListPair.unzip []))
+              , Unit.it "splits [(42,'a')]"     (Unit.isEq ([42], ["a"])  (ListPair.unzip [(42,"a")]))
+              , Unit.it "splits [(0,1), (2,3)]" (Unit.isEq ([0,2], [1,3]) (ListPair.unzip [(0,1), (2,3)]))
+            ],
+            Unit.group "null" [
+                Unit.it "accepts []"             (Unit.isTrue  (ListPair.null []))
+              , Unit.it "rejects [(42,'a')]"     (Unit.isFalse (ListPair.null [(42,"a")]))
+              , Unit.it "rejects [(0,1), (2,3)]" (Unit.isFalse (ListPair.null [(0,1), (2,3)]))
+            ],
+            Unit.group "length" [
+                Unit.it "is 0 for []"             (Unit.isEq 0 (ListPair.length []))
+              , Unit.it "is 1 for [(42,'a')]"     (Unit.isEq 1 (ListPair.length [(42,"a")]))
+              , Unit.it "is 2 for [(0,1), (2,3)]" (Unit.isEq 2 (ListPair.length [(0,1), (2,3)]))
+            ],
+            Unit.group "reverse" [
+                Unit.it "reverses []"             (Unit.isEq []             (ListPair.reverse []))
+              , Unit.it "reverses [(0,1), (2,3)]" (Unit.isEq [(2,3), (0,1)] (ListPair.reverse [(0,1), (2,3)]))
+            ],
+            Unit.group "append" [
+                Unit.it "appends [] []"             (Unit.isEq []             (ListPair.append [] []))
+              , Unit.it "appends [] [(0,1), (2,3)]" (Unit.isEq [(0,1), (2,3)] (ListPair.append [] [(0,1), (2,3)]))
+              , Unit.it "appends [(0,1), (2,3)] []" (Unit.isEq [(0,1), (2,3)] (ListPair.append [(0,1), (2,3)] []))
+            ],
+            Unit.group "revAppend" [
+                Unit.it "appends [] []"             (Unit.isEq []             (ListPair.revAppend [] []))
+              , Unit.it "appends [] [(0,1), (2,3)]" (Unit.isEq [(0,1), (2,3)] (ListPair.revAppend [] [(0,1), (2,3)]))
+              , Unit.it "appends [(0,1), (2,3)] []" (Unit.isEq [(2,3), (0,1)] (ListPair.revAppend [(0,1), (2,3)] []))
+            ],
+            Unit.group "findOpt" [
+                Unit.it "returns NONE for [] 42"           (Unit.isEq [] (ListPair.findOpt [] 42))
+              , Unit.it "returns NONE for [(0,42)] 42"     (Unit.isEq [] (ListPair.findOpt [(0,42)] 42))
+              , Unit.it "returns (SOME 42) for [(0,42)] 0" (Unit.isEq [42] (ListPair.findOpt [(0,42)] 0))
+              , Unit.it "returns (SOME 42) for [(1,'a'), (0,42), (2,3), (0,'no')] 0"
+                        (Unit.isEq [42] (ListPair.findOpt [(1,"a"), (0,42), (2,3), (0,"no")] 0))
+            ],
+            Unit.group "find" [
+                Unit.it "returns 42 for [(0,42)] 0" (Unit.isEq 42 (ListPair.find [(0,42)] 0))
+              , Unit.it "returns 42 for [(1,'a'), (0,42), (2,3), (0,'no')] 0"
+                        (Unit.isEq 42 (ListPair.find [(1,"a"), (0,42), (2,3), (0,"no")] 0))
+            ],
+            Unit.group "mem" [
+                Unit.it "rejects [] for 42"       (Unit.isFalse (ListPair.mem [] 42))
+              , Unit.it "rejects [(0,42)] for 42" (Unit.isFalse (ListPair.mem [(0,42)] 42))
+              , Unit.it "accepts [(0,42)] for 0"  (Unit.isTrue  (ListPair.mem [(0,42)] 0))
+              , Unit.it "accepts [(1,'a'), (0,42), (2,3), (0,'no')] for 0"
+                        (Unit.isTrue (ListPair.mem [(1,"a"), (0,42), (2,3), (0,"no")] 0))
+            ],
+            let fun f (x,y) = (x,y+1)
+            in Unit.group "map" [
+                    Unit.it "maps [] []"           (Unit.isEq [] (ListPair.map f [] []))
+                  , Unit.it "maps ['answer'] [41]" (Unit.isEq [("answer", 42)] (ListPair.map f ["answer"] [41]))
+                  , Unit.it "maps [0,1] [2,8]"     (Unit.isEq [(0,3),(1,9)] (ListPair.map f [0,1] [2,8]))
+                  , Unit.it "maps [0,1,3] [2,8]"   (Unit.isEq [(0,3),(1,9)] (ListPair.map f [0,1,3] [2,8]))
+                  , Unit.it "maps [0,1] [2,8,3]"   (Unit.isEq [(0,3),(1,9)] (ListPair.map f [0,1] [2,8,3]))
+                ]
+            end,
+            let fun f ((x,y),acc) = acc*x*y
+            in Unit.group "foldl" [
+                    Unit.it "folds (*) 1 [] []"       (Unit.isEq 1   (ListPair.foldl f 1 [] []))
+                  , Unit.it "folds (*) 1 [] [2]"      (Unit.isEq 1   (ListPair.foldl f 1 [] [2]))
+                  , Unit.it "folds (*) 1 [2] []"      (Unit.isEq 1   (ListPair.foldl f 1 [2] []))
+                  , Unit.it "folds (*) 1 [2] [3]"     (Unit.isEq 6   (ListPair.foldl f 1 [2] [3]))
+                  , Unit.it "folds (*) 0 [2] [3]"     (Unit.isEq 0   (ListPair.foldl f 0 [2] [3]))
+                  , Unit.it "folds (*) 1 [2,3] [5,7]" (Unit.isEq 210 (ListPair.foldl f 1 [2,3] [5,7]))
+                ]
+            end
+        ]
+in Unit.run authority tests end

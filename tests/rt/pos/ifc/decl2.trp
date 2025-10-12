@@ -1,10 +1,10 @@
 import declassifyutil 
-import lists
+import List
 
 let val x = 42 raisedTo `<alice&bob;#root-integrity>`
     val y = 100 raisedTo `<alice&bob;#root-integrity>`
     val tuple = (x,y,10)
-    val ls = map (fn x => x) [x,y,10]
+    val ls = List.map (fn x => x) [x,y,10]
     val z = declassifydeep (ls, authority, `{}`)
 in z
 end

@@ -1,0 +1,226 @@
+import List
+import ListPair
+import StencilVector
+
+let (* NOTE: The map is implemented as a Hash Array Mapped Trie (HAMT), i.e. a prefix(ish) trie over
+     *       the hash of the keys. We represent the trie as follows:
+     *       - Leaves are represented as collision lists.
+     *       - Internal nodes use Stencil Vectors with `getIndex` to identify the child.
+     *)
+
+    (* NOTE: We wanted to implement the internal helper functions for leaves and nodes below as
+     *       internal submodules. But, doing so with lambdas is not possible without making
+     *       everything a pair.
+     *
+     *       For now, we use the 'leaf_' and 'node_' prefixes.
+     *)
+
+    (*--- INTERNAL: Leaf Functions ---*)
+
+    (** Returns a leaf with a single key-value pair. *)
+    fun leaf_make k v = [(k,v)]
+
+    (** Returns `true` if `n` is a leaf (possibly empty). *)
+    fun leaf_isLeaf x = isList x
+
+    (** The leaf with no key-value pairs. *)
+    val leaf_empty = []
+
+    (** Returns `true` if `n` is the empty leaf. *)
+    val leaf_isEmpty = List.null
+
+    (** Hash of (non-empty) leaf bucket. *)
+    (* TODO (Optimisation): Store hash values in leaves to circumvent recomputation for each
+     *                      collision? *)
+    fun leaf_hash hf (k,_)::_ = hf k
+
+    (** Returns the size of the bucket. *)
+    val leaf_size = List.length
+
+    (** Filter a leaf to all entries that match the given key. That is, returns `[value]` for
+     *  `value` associated with key `k` and `[]` otherwise. *)
+    (* TODO (Optimisation): early termination if found. *)
+    fun leaf_findOpt n k = ListPair.findOpt n k
+
+    (* TODO (Optimisation): combined find/map instead of filter? *)
+    (* TODO (Optimisation): make each add tail-recursive at the cost of reversing the bucket? *)
+    fun leaf_set n k v = (k,v)::(List.filter (fn (k',_) => k <> k') n)
+
+    (** Remove `key` and its associated value from a leaf `n`. *)
+    (* TODO (Optimisation): make each deletion tail-recursive at the cost of reversing the
+     *                      bucket? *)
+    fun leaf_unset n k = List.filter (fn (k',_) => k <> k') n
+
+    (** Fold over all key-value pairs in bucket. *)
+    val leaf_fold = List.foldl
+
+    (*--- INTERNAL: Node Functions ---*)
+
+    (** Returns a `StencilVector.maskWidthLog` number of bits from the hash value `h` at depth `d`. *)
+    fun node_hashToIdx h d = (h >> (d * StencilVector.maskBits)) andb StencilVector.maskMax
+
+    (** Returns the internal node with the given `idx` set to a child. *)
+    val node_make = StencilVector.singleton
+
+    (** Fold over all children in the node *)
+    val node_fold = StencilVector.fold
+
+    (** Returns `true` if the given node is empty *)
+    val node_null = StencilVector.null
+
+    (** Returns the number of children in the node *)
+    val node_size = StencilVector.length
+
+    (** Returns the child of an internal node if it exists, otherwise an *empty* leaf. *)
+    fun node_getChild n idx = StencilVector.getOrDefault n idx leaf_empty
+
+    (** Returns the node `n` updated with `idx` set to the given child.  *)
+    val node_setChild = StencilVector.set
+
+    (** Returns the node `n` updated with child `idx` removed. *)
+    val node_unsetChild = StencilVector.unset
+
+    (*--- Map Construction ---*)
+
+    (** Returns an empty map using the given hash function, `hf`. *)
+    fun empty hf = (hf, leaf_empty)
+
+    (** Returns a map using hash function, `hf`, and stores the single `key`-`value` pair. *)
+    fun singleton hf key value = (hf, leaf_make key value)
+
+    (** Returns the map with the given `key`-`value` pair inserted. *)
+    fun insert (hf,t) key value =
+        let val h = hf key
+            fun insertRec t' d =
+                if leaf_isEmpty t'
+                then leaf_make key value else
+                if leaf_isLeaf t'
+                then let val h' = leaf_hash hf t'
+                     in if h = h'
+                        then (* Add key-value pair, if the hashes match. *)
+                             leaf_set t' key value
+                        else (* Otherwise, add new intermediate node for `h'` and recurse. *)
+                             let val idx  = node_hashToIdx h  d
+                                 val idx' = node_hashToIdx h' d
+                                 val n'   = node_make idx' t'
+                                 val c'   = insertRec (node_getChild n' idx) (d+1)
+                             in node_setChild n' idx c' end
+                     end
+                else let val idx = node_hashToIdx h d
+                         val c'  = insertRec (node_getChild t' idx) (d+1)
+                     in node_setChild t' idx c' end
+        in (hf, insertRec t 0) end
+
+    (** Returns the map without the given `key` and its value removed. *)
+    fun remove (hf,t) key =
+        let val h = hf key
+            fun removeRec t' d =
+                if leaf_isEmpty t'
+                then t' else
+                if leaf_isLeaf t'
+                then if h = (leaf_hash hf t')
+                     then leaf_unset t' key
+                     else t'
+                else let (* Recurse *)
+                         val idx = node_hashToIdx h d
+                         val c'  = removeRec (node_getChild t' idx) (d+1)
+                     in (* Remove intermediate node if it is left with only a single leaf as its
+                         * child. *)
+                        if leaf_isEmpty c'
+                        then let val n' = node_unsetChild t' idx
+                             in if node_size n' <= 1
+                                then let val r = node_fold (fn (c,_) => c) leaf_empty n'
+                                     in if leaf_isLeaf r then r else n' end
+                                else n'
+                             end
+                        else node_setChild t' idx c'
+                     end
+        in (hf, removeRec t 0) end
+
+    (*--- Map Queries ---*)
+
+    (** Returns `true` if the map is empty. *)
+    fun null (_,t) = leaf_isEmpty t
+
+    (** Returns the `[value]` associated with the `key` if it exists; otherwise, `[]`. *)
+    (* HACK (#53): Use option type instead of list. *)
+    fun findOpt (hf,t) key =
+        let val h = hf key
+            fun findOptRec t' d =
+                if leaf_isEmpty t'
+                then [] else
+                if leaf_isLeaf t'
+                then if h <> (leaf_hash hf t')
+                     then []
+                     else leaf_findOpt t' key
+                else findOptRec (node_getChild t' (node_hashToIdx h d)) (d+1)
+        in findOptRec t 0 end
+
+    (** Returns the value associated with the `key`. *)
+    fun find m key = case findOpt m key of [v] => v
+
+    (** Returns `true` if the given key is associated with a value. *)
+    fun mem m key = case findOpt m key of [] => false
+                                        | _  => true
+
+    (** Number of key-value pairs stored in the given map. *)
+    (* TODO (Optimisation): Store size at root to make this O(1)? *)
+    fun size (_,t) =
+        let fun sizeRec t' = if leaf_isLeaf t'
+                             then leaf_size t'
+                             else node_fold (fn (c,acc) => acc + (sizeRec c)) 0 t'
+        in sizeRec t end
+
+    (* TODO: equal. *)
+
+    (*--- Map Manipulation ---*)
+
+    (** Fold function `f` over all key-value pairs in the map. Not tail-recursive. *)
+    fun fold f acc (_,t) =
+        let fun foldRec (t', acc') =
+                if leaf_isLeaf t'
+                then leaf_fold f acc' t'
+                else node_fold foldRec acc' t'
+        in foldRec (t, acc) end
+
+    (* TODO: map (using fold), filter, keys and values (using fold), merge / union, split. *)
+
+    (*--- List Conversion ---*)
+
+    (** Returns a list of all keys stored in the given map. *)
+    fun keys m = fold (fn ((k,_), acc) => k::acc) [] m
+
+    (** Returns a list of all keys stored in the given map. *)
+    fun values m = fold (fn ((_,v), acc) => v::acc) [] m
+
+    (** Returns a list of key-value pairs stored in the given map. *)
+    fun toList m = fold (fn ((k,v), acc) => (k,v)::acc) [] m
+
+    (** Returns the map (using the provided hash function) that contains all key-value pairs in the
+        given list. Tail-recursive. *)
+    fun fromList hf xs = List.foldl (fn ((k,v), m) => insert m k v) (empty hf) xs
+
+    (*--- Module ---*)
+    val HashMap = {
+        (* Construction *)
+        empty     = empty,
+        singleton = singleton,
+        insert    = insert,
+        remove    = remove,
+        (* Queries *)
+        null      = null,
+        size      = size,
+        findOpt   = findOpt,
+        find      = find,
+        mem       = mem,
+        (* Manipulation *)
+        fold      = fold,
+        (* List Conversion*)
+        keys      = keys,
+        values    = values,
+        toList    = toList,
+        fromList  = fromList
+    }
+
+in [ ("HashMap", HashMap) ]
+end

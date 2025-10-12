@@ -72,8 +72,8 @@ instance Aeson.ToJSON JSOutput
 
 ppLibAccess :: LibAccess -> PP.Doc
 ppLibAccess (LibAccess (Basics.LibName libname) varname) = PP.braces $
-  PP.text "lib:" <+> (PP.quotes. PP.text) libname <+> PP.text "," <+>
-  PP.text "decl:" <+> (PP.quotes. PP.text) varname
+  PP.text "lib:" <+> (PP.doubleQuotes. PP.text) libname <+> PP.text "," <+>
+  PP.text "decl:" <+> (PP.doubleQuotes. PP.text) varname
 
 
 ppLibs :: [LibAccess] -> PP.Doc
@@ -89,7 +89,7 @@ jsLoadLibs = vcat $ map text [
                             
       
 addOneLib (LibAccess (Basics.LibName libname) varname) =
-  let args = (PP.quotes.PP.text) libname <+> text "," <+> (PP.quotes. PP.text) varname
+  let args = (PP.doubleQuotes.PP.text) libname <+> text "," <+> (PP.doubleQuotes. PP.text) varname
   in text "this.addLib " <+> PP.parens args
 
 addLibs xs = vcat $ nub (map addOneLib xs)
@@ -257,7 +257,7 @@ instance ToJS FunDef where
 
        return $
           vcat [text "this." PP.<>  ppId hfn <+> text "=" <+> ppArgs ["$env"] <+> text "=> {"
-               , if debug then nest 2 $ text "rt.debug" <+> (PP.parens . PP.quotes.  ppId) hfn
+               , if debug then nest 2 $ text "rt.debug" <+> (PP.parens . PP.doubleQuotes.  ppId) hfn
                           else PP.empty 
                , nest 2 $ vcat $ [ 
                   "let _T = rt.runtime.$t",
@@ -542,7 +542,7 @@ ppSparseSlot = do
 fieldToJS :: ToJS a => (String, a) -> W PP.Doc
 fieldToJS (f, v) = do 
     d <- toJS v 
-    return $ PP.brackets $ PP.quotes (text f) <> text "," <> d
+    return $ PP.brackets $ PP.doubleQuotes (text f) <> text "," <> d
 
 fieldsToJS :: ToJS a => [(String, a)] -> W [PP.Doc]
 fieldsToJS fs = do 
@@ -587,7 +587,7 @@ instance ToJS RawExpr where
           text "rt.withRecord" <> PP.parens (
             PP.hsep [ppId r, text ",", PP.brackets $ PP.hsep $ jsFields ])
       ProjField x f -> return $
-        text "rt.getField" <> PP.parens (ppId x <> text "," <>  PP.quotes (text f ) )
+        text "rt.getField" <> PP.parens (ppId x <> text "," <>  PP.doubleQuotes (text f ) )
       ProjIdx x idx -> return $
         text "rt.raw_indexTuple" <> PP.parens (ppId x <> text "," <>  text (show idx) )
       List vars -> return $
@@ -601,7 +601,7 @@ instance ToJS RawExpr where
       Lib lib'@(Basics.LibName libname) varname -> do
         tell ([LibAccess lib' varname], [])
         return $
-          text "rt.loadLib" <> PP.parens ((PP.quotes.text) libname <> text ", " <> (PP.quotes.text) varname <> text ", this")
+          text "rt.loadLib" <> PP.parens ((PP.doubleQuotes.text) libname <> text ", " <> (PP.doubleQuotes.text) varname <> text ", this")
       ConstructLVal r1 r2 r3 -> return $
         ppFunCall  (text "rt.constructLVal")  (map ppId [r1,r2,r3])
       Base b -> return $ text "rt." <+> text b -- Note: The "$$authorityarg" case is handled in IR2Raw
@@ -611,7 +611,7 @@ instance ToJS RawExpr where
 
 -----------------------------------------------------------
 ppPosInfo :: GetPosInfo a => a -> PP.Doc 
-ppPosInfo  = PP.quotes . text . show . posInfo
+ppPosInfo  = PP.doubleQuotes . text . show . posInfo
 
 pickle = PP.doubleQuotes.text.T.unpack.decodeUtf8.encode
 stdlib = [] -- "let runtime = require('../runtimeMonitored.js')"]

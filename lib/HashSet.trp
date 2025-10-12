@@ -1,0 +1,68 @@
+import List
+import HashMap
+
+let (* NOTE: The set is implemented as a HashMap with dummy values, `()`. This is not necessarily
+     *       space efficient. But, it is decreases the need for maintenance.
+     *)
+    val dummy = ()
+
+    (** Returns an empty set using the given hash function, `hf`. *)
+    fun empty hf = HashMap.empty hf
+
+    (** Returns a map using hash function, `hf`, storing the single element `x`. *)
+    fun singleton hf x = HashMap.singleton hf x dummy
+
+    (** Returns the map with the given element, `x`, inserted. *)
+    fun insert s x = HashMap.insert s x dummy
+
+    (** Returns the set without the given element, `x`. *)
+    val remove = HashMap.remove
+
+    (** Returns `true` if the set is empty. *)
+    val null = HashMap.null
+
+    (** Returns `true` if `x` is in the set. *)
+    val mem = HashMap.mem
+
+    (** Number of elements stored in the given set. *)
+    val size = HashMap.size
+
+    (** Fold function `f` over all elements in the set. Not tail-recursive. *)
+    fun fold f acc s =
+        let fun f' ((k,_), acc) = f (k,acc)
+        in HashMap.fold f' acc s end
+
+    (** Returns a list of elements stored in the given set. *)
+    val toList = HashMap.keys
+
+    (** Alias for `toList`. *)
+    val elems = toList
+
+    (** Returns the set (using the provided hash function) that contains all elements in the given
+        list. Tail-recursive. *)
+    (* TODO: Prettier code would be `HashMap.fromList (List.map (fn x => (x, dummy)))`; if
+     *       `HashMap.fromList` suddenly gets optimised, then we can piggyback on that. Yet, this
+     *       would result in O(n) extra time and space usage. *)
+    fun fromList hf xs = List.foldl (fn (x, s) => insert s x) (empty hf) xs
+
+    (*--- Module ---*)
+    val HashSet = {
+        (* Construction *)
+        empty     = empty,
+        singleton = singleton,
+        insert    = insert,
+        remove    = remove,
+        (* Queries *)
+        null      = null,
+        size      = size,
+        mem       = mem,
+        (* Manipulation *)
+        fold      = fold,
+        (* List Conversion*)
+        elems     = elems,
+        toList    = toList,
+        fromList  = fromList
+    }
+
+in [ ("HashSet", HashSet) ]
+end

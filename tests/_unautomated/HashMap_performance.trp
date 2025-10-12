@@ -1,7 +1,8 @@
 (* HAMT Stress Tests *)
 
-import lists
-import hamt  (* Import hamt after lists so its functions take precedence *)
+import List
+import Hash
+import HashMap
 
 (* Option type must match the one in HAMT library *)
 datatype Atoms = NONE | SOME
@@ -10,55 +11,55 @@ let
   (* ==================== *)
   (* Test Configuration   *)
   (* ==================== *)
-  
+
   (* Test 1: Sequential insertions *)
   val SEQUENTIAL_INSERT_COUNT = 5000
-  
+
   (* Test 2: Random access *)
   val RANDOM_KEY_COUNT = 1000
   val RANDOM_LOOKUP_COUNT = 1000
   val RANDOM_SEED_INITIAL = 42
-  
+
   (* Test 3: Integer keys *)
   val INTEGER_KEY_COUNT = 10000
   val INTEGER_TEST_KEY = 5000
   val INTEGER_TEST_VALUE = 25000000  (* 5000 * 5000 *)
-  
+
   (* Test 4: Bulk removals *)
   val REMOVE_COUNT = 500
-  
+
   (* Test 5: Collision stress *)
   val COLLISION_KEY_COUNT = 500
   val COLLISION_MOD_BASE = 10
   val COLLISION_MAX_REPEAT = 5
-  
+
   (* Test 6: Mixed operations *)
   val MIXED_OPS_COUNT = 10000
   val MIXED_OPS_SEED = 12345
   val MIXED_KEY_RANGE = 1000
-  
+
   (* Test 7: Persistence/versions *)
   val BASE_SIZE = 1000
   val VERSION_COUNT = 100
-  
+
   (* Test 8: Extreme key sizes *)
   val EXTREME_KEY_SMALL = 100
   val EXTREME_KEY_MEDIUM = 500
   val EXTREME_KEY_LARGE = 1000
-  
+
   (* Test 9 & 10: fromList/toList *)
   val FROMLIST_SIZE = 2000
-  
+
   (* Random number generator constants *)
   val RANDOM_A = 1664525
   val RANDOM_C = 1013904223
   val RANDOM_M = 1073741824  (* 2^30 *)
   val RANDOM_KEY_MOD = 10000
-  
+
   (* ==================== *)
   (* Utility Functions    *)
   (* ==================== *)
-  
+
   (* Timing utility *)
   fun timeOp name f =
     let val start = getTime ()
@@ -67,11 +68,11 @@ let
         val duration = endTime - start  (* Already in milliseconds *)
     in (print (name ^ ": " ^ intToString duration ^ " ms"); result)
     end
-    
-  fun assert cond msg = 
-    if cond then () 
+
+  fun assert cond msg =
+    if cond then ()
     else (print ("FAIL: " ^ msg); exit (authority, 1))
-    
+
   (* Generate test data *)
   fun generateStringKeys n =
     let fun gen i acc =
@@ -79,111 +80,116 @@ let
           else gen (i + 1) (("key_" ^ intToString i) :: acc)
     in gen 1 []
     end
-    
+
   fun generateIntKeys n =
     let fun gen i acc =
           if i > n then acc
           else gen (i + 1) (i :: acc)
     in gen 1 []
     end
-    
+
   (* Random number generator using linear congruential method *)
   fun makeRandom seed =
     let fun next s = (RANDOM_A * s + RANDOM_C) mod RANDOM_M
     in next seed
     end
-    
+
   fun randomKeys n seed =
     let fun gen 0 _ acc = acc
-          | gen i s acc = 
+          | gen i s acc =
             let val newSeed = makeRandom s
                 val key = "rnd_" ^ intToString (newSeed mod RANDOM_KEY_MOD)
             in gen (i - 1) newSeed (key :: acc)
             end
     in gen n seed []
     end
-    
+
   (* Stress Test 1: Large sequential insertions *)
   val _ = print "\n=== Stress Test 1: Large Sequential Insertions ==="
-  
+
   fun insertManyStrings keys =
-    foldl (fn (k, t) => insert t k k) (empty ()) keys
-    
+    List.foldl (fn (k, t) => HashMap.insert t k k) (HashMap.empty Hash.hashString) keys
+
   val keys5k = generateStringKeys SEQUENTIAL_INSERT_COUNT
   val _ = print ("Inserting " ^ intToString SEQUENTIAL_INSERT_COUNT ^ " string keys...")
-  val t5k = timeOp (intToString SEQUENTIAL_INSERT_COUNT ^ " insertions") (fn () => insertManyStrings keys5k)
-  val _ = assert (size t5k = SEQUENTIAL_INSERT_COUNT) ("Should have " ^ intToString SEQUENTIAL_INSERT_COUNT ^ " entries")
-  
+  val t5k = timeOp (intToString SEQUENTIAL_INSERT_COUNT ^ " insertions")
+                   (fn () => insertManyStrings keys5k)
+  val _ = assert (HashMap.size t5k = SEQUENTIAL_INSERT_COUNT)
+                 ("Should have " ^ intToString SEQUENTIAL_INSERT_COUNT ^ " entries")
+
   (* Stress Test 2: Random access patterns *)
   val _ = print "\n=== Stress Test 2: Random Access Patterns ==="
-  
+
   val randomKeyList = randomKeys RANDOM_KEY_COUNT RANDOM_SEED_INITIAL
   val _ = print ("Inserting " ^ intToString RANDOM_KEY_COUNT ^ " random keys (with potential duplicates)...")
-  val tRandom = timeOp "Random insertions" (fn () => insertManyStrings randomKeyList)
-  
+  val tRandom = timeOp "Random insertions"
+                       (fn () => insertManyStrings randomKeyList)
+
   (* Check some random lookups *)
-  fun randomLookups trie keys n =
-    let fun lookup' 0 = ()
-          | lookup' i = 
-            case keys of
-              [] => ()
-            | (k::_) => (lookup trie k; lookup' (i - 1))
-    in lookup' n
+  fun randomLookups m keys n =
+    let fun lookup' _  0     = ()
+          | lookup' [] _     = ()
+          | lookup' k::ks' i = HashMap.findOpt m k; lookup' (i - 1)
+    in lookup' keys n
     end
-    
-  val _ = timeOp (intToString RANDOM_LOOKUP_COUNT ^ " random lookups") (fn () => randomLookups tRandom randomKeyList RANDOM_LOOKUP_COUNT)
-  
+
+  val _ = timeOp (intToString RANDOM_LOOKUP_COUNT ^ " random lookups")
+                 (fn () => randomLookups tRandom randomKeyList RANDOM_LOOKUP_COUNT)
+
   (* Stress Test 3: Integer key performance *)
   val _ = print "\n=== Stress Test 3: Integer Key Performance ==="
-  
+
   val intKeys10k = generateIntKeys INTEGER_KEY_COUNT
   fun insertManyInts keys =
-    foldl (fn (k, t) => insert t k (k * k)) (empty ()) keys
-    
+    List.foldl (fn (k, t) => HashMap.insert t k (k * k)) (HashMap.empty Hash.hashInt) keys
+
   val _ = print ("Inserting " ^ intToString INTEGER_KEY_COUNT ^ " integer keys...")
   val tInt = timeOp (intToString INTEGER_KEY_COUNT ^ " int insertions") (fn () => insertManyInts intKeys10k)
-  val _ = assert (size tInt = INTEGER_KEY_COUNT) ("Should have " ^ intToString INTEGER_KEY_COUNT ^ " entries")
-  
+  val _ = assert (HashMap.size tInt = INTEGER_KEY_COUNT)
+                 ("Should have " ^ intToString INTEGER_KEY_COUNT ^ " entries")
+
   (* Verify some values *)
-  val _ = case lookup tInt INTEGER_TEST_KEY of
-            (SOME, v) => assert (v = INTEGER_TEST_VALUE) "Value should be square of key"
-          | _ => assert false ("Key " ^ intToString INTEGER_TEST_KEY ^ " should exist")
-  
+  val _ = case HashMap.findOpt tInt INTEGER_TEST_KEY of
+            [v] => assert (v = INTEGER_TEST_VALUE) "Value should be square of key"
+           | _  => assert false ("Key " ^ intToString INTEGER_TEST_KEY ^ " should exist")
+
   (* Stress Test 4: Removal stress test *)
   val _ = print "\n=== Stress Test 4: Bulk Removals ==="
-  
-  fun removeMany trie keys =
-    foldl (fn (k, t) => remove t k) trie keys
-    
-  val removeKeys = slice 0 REMOVE_COUNT keys5k  (* Remove first REMOVE_COUNT keys *)
+
+  fun removeMany m keys =
+    List.foldl (fn (k, t) => HashMap.remove t k) m keys
+
+  val removeKeys = List.slice 0 REMOVE_COUNT keys5k  (* Remove first REMOVE_COUNT keys *)
   val _ = print ("Removing " ^ intToString REMOVE_COUNT ^ " keys from " ^ intToString SEQUENTIAL_INSERT_COUNT ^ "...")
-  val tRemoved = timeOp (intToString REMOVE_COUNT ^ " removals") (fn () => removeMany t5k removeKeys)
-  val _ = assert (size tRemoved = (SEQUENTIAL_INSERT_COUNT - REMOVE_COUNT)) ("Should have " ^ intToString (SEQUENTIAL_INSERT_COUNT - REMOVE_COUNT) ^ " entries remaining")
-  
+  val tRemoved = timeOp (intToString REMOVE_COUNT ^ " removals")
+                        (fn () => removeMany t5k removeKeys)
+  val _ = assert (HashMap.size tRemoved = (SEQUENTIAL_INSERT_COUNT - REMOVE_COUNT))
+                 ("Should have " ^ intToString (SEQUENTIAL_INSERT_COUNT - REMOVE_COUNT) ^ " entries remaining")
+
   (* Stress Test 5: Collision stress *)
   val _ = print "\n=== Stress Test 5: Collision Stress Test ==="
-  
+
   (* Generate keys that are likely to collide *)
   fun generateCollisionKeys n =
     let fun gen i acc =
           if i > n then acc
-          else 
+          else
             let (* Create variations of similar strings *)
                 val base = intToString (i mod COLLISION_MOD_BASE)
-                val key = foldl (fn (_, s) => s ^ base) base (range (i mod COLLISION_MAX_REPEAT + 1))
+                val key = List.foldl (fn (_, s) => s ^ base) base (List.range (i mod COLLISION_MAX_REPEAT + 1))
             in gen (i + 1) (key :: acc)
             end
     in gen 1 []
     end
-    
+
   val collKeys = generateCollisionKeys COLLISION_KEY_COUNT
   val _ = print ("Inserting " ^ intToString COLLISION_KEY_COUNT ^ " collision-prone keys...")
   val tColl = timeOp "Collision insertions" (fn () => insertManyStrings collKeys)
-  
+
   (* Stress Test 6: Mixed operations under load *)
   val _ = print "\n=== Stress Test 6: Mixed Operations Under Load ==="
-  
-  fun mixedOps trie n seed =
+
+  fun mixedOps m n seed =
     let fun ops t 0 _ = t
           | ops t i s =
             let val s1 = makeRandom s
@@ -191,73 +197,79 @@ let
                 val s2 = makeRandom s1
                 val key = "mix_" ^ intToString (s2 mod MIXED_KEY_RANGE)
                 val s3 = makeRandom s2
-            in case op_type of
-                 0 => ops (insert t key s3) (i - 1) s3  (* Insert *)
-               | 1 => (lookup t key; ops t (i - 1) s3)  (* Lookup *)
-               | _ => ops (remove t key) (i - 1) s3     (* Remove *)
+            in case op_type of 0 => ops (HashMap.insert t key s3) (i - 1) s3 (* Insert *)
+                             | 1 => HashMap.findOpt t key; ops t (i - 1) s3  (* Lookup *)
+                             | 2 => ops (HashMap.remove t key) (i - 1) s3    (* Remove *)
             end
-    in ops trie n seed
+    in ops m n seed
     end
-    
+
   val _ = print ("Performing " ^ intToString MIXED_OPS_COUNT ^ " mixed operations...")
-  val tMixed = timeOp "Mixed operations" (fn () => mixedOps (empty ()) MIXED_OPS_COUNT MIXED_OPS_SEED)
-  
+  val tMixed = timeOp "Mixed operations"
+                      (fn () => mixedOps (HashMap.empty Hash.hashString) MIXED_OPS_COUNT MIXED_OPS_SEED)
+
   (* Stress Test 7: Memory stress - many versions *)
   val _ = print "\n=== Stress Test 7: Persistence Memory Stress ==="
-  
+
   fun createVersions base n =
     let fun create i acc =
           if i > n then acc
-          else 
-            let val newTrie = insert base ("version_" ^ intToString i) i
-            in create (i + 1) (newTrie :: acc)
+          else
+            let val m' = HashMap.insert base ("version_" ^ intToString i) i
+            in create (i + 1) (m' :: acc)
             end
     in create 1 []
     end
-    
+
   val base1k = insertManyStrings (generateStringKeys BASE_SIZE)
   val _ = print ("Creating " ^ intToString VERSION_COUNT ^ " versions from " ^ intToString BASE_SIZE ^ "-key base...")
-  val versions = timeOp ("Create " ^ intToString VERSION_COUNT ^ " versions") (fn () => createVersions base1k VERSION_COUNT)
-  val _ = assert (length versions = VERSION_COUNT) ("Should have " ^ intToString VERSION_COUNT ^ " versions")
-  
+  val versions = timeOp ("Create " ^ intToString VERSION_COUNT ^ " versions")
+                        (fn () => createVersions base1k VERSION_COUNT)
+  val _ = assert (List.length versions = VERSION_COUNT)
+                 ("Should have " ^ intToString VERSION_COUNT ^ " versions")
+
   (* Verify persistence *)
-  val _ = assert (size base1k = BASE_SIZE) ("Base should still have " ^ intToString BASE_SIZE ^ " entries")
+  val _ = assert (HashMap.size base1k = BASE_SIZE)
+                 ("Base should still have " ^ intToString BASE_SIZE ^ " entries")
   val _ = case versions of
-            (v::_) => assert (size v = (BASE_SIZE + 1)) ("Version should have " ^ intToString (BASE_SIZE + 1) ^ " entries")
-          | _ => assert false "Should have versions"
-  
+              (v::_) => assert (HashMap.size v = (BASE_SIZE + 1))
+                               ("Version should have " ^ intToString (BASE_SIZE + 1) ^ " entries")
+            | _ => assert false "Should have versions"
+
   (* Stress Test 8: Extreme key sizes *)
   val _ = print "\n=== Stress Test 8: Extreme Key Sizes ==="
-  
-  fun longKey n = 
-    foldl (fn (i, s) => s ^ "x") "" (range n)
-    
+
+  fun longKey n =
+    List.foldl (fn (i, s) => s ^ "x") "" (List.range n)
+
   val extremeKeys = [
     ("", "empty key"),
     (longKey EXTREME_KEY_SMALL, intToString EXTREME_KEY_SMALL ^ " char key"),
     (longKey EXTREME_KEY_MEDIUM, intToString EXTREME_KEY_MEDIUM ^ " char key"),
     (longKey EXTREME_KEY_LARGE, intToString EXTREME_KEY_LARGE ^ " char key")
   ]
-  
+
   val _ = print "Inserting extreme size keys..."
-  val tExtreme = timeOp "Extreme keys" (fn () => fromList extremeKeys)
-  val _ = assert (size tExtreme = 4) "Should handle extreme keys"
-  
+  val tExtreme = timeOp "Extreme keys" (fn () => HashMap.fromList Hash.hashString extremeKeys)
+  val _ = assert (HashMap.size tExtreme = 4) "Should handle extreme keys"
+
   (* Stress Test 9: fromList with large dataset *)
   val _ = print "\n=== Stress Test 9: fromList Performance ==="
-  
-  val largePairs = map (fn k => (k, k ^ "_value")) (generateStringKeys FROMLIST_SIZE)
+
+  val largePairs = List.map (fn k => (k, k ^ "_value")) (generateStringKeys FROMLIST_SIZE)
   val _ = print ("Creating trie from " ^ intToString FROMLIST_SIZE ^ " pairs...")
-  val tFromList = timeOp ("fromList " ^ intToString FROMLIST_SIZE) (fn () => fromList largePairs)
-  val _ = assert (size tFromList = FROMLIST_SIZE) "fromList should create all entries"
-  
+  val tFromList = timeOp ("fromList " ^ intToString FROMLIST_SIZE)
+                         (fn () => HashMap.fromList Hash.hashString largePairs)
+  val _ = assert (HashMap.size tFromList = FROMLIST_SIZE) "fromList should create all entries"
+
   (* Stress Test 10: toList with large dataset *)
   val _ = print "\n=== Stress Test 10: toList Performance ==="
-  
+
   val _ = print ("Extracting " ^ intToString FROMLIST_SIZE ^ " pairs...")
-  val extracted = timeOp ("toList " ^ intToString FROMLIST_SIZE) (fn () => toList tFromList)
-  val _ = assert (length extracted = FROMLIST_SIZE) "Should extract all pairs"
-  
+  val extracted = timeOp ("toList " ^ intToString FROMLIST_SIZE)
+                         (fn () => HashMap.toList tFromList)
+  val _ = assert (List.length extracted = FROMLIST_SIZE) "Should extract all pairs"
+
 in
   print "\n\nAll stress tests completed successfully!"
 end

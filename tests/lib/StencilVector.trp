@@ -1,0 +1,278 @@
+import Unit
+import StencilVector
+
+let val SV = StencilVector
+
+    val tests = Unit.group "StencilVector" [
+            Unit.group "maskBits" [
+                Unit.it "is a number" (Unit.isEq "number" (getType SV.maskBits))
+                ],
+            Unit.group "maskMax" [
+                Unit.it "is a number"         (Unit.isEq "number"                 (getType SV.maskMax))
+              , Unit.it "is 2^{maskBits} - 1" (Unit.isEq ((1 << SV.maskBits) - 1) (SV.maskMax))
+            ],
+            let val sv = SV.empty
+            in Unit.group "empty" [
+                    Unit.it "has no members" [
+                        Unit.isFalse (SV.mem sv 0)
+                      , Unit.isFalse (SV.mem sv 1)
+                      , Unit.isFalse (SV.mem sv 2)
+                      , Unit.isFalse (SV.mem sv 3)
+                      , Unit.isFalse (SV.mem sv 7)
+                      , Unit.isFalse (SV.mem sv 16)
+                      , Unit.isFalse (SV.mem sv 30)
+                      , Unit.isFalse (SV.mem sv 31)
+                    ]
+                  , Unit.it "provides default with getOrDefault [0]" (Unit.isEq 42 (SV.getOrDefault sv 0 42))
+                  , Unit.it "provides default with getOrDefault [1]" (Unit.isEq () (SV.getOrDefault sv 1 ()))
+                  , Unit.it "is valid"          (Unit.isTrue (SV.valid sv))
+                  , Unit.it "is null"           (Unit.isTrue (SV.null sv))
+                  , Unit.it "has 0 as its mask" (Unit.isEq 0 (SV.mask sv))
+                  , Unit.it "has length 0"      (Unit.isEq 0 (SV.length sv))
+                ]
+            end,
+            let val sv = SV.set (SV.empty) 0 42
+            in Unit.group "set (empty) 0 42" [
+                    Unit.it "has a member at [0]" (Unit.isTrue (SV.mem sv 0))
+                  , Unit.it "provides value with get [0]"          (Unit.isEq 42 (SV.get sv 0))
+                  , Unit.it "provides value with getOrDefault [0]" (Unit.isEq 42 (SV.getOrDefault sv 0 ()))
+                  , Unit.it "has no other members" [
+                        Unit.isFalse (SV.mem sv 1)
+                      , Unit.isFalse (SV.mem sv 2)
+                      , Unit.isFalse (SV.mem sv 3)
+                      , Unit.isFalse (SV.mem sv 7)
+                      , Unit.isFalse (SV.mem sv 16)
+                      , Unit.isFalse (SV.mem sv 30)
+                      , Unit.isFalse (SV.mem sv 31)
+                    ]
+                  , Unit.it "provides default with getOrDefault [1]" (Unit.isEq () (SV.getOrDefault sv 1 ()))
+                  , Unit.it "is valid"          (Unit.isTrue (SV.valid sv))
+                  , Unit.it "is not null"       (Unit.isFalse (SV.null sv))
+                  , Unit.it "has 1 as its mask" (Unit.isEq 1 (SV.mask sv))
+                  , Unit.it "has length 1"      (Unit.isEq 1 (SV.length sv))
+                ]
+            end,
+            let val sv = SV.set (SV.empty) 1 "a"
+            in Unit.group "set (empty) 1 'a'" [
+                    Unit.it "has a member at [1]" (Unit.isTrue (SV.mem sv 1))
+                  , Unit.it "provides value with get [1]"          (Unit.isEq "a" (SV.get sv 1))
+                  , Unit.it "provides value with getOrDefault [1]" (Unit.isEq "a" (SV.getOrDefault sv 1 ()))
+                  , Unit.it "has no other members" [
+                        Unit.isFalse (SV.mem sv 0)
+                      , Unit.isFalse (SV.mem sv 2)
+                      , Unit.isFalse (SV.mem sv 3)
+                      , Unit.isFalse (SV.mem sv 7)
+                      , Unit.isFalse (SV.mem sv 16)
+                      , Unit.isFalse (SV.mem sv 30)
+                      , Unit.isFalse (SV.mem sv 31)
+                    ]
+                  , Unit.it "provides default with getOrDefault [0]" (Unit.isEq ()  (SV.getOrDefault sv 0 ()))
+                  , Unit.it "is valid"          (Unit.isTrue (SV.valid sv))
+                  , Unit.it "is not null"       (Unit.isFalse (SV.null sv))
+                  , Unit.it "has 2 as its mask" (Unit.isEq 2 (SV.mask sv))
+                  , Unit.it "has length 1"      (Unit.isEq 1 (SV.length sv))
+                ]
+            end,
+            let val sv = SV.set (SV.empty) 31 []
+            in Unit.group "set (empty) 31 []" [
+                    Unit.it "has a member at [31]" (Unit.isTrue (SV.mem sv 31))
+                  , Unit.it "provides value with get [31]"          (Unit.isEq [] (SV.get sv 31))
+                  , Unit.it "provides value with getOrDefault [31]" (Unit.isEq [] (SV.getOrDefault sv 31 ()))
+                  , Unit.it "has no other members" [
+                        Unit.isFalse (SV.mem sv 0)
+                      , Unit.isFalse (SV.mem sv 1)
+                      , Unit.isFalse (SV.mem sv 2)
+                      , Unit.isFalse (SV.mem sv 3)
+                      , Unit.isFalse (SV.mem sv 7)
+                      , Unit.isFalse (SV.mem sv 16)
+                      , Unit.isFalse (SV.mem sv 30)
+                    ]
+                  , Unit.it "provides default with getOrDefault [0]" (Unit.isEq () (SV.getOrDefault sv 0 ()))
+                  , Unit.it "is valid"                      (Unit.isTrue (SV.valid sv))
+                  , Unit.it "is not null"                   (Unit.isFalse (SV.null sv))
+                  , Unit.it "has (-)2147483648 as its mask" (Unit.isEq (-2147483648) (SV.mask sv))
+                  , Unit.it "has length 1"                  (Unit.isEq 1 (SV.length sv))
+                ]
+            end,
+            let val sv  = SV.singleton 2 42
+                val sv' = SV.set (SV.empty) 2 42
+            in Unit.group "singleton 2 42" [
+                    Unit.it "is equivalent to (set (empty) 2 42)" (Unit.isEq sv' sv)
+                ]
+            end,
+            let val sv  = SV.singleton 4 "b"
+                val sv' = SV.set (SV.empty) 4 "b"
+            in Unit.group "singleton 4 'b'" [
+                    Unit.it "is equivalent to (set (empty) 4 'b')" (Unit.isEq sv' sv)
+                ]
+            end,
+            let val sv = SV.set (SV.singleton 0 (0,21)) 1 (1,42)
+            in Unit.group "set (singleton 0 (0,21)) 1 (1,42)" [
+                    Unit.it "has a member at [0]" (Unit.isTrue (SV.mem sv 0))
+                  , Unit.it "provides value with get [0]"          (Unit.isEq (0,21) (SV.get sv 0))
+                  , Unit.it "provides value with getOrDefault [0]" (Unit.isEq (0,21) (SV.getOrDefault sv 0 (-1)))
+                  , Unit.it "has a member at [1]" (Unit.isTrue (SV.mem sv 1))
+                  , Unit.it "provides value with get [1]"          (Unit.isEq (1,42) (SV.get sv 1))
+                  , Unit.it "provides value with getOrDefault [1]" (Unit.isEq (1,42) (SV.getOrDefault sv 1 (-1)))
+                  , Unit.it "has no other members" [
+                        Unit.isFalse (SV.mem sv 2)
+                      , Unit.isFalse (SV.mem sv 3)
+                      , Unit.isFalse (SV.mem sv 4)
+                      , Unit.isFalse (SV.mem sv 7)
+                      , Unit.isFalse (SV.mem sv 16)
+                      , Unit.isFalse (SV.mem sv 30)
+                      , Unit.isFalse (SV.mem sv 31)
+                    ]
+                  , Unit.it "provides default with getOrDefault [2]" (Unit.isEq (-1) (SV.getOrDefault sv 2 (-1)))
+                  , Unit.it "provides default with getOrDefault [4]" (Unit.isEq (-1) (SV.getOrDefault sv 4 (-1)))
+                  , Unit.it "is valid"           (Unit.isTrue (SV.valid sv))
+                  , Unit.it "is not null"        (Unit.isFalse (SV.null sv))
+                  , Unit.it "has 3 as its mask"  (Unit.isEq 3 (SV.mask sv))
+                  , Unit.it "has length 2"       (Unit.isEq 2 (SV.length sv))
+                ]
+            end,
+            let val sv = SV.set (SV.singleton 1 (1,42)) 0 (0,21)
+            in Unit.group "set (singleton 1 (1,42)) 0 (0,21)" [
+                    Unit.it "has a member at [0]" (Unit.isTrue (SV.mem sv 0))
+                  , Unit.it "provides value with get [0]"          (Unit.isEq (0,21) (SV.get sv 0))
+                  , Unit.it "provides value with getOrDefault [0]" (Unit.isEq (0,21) (SV.getOrDefault sv 0 (-1)))
+                  , Unit.it "has a member at [1]" (Unit.isTrue (SV.mem sv 1))
+                  , Unit.it "provides value with get [1]"          (Unit.isEq (1,42) (SV.get sv 1))
+                  , Unit.it "provides value with getOrDefault [1]" (Unit.isEq (1,42) (SV.getOrDefault sv 1 (-1)))
+                  , Unit.it "has no other members" [
+                        Unit.isFalse (SV.mem sv 2)
+                      , Unit.isFalse (SV.mem sv 3)
+                      , Unit.isFalse (SV.mem sv 4)
+                      , Unit.isFalse (SV.mem sv 7)
+                      , Unit.isFalse (SV.mem sv 16)
+                      , Unit.isFalse (SV.mem sv 30)
+                      , Unit.isFalse (SV.mem sv 31)
+                    ]
+                  , Unit.it "provides default with getOrDefault [2]" (Unit.isEq (-1) (SV.getOrDefault sv 2 (-1)))
+                  , Unit.it "provides default with getOrDefault [4]" (Unit.isEq (-1) (SV.getOrDefault sv 4 (-1)))
+                  , Unit.it "is valid"           (Unit.isTrue (SV.valid sv))
+                  , Unit.it "is not null"        (Unit.isFalse (SV.null sv))
+                  , Unit.it "has 3 as its mask"  (Unit.isEq 3 (SV.mask sv))
+                  , Unit.it "has length 2"       (Unit.isEq 2 (SV.length sv))
+                ]
+            end,
+            let val sv = SV.set (SV.set (SV.singleton 0 (0,true)) 1 (1,42)) 0 (0,false)
+            in Unit.group "set (set (singleton 0 (0,true)) 1 (1,42)) 0 (0,false)" [
+                    Unit.it "has a member at [0]" (Unit.isTrue (SV.mem sv 0))
+                  , Unit.it "provides value with get [0]"          (Unit.isEq (0,false) (SV.get sv 0))
+                  , Unit.it "provides value with getOrDefault [0]" (Unit.isEq (0,false) (SV.getOrDefault sv 0 (-1)))
+                  , Unit.it "has a member at [1]" (Unit.isTrue (SV.mem sv 1))
+                  , Unit.it "provides value with get [1]"          (Unit.isEq (1,42) (SV.get sv 1))
+                  , Unit.it "provides value with getOrDefault [1]" (Unit.isEq (1,42) (SV.getOrDefault sv 1 (-1)))
+                  , Unit.it "has no other members" [
+                        Unit.isFalse (SV.mem sv 2)
+                      , Unit.isFalse (SV.mem sv 3)
+                      , Unit.isFalse (SV.mem sv 4)
+                      , Unit.isFalse (SV.mem sv 7)
+                      , Unit.isFalse (SV.mem sv 16)
+                      , Unit.isFalse (SV.mem sv 30)
+                      , Unit.isFalse (SV.mem sv 31)
+                    ]
+                  , Unit.it "provides default with getOrDefault [2]" (Unit.isEq (-1) (SV.getOrDefault sv 2 (-1)))
+                  , Unit.it "provides default with getOrDefault [4]" (Unit.isEq (-1) (SV.getOrDefault sv 4 (-1)))
+                  , Unit.it "is valid"           (Unit.isTrue (SV.valid sv))
+                  , Unit.it "is not null"        (Unit.isFalse (SV.null sv))
+                  , Unit.it "has 3 as its mask"  (Unit.isEq 3 (SV.mask sv))
+                  , Unit.it "has length 2"       (Unit.isEq 2 (SV.length sv))
+                ]
+            end,
+            let val sv = SV.set (SV.singleton 1 42) 3 21
+            in Unit.group "set (singleton 1 42) 3 21" [
+                    Unit.it "has a member at [1]" (Unit.isTrue (SV.mem sv 1))
+                  , Unit.it "provides value with get [1]"          (Unit.isEq 42 (SV.get sv 1))
+                  , Unit.it "provides value with getOrDefault [1]" (Unit.isEq 42 (SV.getOrDefault sv 1 (-1)))
+                  , Unit.it "has a member at [3]" (Unit.isTrue (SV.mem sv 3))
+                  , Unit.it "provides value with get [3]"          (Unit.isEq 21 (SV.get sv 3))
+                  , Unit.it "provides value with getOrDefault [1]" (Unit.isEq 21 (SV.getOrDefault sv 3 (-1)))
+                  , Unit.it "has no other members" [
+                        Unit.isFalse (SV.mem sv 0)
+                      , Unit.isFalse (SV.mem sv 2)
+                      , Unit.isFalse (SV.mem sv 4)
+                      , Unit.isFalse (SV.mem sv 7)
+                      , Unit.isFalse (SV.mem sv 16)
+                      , Unit.isFalse (SV.mem sv 30)
+                      , Unit.isFalse (SV.mem sv 31)
+                    ]
+                  , Unit.it "provides default with getOrDefault [2]" (Unit.isEq (-1) (SV.getOrDefault sv 2 (-1)))
+                  , Unit.it "provides default with getOrDefault [4]" (Unit.isEq (-1) (SV.getOrDefault sv 4 (-1)))
+                  , Unit.it "is valid"           (Unit.isTrue (SV.valid sv))
+                  , Unit.it "is not null"        (Unit.isFalse (SV.null sv))
+                  , Unit.it "has 10 as its mask" (Unit.isEq 10 (SV.mask sv))
+                  , Unit.it "has length 2"       (Unit.isEq 2 (SV.length sv))
+                ]
+            end,
+            let val sv = SV.set (SV.singleton 2 false) 2 true
+            in Unit.group "set (singleton 2 false) 2 true" [
+                    Unit.it "has a member at [2]" (Unit.isTrue (SV.mem sv 2))
+                  , Unit.it "provides value with get [2]" (Unit.isEq true (SV.get sv 2))
+                  , Unit.it "has no other members" [
+                        Unit.isFalse (SV.mem sv 0)
+                      , Unit.isFalse (SV.mem sv 1)
+                      , Unit.isFalse (SV.mem sv 3)
+                      , Unit.isFalse (SV.mem sv 4)
+                      , Unit.isFalse (SV.mem sv 7)
+                      , Unit.isFalse (SV.mem sv 16)
+                      , Unit.isFalse (SV.mem sv 30)
+                      , Unit.isFalse (SV.mem sv 31)
+                    ]
+                  , Unit.it "is valid"          (Unit.isTrue (SV.valid sv))
+                  , Unit.it "is not null"       (Unit.isFalse (SV.null sv))
+                  , Unit.it "has 4 as its mask" (Unit.isEq 4 (SV.mask sv))
+                  , Unit.it "has length 1"      (Unit.isEq 1 (SV.length sv))
+                ]
+            end,
+            let val sv = SV.unset (SV.singleton 7 42) 7
+            in Unit.group "unset (singleton 7 42) 7" [
+                    Unit.it "is equivalent to (empty)" (Unit.isEq SV.empty sv)
+                ]
+            end,
+            let val sv = SV.unset (SV.set (SV.singleton 2 false) 4 true) 4
+            in Unit.group "unset (set (singleton 2 false) 4 true) 2" [
+                    Unit.it "is equivalent to (singleton 2 false)" (Unit.isEq (SV.singleton 2 false) sv)
+                  , Unit.it "provides value with getOrDefault [2]" (Unit.isEq false (SV.getOrDefault sv 2 (-1)))
+                  , Unit.it "provides default with getOrDefault [4]" (Unit.isEq (-1) (SV.getOrDefault sv 4 (-1)))
+                ]
+            end,
+            let val sv = SV.unset (SV.set (SV.set (SV.empty) 2 false) 4 true) 2
+            in Unit.group "unset (set (set (empty) 2 false) 4 true) 2" [
+                    Unit.it "is equivalent to (singleton 4 true)" (Unit.isEq (SV.singleton 4 true) sv)
+                  , Unit.it "provides default with getOrDefault [2]" (Unit.isEq (-1) (SV.getOrDefault sv 2 (-1)))
+                  , Unit.it "provides value with getOrDefault [4]" (Unit.isEq true (SV.getOrDefault sv 4 (-1)))
+                ]
+            end,
+            let fun inc x = x+1
+                fun dec x = x-1
+            in Unit.group "map (+/- 1)" [
+                    Unit.it "does nothing to (empty)" (Unit.isEq SV.empty (SV.map inc SV.empty))
+                  , let val sv  = SV.singleton 2 1
+                        val sv' = SV.map inc (SV.singleton 2 0)
+                    in Unit.it "can increment (singleton 2 0)" (Unit.isEq sv sv')
+                    end
+                  , let val sv  = SV.set (SV.singleton 1 2) 3 3
+                        val sv' = SV.map inc (SV.set (SV.singleton 1 1) 3 2)
+                    in Unit.it "can increment (set (singleton 1 1) 3 2)" (Unit.isEq sv sv')
+                    end
+                  , let val sv  = SV.set (SV.singleton 1 0) 3 1
+                        val sv' = SV.map dec (SV.set (SV.singleton 1 1) 3 2)
+                    in Unit.it "can decrement (set (singleton 1 1) 3 2)" (Unit.isEq sv sv')
+                    end
+                ]
+            end,
+            let fun sum (x,y) = x+y
+            in Unit.group "fold (+)" [
+                    Unit.it "returns initial value for (empty)" (Unit.isEq 0 (SV.fold sum 0 SV.empty))
+                  , let val sv = SV.singleton 4 42
+                    in Unit.it "computes 42 for (singleton 4 42)" (Unit.isEq 42 (SV.fold sum 0 sv))
+                    end
+                  , let val sv = SV.set (SV.singleton 4 42) 2 21
+                    in Unit.it "computes 64 for (set (singleton 4 42) 2 21)" (Unit.isEq 63 (SV.fold sum 0 sv))
+                    end
+                ]
+            end
+        ]
+in Unit.run authority tests end

@@ -1,5 +1,5 @@
+import List
 import timeout
-import lists
 
 datatype Atoms = APPEND_ENTRIES
                | REQUEST_VOTE
@@ -14,11 +14,6 @@ datatype Atoms = APPEND_ENTRIES
 
 let val DURATION = 150
 
-    fun append l1 l2 =
-        case l1 of
-            [] => l2
-          | x::l => x::(append l l2)
-
     fun broadcast [] msg = ()
       | broadcast ((_, pid)::l) msg =
         let val _ = send (pid, msg)
@@ -30,10 +25,7 @@ let val DURATION = 150
 
     val empty_log = (0, [(0, 0)])
 
-    fun nth (x::l) 1 = x
-      | nth (x::l) n = nth l (n - 1)
-
-    fun log_get (sz, xs) n = if n > sz then ERROR else nth xs (sz - n + 1)
+    fun log_get (sz, xs) n = if n > sz then ERROR else List.nth xs (sz - n + 1)
 
     fun log_push (sz, xs) x = (sz + 1, x::xs)
 
@@ -48,7 +40,7 @@ let val DURATION = 150
         else (sz, xs)
 
     fun log_add_new_entries (sz, xs) ys =
-        (sz + length ys, append ys xs)
+        (sz + length ys, List.append ys xs)
 
     (* Get all the entries after index n *)
     fun log_take_entries (sz, xs) n =
@@ -88,7 +80,7 @@ let val DURATION = 150
         in (prevLogIndex, prevLogTerm, entries)
         end
 
-    (* Send append entries response and return new log state and new commitIndex*)
+    (* Send List.append entries response and return new log state and new commitIndex*)
     (* log is a list of pairs (term * cmd) *)
     (* entries is a list of triples (num * term * cmd) *)
     fun append_entries currentTerm log commitIndex term leaderId prevLogIndex prevLogTerm entries leaderCommit print =
@@ -108,7 +100,7 @@ let val DURATION = 150
              end
 
     (* If last log index >= nextIndex for a follower: send
-       AppendEntries RPC with log entries starting at nextIndex *)
+       List.AppendEntries RPC with log entries starting at nextIndex *)
     fun update_followers currentTerm commitIndex cluster log nextIndex =
         let fun f (n, pid) =
                 (* if nextIndex = last log index, this should behave as a heartbeat *)
@@ -117,7 +109,7 @@ let val DURATION = 150
                      in send (pid, (APPEND_ENTRIES, currentTerm, self (), prevLogIndex, prevLogTerm, entries, commitIndex))
                      end
                 else ()
-        in map f cluster
+        in List.map f cluster
         end
 
     (* If there exists an N such that N > commitIndex, a majority
@@ -125,7 +117,7 @@ let val DURATION = 150
        set commitIndex = N *)
     fun check_commitIndex cluster threshold log commitIndex matchIndex =
         let val lastLogIndex = last_log_index log
-            val majority = foldl (fn ((n, _), k) => if arrayGet (matchIndex, n - 1) >= lastLogIndex then k + 1 else k) 1 cluster
+            val majority = List.foldl (fn ((n, _), k) => if arrayGet (matchIndex, n - 1) >= lastLogIndex then k + 1 else k) 1 cluster
         in if (lastLogIndex > commitIndex andalso majority)
            then lastLogIndex
            else commitIndex
@@ -145,7 +137,7 @@ let val DURATION = 150
                     val _ = timeout (self ()) (TIMEOUT, nonce) DURATION
                     val commitIndex = check_commitIndex cluster threshold log commitIndex matchIndex
                     (* If last log index >= nextIndex for a follower: send
-                       AppendEntries RPC with log entries starting at nextIndex *)
+                       List.AppendEntries RPC with log entries starting at nextIndex *)
                     val _ = update_followers currentTerm commitIndex cluster log nextIndex
                     val (lastApplied, state) = if commitIndex > lastApplied then (lastApplied + 1, apply_entry true state (snd (log_get log (lastApplied + 1)))) else (lastApplied, state)
                     fun loop n lastApplied state =
@@ -180,7 +172,7 @@ let val DURATION = 150
                               then follower (term, -1, log, commitIndex, lastApplied) state
                               else
                               (* If successful: update nextIndex and matchIndex for follower
-                                 If AppendEntries fails because of log inconsistency:
+                                 If List.AppendEntries fails because of log inconsistency:
                                  decrement nextIndex and retry *)
                                   let val follower_index = index_of cluster from
                                       val _ = if result then

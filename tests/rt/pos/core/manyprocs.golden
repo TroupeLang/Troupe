@@ -1,6 +1,5 @@
-2020-06-01T21:09:37.237Z [RTM] [32minfo[39m: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+2025-09-09T14:32:33.058Z [RTM] [32minfo[39m: Skipping network creation. Observe that all external IO operations will yield a runtime error.
 >>> Main thread finished with value: ()@{}%{}
-("OK"@{}%{}, 1000@{}%{})@{}%{}
 ("OK"@{}%{}, 999@{}%{})@{}%{}
 ("OK"@{}%{}, 998@{}%{})@{}%{}
 ("OK"@{}%{}, 997@{}%{})@{}%{}
@@ -1000,3 +999,4 @@
 ("OK"@{}%{}, 3@{}%{})@{}%{}
 ("OK"@{}%{}, 2@{}%{})@{}%{}
 ("OK"@{}%{}, 1@{}%{})@{}%{}
+("OK"@{}%{}, 0@{}%{})@{}%{}

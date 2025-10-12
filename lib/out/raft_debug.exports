@@ -1,6 +1,0 @@
-START
-pre_machine
-spawn_machine
-CLIENT_COMMAND
-CLIENT_COMMAND_RESPONSE
-NOT_LEADER

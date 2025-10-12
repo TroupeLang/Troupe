@@ -1,5 +1,5 @@
 all:
 	tsc
 
-clear:
+clean:
 	rm -rf built

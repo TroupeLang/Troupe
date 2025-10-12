@@ -1,7 +1,7 @@
-import lists 
+import List
 
 let 
-    fun f () = print (map (fn x => x + 1) [1,2,3])
+    fun f () = print (List.map (fn x => x + 1) [1,2,3])
     val p = 
         spawn ("QmQSEt8DBeumRh8ZupmUaW8rVvwnjFtpBE557vjSLccUBh", 
                f)

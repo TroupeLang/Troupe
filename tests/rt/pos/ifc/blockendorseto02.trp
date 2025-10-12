@@ -1,6 +1,5 @@
 (* Test 2: blockendorseto with multiple labels - positive test *)
-import lists
-
+import List
 
 let val tainted = true raisedTo `<; alice | bob>`
     fun doTaintBlock () = 
@@ -16,13 +15,13 @@ let val tainted = true raisedTo `<; alice | bob>`
 
     val levs = [`<; alice>` , `<; bob>` ]
 
-    val auth_levs = map (fn l => (attenuate (authority, l), l)) levs 
+    val auth_levs = List.map (fn l => (attenuate (authority, l), l)) levs 
     
     (* val aliceIntegrityAuth = attenuate (authority, `<; alice>`)
     val bobIntegrityAuth = attenuate (authority, `<; bob >`)
  *)
 
     (* val _ = blockendorseto (aliceIntegrityAuth, `<;alice>`) *)
-in map testBlockEndorse auth_levs; 
+in List.map testBlockEndorse auth_levs; 
    debugpc ()
 end

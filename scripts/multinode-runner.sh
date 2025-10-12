@@ -3,6 +3,45 @@ set -euo pipefail
 
 # Troupe Multi-Node Test Runner - Refactored Version
 # Orchestrates multi-node tests with proper cleanup and output synchronization
+#
+# IMPORTANT MAINTENANCE NOTES:
+# ============================
+# 1. NEGATIVE TESTS: Some tests are designed to fail or timeout (exit code 124).
+#    Examples: ring-echo (intermediary node), trust-flow-issue-42 (node1).
+#    DO NOT add retry logic or exponential backoffs that would delay these failures.
+#
+# 2. RELAY LOGIC: The relay must work both with and without the relay server.
+#    Tests can specify "use_relay": false in config.json. Any changes to relay
+#    handling must preserve this dual-mode functionality.
+#
+# 3. NO POLLING: Service discovery uses fixed delays, not polling loops.
+#    This is by design - polling can mask timing issues and race conditions
+#    that tests are meant to detect.
+#
+# 4. NO UNIVERSAL RETRIES: Network operations should NOT have automatic retries.
+#    Retries would interfere with negative tests and tests that verify
+#    timeout behavior.
+#
+# 5. TIMEOUT CONFIGURATIONS: Tests specify their own timeouts in config.json.
+#    Some tests have internal sleep commands that must be shorter than the
+#    configured timeout. Always verify: internal_sleep < config_timeout - buffer
+#
+# 6. CI SCALING: In CI environments, timeouts are scaled by 1.2x (20% increase)
+#    to account for slower machines. This is a simple multiplier, not retry logic.
+#
+# 7. EXIT CODE PRESERVATION: The cleanup function MUST preserve the original test
+#    exit code. Without 'exit $exit_code' at the end of cleanup, the script would
+#    exit with the status of the last cleanup command, causing false test failures.
+#
+# 8. CLEANUP TIMING: Cleanup operations need CI scaling too. Processes take longer
+#    to terminate gracefully in CI. We give relay/nodes 3s base (3.6s in CI) to
+#    shutdown cleanly before force-killing to avoid race conditions.
+#
+# 9. ARITHMETIC SAFETY: Use '|| true' after ((var++)) when set -e is active.
+#    In bash, ((0)) returns exit code 1, which terminates the script with set -e.
+#
+# 10. PORT MANAGEMENT: Tests use specific ports. Cleanup must be thorough to
+#    prevent "port already in use" errors, but without retrying binds.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TROUPE_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -12,6 +51,79 @@ TEMP_DIR=""
 VERBOSE=false
 RELAY_MULTIADDR=""
 RELAY_PID=""
+
+# Detect CI environment and apply modest scaling
+TIMEOUT_SCALE=1.0
+if [[ -n "${CI:-}" ]] || [[ -n "${GITHUB_ACTIONS:-}" ]]; then
+    TIMEOUT_SCALE=1.2  # 20% more time in CI only
+    echo "[INFO] CI environment detected, scaling timeouts by ${TIMEOUT_SCALE}x" >&2
+fi
+
+# ============================================================================
+# Helper Functions - Common operations extracted to reduce duplication
+# ============================================================================
+
+# Check if a PID is valid and the process is running
+is_valid_pid() {
+    local pid="$1"
+    [[ -n "$pid" ]] && [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null
+}
+
+# Kill all processes listening on a specific port (OS-aware)
+kill_processes_on_port() {
+    local port="$1"
+    if command -v lsof >/dev/null 2>&1; then
+        if [[ "$(uname)" == "Darwin" ]]; then
+            lsof -ti ":$port" | xargs kill -9 2>/dev/null || true
+        else
+            lsof -ti ":$port" | xargs -r kill -9 2>/dev/null || true
+        fi
+    fi
+}
+
+# Get all ports used by the test (nodes + relay)
+get_all_ports() {
+    local config_file="$1"
+    local ports=($(jq -r '.nodes[].port' "$config_file" 2>/dev/null))
+    local relay_port=$(jq -r '.network.relay_port // 5555' "$config_file" 2>/dev/null)
+    ports+=("$relay_port")
+    echo "${ports[@]}"
+}
+
+# Get the number of nodes in the test configuration
+get_node_count() {
+    local config_file="$1"
+    jq -r '.nodes | length' "$config_file"
+}
+
+# Display standardized error message for node failures
+display_node_error() {
+    local node_id="$1"
+    local error_type="$2"  # "timeout" or "exit_code"
+    local actual="$3"
+    local expected="$4"
+    local output_file="$5"
+    local error_file="$6"
+    local timeout_val="${7:-}"  # Optional, only for timeout errors
+
+    if [[ "$error_type" == "timeout" ]]; then
+        echo "ERROR: Node $node_id timed out unexpectedly" >&2
+        echo "  Timeout: ${actual}s (original: ${timeout_val}s)" >&2
+        echo "  Expected exit code: $expected" >&2
+    else
+        echo "ERROR: Node $node_id exit code mismatch" >&2
+        echo "  Actual: $actual" >&2
+        echo "  Expected: $expected" >&2
+    fi
+
+    echo "  Last 10 lines of output:" >&2
+    tail -n 10 "$output_file" 2>/dev/null | sed 's/^/    /' >&2
+
+    if [[ "$error_type" == "exit_code" ]] && [[ -s "$error_file" ]]; then
+        echo "  Last 5 lines of errors:" >&2
+        tail -n 5 "$error_file" 2>/dev/null | sed 's/^/    /' >&2
+    fi
+}
 
 usage() {
     cat << EOF
@@ -31,64 +143,132 @@ EOF
 }
 
 cleanup() {
-    # Capture exit code before any other commands
-    exit_code=$?
-    log "Cleaning up test processes..."
-    
-    # Kill relay first with multiple attempts
-    if [[ -n "$RELAY_PID" ]] && [[ "$RELAY_PID" =~ ^[0-9]+$ ]] && kill -0 "$RELAY_PID" 2>/dev/null; then
-        kill "$RELAY_PID" 2>/dev/null || true
-        sleep 1
-        kill -9 "$RELAY_PID" 2>/dev/null || true
+    # CRITICAL: Capture the original exit code immediately
+    # This must be the FIRST command in cleanup to preserve test results
+    local exit_code=$?
+    log "Cleaning up test processes (exit code: $exit_code)..."
+
+    local cleaned_count=0
+    local cleanup_failures=()  # Track cleanup operations that fail
+
+    # Calculate cleanup timeouts with CI scaling
+    # In CI environments, processes take longer to terminate gracefully
+    local relay_grace_period=3
+    local node_grace_period=3
+    local socket_release_wait=3
+
+    if [[ -n "${TIMEOUT_SCALE:-}" ]]; then
+        # Apply the same scaling factor used for test timeouts to cleanup
+        relay_grace_period=$(awk "BEGIN {print int($relay_grace_period * $TIMEOUT_SCALE + 0.5)}")
+        node_grace_period=$(awk "BEGIN {print int($node_grace_period * $TIMEOUT_SCALE + 0.5)}")
+        socket_release_wait=$(awk "BEGIN {print int($socket_release_wait * $TIMEOUT_SCALE + 0.5)}")
+        log "CI environment: using scaled cleanup timeouts (relay=${relay_grace_period}s, nodes=${node_grace_period}s, sockets=${socket_release_wait}s)"
     fi
-    
+
+    # Kill relay first with graceful shutdown attempt
+    if is_valid_pid "$RELAY_PID"; then
+        log "Stopping relay (PID: $RELAY_PID)"
+        if ! kill "$RELAY_PID" 2>/dev/null; then
+            cleanup_failures+=("Failed to send SIGTERM to relay PID $RELAY_PID")
+        fi
+
+        # Wait for graceful shutdown with timeout
+        local wait_count=0
+        local relay_terminated=false
+        while [[ $wait_count -lt $relay_grace_period ]]; do
+            if ! kill -0 "$RELAY_PID" 2>/dev/null; then
+                log "Relay terminated gracefully"
+                relay_terminated=true
+                break
+            fi
+            sleep 1
+            ((wait_count++)) || true
+        done
+
+        # Force kill if still running
+        if [[ "$relay_terminated" == "false" ]]; then
+            if kill -9 "$RELAY_PID" 2>/dev/null; then
+                log "Force-killed relay after ${relay_grace_period}s timeout"
+                cleanup_failures+=("Relay PID $RELAY_PID required force-kill after ${relay_grace_period}s")
+            else
+                cleanup_failures+=("Failed to force-kill relay PID $RELAY_PID (may have already exited)")
+            fi
+        fi
+        ((cleaned_count++)) || true
+    fi
+
     # Kill by process name as fallback
-    pkill -f "relay.mjs" || true
-    pkill -f "node.*network.sh" || true
-    
-    # Kill all spawned node processes
-    if [[ ${#CLEANUP_PIDS[@]} -gt 0 ]]; then
-        for pid in "${CLEANUP_PIDS[@]}"; do
-            if [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null; then
-                kill "$pid" 2>/dev/null || true
-            fi
-        done
-        
-        # Give processes more time to clean up
-        sleep 2
-        
-        # Force kill remaining processes
-        for pid in "${CLEANUP_PIDS[@]}"; do
-            if [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null; then
-                kill -9 "$pid" 2>/dev/null || true
-            fi
-        done
+    if pkill -f "relay.mjs" 2>/dev/null; then
+        ((cleaned_count++)) || true
+        cleanup_failures+=("Found relay.mjs processes via pkill (PID tracking may have failed)")
     fi
-    
-    # Clean up ports used by the test
-    if [[ -n "$TEST_CONFIG" ]]; then
-        local ports=($(jq -r '.nodes[].port' "$TEST_CONFIG" 2>/dev/null))
-        local relay_port=$(jq -r '.network.relay_port // 5555' "$TEST_CONFIG" 2>/dev/null)
-        ports+=("$relay_port")
-        
-        for port in "${ports[@]}"; do
-            if [[ "$port" =~ ^[0-9]+$ ]]; then
-                # Kill any process listening on this port
-                if command -v lsof >/dev/null 2>&1; then
-                    # macOS doesn't support -r flag for xargs
-                    if [[ "$(uname)" == "Darwin" ]]; then
-                        lsof -ti ":$port" | xargs kill -9 2>/dev/null || true
-                    else
-                        lsof -ti ":$port" | xargs -r kill -9 2>/dev/null || true
+    if pkill -f "node.*network.sh" 2>/dev/null; then
+        ((cleaned_count++)) || true
+        cleanup_failures+=("Found network.sh processes via pkill (PID tracking may have failed)")
+    fi
+
+    # Kill all spawned node processes
+    if [[ -n "${CLEANUP_PIDS[*]:-}" ]]; then
+        log "Cleaning up ${#CLEANUP_PIDS[@]} node processes"
+        local failed_kills=()
+        for pid in "${CLEANUP_PIDS[@]}"; do
+            if is_valid_pid "$pid"; then
+                if ! kill "$pid" 2>/dev/null; then
+                    failed_kills+=("$pid")
+                else
+                    ((cleaned_count++)) || true
+                fi
+            fi
+        done
+
+        if [[ -n "${failed_kills[*]:-}" ]]; then
+            cleanup_failures+=("Failed to send SIGTERM to node PIDs: ${failed_kills[*]}")
+        fi
+
+        # Give processes time to clean up gracefully
+        sleep "$node_grace_period"
+
+        # Force kill remaining processes
+        local force_killed=()
+        local still_running=()
+        for pid in "${CLEANUP_PIDS[@]}"; do
+            if is_valid_pid "$pid"; then
+                if kill -9 "$pid" 2>/dev/null; then
+                    log "Force-killed remaining process $pid"
+                    force_killed+=("$pid")
+                else
+                    # Process may have exited between check and kill
+                    if kill -0 "$pid" 2>/dev/null; then
+                        still_running+=("$pid")
                     fi
                 fi
             fi
         done
+
+        if [[ -n "${force_killed[*]:-}" ]]; then
+            cleanup_failures+=("Node PIDs required force-kill after ${node_grace_period}s: ${force_killed[*]}")
+        fi
+        if [[ -n "${still_running[*]:-}" ]]; then
+            cleanup_failures+=("Failed to kill node PIDs: ${still_running[*]}")
+        fi
     fi
-    
+
+    # Clean up ports used by the test
+    if [[ -n "$TEST_CONFIG" ]]; then
+        local ports=($(get_all_ports "$TEST_CONFIG"))
+
+        for port in "${ports[@]}"; do
+            if [[ "$port" =~ ^[0-9]+$ ]]; then
+                kill_processes_on_port "$port"
+            fi
+        done
+    fi
+
     # Final cleanup of any troupe processes
-    pkill -9 -f "node.*troupe" || true
-    
+    if pkill -9 -f "node.*troupe" 2>/dev/null; then
+        cleanup_failures+=("Found lingering troupe processes requiring pkill -9")
+    fi
+
     # Clean up temporary directory (preserve on failure for debugging)
     if [[ -n "$TEMP_DIR" && -d "$TEMP_DIR" ]]; then
         if [[ $exit_code -ne 0 ]]; then
@@ -105,9 +285,32 @@ cleanup() {
             rm -rf "$TEMP_DIR"
         fi
     fi
-    
-    # Additional delay to ensure OS releases sockets
-    sleep 2
+
+    # Wait for OS to release sockets
+    # This prevents "port already in use" errors in subsequent tests
+    # Critical in CI where socket cleanup can be slower
+    log "Cleaned up $cleaned_count processes, waiting ${socket_release_wait}s for socket release..."
+    sleep "$socket_release_wait"
+
+    # Report cleanup issues if any occurred
+    # These are informational only and don't affect the test result
+    # Check if array has any elements before accessing
+    if [[ -n "${cleanup_failures[*]:-}" ]]; then
+        echo "" >&2
+        echo "=== Cleanup Issues Report (non-fatal) ===" >&2
+        echo "The following cleanup operations had issues:" >&2
+        for failure in "${cleanup_failures[@]}"; do
+            echo "  - $failure" >&2
+        done
+        echo "" >&2
+        echo "Note: These cleanup issues did not affect the test result (exit code: $exit_code)" >&2
+        echo "They are reported for diagnostic purposes only." >&2
+    fi
+
+    # CRITICAL: Exit with the original exit code from the test, not from cleanup
+    # Without this, the script would exit with the status of the last cleanup command
+    # This is why tests were "failing" in CI even though they succeeded
+    exit $exit_code
 }
 
 trap cleanup EXIT INT TERM
@@ -127,6 +330,9 @@ check_port_available() {
     local port="$1"
     if command -v lsof >/dev/null 2>&1; then
         if lsof -Pi ":$port" -sTCP:LISTEN -t >/dev/null 2>&1; then
+            # Port is in use - log which process is using it for diagnostics
+            local process_info=$(lsof -Pi ":$port" -sTCP:LISTEN 2>/dev/null | tail -n +2 | head -1)
+            log "Port $port is in use by: $process_info"
             return 1  # Port is in use
         fi
     fi
@@ -137,7 +343,7 @@ wait_for_port_release() {
     local port="$1"
     local max_wait=10
     local wait_count=0
-    
+
     while [[ $wait_count -lt $max_wait ]]; do
         if check_port_available "$port"; then
             log "Port $port is now available"
@@ -145,19 +351,12 @@ wait_for_port_release() {
         fi
         log "Port $port still in use, waiting... ($((max_wait - wait_count))s remaining)"
         sleep 1
-        ((wait_count++))
+        ((wait_count++)) || true
     done
-    
+
     # Force kill processes using the port
     log "Force killing processes on port $port"
-    if command -v lsof >/dev/null 2>&1; then
-        # macOS doesn't support -r flag for xargs
-        if [[ "$(uname)" == "Darwin" ]]; then
-            lsof -ti ":$port" | xargs kill -9 2>/dev/null || true
-        else
-            lsof -ti ":$port" | xargs -r kill -9 2>/dev/null || true
-        fi
-    fi
+    kill_processes_on_port "$port"
     sleep 1
     return 0
 }
@@ -165,10 +364,8 @@ wait_for_port_release() {
 validate_ports() {
     local config_file="$1"
     log "Validating port availability..."
-    
-    local ports=($(jq -r '.nodes[].port' "$config_file" 2>/dev/null))
-    local relay_port=$(jq -r '.network.relay_port // 5555' "$config_file" 2>/dev/null)
-    ports+=("$relay_port")
+
+    local ports=($(get_all_ports "$config_file"))
     
     local port_conflict=false
     for port in "${ports[@]}"; do
@@ -217,7 +414,7 @@ setup_network_identities() {
     
     # Generate node identities
     local node_count
-    node_count=$(jq -r '.nodes | length' "$config_file")
+    node_count=$(get_node_count "$config_file")
     
     for ((i=0; i<node_count; i++)); do
         local node_id
@@ -405,7 +602,7 @@ start_relay() {
         fi
         
         sleep 0.5
-        ((wait_count++))
+        ((wait_count++)) || true
     done
     
     # Re-enable exit on error before erroring out
@@ -427,10 +624,11 @@ run_node() {
     local node_index="$2"
     local test_dir="$3"
     local output_dir="$4"
-    
+    local in_parallel="${5:-false}"  # New parameter to indicate parallel mode
+
     local node_config
     node_config=$(jq -r ".nodes[$node_index]" "$config_file")
-    
+
     local node_id script port start_delay expected_exit_code extra_argv
     node_id=$(echo "$node_config" | jq -r '.id')
     script=$(echo "$node_config" | jq -r '.script')
@@ -498,20 +696,33 @@ run_node() {
     
     local timeout_val
     timeout_val=$(jq -r '.timeout // 30' "$config_file")
-    
+
+    # Apply CI scaling if needed
+    local scaled_timeout="$timeout_val"
+    if [[ "$TIMEOUT_SCALE" != "1.0" ]]; then
+        # Check if bc is available for floating point math
+        if command -v bc >/dev/null 2>&1; then
+            scaled_timeout=$(echo "scale=0; ($timeout_val * $TIMEOUT_SCALE)/1" | bc)
+        else
+            # Fallback to integer math (20% increase for 1.2 scale)
+            scaled_timeout=$(( (timeout_val * 12) / 10 ))
+        fi
+        log "Timeout scaled from ${timeout_val}s to ${scaled_timeout}s"
+    fi
+
     if [[ "$VERBOSE" == "true" ]]; then
         # In verbose mode, show prefixed output
-        timeout "$timeout_val" "${cmd_args[@]}" \
+        timeout "$scaled_timeout" "${cmd_args[@]}" \
             > >(tee "$output_file" | sed "s/^/[$node_id:out] /" >&2) \
             2> >(tee "$error_file" | sed "s/^/[$node_id:err] /" >&2) &
     else
         # Normal mode: just redirect to files
-        timeout "$timeout_val" "${cmd_args[@]}" \
+        timeout "$scaled_timeout" "${cmd_args[@]}" \
             > "$output_file" 2> "$error_file" &
     fi
     
     local node_pid=$!
-    
+
     # Docker compatibility: Check if PID capture worked
     if [[ "$node_pid" == "\$!" ]] || ! [[ "$node_pid" =~ ^[0-9]+$ ]]; then
         log "Warning: PID capture failed for node $node_id (Docker issue)"
@@ -522,8 +733,10 @@ run_node() {
             node_pid="unknown"
         fi
     fi
-    
-    if [[ "$node_pid" != "unknown" ]]; then
+
+    # Only add to cleanup PIDs if not in parallel mode
+    # In parallel mode, we wait for all processes explicitly
+    if [[ "$node_pid" != "unknown" ]] && [[ "$in_parallel" != "true" ]]; then
         CLEANUP_PIDS+=("$node_pid")
     fi
     
@@ -540,15 +753,27 @@ run_node() {
     
     # Handle timeout exit code (124)
     if [[ "$actual_exit_code" == "124" ]]; then
-        log "Node $node_id timed out after ${timeout_val}s"
-        if [[ "$expected_exit_code" != "124" ]]; then
-            error "Node $node_id timed out unexpectedly"
+        if [[ "$expected_exit_code" == "124" ]]; then
+            log "Node $node_id timed out as expected after ${scaled_timeout}s"
+        else
+            display_node_error "$node_id" "timeout" "$scaled_timeout" "$expected_exit_code" "$output_file" "$error_file" "$timeout_val"
+            if [[ "$in_parallel" == "true" ]]; then
+                return 1  # Return error code instead of exiting in parallel mode
+            else
+                error "Node $node_id timed out unexpectedly"
+            fi
         fi
     elif [[ "$actual_exit_code" != "$expected_exit_code" ]]; then
-        error "Node $node_id exited with code $actual_exit_code, expected $expected_exit_code"
+        display_node_error "$node_id" "exit_code" "$actual_exit_code" "$expected_exit_code" "$output_file" "$error_file"
+        if [[ "$in_parallel" == "true" ]]; then
+            return 1  # Return error code instead of exiting in parallel mode
+        else
+            error "Node $node_id exited with code $actual_exit_code, expected $expected_exit_code"
+        fi
     fi
-    
-    log "Node $node_id completed successfully"
+
+    log "Node $node_id completed successfully (exit code: $actual_exit_code)"
+    return 0  # Explicitly return success
 }
 
 merge_outputs() {
@@ -571,7 +796,7 @@ merge_outputs() {
         "sequential")
             # Concatenate outputs in node order
             local node_count
-            node_count=$(jq -r '.nodes | length' "$config_file")
+            node_count=$(get_node_count "$config_file")
             
             for ((i=0; i<node_count; i++)); do
                 local node_id
@@ -587,7 +812,7 @@ merge_outputs() {
         "per_node")
             # Output each node separately without filtering
             local node_count
-            node_count=$(jq -r '.nodes | length' "$config_file")
+            node_count=$(get_node_count "$config_file")
             
             for ((i=0; i<node_count; i++)); do
                 local node_id
@@ -636,33 +861,40 @@ run_test() {
     coordination=$(jq -r '.coordination // "parallel"' "$config_file")
     
     local node_count
-    node_count=$(jq -r '.nodes | length' "$config_file")
+    node_count=$(get_node_count "$config_file")
     
     case "$coordination" in
         "parallel")
             # Start all nodes simultaneously
             local node_pids=()
             for ((i=0; i<node_count; i++)); do
-                run_node "$config_file" "$i" "$test_dir" "$output_dir" &
+                run_node "$config_file" "$i" "$test_dir" "$output_dir" "true" &
                 node_pids+=($!)
             done
-            
+
             # Wait for all nodes
             local failed=false
-            for pid in "${node_pids[@]}"; do
+            local failed_nodes=()
+            for ((i=0; i<${#node_pids[@]}; i++)); do
+                local pid="${node_pids[$i]}"
                 if ! wait "$pid"; then
                     failed=true
+                    local node_id=$(jq -r ".nodes[$i].id" "$config_file")
+                    failed_nodes+=("$node_id")
                 fi
             done
-            
+
             if [[ "$failed" == "true" ]]; then
-                error "One or more nodes failed"
+                echo "Error: The following nodes failed: ${failed_nodes[*]}" >&2
+                # Don't call error() here as it triggers cleanup prematurely
+                # Just return failure to the caller
+                return 1
             fi
             ;;
         "sequential")
             # Start nodes one after another
             for ((i=0; i<node_count; i++)); do
-                run_node "$config_file" "$i" "$test_dir" "$output_dir"
+                run_node "$config_file" "$i" "$test_dir" "$output_dir" "false"
             done
             ;;
         *)
@@ -707,7 +939,15 @@ main() {
     fi
     
     parse_config "$TEST_CONFIG"
+
+    # Temporarily disable set -e for run_test since it handles its own errors
+    set +e
     run_test "$TEST_CONFIG"
+    local test_result=$?
+    set -e
+
+    # Exit with the test result (cleanup will be triggered by trap)
+    exit $test_result
 }
 
 main "$@"

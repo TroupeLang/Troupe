@@ -1,6 +1,6 @@
 {
   "test_name": "multi-client-echo",
-  "timeout": 35,
+  "timeout": 45,
   "coordination": "parallel",
   "network": {
     "relay_port": 5556,

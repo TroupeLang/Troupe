@@ -1,0 +1,125 @@
+import List
+
+let
+    (*--- Pretty Printing ---*)
+    (* TODO: Move to 'stdio.trp'? *)
+    fun print auth indent str =
+        let fun makeIndent 0 = ""
+              | makeIndent i = "  " ^ (makeIndent (i-1))
+        in fwrite ((getStdout auth), (makeIndent indent) ^ str)
+        end
+
+    fun printCR auth = fwrite ((getStdout auth), "\r")
+    fun printNL auth = fwrite ((getStdout auth), "\n")
+
+    (* TODO (Issue #55) Move colours into helper functions. *)
+    val testStr = "\x1b[33m" ^ "[ TEST ]" ^ "\x1b[0m" ^ " it "
+    val passStr = "\x1b[32m" ^ "[ PASS ]" ^ "\x1b[0m" ^ " it "
+    val failStr = "\x1b[31m" ^ "[ FAIL ]" ^ "\x1b[0m" ^ " it "
+
+    val beginStr = "\x1b[34m" ^ "begin " ^ "\x1b[0m"
+    val endStr   = "\x1b[34m" ^ "end "   ^ "\x1b[0m"
+
+    (*--- Test Creation ---*)
+
+    (** A group of tests and other subdescriptions. *)
+    fun group name ts = { tag="Unit.group", name=name, tests=ts } (* TODO *)
+
+    (** Collection of assertion(s) for a single test; either a single assertion or a list. *)
+    fun it name tests = case tests of { tag="Unit.isEq", .. }  => it name [tests]
+                                    | { tag="Unit.isNeq", .. } => it name [tests]
+                                    | _ => { tag="Unit.it", name=name, tests=tests }
+
+    (** A single assertion of structural equality. *)
+    fun isEq expected actual = { tag="Unit.isEq", exp=expected, act=actual }
+
+    (** Assert for a value being `true` *)
+    fun isTrue  actual = isEq true actual
+
+    (** Assert for a value being `false` *)
+    fun isFalse actual = isEq false actual
+
+    (** A single assertion of structural inequality. *)
+    fun isNeq unexpected actual = { tag="Unit.isNeq", unexp=unexpected, act=actual }
+
+    (*--- Test Running ---*)
+
+    (** Returns the number of tests in a given group. *)
+    fun size { tag="Unit.it", .. }                 = 1
+      | size { tag="Unit.group", tests=tests, .. } =
+        List.foldl (fn (t, acc) => acc + size t) 0 tests
+      | size _ = 0
+
+    (** Run the given test suite, created with `group`, `it`, and `is*`. *)
+    fun run auth ts =
+        let (** Runs a 'Unit.isEq' and returns `true` if it fails. *)
+            fun runIsEq indent { tag="Unit.isEq", exp=exp, act=act } =
+                if exp = act
+                then false
+                else let val _ = printNL auth
+                         val _ = print auth indent ("Expected: " ^ (toString exp) ^ "\n")
+                         val _ = print auth indent ("Actual:   " ^ (toString act) ^ "\n")
+                     in true
+                     end
+              | runIsEq indent a =
+                print auth indent ("runIsEq ? " ^ (toString a) ^ "?\n"); false
+
+            (** Runs a 'Unit.isEq' and returns `true` if it fails. *)
+            fun runIsNeq indent { tag="Unit.isNeq", unexp=unexp, act=act } =
+                if unexp <> act
+                then false
+                else let val _ = printNL auth
+                         val _ = print auth indent ("Undesired Match: " ^ (toString unexp) ^ "\n")
+                     in true
+                     end
+              | runIsNeq indent a =
+                print auth indent ("runIsNeq ? " ^ (toString a) ^ "?\n"); false
+
+            (** Runs a 'Unit.it' and returns `1` if it succeeds and `0` otherwise. *)
+            fun runIt indent { tag="Unit.it", name=name, tests=tests } =
+                let val _ = print auth indent (testStr ^ name)
+                    fun passFilter t = case t of { tag="Unit.isEq",  .. } => runIsEq  (indent+2) t
+                                               | { tag="Unit.isNeq", .. } => runIsNeq (indent+2) t
+                                               | _ => print auth 0 ("runIt::filter ? " ^ (toString t) ^ "?\n"); false
+                    val pass = List.null (List.filter passFilter tests)
+                    val _ = if pass then printCR auth else ()
+                    val _ = print auth indent ((if pass then passStr else failStr) ^ name ^ "\n")
+                    (* TODO: Print 'expected: ..., actual: ...' on failure *)
+                in if pass then 1 else 0 end
+              | runIt indent a =
+                print auth 0 ("runIt ? " ^ (toString a) ^ "?\n"); 0
+
+            (** Runs a 'Unit.group` and sums up the number of succeeding 'Unit.it'. *)
+            fun runGroup indent ts =
+                case ts of { tag="Unit.group", name=name, tests=tests } =>
+                           let val _ = print auth indent (beginStr ^ name ^ "\n")
+                               val passed = List.foldl (fn (t, acc) => acc + runGroup (indent+1) t)
+                                                       0
+                                                       tests
+                               val _ = print auth indent (endStr ^ "\n")
+                           in passed end
+                         | { tag="Unit.it", .. } =>
+                           runIt (indent+1) ts
+                         | _ =>
+                           print auth 0 ("runGroup ? " ^ (toString ts) ^ "?\n"); 0
+
+            val total  = size ts
+            val passed = runGroup 0 ts
+            val _ = print auth 0 "\n"
+            val _ = print auth 0 ("Total:  " ^ (intToString total) ^ "\n")
+            val _ = print auth 0 ("Passes: " ^ (intToString passed) ^ "\n")
+        in total = passed end
+
+    (*--- Module ---*)
+    val Unit = {
+        group   = group,
+        it      = it,
+        isEq    = isEq,
+        isTrue  = isTrue,
+        isFalse = isFalse,
+        isNeq   = isNeq,
+        run     = run
+    }
+
+in [ ("Unit", Unit) ]
+end

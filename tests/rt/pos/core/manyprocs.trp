@@ -1,4 +1,4 @@
-import lists
+import List
 
 datatype Atoms = FIRST  | SECOND
 
@@ -8,13 +8,13 @@ let
      in receive [ hn (SECOND, j)  => if i = j then printWithLabels ("OK", i) else printWithLabels ("FAIL", i) ]
      end 
 
-    fun server (db, 0) = map  ( fn (x, pid) => send (pid, (SECOND, x))) db 
+    fun server (db, 0) = List.map  ( fn (x, pid) => send (pid, (SECOND, x))) db 
       | server (db, n) = receive [ hn (FIRST, x, pid) => server  ((x, pid) :: db, n - 1 )  ]
  
     val nprocs = 1000
     val serverPid = spawn (fn () => server ([], nprocs))
         
-    val _ = map (fn i => spawn (fn () => client i serverPid ) ) (range nprocs)
+    val _ = List.map (fn i => spawn (fn () => client i serverPid ) ) (List.range nprocs)
 
 in ()
 

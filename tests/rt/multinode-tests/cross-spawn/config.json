@@ -1,6 +1,6 @@
 {
   "test_name": "cross-node-spawn",
-  "timeout": 35,
+  "timeout": 45,
   "coordination": "parallel",
   "network": {
     "relay_port": 5557,

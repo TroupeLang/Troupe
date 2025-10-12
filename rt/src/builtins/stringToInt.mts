@@ -8,7 +8,7 @@ export function BuiltinStringToInt<TBase extends Constructor<UserRuntimeZero>>(B
     return class extends Base {
         stringToInt = mkBase((arg) => {
             assertIsString(arg);
-            let r = this.runtime.$t.mkValWithLev(parseInt(arg.val), arg.lev);
+            let r = this.runtime.$t.mkValWithLev(parseFloat(arg.val), arg.lev);
             return this.runtime.ret(r);
         }, "stringToInt")
 

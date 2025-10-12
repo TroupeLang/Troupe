@@ -106,8 +106,8 @@ jobs:
             exit 1
           fi
           echo "Runtime built successfully, troupe.mjs found"
-      - name: compile libs
-        run: make libs
+      - name: compile lib
+        run: make lib
       - name: compile service
         run: make service      
       - name: run basic test

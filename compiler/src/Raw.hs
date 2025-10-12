@@ -161,6 +161,10 @@ data RawTerminator
   | Call RawBBTree RawBBTree
   deriving (Eq, Show)
 
+
+-- TODO: 2025-09-19; AA -- this is a bit too hacky 
+                        -- we should not be referencing runtime functions 
+                        -- by concatenating their names 
 ppRTAssertionCode f a = f (text $ "rt.rawAssert" ++ rtFun) args
   where (rtFun, args) = case a of
           AssertType x t -> (case t of
@@ -176,7 +180,7 @@ ppRTAssertionCode f a = f (text $ "rt.rawAssert" ++ rtFun) args
             , [ppId x])
           AssertTypesBothStringsOrBothNumbers x y -> ("PairsAreStringsOrNumbers", [ppId x, ppId y])
           AssertTupleLengthGreaterThan x n -> ("TupleLengthGreaterThan", [ppId x, text (show n)])
-          AssertRecordHasField x f -> ("RecordHasField", [ppId x, PP.quotes $ text f])
+          AssertRecordHasField x f -> ("RecordHasField", [ppId x, PP.doubleQuotes $ text f])
           AssertNotZero x -> ("NotZero", [ppId x])
 
 

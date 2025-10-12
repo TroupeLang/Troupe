@@ -1,6 +1,5 @@
 (* Node service process and runtime functionality *)
 
-import lists
 datatype Atoms = STDOUT   
                | SPAWN 
                | SPAWNOK

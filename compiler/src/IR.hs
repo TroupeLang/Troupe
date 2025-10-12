@@ -156,7 +156,7 @@ ppDeps a = let (ffs_0,lls_0, atoms_0) = execWriter  (dependencies a)
                (ffs, lls, aas) = (nub ffs_0, nub lls_0, nub atoms_0)
 
                format dd =
-                   let tt = map (PP.quotes . ppId) dd in 
+                   let tt = map (PP.doubleQuotes . ppId) dd in 
                    (PP.brackets.PP.hsep) (PP.punctuate PP.comma tt)
             in ( format ffs, format lls , format aas )            
 

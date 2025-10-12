@@ -1,6 +1,7 @@
-import lists
+import List
+
 let fun mapspawn f = 
-        map (fn x => spawn ( fn () => printWithLabels (f x) ))
+        List.map (fn x => spawn ( fn () => printWithLabels (f x) ))
 
 
     val ls = [ 1 raisedTo `{alice}`, 

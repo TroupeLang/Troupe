@@ -1,0 +1,92 @@
+import Unit
+import String
+
+let val tests = Unit.group "String" [
+            Unit.group "size" [
+                Unit.it "is 0 for ''"         (Unit.isEq 0 (String.size ""))
+              , Unit.it "is 1 for 'a'"        (Unit.isEq 1 (String.size "a"))
+              , Unit.it "is 1 for 'b'"        (Unit.isEq 1 (String.size "b"))
+              , Unit.it "is 5 for 'Hello'"    (Unit.isEq 5 (String.size "Hello"))
+              , Unit.it "is 7 for 'Troupe!'"  (Unit.isEq 7 (String.size "Troupe!"))
+            ],
+            let val s = "Hello"
+            in Unit.group "sub" [
+                    Unit.it "is 'H' for 0" (Unit.isEq "H" (String.sub (s, 0)))
+                  , Unit.it "is 'e' for 1" (Unit.isEq "e" (String.sub (s, 1)))
+                  , Unit.it "is 'l' for 2" (Unit.isEq "l" (String.sub (s, 2)))
+                  , Unit.it "is 'l' for 3" (Unit.isEq "l" (String.sub (s, 3)))
+                  , Unit.it "is 'o' for 4" (Unit.isEq "o" (String.sub (s, 4)))
+                  , Unit.it "is ''  for 5" (Unit.isEq ""  (String.sub (s, 5)))
+                  , Unit.it "is ''  for 6" (Unit.isEq ""  (String.sub (s, 6)))
+                ]
+            end,
+            let val s = "World!"
+            in Unit.group "subCode" [
+                    Unit.it "is 87 for 0"  (Unit.isEq 87  (String.subCode (s,0)))
+                  , Unit.it "is 111 for 1" (Unit.isEq 111 (String.subCode (s,1)))
+                  , Unit.it "is 114 for 2" (Unit.isEq 114 (String.subCode (s,2)))
+                  , Unit.it "is 108 for 3" (Unit.isEq 108 (String.subCode (s,3)))
+                  , Unit.it "is 100 for 4" (Unit.isEq 100 (String.subCode (s,4)))
+                  , Unit.it "is 33  for 5" (Unit.isEq 33  (String.subCode (s,5)))
+                  , Unit.it "is 0   for 6" (Unit.isEq 0   (String.subCode (s,6)))
+                ]
+            end,
+            let val s = "Hello Troupe!"
+            in Unit.group "substring" [
+                    Unit.it "is 'Hello' for 0 5"    (Unit.isEq "Hello" (String.substring (s, 0, 5)))
+                  , Unit.it "is 'Troupe' for 6 12"  (Unit.isEq "Troupe" (String.substring (s, 6, 12)))
+                  , Unit.it "is 'Troupe!' for 6 13" (Unit.isEq "Troupe!" (String.substring (s, 6, 13)))
+                  , Unit.it "is 'Troupe!' for 6 14" (Unit.isEq "Troupe!" (String.substring (s, 6, 13)))
+                ]
+            end,
+            Unit.group "concat" [
+                Unit.it "is '' for []"           (Unit.isEq ""   (String.concat []))
+              , Unit.it "is 'a' for ['a']"       (Unit.isEq "a"  (String.concat ["a"]))
+              , Unit.it "is 'a' for ['', 'a']"   (Unit.isEq "a"  (String.concat ["", "a"]))
+              , Unit.it "is 'a' for ['a', '']"   (Unit.isEq "a"  (String.concat ["a", ""]))
+              , Unit.it "is 'ab' for ['a', 'b']" (Unit.isEq "ab" (String.concat ["a", "b"]))
+            ],
+            Unit.group "concatWith" [
+                Unit.it "is '' for []"                       (Unit.isEq ""      (String.concatWith "," []))
+              , Unit.it "skips separator for ['a']"          (Unit.isEq "a"     (String.concatWith "," ["a"]))
+              , Unit.it "skips separator for ['b']"          (Unit.isEq "b"     (String.concatWith "," ["b"]))
+              , Unit.it "adds separator for ['a', 'b']"      (Unit.isEq "a,b"   (String.concatWith "," ["a", "b"]))
+              , Unit.it "adds separator for ['a', 'b', 'c']" (Unit.isEq "a,b,c" (String.concatWith "," ["a", "b","c"]))
+              , Unit.it "adds separator around '' too"       (Unit.isEq "a..b"  (String.concatWith "." ["a","", "b"]))
+            ],
+            Unit.group "implode" [
+                Unit.it "is '' for []"           (Unit.isEq ""    (String.implode []))
+              , Unit.it "is 'a' for ['a']"       (Unit.isEq "a"   (String.implode ["a"]))
+              , Unit.it "is 'b' for ['b']"       (Unit.isEq "b"   (String.implode ["b"]))
+              , Unit.it "is 'ab' for ['a','b']"  (Unit.isEq "ab"  (String.implode ["a","b"]))
+              , Unit.it "is 'ba' for ['b','a']"  (Unit.isEq "ba"  (String.implode ["b","a"]))
+            ],
+            Unit.group "explode" [
+                Unit.it "is [] for ''"           (Unit.isEq []        (String.explode ""))
+              , Unit.it "is ['a'] for 'a'"       (Unit.isEq ["a"]     (String.explode "a"))
+              , Unit.it "is ['b'] for 'b'"       (Unit.isEq ["b"]     (String.explode "b"))
+              , Unit.it "is ['a','b'] for 'ab'"  (Unit.isEq ["a","b"] (String.explode "ab"))
+              , Unit.it "is ['b','a'] for 'ba'"  (Unit.isEq ["b","a"] (String.explode "ba"))
+            ],
+            let fun f "a" = "b"
+                  | f "b" = "a"
+                  | f c   = c
+            in Unit.group "map" [
+                    Unit.it "is '' for ''"       (Unit.isEq ""   (String.map f ""))
+                  , Unit.it "is 'b' for 'a'"     (Unit.isEq "b"  (String.map f "a"))
+                  , Unit.it "is 'a' for 'b'"     (Unit.isEq "a"  (String.map f "b"))
+                  , Unit.it "is 'ba' for 'ab'"   (Unit.isEq "ba" (String.map f "ab"))
+                  , Unit.it "is 'a b' for 'b a'" (Unit.isEq "a b" (String.map f "b a"))
+                ]
+            end,
+            let fun f c = c ^ "_"
+            in Unit.group "translate" [
+                    Unit.it "is '' for ''"       (Unit.isEq ""     (String.translate f ""))
+                  , Unit.it "is 'a_' for 'a'"    (Unit.isEq "a_"   (String.translate f "a"))
+                  , Unit.it "is 'b_' for 'b'"    (Unit.isEq "b_"   (String.translate f "b"))
+                  , Unit.it "is 'a_b_' for 'ab'" (Unit.isEq "a_b_" (String.translate f "ab"))
+                  , Unit.it "is 'b_a_' for 'ba'" (Unit.isEq "b_a_" (String.translate f "ba"))
+                ]
+            end
+        ]
+in Unit.run authority tests end

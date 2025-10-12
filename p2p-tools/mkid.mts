@@ -6,7 +6,8 @@
 'use strict';
 import * as fs from 'node:fs'
 import * as fsPromises from 'node:fs/promises';
-import { createEd25519PeerId } from '@libp2p/peer-id-factory'
+import { keys } from '@libp2p/crypto'
+import { peerIdFromPrivateKey } from '@libp2p/peer-id'
 import { toString as uint8ArrayToString } from 'uint8arrays/to-string'
 import yargs from 'yargs'
 import { hideBin } from 'yargs/helpers';
@@ -28,12 +29,16 @@ async function ensureFileDoesntExist (f) {
 }
 
 (async () => {
-    let peerid = await createEd25519PeerId();
+    const privateKey = await keys.generateKeyPair('Ed25519');
+    const peerid = await peerIdFromPrivateKey(privateKey);
+    const privKeyBytes = keys.privateKeyToProtobuf(privateKey);
+    const publicKey = privateKey.publicKey;
+    const pubKeyBytes = keys.publicKeyToProtobuf(publicKey);
     
     const obj = {
       id : peerid.toString(),
-      privKey : uint8ArrayToString(peerid.privateKey, 'base64pad'),
-      pubKey : uint8ArrayToString(peerid.publicKey, 'base64pad')
+      privKey : uint8ArrayToString(privKeyBytes, 'base64pad'),
+      pubKey : uint8ArrayToString(pubKeyBytes, 'base64pad')
     };
     if (argv.verbose) {
         console.log("Created key with id:", obj.id);      

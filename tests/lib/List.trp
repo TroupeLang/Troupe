@@ -1,0 +1,159 @@
+import Unit
+import List
+
+let val tests = Unit.group "List" [
+            Unit.group "head" [
+                Unit.it "returns 42 for [42]"   (Unit.isEq 42 (List.head [42]))
+              , Unit.it "returns 1 for [1,2]"   (Unit.isEq 1  (List.head [1,2]))
+              , Unit.it "returns 2 for [2,4,7]" (Unit.isEq 2  (List.head [2,4,7]))
+            ],
+            Unit.group "tail" [
+                Unit.it "returns [] for [42]"     (Unit.isEq [] (List.tail [42]))
+              , Unit.it "returns [2] for [1,2]"   (Unit.isEq [2] (List.tail [1,2]))
+              , Unit.it "returns [2] for [2,4,7]" (Unit.isEq [4,7] (List.tail [2,4,7]))
+            ],
+            let val xs = [0,42,"a"]
+            in Unit.group "nth" [
+                    Unit.it "fetches 0th" (Unit.isEq 0 (List.nth xs 0))
+                  , Unit.it "fetches 1st" (Unit.isEq 42 (List.nth xs 1))
+                  , Unit.it "fetches 1st" (Unit.isEq "a" (List.nth xs 2))
+                ]
+            end,
+            Unit.group "null" [
+                Unit.it "accepts []"      (Unit.isTrue  (List.null []))
+              , Unit.it "rejects [0]"     (Unit.isFalse (List.null [0]))
+              , Unit.it "rejects ['a']"   (Unit.isFalse (List.null ["a"]))
+              , Unit.it "rejects [0,1]"   (Unit.isFalse (List.null [0,1]))
+              , Unit.it "rejects [1,2,0]" (Unit.isFalse (List.null [1,2,0]))
+            ],
+            Unit.group "elem" [
+                Unit.it "rejects 42 []"               (Unit.isFalse (List.elem 42 []))
+              , Unit.it "accepts 42 [42]"             (Unit.isTrue  (List.elem 42 [42]))
+              , Unit.it "accepts 42 [21, 42]"         (Unit.isTrue  (List.elem 42 [21,42]))
+              , Unit.it "rejects 42 [21, 10]"         (Unit.isFalse (List.elem 42 [21,10]))
+              , Unit.it "rejects 2  [0,1,3,4]"        (Unit.isFalse (List.elem 2 [0,1,3,4]))
+              , Unit.it "rejects 42 ['a', 'c']"       (Unit.isFalse (List.elem 42 ["a", "c"]))
+              , Unit.it "accepts 'c' ['a', 'b', 'c']" (Unit.isTrue  (List.elem "c" ["a", "b", "c"]))
+            ],
+            Unit.group "length" [
+                Unit.it "is 0 for []"      (Unit.isEq 0 (List.length []))
+              , Unit.it "is 1 for [0]"     (Unit.isEq 1 (List.length [0]))
+              , Unit.it "is 1 for ['a']"   (Unit.isEq 1 (List.length ["a"]))
+              , Unit.it "is 2 for [0,1]"   (Unit.isEq 2 (List.length [0,1]))
+              , Unit.it "is 3 for [1,2,0]" (Unit.isEq 3 (List.length [1,2,0]))
+            ],
+            Unit.group "reverse" [
+                Unit.it "inverts []"      (Unit.isEq [] (List.reverse []))
+              , Unit.it "inverts [0]"     (Unit.isEq [0] (List.reverse [0]))
+              , Unit.it "inverts [1]"     (Unit.isEq [1] (List.reverse [1]))
+              , Unit.it "inverts [1,0]"   (Unit.isEq [0,1] (List.reverse [1,0]))
+              , Unit.it "inverts [0,1]"   (Unit.isEq [1,0] (List.reverse [0,1]))
+              , Unit.it "inverts [0,2,1]" (Unit.isEq [1,2,0] (List.reverse [0,2,1]))
+            ],
+            Unit.group "append" [
+                Unit.it "appends [] []"       (Unit.isEq []        (List.append [] []))
+              , Unit.it "appends [42] []"     (Unit.isEq [42]      (List.append [42] []))
+              , Unit.it "appends [21] [42]"   (Unit.isEq [21,42]   (List.append [21] [42]))
+              , Unit.it "appends [42] [21]"   (Unit.isEq [42,21]   (List.append [42] [21]))
+              , Unit.it "appends [0,1] [2]"   (Unit.isEq [0,1,2]   (List.append [0,1] [2]))
+              , Unit.it "appends [1,2] [0,3]" (Unit.isEq [1,2,0,3] (List.append [1,2] [0,3]))
+            ],
+            Unit.group "revAppend" [
+                Unit.it "appends [] []"       (Unit.isEq []        (List.revAppend [] []))
+              , Unit.it "appends [42] []"     (Unit.isEq [42]      (List.revAppend [42] []))
+              , Unit.it "appends [21] [42]"   (Unit.isEq [21,42]   (List.revAppend [21] [42]))
+              , Unit.it "appends [42] [21]"   (Unit.isEq [42,21]   (List.revAppend [42] [21]))
+              , Unit.it "appends [0,1] [2]"   (Unit.isEq [1,0,2]   (List.revAppend [0,1] [2]))
+              , Unit.it "appends [1,2] [0,3]" (Unit.isEq [2,1,0,3] (List.revAppend [1,2] [0,3]))
+            ],
+            let val xs = [2,3,5,7,11,13]
+            in Unit.group "sublist" [
+                    Unit.it "slices 0 0  []"            (Unit.isEq []      (List.sublist 0 0 []))
+                  , Unit.it "slices 0 0  [2,3,5,..,13]" (Unit.isEq []      (List.sublist 0 0 xs))
+                  , Unit.it "slices 2 2  [2,3,5,..,13]" (Unit.isEq []      (List.sublist 2 2 xs))
+                  , Unit.it "slices 0 3  [2,3,5,..,13]" (Unit.isEq [2,3,5] (List.sublist 0 3 xs))
+                  , Unit.it "slices 1 3  [2,3,5,..,13]" (Unit.isEq [3,5]   (List.sublist 1 3 xs))
+                  , Unit.it "ignores invalid indices, 2,4 []"
+                            (Unit.isEq []            (List.sublist 2 4 []))
+                  , Unit.it "ignores invalid indices, 1 42 [2,3,5,..,13]"
+                            (Unit.isEq [3,5,7,11,13] (List.sublist 1 42 xs))
+                  , Unit.it "ignores invalid indices, 42 2 [2,3,5,..,13]"
+                            (Unit.isEq [] (List.sublist 42 2 xs))
+                ]
+            end,
+            Unit.group "appendAt" [
+                Unit.it "appends [] [] 0"     (Unit.isEq []      (List.appendAt [] [] 0))
+              , Unit.it "appends [1] [2] 0"   (Unit.isEq [2,1]   (List.appendAt [1] [2] 0))
+              , Unit.it "appends [1] [2] 1"   (Unit.isEq [1,2]   (List.appendAt [1] [2] 1))
+              , Unit.it "appends [1,3] [2] 1" (Unit.isEq [1,2,3] (List.appendAt [1,3] [2] 1))
+              , Unit.it "appends to the back, if index is too large"
+                        (Unit.isEq [1,3,2,4]      (List.appendAt [1,3] [2,4] 42))
+            ],
+            let fun inc x = x+1
+            in Unit.group "map" [
+                    Unit.it "inc []"    (Unit.isEq []    (List.map inc []))
+                  , Unit.it "inc [1]"   (Unit.isEq [2]   (List.map inc [1]))
+                  , Unit.it "inc [1,1]" (Unit.isEq [2,2] (List.map inc [1,1]))
+                  , Unit.it "inc [1,3]" (Unit.isEq [2,4] (List.map inc [1,3]))
+                ]
+            end,
+            let fun id x = x
+            in Unit.group "mapi" [
+                    Unit.it "id []"    (Unit.isEq []             (List.mapi id []))
+                  , Unit.it "id [1]"   (Unit.isEq [(0,1)]        (List.mapi id [1]))
+                  , Unit.it "id [1,1]" (Unit.isEq [(0,1), (1,1)] (List.mapi id [1,1]))
+                  , Unit.it "id [1,3]" (Unit.isEq [(0,1), (1,3)] (List.mapi id [1,3]))
+                ]
+            end,
+            let val xs = [0,1,2,3,4,5,6,7,8,9]
+                fun isOdd  x = (x mod 2) = 1
+                fun isEven x = (x mod 2) = 0
+                fun isDiv3 x = (x mod 3) = 0
+            in Unit.group "filter" [
+                    Unit.it "isOdd  []"      (Unit.isEq []          (List.filter isOdd  []))
+                  , Unit.it "isEven []"     (Unit.isEq []          (List.filter isEven []))
+                  , Unit.it "isOdd  [0..10]" (Unit.isEq [1,3,5,7,9] (List.filter isOdd  xs))
+                  , Unit.it "isEven [0..10]" (Unit.isEq [0,2,4,6,8] (List.filter isEven xs))
+                  , Unit.it "isDiv3 [0..10]" (Unit.isEq [0,3,6,9]   (List.filter isDiv3 xs))
+                ]
+            end,
+            let val xs = [21,42,8,11]
+                fun isOddIdx (i,_) = (i mod 2) = 1
+                fun isOddVal (_,x) = (x mod 2) = 1
+            in Unit.group "filteri" [
+                    Unit.it "isOddIdx []" (Unit.isEq []      (List.filteri isOddIdx  []))
+                  , Unit.it "isOddVal []" (Unit.isEq []      (List.filteri isOddVal []))
+                  , Unit.it "isOddIdx xs" (Unit.isEq [42,11] (List.filteri isOddIdx  xs))
+                  , Unit.it "isOddVal xs" (Unit.isEq [21,11] (List.filteri isOddVal xs))
+                ]
+            end,
+            let val xs = [21,42,8,11,7]
+                fun isOdd x = (x mod 2) = 1
+            in Unit.group "partition" [
+                    Unit.it "isOdd []" (Unit.isEq ([],[])            (List.partition isOdd []))
+                  , Unit.it "isOdd xs" (Unit.isEq ([21,11,7],[42,8]) (List.partition isOdd xs))
+                ]
+            end,
+            Unit.group "range" [
+                Unit.it "generates [0..0]" (Unit.isEq []      (List.range 0))
+              , Unit.it "generates [0..1]" (Unit.isEq [0]     (List.range 1))
+              , Unit.it "generates [0..2]" (Unit.isEq [0,1]   (List.range 2))
+              , Unit.it "generates [0..3]" (Unit.isEq [0,1,2] (List.range 3))
+            ],
+            let fun cmp x y = x < y
+                val sort = List.sort cmp
+            in Unit.group "sort" [
+                    Unit.it "sorts []"                  (Unit.isEq []                  (sort []))
+                  , Unit.it "sorts [0]"                 (Unit.isEq [0]                 (sort [0]))
+                  , Unit.it "sorts [0,1]"               (Unit.isEq [0,1]               (sort [0,1]))
+                  , Unit.it "sorts [1,0]"               (Unit.isEq [0,1]               (sort [1,0]))
+                  , Unit.it "sorts [0,0]"               (Unit.isEq [0,0]               (sort [0,0]))
+                  , Unit.it "sorts [1,0,0]"             (Unit.isEq [0,0,1]             (sort [1,0,0]))
+                  , Unit.it "sorts [1,0,2]"             (Unit.isEq [0,1,2]             (sort [1,0,2]))
+                  , Unit.it "sorts [1,3,0,2]"           (Unit.isEq [0,1,2,3]           (sort [1,3,0,2]))
+                  , Unit.it "sorts [3,0,2,1,2]"         (Unit.isEq [0,1,2,2,3]         (sort [3,0,2,1,2]))
+                  , Unit.it "sorts [3,4,0,2,5,1,6,3,2]" (Unit.isEq [0,1,2,2,3,3,4,5,6] (sort [3,4,0,2,5,1,6,3,2]))
+                ]
+            end
+        ]
+in Unit.run authority tests end

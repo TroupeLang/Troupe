@@ -1,0 +1,117 @@
+(** In Troupe, there is not per-se an `int` type. Rather, there is a `number` and some integral
+ *  operations on them which treats them as if they were 32 bit signed integers. *)
+
+let (** Largest (safe) possible integral value. Anything larger than this cannot represent an
+     *  increment of 1.
+     *
+     * NOTE: Value copied from the JavaScript documentation for `Number.MAX_SAFE_INTEGER`. *)
+    val maxInt = 9007199254740992
+
+    (** Smallest (safe) possible integral value. Anything smaller than this cannot represent an
+     *  increment of 1. *)
+    val minInt = -maxInt
+
+    (** The number of significant bits if a `number` is treated as if it was a * 32 bit signed
+    integer. *)
+    val precision = 32
+
+    (** Maximum 32 bit signed integer (two's complement). *)
+    val maxInt32 = 2147483647
+
+    (** Minimum 32 bit signed integer (two's complement). *)
+    val minInt32 = -2147483648
+
+    (** Maximum (floating point) number possible.
+     *
+     * NOTE: Value copied from the JavaScript documentation for `Number.MAX_INTEGER`. *)
+    val maxNum = 179769313486231570814527423731704356798070567525844996598917476803157260780028538760589558632766878171540458953514382464234321326889464182768467546703537516986049910576551282076245490090389328944075868508455133942304583236903222948165808559332123348274797826204144723168738177180919299881250404026184124858368
+
+    (** Minimum (floating point) number possible. *)
+    val minNum = -maxNum
+
+    (* TODO (TCB?):
+     * - NaN
+     * - inf
+     *)
+
+    (** Returns the absolute value of x *)
+    fun abs x = if x < 0 then -x else x
+
+    (** Returns the smallest value in the tuple. *)
+    fun min (x,y) = if x < y then x else y
+
+    (** Returns the largest value in the tuple. *)
+    fun max (x,y) = if x < y then y else x
+
+    (** Returns the *ceiling* of the given number, `x`, i.e. the smallest integral number larger
+     *  than `x`.
+     *
+     * TODO: Move out of the TCB?
+     *)
+    val ceil = ceil
+
+    (** Returns the *floor* of the given number, `x`, i.e. the largest integral number smaller than
+     *  `x`.
+     *
+     * TODO: Move out of the TCB?
+     *)
+    val floor = floor
+
+    (** Returns the integer, `x'`, with the least distance to `x` (ties are broken by the largest).
+     *
+     * TODO: Move out of the TCB?
+     *)
+    val round = round
+
+    (** Returns the square root of *x*, i.e. the number, `x'` such that `x' * x' = x`.
+     *
+     * TODO: Move out of the TCB?
+     *)
+    val sqrt = sqrt
+
+    (** Returns `x` with the fractional parts removed. *)
+    fun isInt x = floor x = x
+
+    (** Returns `x` with the fractional parts removed. *)
+    fun toInt x = (if x < 0 then ceil else floor) x
+
+    (** Returns `x` truncated to a 32 bit integral value; values beyond `minInt32` and `maxInt32`
+     *  are capped. *)
+    fun toInt32 x = (max (min (maxInt32, x), minInt32)) orb 0
+
+    (** Returns the string representing the given `number`.
+     *
+     * TODO: Move out of the TCB?
+     *)
+    val toString = intToString
+
+    (** Returns the number written in `s`.
+     *
+     * TODO: Move out of the TCB?
+     *)
+    val fromString = stringToInt
+
+    (*--- Module ---*)
+    val Number = {
+        maxInt     = maxInt,
+        minInt     = minInt,
+        precision  = precision,
+        maxInt32   = maxInt32,
+        minInt32   = minInt32,
+        maxNum     = maxNum,
+        minNum     = minNum,
+        abs        = abs,
+        min        = min,
+        max        = max,
+        ceil       = ceil,
+        floor      = floor,
+        round      = round,
+        sqrt       = sqrt,
+        isInt      = isInt,
+        toInt      = toInt,
+        toInt32    = toInt32,
+        toString   = toString,
+        fromString = fromString
+    }
+in [("Number", Number)]
+end

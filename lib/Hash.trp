@@ -1,0 +1,82 @@
+import Number
+import String
+
+let
+    (** Hash function for strings.
+     *
+     * Uses polynomial rolling hash, i.e. a conversion to a number using a certain
+     * radix; for performance, strings of length 2 or shorter are evaluated
+     * non-recursively.
+     *)
+    fun hashString s =
+        (* String hash with fast paths for small strings *)
+        let val len = strlen s
+            val radix = 127
+            fun charCodeAt i = String.subCode (s,i)
+        in case len of 0 => 0
+                     | 1 => charCodeAt 0
+                     | 2 => (radix * charCodeAt 0 + charCodeAt 1) andb Number.maxInt32
+                     | _ => let fun go idx acc =
+                                    if len <= idx then acc
+                                    else go (idx + 1) ((acc * radix + charCodeAt idx) andb Number.maxInt32)
+                            in go 0 0
+                            end
+        end
+
+    (** The Multiply-Shift as proposed by Dietzfelbinger et al. (also known as
+     * Knuth's Multiplicative Hash) of a value `i` into a domain of `0..2^l`
+     * for `l = 0..31`. *)
+    fun hashMultiplyShift i l =
+        if l < 0 then 0
+        else if 31 < l then hashMultiplyShift i 31
+        else let val alpha = 2654435769
+             in (i * alpha andb Number.maxInt32) >> (32 - (floor l))
+             end
+
+    (** Hash function for integers. *)
+    fun hashInt i = hashMultiplyShift i 31
+
+    (** Hash function for numbers, including fractions.
+     *
+     * TODO: Currently float hashing is merely done by string hashing. Much
+     *       better would be just to bitcast it to an integer. *)
+    fun hashNumber i = if Number.isInt i then hashInt i else hashString (toString i)
+
+    (** Hash function for lists of any value. Tail-recursive. *)
+    fun hashList xs =
+        (* Hash the type. For now, this is merely hardcoded as the first few prime numbers. *)
+        let fun hashType x = case getType x of "number"   => 2
+                                             | "string"   => 3
+                                             | "list"     => 5
+                                             | "record"   => 7
+                                             | "function" => 11
+                                             | _          => 13
+            val p = 3
+            fun go i []    acc = acc
+              | go i x::xs acc =
+                let val acc' = (acc + i * ((hash x) xorb (hashType x))) andb Number.maxInt32
+                in go (i*p) xs acc' end
+        in go 1 xs 0 end
+
+    (** Hash function for any type of value. *)
+    and hash x = case getType x of "number"   => hashNumber x
+                                 | "string"   => hashString x
+                                 | "list"     => hashList x
+                              (* | "record"   => TODO: Convert to sorted list? *)
+                              (* | "function" => TODO: How to hash the function body? *)
+                                 | _          => hashString (toString x)
+
+    (*--- Module ---*)
+    val Hash = {
+        hashString        = hashString,
+        hashMultiplyShift = hashMultiplyShift,
+        hashInt           = hashInt,
+        hashNumber        = hashNumber,
+        hashList          = hashList,
+        hash              = hash
+    }
+
+in [ ("Hash", Hash)
+   , ("hash", hash)
+   ]
+end

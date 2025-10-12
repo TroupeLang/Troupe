@@ -4,9 +4,10 @@ import { mplex } from '@libp2p/mplex';
 import { webSockets } from '@libp2p/websockets';
 import { logger } from '@libp2p/logger'
 import { createLibp2p } from 'libp2p';
-import { circuitRelayServer } from 'libp2p/circuit-relay';
-import { identifyService } from 'libp2p/identify';
-import { createFromJSON } from '@libp2p/peer-id-factory';
+import { circuitRelayServer } from '@libp2p/circuit-relay-v2';
+import { identify } from '@libp2p/identify';
+import { keys } from '@libp2p/crypto';
+import { peerIdFromPrivateKey } from '@libp2p/peer-id';
 import { pipe } from 'it-pipe';
 import * as lp from 'it-length-prefixed';
 import map from 'it-map';
@@ -55,8 +56,12 @@ async function main () {
   
   // Create peer ID from private key and validate it matches the ID file
   let id;
+  let privateKey;
   try {
-    id = await createFromJSON({id: relayId, privKey: relayKey});
+    // Convert base64pad private key to Uint8Array
+    const privKeyBytes = Uint8Array.from(Buffer.from(relayKey, 'base64'));
+    privateKey = await keys.privateKeyFromProtobuf(privKeyBytes);
+    id = await peerIdFromPrivateKey(privateKey);
   } catch (error) {
     console.error(`Error: Failed to create peer ID from key files: ${error.message}`);
     console.error('Please ensure the ID file and private key file are valid and match each other');
@@ -75,14 +80,14 @@ async function main () {
   }
 
   const node = await createLibp2p({
-    peerId : id,
+    privateKey : privateKey,
     addresses: {
       listen: [`/ip4/0.0.0.0/tcp/${argv.port}/ws`]
     },
     transports: [
       webSockets()
     ],
-    connectionEncryption: [
+    connectionEncrypters: [
       noise()
     ],
     streamMuxers: [
@@ -90,7 +95,7 @@ async function main () {
       mplex()
     ],
     services: {
-      identify: identifyService(),
+      identify: identify(),
       relay: circuitRelayServer({ // makes the node function as a relay server
         /*
           The limits are set intentionally very high to avoid the relay cutting off

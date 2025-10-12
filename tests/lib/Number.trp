@@ -1,0 +1,104 @@
+import Unit
+import Number
+
+let val tests = Unit.group "Number" [
+            Unit.group "maxInt / minInt" [
+                Unit.it "maxInt++ = maxInt" (Unit.isEq Number.maxInt (Number.maxInt + 1))
+              , Unit.it "minInt-- = minInt" (Unit.isEq Number.minInt (Number.minInt - 1))
+            ],
+            Unit.group "abs" [
+                Unit.it "keeps 0 as is"    (Unit.isEq 0 (Number.abs 0))
+              , Unit.it "keeps +2 as is"   (Unit.isEq 2 (Number.abs 2))
+              , Unit.it "negates -1 as is" (Unit.isEq 1 (Number.abs (-1)))
+            ],
+            Unit.group "min" [
+                Unit.it "returns 1  for ( 1, 2)" (Unit.isEq  1   (Number.min ( 1, 2)))
+              , Unit.it "returns -1 for ( 1, 0)" (Unit.isEq  0   (Number.min ( 1, 0)))
+              , Unit.it "returns -1 for (-1, 0)" (Unit.isEq (-1) (Number.min (-1, 0)))
+            ],
+            Unit.group "max" [
+                Unit.it "returns 2 for ( 1, 2)" (Unit.isEq 2 (Number.max ( 1, 2)))
+              , Unit.it "returns 2 for ( 3, 1)" (Unit.isEq 3 (Number.max ( 3, 1)))
+              , Unit.it "returns 0 for (-1, 0)" (Unit.isEq 0 (Number.max (-1, 0)))
+            ],
+            Unit.group "ceil" [
+                Unit.it "returns 0 for 0"    (Unit.isEq 0    (Number.ceil 0))
+              , Unit.it "returns 1 for 1"    (Unit.isEq 1    (Number.ceil 1))
+              , Unit.it "returns -1 for -1"  (Unit.isEq (-1) (Number.ceil (-1)))
+              , Unit.it "returns 2 for 3/2"  (Unit.isEq 2    (Number.ceil (3/2)))
+              , Unit.it "returns 2 for 4/3"  (Unit.isEq 2    (Number.ceil (4/3)))
+              , Unit.it "returns 2 for 5/3"  (Unit.isEq 2    (Number.ceil (5/3)))
+              , Unit.it "returns 9 for 42/5" (Unit.isEq 9    (Number.ceil (42/5)))
+              , Unit.it "returns 8 for 43/5" (Unit.isEq 9    (Number.ceil (43/5)))
+            ],
+            Unit.group "floor" [
+                Unit.it "returns 0 for 0"    (Unit.isEq 0    (Number.floor 0))
+              , Unit.it "returns 1 for 1"    (Unit.isEq 1    (Number.floor 1))
+              , Unit.it "returns -1 for -1"  (Unit.isEq (-1) (Number.floor (-1)))
+              , Unit.it "returns 1 for 3/2"  (Unit.isEq 1    (Number.floor (3/2)))
+              , Unit.it "returns 1 for 4/3"  (Unit.isEq 1    (Number.floor (4/3)))
+              , Unit.it "returns 1 for 5/3"  (Unit.isEq 1    (Number.floor (5/3)))
+              , Unit.it "returns 8 for 42/5" (Unit.isEq 8    (Number.floor (42/5)))
+              , Unit.it "returns 8 for 43/5" (Unit.isEq 8    (Number.floor (43/5)))
+            ],
+            Unit.group "floor" [
+                Unit.it "returns 0 for 0"    (Unit.isEq 0    (Number.round 0))
+              , Unit.it "returns 1 for 1"    (Unit.isEq 1    (Number.round 1))
+              , Unit.it "returns -1 for -1"  (Unit.isEq (-1) (Number.round (-1)))
+              , Unit.it "returns 2 for 3/2"  (Unit.isEq 2    (Number.round (3/2)))
+              , Unit.it "returns 1 for 4/3"  (Unit.isEq 1    (Number.round (4/3)))
+              , Unit.it "returns 2 for 5/3"  (Unit.isEq 2    (Number.round (5/3)))
+              , Unit.it "returns 8 for 42/5" (Unit.isEq 8    (Number.round (42/5)))
+              , Unit.it "returns 9 for 43/5" (Unit.isEq 9    (Number.round (43/5)))
+            ],
+            Unit.group "sqrt" [
+                Unit.it "returns 0 for 0"    (Unit.isEq 0    (Number.sqrt 0))
+              , Unit.it "returns 1 for 1"    (Unit.isEq 1    (Number.sqrt 1))
+              , Unit.it "returns 2 for 4"    (Unit.isEq 2    (Number.sqrt 4))
+              , Unit.it "returns 3 for 9"    (Unit.isEq 3    (Number.sqrt 9))
+            ],
+            Unit.group "isInt" [
+                Unit.it "accepts 0"     (Unit.isTrue  (Number.isInt 0))
+              , Unit.it "accepts 1"     (Unit.isTrue  (Number.isInt 1))
+              , Unit.it "accepts -1"    (Unit.isTrue  (Number.isInt (-1)))
+              , Unit.it "accepts 42"    (Unit.isTrue  (Number.isInt 42))
+              , Unit.it "accepts 0/2"   (Unit.isTrue  (Number.isInt (0/2)))
+              , Unit.it "accepts 1/-1"  (Unit.isTrue  (Number.isInt (1/(-1))))
+              , Unit.it "accepts -1/1"  (Unit.isTrue  (Number.isInt ((-1)/1)))
+              , Unit.it "accepts 42/42" (Unit.isTrue  (Number.isInt (42/42)))
+              , Unit.it "rejects 3/2"   (Unit.isFalse (Number.isInt (3/2)))
+              , Unit.it "rejects 42/5"  (Unit.isFalse (Number.isInt (42/5)))
+            ],
+            Unit.group "toInt" [
+                Unit.it "leaves 0 as is"         (Unit.isEq 0               (Number.toInt 0))
+              , Unit.it "leaves 1 as is"         (Unit.isEq 1               (Number.toInt 1))
+              , Unit.it "leaves -1 as is"        (Unit.isEq (-1)            (Number.toInt (-1)))
+              , Unit.it "leaves 42 as is"        (Unit.isEq 42              (Number.toInt 42))
+              , Unit.it "omits fraction for 3/2" (Unit.isEq 1               (Number.toInt (3/2)))
+              , Unit.it "omits fraction for 5/2" (Unit.isEq 2               (Number.toInt (5/2)))
+            ],
+            Unit.group "toInt32" [
+                Unit.it "leaves 0 as is"         (Unit.isEq 0               (Number.toInt32 0))
+              , Unit.it "leaves 1 as is"         (Unit.isEq 1               (Number.toInt32 1))
+              , Unit.it "leaves -1 as is"        (Unit.isEq (-1)            (Number.toInt32 (-1)))
+              , Unit.it "leaves 42 as is"        (Unit.isEq 42              (Number.toInt32 42))
+              , Unit.it "omits fraction for 3/2" (Unit.isEq 1               (Number.toInt32 (3/2)))
+              , Unit.it "truncates  2^33-1"      (Unit.isEq Number.maxInt32 (Number.toInt32 (2*2*2*(1 << 30))))
+              , Unit.it "truncates -2^33-1"      (Unit.isEq Number.minInt32 (Number.toInt32 (-(2*2*2*(1 << 30) - 1))))
+            ],
+            Unit.group "toString" [
+                Unit.it "returns '0'        for 0"    (Unit.isEq "0"                  (Number.toString 0))
+              , Unit.it "returns '0'        for 0/2"  (Unit.isEq "0"                  (Number.toString (0/2)))
+              , Unit.it "returns '1'        for 1"    (Unit.isEq "1"                  (Number.toString 1))
+              , Unit.it "returns '1.5'      for 3/2"  (Unit.isEq "1.5"                (Number.toString (3/2)))
+              , Unit.it "returns '0.333...' for 1/3"  (Unit.isEq "0.3333333333333333" (Number.toString (1/3)))
+            ],
+            Unit.group "fromString" [
+                Unit.it "returns 0     for '0'"    (Unit.isEq 0            (Number.fromString "0"))
+              , Unit.it "returns 0     for '0.'"   (Unit.isEq 0            (Number.fromString "0."))
+              , Unit.it "returns 0     for '0.0'"  (Unit.isEq 0            (Number.fromString "0.00"))
+              , Unit.it "returns 42    for '42'"   (Unit.isEq 42           (Number.fromString "42"))
+              , Unit.it "returns 42/10 for '4.2'"  (Unit.isEq (42/10)      (Number.fromString "4.2"))
+            ]
+        ]
+in Unit.run authority tests end

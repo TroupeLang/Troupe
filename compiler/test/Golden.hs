@@ -135,12 +135,14 @@ goldenTests tc = do
     warningTestsForRuntime   <- findByExtension extensions "tests/rt/warn"
     timeoutTestsForRuntime   <- findByExtension extensions "tests/rt/timeout/blocking"
     divergingTestsForRuntime <- findByExtension extensions "tests/rt/timeout/diverging"
+    testsForLib              <- findByExtension extensions "tests/lib"
 
     return $ (testGroup ("Troupe golden tests (" ++ ppTestConfig tc ++ ")") $ map ($ tc)
                                 [ compilerTests negativeTestsForCompiler
                                 , runtimeTests $ concat [positiveTestsForRuntime, negativeTestsForRuntime, warningTestsForRuntime]
                                 , timeoutTests timeoutTestsForRuntime
-                                , divergingTests divergingTestsForRuntime ] )
+                                , divergingTests divergingTestsForRuntime
+                                , libTests testsForLib] )
 
 
 compilerTests testFiles tc =
@@ -194,5 +196,15 @@ divergingTests testFiles tc =
             (goldenFileName troupeFile tc)
             (runPositiveTimeout 8 troupeFile tc)
         | troupeFile <- testFiles 
+        ]
+
+libTests testFiles tc =
+    testGroup "Library tests"
+        [ goldenVsStringDiff
+            troupeFile
+            diff
+            (goldenFileName troupeFile tc)
+            (runPositive troupeFile tc)
+        | troupeFile <- testFiles
         ]
 

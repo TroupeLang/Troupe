@@ -1,0 +1,11 @@
+let fun inc' x = x+1
+
+    val x = {
+        inc' = inc',
+        de'c = fn x => x - 1
+    }
+
+    val _ = save (authority, "rwm", x)
+    val y = restore ("rwm")
+in (y.inc' 41) + (y.de'c 1)
+end

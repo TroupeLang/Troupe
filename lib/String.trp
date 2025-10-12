@@ -1,0 +1,86 @@
+(* TODO: Make strings merely lists of characters, similar to Haskell? Then a lot of things can be
+ *       moved out of the TCB? *)
+import Number
+import List
+
+let (** The maximum length of a string.
+     *
+     * ECMA-262: 6.1.4 The String Type
+     *
+     * The String type is the set of all ordered sequences of zero or more 16-bit unsigned integer
+     * values ("elements") up to a maximum length of 2^53-1 elements.
+     *
+     * Yet, in Troupe, we are (somewhat) bound to signed 32 bit integers only.
+     *)
+    val maxSize = Number.maxInt32
+
+    (** Returns the length of string `s`. *)
+    fun size s = strlen s
+
+    (** Returns the `i`th character of `s`, counting from zero. If `i` is out of bounds, then "" is
+     *  returned. *)
+    fun sub (s,i) = substring (s, i, i+1)
+
+    (** The character value at the given index. If `i` is out of bounds, then 0 (NULL) is
+     *  returned. *)
+    (* TODO (#59): Rename to `sub'` when `'` symbols are properly supported. *)
+    fun subCode (s,i) = charCodeAtWithDefault (s, i, 0)
+
+    (** Returns the substring of `s`. Indices beyond the end of string are silently truncated. *)
+    val substring = substring
+
+    (** The concatenation of all strings in `xs`. *)
+    fun concat xs = let fun f ("",x') = x'
+                          | f (x ,"") = x
+                          | f (x ,x') = x'^x
+                    in List.foldl f "" xs end
+
+    (** The concatenation of all strings in `xs` with string `s` as a separator. *)
+    fun concatWith _ []    = ""
+      | concatWith _ x::[] = x
+      | concatWith s x::xs = let fun f (x,x') = x' ^ s ^ x
+                             in List.foldl f x xs end
+
+    (** The string of size one containing the character `c`.
+     *
+     * Troupe does not support `Char` as a separate type. Rather, something is merely a char if
+     * if it a string of length 1. *)
+    fun str c = c
+
+    (* TODO: `strCode`/`str'` where 'c' is a charCode that is converted. *)
+
+    (** Returns the string containing the characters in the list `xs`. This is equivalent to
+     *  `concat (List.map str xs)`. *)
+    val implode = concat
+
+    (** Returns the list of characters in the string `s`. *)
+    fun explode s = let fun go 0 acc = acc
+                          | go i acc = go (i-1) ((sub (s,i-1))::acc)
+                    in go (size s) [] end
+
+    (** Applies `f` to each element of `f` from left to right, returning the resulting string. *)
+    fun map f s = implode(List.map f (explode s))
+
+    (* TODO: `mapCode`/`map'` where one maps over charCodes instead. *)
+
+    (** Returns the string generated from `s` by mapping each character in `s` by `f`.  *)
+    fun translate f s = concat(List.map f (explode s))
+
+    (* TODO: `translateCode`/`translate'` where one maps over charCodes instead. *)
+
+    (*--- Module ---*)
+    val String = {
+        maxSize    = maxSize,
+        size       = size,
+        sub        = sub,
+        subCode    = subCode,
+        substring  = substring,
+        concat     = concat,
+        concatWith = concatWith,
+        implode    = implode,
+        explode    = explode,
+        map        = map,
+        translate  = translate
+    }
+in [("String", String)]
+end

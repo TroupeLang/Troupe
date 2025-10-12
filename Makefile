@@ -1,7 +1,7 @@
-.PHONY: rt compiler p2p-tools
+.PHONY: rt compiler lib p2p-tools
 
 # TODO: Rename to 'build/*' ?
-all: npm rt compiler p2p-tools libs service
+all: npm rt compiler p2p-tools lib service
 
 npm:
 	npm install
@@ -17,33 +17,23 @@ compiler:
 p2p-tools:
 	cd p2p-tools; tsc
 
-libs:
-	$(COMPILER) ./lib/nsuref.trp -l
-	$(COMPILER) ./lib/string.trp -l
-	$(COMPILER) ./lib/printService.trp -l
-	$(COMPILER) ./lib/lists.trp -l
-	$(COMPILER) ./lib/NetHealth.trp -l
-	$(COMPILER) ./lib/declassifyutil.trp -l
-	$(COMPILER) ./lib/stdio.trp -l
-	$(COMPILER) ./lib/timeout.trp -l
-	$(COMPILER) ./lib/raft.trp -l
-	$(COMPILER) ./lib/raft_debug.trp -l
-	$(COMPILER) ./lib/bst.trp -l
-	$(COMPILER) ./lib/localregistry.trp -l
-	$(COMPILER) ./lib/hamt.trp -l
+lib:
+	cd lib; $(MAKE) build
 
 service:
 	mkdir -p ./trp-rt/out
 	$(COMPILER) ./trp-rt/service.trp -l
 
 # TODO: Rename to 'clean/*' ?
-clear: clear/stack clear/rt
-clear/compiler:
-	cd compiler; $(MAKE) clear
-clear/rt:
-	cd rt; $(MAKE) clear
-clear/p2p-tools:
-	cd p2p-tools; $(MAKE) clear
+clean: clean/compiler clean/rt clean/lib
+clean/compiler:
+	cd compiler; $(MAKE) clean
+clean/rt:
+	cd rt; $(MAKE) clean
+clean/p2p-tools:
+	cd p2p-tools; $(MAKE) clean
+clean/lib:
+	cd lib; $(MAKE) clean
 
 ci-test-golden-no-color:
 	mkdir -p out 
@@ -66,7 +56,7 @@ test/ci-relay: p2p-tools
 	@echo "Running CI relay test..."
 	./tests/ci-relay-test.sh
 
-dist: stack npm rt p2p-tools libs
+dist: stack npm rt p2p-tools lib
 	rm -rf ./build/
 	mkdir -p ./build/Troupe/rt/built
 	mkdir -p ./build/Troupe/p2p-tools/built

@@ -118,7 +118,7 @@ data FunDef = FunDef
 
 -- An IR program is just a collection of atoms declarations 
 -- and function definitions
-data IRProgram = IRProgram C.SyntacticVariants [FunDef] deriving (Generic)
+data IRProgram = IRProgram [FunDef] deriving (Generic)
 
 -----------------------------------------------------------
 -- Dependency calculation
@@ -133,10 +133,7 @@ instance ComputesDependencies IRInst where
    dependencies (MkFunClosures _ fdefs) = 
         mapM_ (\(_, hfn) -> tell ([hfn],[],[])) fdefs
    dependencies (Assign _ (Lib libname _)) = 
-        tell ([], [libname],[])
-   dependencies (Assign _ (Const (C.LSynVar a))) = 
-        tell ([], [], [a])
-                                       
+        tell ([], [libname],[])        
    dependencies _ = return ()
 
 instance ComputesDependencies IRBBTree where
@@ -182,7 +179,6 @@ instance Serialize IRBBTree
 -----------------------------------------------------------
 data SerializationUnit
   = FunSerialization FunDef
-  | SyntacticVariantsSerialization C.SyntacticVariants
   | ProgramSerialization IRProgram
   deriving (Generic)
 
@@ -191,12 +187,6 @@ instance Serialize SerializationUnit
 
 serializeFunDef :: FunDef -> BS.ByteString
 serializeFunDef fdef = Serialize.runPut ( Serialize.put (FunSerialization fdef) )
-
-serializeSyntacticVariants :: C.SyntacticVariants -> BS.ByteString
-serializeSyntacticVariants atoms = Serialize.runPut (Serialize.put (SyntacticVariantsSerialization atoms))
-
-deserializeSyntacticVariants :: BS.ByteString -> Either String C.SyntacticVariants
-deserializeSyntacticVariants bs = Serialize.runGet (Serialize.get) bs
 
 deserialize :: BS.ByteString -> Either String SerializationUnit
 deserialize bs =
@@ -355,7 +345,7 @@ instance WellFormedIRCheck IRExpr where
 -- they may need to be checked too...
 
 wfIRProg :: IRProgram -> Except String ()
-wfIRProg (IRProgram _ funs) = mapM_ wfFun funs
+wfIRProg (IRProgram funs) = mapM_ wfFun funs
 
 wfFun :: FunDef -> Except String () 
 wfFun (FunDef (HFN fn) (VN arg) consts bb) = 
@@ -381,7 +371,7 @@ checkFromBB initState bb =
 -- PRETTY PRINTING
 -----------------------------------------------------------
 
-ppProg (IRProgram atoms funs) =
+ppProg (IRProgram funs) =
   vcat $ (map ppFunDef funs)
 
 instance Show IRProgram where

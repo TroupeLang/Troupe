@@ -376,4 +376,4 @@ ktWalkFix kt =
        else ktWalkFix kt'
 
 rewrite :: Prog -> Prog
-rewrite (Prog atoms kterm) = Prog atoms (ktWalkFix kterm)
+rewrite (Prog kterm) = Prog (ktWalkFix kterm)

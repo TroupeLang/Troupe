@@ -86,7 +86,7 @@ data KTerm
 
       deriving (Eq, Ord)
 
-data Prog = Prog C.SyntacticVariants KTerm
+data Prog = Prog KTerm
   deriving (Eq, Show)
 
 --------------------------------------------------
@@ -103,13 +103,7 @@ instance ShowIndent Prog where
 --
 
 ppProg :: Prog -> PP.Doc
-ppProg (Prog (C.SyntacticVariants atoms) kterm) =
-  let ppSyntacticVariants =
-        if null atoms
-          then PP.empty
-          else (text "datatype SyntacticVariants = ") <+>
-               (hsep $ PP.punctuate (text " |") (map text atoms))
-  in ppSyntacticVariants $$ ppKTerm 0 kterm
+ppProg (Prog  kterm) = ppKTerm 0 kterm
 
 ppKTerm :: Precedence -> KTerm -> PP.Doc
 

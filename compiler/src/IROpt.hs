@@ -535,4 +535,4 @@ funopt (FunDef hfn argname consts bb) =
 
 
 iropt::IRProgram -> IRProgram
-iropt (IRProgram atoms fdefs) = IRProgram atoms (map funopt fdefs)
+iropt (IRProgram fdefs) = IRProgram (map funopt fdefs)

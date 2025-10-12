@@ -38,7 +38,6 @@ instance FreeNames KLambda where
 
 instance FreeNames SVal where
   freeVars (KAbs klam) = freeVars klam
-  freeVars (Lit (C.LSynVar nm)) = FreeVars (Set.singleton $ VN nm)
   freeVars _ = emptyFreeVars
 
 instance FreeNames ContDef where

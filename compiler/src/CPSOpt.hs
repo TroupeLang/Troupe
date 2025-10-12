@@ -545,5 +545,5 @@ iter kt =
                            iter kt' 
 
 rewrite :: Prog -> Prog
-rewrite (Prog atoms kterm) = 
- Prog atoms (iter kterm)
+rewrite (Prog kterm) = 
+ Prog (iter kterm)

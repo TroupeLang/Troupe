@@ -10,7 +10,7 @@ where
 import IR (SerializationUnit(..), HFN(..)
           , ppId, ppFunCall, ppArgs, Fields (..), Ident
           , serializeFunDef
-          , serializeSyntacticVariants )
+          )
 import qualified IR           
 import qualified Raw 
 import qualified Stack 
@@ -236,8 +236,8 @@ trFun fdef@(Raw.FunDef hfn consts bb ir) =
 
 
 rawProg2Stack :: Raw.RawProgram -> Stack.StackProgram
-rawProg2Stack (Raw.RawProgram atms fdefs)  =
-  Stack.StackProgram atms (map trFun fdefs)
+rawProg2Stack (Raw.RawProgram fdefs)  =
+  Stack.StackProgram (map trFun fdefs)
 
 
 rawFun2Stack = trFun 
@@ -245,5 +245,4 @@ rawFun2Stack = trFun
 raw2Stack :: Raw.RawUnit -> Stack.StackUnit 
 raw2Stack r = case r of 
   Raw.FunRawUnit f -> Stack.FunStackUnit (trFun f)
-  Raw.SyntacticVariantRawUnit c -> Stack.SyntacticVariantStackUnit c 
   Raw.ProgramRawUnit p -> Stack.ProgramStackUnit (rawProg2Stack p)

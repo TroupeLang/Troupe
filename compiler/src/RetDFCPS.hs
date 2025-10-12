@@ -32,8 +32,8 @@ transFunDecl (Core.FunDecl fname (Core.Nullary e)) = do
   return $ CPS.Fun (VN fname) (CPS.Nullary e')
 
 transProg :: Core.Prog -> CPS.Prog
-transProg (Core.Prog imports atoms t) =
-  Prog atoms $ evalState (trans t (\z -> return $ Halt z)) 1
+transProg (Core.Prog imports t) =
+  Prog $ evalState (trans t (\z -> return $ Halt z)) 1
 
 
 transFields k fields context = 

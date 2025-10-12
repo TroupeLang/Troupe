@@ -16,7 +16,7 @@ import Raw
 import IR (SerializationUnit(..), HFN(..)
           , ppId, ppFunCall, ppArgs, Fields (..), Ident
           , serializeFunDef
-          , serializeSyntacticVariants )
+          )
 import qualified IR           
 import qualified Stack 
 import qualified Data.Maybe as Maybe

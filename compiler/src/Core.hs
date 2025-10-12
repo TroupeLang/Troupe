@@ -8,7 +8,6 @@ module Core (   Lambda (..)
               , FunDecl (..)
               , Lit(..)
               , Prog(..)
-              , SyntacticVariants(..)
               , VarAccess(..)
               , lowerProg
               , renameProg
@@ -57,7 +56,6 @@ data Lit
     | LDCLabel DCLabelExp
     | LUnit
     | LBool Bool
-    | LSynVar SyntacticVariantConstructorName
   deriving (Show, Generic)
 instance Serialize Lit
 instance Eq Lit where 
@@ -66,7 +64,6 @@ instance Eq Lit where
   (LLabel l) == (LLabel l') = l == l' 
   LUnit == LUnit = True 
   (LBool x) == (LBool y) = x == y 
-  (LSynVar x) == (LSynVar y) = x == y
   (LDCLabel dc) == (LDCLabel dc') = dc == dc' 
   _ == _ = False
 instance Ord Lit where 
@@ -75,14 +72,11 @@ instance Ord Lit where
   (LLabel x)   <= (LLabel y)   = x <=y
   (LUnit)      <= (LUnit)      = True 
   (LBool x)    <= (LBool y)    = x <=y
-  (LSynVar x)  <= (LSynVar y)  = x <=y
   (LDCLabel x) <= (LDCLabel y) = x <= y
   (LInt _ _)   <= (LString _)  = True 
   (LString _)  <= (LLabel _)   = True 
   (LLabel _)   <= (LUnit)      = True 
   (LUnit)      <= (LBool _)    = True 
-  (LBool _)    <= (LSynVar _)  = True 
-  (LSynVar _)  <= (LDCLabel _) = True
   _            <= _            = False 
 
 instance GetPosInfo Lit where
@@ -120,12 +114,7 @@ data Term
   deriving (Eq)
 
 
-data SyntacticVariants = SyntacticVariants [SyntacticVariantName]
-  deriving (Eq, Show, Generic)
-instance Serialize SyntacticVariants
-
-
-data Prog = Prog Imports SyntacticVariants Term
+data Prog = Prog Imports Term
   deriving (Eq, Show)
 
 
@@ -151,14 +140,11 @@ The module also contains pretty printing for the Core representation.
 -- 1. Lowering 
 --------------------------------------------------
 
-lowerProg (D.Prog imports atms term) = Prog imports (trans atms) (lower term)
+lowerProg (D.Prog imports _ term) = Prog imports (lower term)
 
 
 
 -- the rest of the declarations in this part are not exported
-
-trans :: D.SyntacticVariants -> SyntacticVariants
-trans (D.SyntacticVariants atms) = SyntacticVariants [] -- (concat $ map snd atms)
 
 lowerLam (D.Lambda vs t) =
   case vs of
@@ -172,7 +158,8 @@ lowerLit (D.LLabel s) = LLabel s
 lowerLit (D.LDCLabel dc) = LDCLabel dc
 lowerLit D.LUnit = LUnit
 lowerLit (D.LBool b) = LBool b
-lowerLit (D.LSyntacticVariant n) = LSynVar n
+-- We need some error handling here
+-- lowerLit (D.LSyntacticVariant n) = LSynVar n
 
 lower :: D.Term -> Core.Term
 lower (D.Lit l) = Lit (lowerLit l)
@@ -221,13 +208,12 @@ lower (D.Un op e) = Un op (lower e)
 -- This is the only function that is exported here
 
 renameProg :: Prog -> Prog
-renameProg (Prog imports (SyntacticVariants atms) term) =
-  let alist = map (\ a -> (a, a)) atms
-      initEnv    = Map.fromList alist
+renameProg (Prog imports term) =
+  let initEnv    = Map.empty
       initReader = mapFromImports imports
       initState  = 0
       (term', _) = evalRWS (rename term initEnv) initReader initState
-  in Prog imports (SyntacticVariants atms) term'
+  in Prog imports term'
 
 -- The rest of the declarations here are not exported
 
@@ -413,15 +399,9 @@ instance ShowIndent Prog where
 
 
 ppProg :: Prog -> PP.Doc
-ppProg (Prog (Imports imports) (SyntacticVariants atoms) term) =
-  let ppSyntacticVariants =
-        if null atoms
-          then PP.empty
-          else (text "datatype Atoms = ") <+>
-               (hsep $ PP.punctuate (text " |") (map text atoms))
-
-      ppImports = if null imports then PP.empty else text "<<imports>>\n"
-  in ppImports $$ ppSyntacticVariants $$ ppTerm 0 term
+ppProg (Prog (Imports imports) term) =
+  let ppImports = if null imports then PP.empty else text "<<imports>>\n"
+  in ppImports $$ ppTerm 0 term
 
 
 ppTerm :: Precedence -> Term -> PP.Doc
@@ -559,7 +539,6 @@ ppLit (LLabel s)    = PP.braces (text s)
 ppLit LUnit         = text "()"
 ppLit (LBool True)  = text "true"
 ppLit (LBool False) = text "false"
-ppLit (LSynVar a)   = text a
 ppLit (LDCLabel dc) = ppDCLabelExpLit dc
 
 

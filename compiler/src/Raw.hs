@@ -196,7 +196,7 @@ data FunDef = FunDef
 
 -- An IR program is just a collection of atoms declarations 
 -- and function definitions
-data RawProgram = RawProgram C.SyntacticVariants [FunDef] 
+data RawProgram = RawProgram [FunDef] 
 
 
 -----------------------------------------------------------
@@ -204,7 +204,6 @@ data RawProgram = RawProgram C.SyntacticVariants [FunDef]
 -----------------------------------------------------------
 data RawUnit 
   = FunRawUnit FunDef 
-  | SyntacticVariantRawUnit C.SyntacticVariants 
   | ProgramRawUnit RawProgram 
 
 
@@ -259,7 +258,7 @@ instructionType i = case i of
 -- PRETTY PRINTING
 -----------------------------------------------------------
 
-ppProg (RawProgram atoms funs) =
+ppProg (RawProgram funs) =
   vcat $ (map ppFunDef funs)
 
 instance Show RawProgram where

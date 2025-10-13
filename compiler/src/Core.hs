@@ -158,8 +158,7 @@ lowerLit (D.LLabel s) = LLabel s
 lowerLit (D.LDCLabel dc) = LDCLabel dc
 lowerLit D.LUnit = LUnit
 lowerLit (D.LBool b) = LBool b
--- We need some error handling here
--- lowerLit (D.LSyntacticVariant n) = LSynVar n
+lowerLit (D.LSyntacticVariant n) = error $ "Unexpected syntactic variant: \"" ++ n ++ "\""
 
 lower :: D.Term -> Core.Term
 lower (D.Lit l) = Lit (lowerLit l)

@@ -188,7 +188,8 @@ compilePattern succ (v, S.RecordPattern fieldPatterns mode) = do
               
           compileField succ (f, Nothing) = do 
               ifHasField f $ compilePattern succ (T.ProjField v f, S.VarPattern f)
-  
+compilePattern _ (_, (S.SyntacticVariantPattern nm _)) =
+  lift $ throwError $ "Unexpected syntactic variant pattern: \"" ++ nm ++ "\""
 
 
 -- | Tranform a declaration, compiling patterns into terms.

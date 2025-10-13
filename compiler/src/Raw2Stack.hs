@@ -46,6 +46,7 @@ import           IR ( Identifier(..)
                     )
 
 import RawDefUse
+import qualified GHC.Stack.Types as GHC.Stack
 
 data TEnv = TEnv { defsUses :: DefUse, offsets :: OffsetMap, localCallDepth :: Int, __consts :: Raw.ConstMap }
 type BlockNumber = Int 
@@ -54,7 +55,6 @@ type Tr = RWS TEnv () BlockNumber
 
 getBlockNumber :: Tr BlockNumber 
 getBlockNumber = get 
-
 
 setBlockNumber :: BlockNumber -> Tr ()
 setBlockNumber = put

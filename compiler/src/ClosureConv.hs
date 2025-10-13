@@ -20,7 +20,7 @@ import Control.Monad.Reader
 import Data.List
 import CompileMode
 
-import           Control.Monad.Except
+import Control.Monad.Except
 import IR as CCIR
 
 import Control.Monad.Identity

@@ -5,6 +5,7 @@ import Control.Monad
 import Data.List (any, find)
 import Direct
 
+-- | 'visitProg' takes a 'Prog' and converts syntactic variants to a tuple representation.
 visitProg :: Prog -> Prog
 visitProg (Prog imports (SyntacticVariants datatypes) tm) =
   let tcs = concat $ map snd datatypes 
@@ -15,8 +16,8 @@ visitTerm svs (Lit lit) = Lit lit
 visitTerm svs (Var nm) =
   case find ((==) nm . fst) svs of
     Nothing -> Var nm
-    Just (_t, []) -> Tuple [Lit (LString nm)] True -- Convert atom into a tuple
-    Just (_t, _) ->
+    Just (_tag, []) -> Tuple [Lit (LString nm)] True -- Convert atom into a tuple
+    Just (_tag, _)  ->
       let var = "v"
       in Abs (Lambda [VarPattern var] (Tuple [ Lit (LString nm)
                                            , Var var
@@ -87,7 +88,6 @@ visitPattern svs (RecordPattern fields mode) = RecordPattern (map visitField fie
             visitField (f, Just p) = (f, Just (visitPattern svs p))
 visitPattern svs (SyntacticVariantPattern nm pat) =
   TuplePattern [ ValPattern (LString nm), visitPattern svs pat ]
-                 
 
 visitLambda :: [SyntacticVariantConstructor] -> Lambda -> Lambda
 visitLambda svs (Lambda pats term) =

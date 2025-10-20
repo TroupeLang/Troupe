@@ -146,26 +146,24 @@ let (*--- Constants ---*)
 
     (* TODO: Lift list functions `mapi`, `find` and `filter`? *)
 
+    (*--- Module ---*)
     val StencilVector = {
-        (* Constants *)
-        maskBits     = maskBits,
-        maskMax      = maskMax,
-        (* Functions *)
-        empty        = empty,
-        singleton    = singleton,
-        get          = get,
-        getOrDefault = getOrDefault,
-        set          = set,
-        unset        = unset,
-        mem          = mem,
-        valid        = valid,
-        null         = null,
-        mask         = mask,
-        length       = length,
-        map          = map,
-        fold         = fold
+        maskBits,
+        maskMax,
+        empty,
+        singleton,
+        get,
+        getOrDefault,
+        set,
+        unset,
+        mem,
+        valid,
+        null,
+        mask,
+        length,
+        map,
+        fold
     }
-in  (* Export public functions *)
-    [ ("StencilVector", StencilVector)
-    ]
+
+in [ ("StencilVector", StencilVector) ]
 end

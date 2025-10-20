@@ -68,15 +68,13 @@ let
 
     (*--- Module ---*)
     val Hash = {
-        hashString        = hashString,
-        hashMultiplyShift = hashMultiplyShift,
-        hashInt           = hashInt,
-        hashNumber        = hashNumber,
-        hashList          = hashList,
-        hash              = hash
+        hashString,
+        hashMultiplyShift,
+        hashInt,
+        hashNumber,
+        hashList,
+        hash
     }
 
-in [ ("Hash", Hash)
-   , ("hash", hash)
-   ]
+in [ ("Hash", Hash), ("hash", hash) ]
 end

@@ -64,22 +64,19 @@ let (* -- ListPair Generation -- *)
 
     (*--- Module ---*)
     val ListPair = {
-        zip       = zip,
-        unzip     = unzip,
-
-        null      = null,
-        length    = length,
-
-        reverse   = reverse,
-        append    = append,
-        revAppend = revAppend,
-
-        findOpt   = findOpt,
-        find      = find,
-        mem       = mem,
-
-        map       = map,
-        foldl     = foldl
+        zip,
+        unzip,
+        null,
+        length,
+        reverse,
+        append,
+        revAppend,
+        findOpt,
+        find,
+        mem,
+        map,
+        foldl
     }
 
-in [ ("ListPair", ListPair) ] end
+in [ ("ListPair", ListPair) ]
+end

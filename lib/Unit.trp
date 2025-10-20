@@ -112,13 +112,13 @@ let
 
     (*--- Module ---*)
     val Unit = {
-        group   = group,
-        it      = it,
-        isEq    = isEq,
-        isTrue  = isTrue,
-        isFalse = isFalse,
-        isNeq   = isNeq,
-        run     = run
+        group,
+        it,
+        isEq,
+        isTrue,
+        isFalse,
+        isNeq,
+        run
     }
 
 in [ ("Unit", Unit) ]

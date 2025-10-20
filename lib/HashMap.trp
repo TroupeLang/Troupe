@@ -202,24 +202,20 @@ let (* NOTE: The map is implemented as a Hash Array Mapped Trie (HAMT), i.e. a p
 
     (*--- Module ---*)
     val HashMap = {
-        (* Construction *)
-        empty     = empty,
-        singleton = singleton,
-        insert    = insert,
-        remove    = remove,
-        (* Queries *)
-        null      = null,
-        size      = size,
-        findOpt   = findOpt,
-        find      = find,
-        mem       = mem,
-        (* Manipulation *)
-        fold      = fold,
-        (* List Conversion*)
-        keys      = keys,
-        values    = values,
-        toList    = toList,
-        fromList  = fromList
+        empty,
+        singleton,
+        insert,
+        remove,
+        null,
+        size,
+        findOpt,
+        find,
+        mem,
+        fold,
+        keys,
+        values,
+        toList,
+        fromList
     }
 
 in [ ("HashMap", HashMap) ]

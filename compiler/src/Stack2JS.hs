@@ -452,7 +452,7 @@ ir2js InvalidateSparseBit = return $
 {-- TERMINATORS --}
 
 
-tr2js (Call bb bb2) = do
+tr2js (StackExpand bb bb2) = do
     _frameSize <- gets frameSize
     _sparseSlot <- gets sparseSlot
     _consts <- gets consts

@@ -233,7 +233,7 @@ instance Trav RawTerminator where
          trav bb2
        LibExport v -> use v 
        Error r _ -> use r 
-       Call bb1 bb2 -> do
+       StackExpand bb1 bb2 -> do
          trav bb1
          modify (\s -> 
                      let (c, _) = locInfo s 

@@ -78,7 +78,7 @@ instance Substitutable RawTerminator where
       If r bb1 bb2 -> 
         If (apply subst r) (apply subst bb1) (apply subst bb2)
       Error r p -> Error (apply subst r) p 
-      Call bb1 bb2 -> Call (apply subst bb1) (apply subst bb2) 
+      StackExpand bb1 bb2 -> StackExpand (apply subst bb1) (apply subst bb2) 
       _ -> tr
 
 instance Substitutable RawBBTree where
@@ -420,7 +420,7 @@ instance PEval RawTerminator where
                 }
         bb2' <- peval bb2         
         return $ If x bb1' bb2'
-      Call bb1 bb2 -> do
+      StackExpand bb1 bb2 -> do
         s <- get
         bb1' <- peval bb1
         put $ s { stateMon = Map.empty
@@ -428,7 +428,7 @@ instance PEval RawTerminator where
                 , stateJoins = stateJoins s 
                 } -- reset the monitor state
         bb2' <- peval bb2
-        return $ Call bb1' bb2'
+        return $ StackExpand bb1' bb2'
       Ret -> do 
         return tr' 
       TailCall x -> do 
@@ -470,14 +470,15 @@ filterInstBwd ls =
   f (Nothing, Nothing) (reverse ls) []
 
 
--- | This optimization for 'Call' moves instructions from the continuation to before the 'Call'.
--- This can result in a 'Call' which just contains a 'Ret', which is then optimized away.
--- The optimization compensates for redundant assignments introduced by the translation.
-hoistCalls :: RawBBTree -> RawBBTree
-hoistCalls bb@(BB insts tr) = 
+-- | This optimization for 'StackExpand' moves instructions from the continuation to before the
+-- 'StackExpand'. This can result in a 'StackExpand' which just contains a 'Ret', which is then
+-- optimized away. The optimization compensates for redundant assignments introduced by the
+-- translation.
+hoistStackExpand :: RawBBTree -> RawBBTree
+hoistStackExpand bb@(BB insts tr) = 
   case tr of 
     -- Here we check which instructions from ii_1 can be moved to before the call
-    Call (BB ii_1 tr_1) bb2 ->
+    StackExpand (BB ii_1 tr_1) bb2 ->
       let isFrameSpecific i = 
             case i of 
               SetBranchFlag -> True
@@ -487,7 +488,7 @@ hoistCalls bb@(BB insts tr) =
           -- jx_1: non-frame-specific instructions, are moved to before the call
           -- jx_2: frame-specific instructions, stay under the call's instructions
           (jx_1, jx_2)  = Data.List.break isFrameSpecific ii_1  
-      in BB (insts ++ jx_1) (Call (BB jx_2 tr_1) bb2) 
+      in BB (insts ++ jx_1) (StackExpand (BB jx_2 tr_1) bb2) 
     -- If returning, the current frame will be removed, and thus all PC set instructions
     -- are redundant and can be removed.
     Ret -> 
@@ -537,7 +538,7 @@ instance PEval RawBBTree where
                 If x (BB (set_pc_bl ++ i_then) tr_then) 
                      (BB (set_pc_bl ++ i_else) tr_else)
  
-            _ -> hoistCalls $ BB (insts_no_ret ++ set_pc_bl) tr''
+            _ -> hoistStackExpand $ BB (insts_no_ret ++ set_pc_bl) tr''
     let insts_sorted = instOrder insts_ 
     return $ BB insts_sorted bb_
   

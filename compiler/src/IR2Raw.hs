@@ -699,7 +699,7 @@ tr2raw = \case
     return $ If r bb1' bb2'
 
   -- Revision 2023-08: Equivalent, only way of modifying bb2 changed.
-  IR.Call v irBB1 irBB2 -> do
+  IR.StackExpand v irBB1 irBB2 -> do
     bb1 <- tree2raw irBB1
     BB insts2 tr2 <- tree2raw irBB2
     -- Prepend before insts2 instructions to store in variable v the result
@@ -711,7 +711,7 @@ tr2raw = \case
                                   -- generally using Sequence (faster concatenation) for instructions
                                   -- might improve performance
     let bb2 = BB insts2' tr2
-    return $ Call bb1 bb2
+    return $ StackExpand bb1 bb2
 
   -- Note: This is translated into branching and Error for throwing RT exception
   -- Revision 2023-08: More fine-grained raising of blocking label, see below.

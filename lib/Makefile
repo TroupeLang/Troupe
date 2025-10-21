@@ -13,7 +13,6 @@ build:
 	$(COMPILER) ./HashMap.trp -l
 	$(COMPILER) ./HashSet.trp -l
   # Old stuff, here be dragons...
-	$(COMPILER) ./nsuref.trp -l
 	$(COMPILER) ./printService.trp -l
 	$(COMPILER) ./timeout.trp -l
 	$(COMPILER) ./declassifyutil.trp -l

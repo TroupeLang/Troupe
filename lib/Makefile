@@ -5,6 +5,7 @@ build:
   # Standard Library
 	$(COMPILER) ./Number.trp -l
 	$(COMPILER) ./List.trp -l
+	$(COMPILER) ./ThreadUtil.trp -l
 	$(COMPILER) ./ListPair.trp -l
 	$(COMPILER) ./DeclassifyUtil.trp -l
 	$(COMPILER) ./String.trp -l
@@ -13,8 +14,6 @@ build:
 	$(COMPILER) ./StencilVector.trp -l
 	$(COMPILER) ./HashMap.trp -l
 	$(COMPILER) ./HashSet.trp -l
-  # Old stuff, here be dragons...
-	$(COMPILER) ./timeout.trp -l
 
 clean:
 	rm -rf out

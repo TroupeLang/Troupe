@@ -15,6 +15,7 @@ reviewed rigorously rather than depend on the monitor.
 - `Number`         : Operations for numbers, i.e. integer and floats.
 - `StencilVector`  : Memory-efficient implementation of small (sparse) arrays.
 - `String`         : Operations for strings
+- `ThreadUtil`     : Additional functions for thread management.
 - `Unit`           : Unit testing.
 
 ## How to add a new file
@@ -33,6 +34,11 @@ target of the *makefile*.
   `ListPair.findOpt` can be used in the same file.
 - Each function that is exported has to be documented (`(** <text> *)`). In the long run, we will
   auto-generate documentation for the Standard Library.
+
+### Other notes
+
+- The `ThreadUtil` module was initially named `Thread`. But, this suggests incorrectly, that
+  threading is implemented here rather than being a language primitive.
 
 ## TODO
 

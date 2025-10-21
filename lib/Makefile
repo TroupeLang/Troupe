@@ -18,7 +18,6 @@ build:
 	$(COMPILER) ./timeout.trp -l
 	$(COMPILER) ./declassifyutil.trp -l
 	$(COMPILER) ./stdio.trp -l
-	$(COMPILER) ./bst.trp -l
 
 clean:
 	rm -rf out

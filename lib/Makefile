@@ -20,7 +20,6 @@ build:
 	$(COMPILER) ./declassifyutil.trp -l
 	$(COMPILER) ./stdio.trp -l
 	$(COMPILER) ./bst.trp -l
-	$(COMPILER) ./localregistry.trp -l
 
 clean:
 	rm -rf out

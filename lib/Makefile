@@ -16,7 +16,6 @@ build:
 	$(COMPILER) ./nsuref.trp -l
 	$(COMPILER) ./printService.trp -l
 	$(COMPILER) ./timeout.trp -l
-	$(COMPILER) ./NetHealth.trp -l
 	$(COMPILER) ./declassifyutil.trp -l
 	$(COMPILER) ./stdio.trp -l
 	$(COMPILER) ./bst.trp -l

@@ -6,15 +6,16 @@ reviewed rigorously rather than depend on the monitor.
 
 ## Modules
 
-- `Hash`          : Hash functions for values of all types.
-- `HashMap`       : Map from keys to values via their hash.
-- `HashSet`       : Set of elements via their hash.
-- `List`          : Operations for lists, i.e. `[]` and `x::xs`.
-- `ListPair`      : Operations for list of pairs, i.e. `(x,y)::xs`.
-- `Number`        : Operations for numbers, i.e. integer and floats.
-- `StencilVector` : Memory-efficient implementation of small (sparse) arrays.
-- `String`        : Operations for strings
-- `Unit`          : Unit testing.
+- `DeclassifyUtil` : Helper functions for declassification.
+- `Hash`           : Hash functions for values of all types.
+- `HashMap`        : Map from keys to values via their hash.
+- `HashSet`        : Set of elements via their hash.
+- `List`           : Operations for lists, i.e. `[]` and `x::xs`.
+- `ListPair`       : Operations for list of pairs, i.e. `(x,y)::xs`.
+- `Number`         : Operations for numbers, i.e. integer and floats.
+- `StencilVector`  : Memory-efficient implementation of small (sparse) arrays.
+- `String`         : Operations for strings
+- `Unit`           : Unit testing.
 
 ## How to add a new file
 

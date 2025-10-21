@@ -13,10 +13,8 @@ build:
 	$(COMPILER) ./HashMap.trp -l
 	$(COMPILER) ./HashSet.trp -l
   # Old stuff, here be dragons...
-	$(COMPILER) ./printService.trp -l
 	$(COMPILER) ./timeout.trp -l
 	$(COMPILER) ./declassifyutil.trp -l
-	$(COMPILER) ./stdio.trp -l
 
 clean:
 	rm -rf out

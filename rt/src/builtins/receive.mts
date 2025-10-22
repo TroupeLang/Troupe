@@ -131,19 +131,6 @@ export function BuiltinReceive<TBase extends Constructor<UserRuntimeZero>>(Base:
           return this.runtime.__mbox.consume ( consume_l, i.val, lowb.val, highb.val )
         })
 
-        _blockThread = mkBase ((arg) => {
-          assertIsUnit(arg)
-          this.runtime.__sched.blockThread(this.runtime.__sched.__currentThread);
-          return null;
-        })
-
-        _pc = mkBase ((arg) => {
-          assertIsUnit (arg)
-          return this.runtime.ret (
-            new LVal (this.runtime.$t.pc, this.runtime.$t.pc, BOT))
-        })
- 
-
         guard = mkBase (arg => {
           assertIsNTuple(arg, 3)
           let f = arg.val[0]

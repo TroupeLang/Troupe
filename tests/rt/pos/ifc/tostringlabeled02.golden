@@ -1,4 +1,0 @@
-2019-03-07T19:02:08.670Z [RTM] [32minfo[39m: Skipping network creation. Observe that all external IO operations will yield a runtime error.
-The level of the string is (42@{alice}%{}, 11@{bob}%{})@{}%{}
-Observe how the PC-level and blocking-level are now tainted because of the string concatenation (and the usage of printString) above
->>> Main thread finished with value: ()@{}%{}

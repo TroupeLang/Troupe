@@ -1,0 +1,1 @@
+fwrite (stderr authority, "42\n")

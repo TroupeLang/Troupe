@@ -1,0 +1,4 @@
+2025-10-23T17:09:51.371Z [RTM] [32minfo[39m: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+Hello, Alice @ stdout!
+Runtime error in thread 7a514c9e-2862-4175-b00d-d56af61e60a0@{}%{}
+>> value "PC: " is not a function

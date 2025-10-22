@@ -13,6 +13,7 @@ reviewed rigorously rather than depend on the monitor.
 - `List`           : Operations for lists, i.e. `[]` and `x::xs`.
 - `ListPair`       : Operations for list of pairs, i.e. `(x,y)::xs`.
 - `Number`         : Operations for numbers, i.e. integer and floats.
+- `StdIO`          : Standard input and output.
 - `StencilVector`  : Memory-efficient implementation of small (sparse) arrays.
 - `String`         : Operations for strings
 - `ThreadUtil`     : Additional functions for thread management.

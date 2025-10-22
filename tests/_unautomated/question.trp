@@ -1,3 +1,0 @@
-let val x = question "Introduce yourself" 
-in print ( "Welcome" ^ x )
-end 

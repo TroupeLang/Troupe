@@ -13,5 +13,5 @@ let val x = false raisedTo `<alice & bob;#root-integrity>`
     val _ = if y then receive [] else ()  
     val _ = debugpc () 
     val _ = adv y 
-in printWithLabels y 
+in printL y 
 end

@@ -1,4 +1,4 @@
-let val (a,b) = let val _ = printWithLabels 2121 in (2,21) end 
-in printWithLabels 222
+let val (a,b) = let val _ = printL 2121 in (2,21) end 
+in printL 222
 end
 

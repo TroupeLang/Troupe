@@ -7,7 +7,7 @@ let
           val y = 42
           val _ = send (bobId, (x, fn z => x + z, self()))
           val y = recv ()
-      in printWithLabels y
+      in printL y
       end
 
     fun bob () =

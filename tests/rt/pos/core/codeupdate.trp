@@ -5,7 +5,7 @@ let fun v_one n =
                  
     val service = spawn (fn () => v_one 0)
     val _ = send (service, ("REQUEST", self()))
-    val _ = receive [ hn x => printWithLabels x]
+    val _ = receive [ hn x => printL x]
                     
     fun v_two n =
         receive [ hn ("REQUEST", senderid) => let val _ = send (senderid, n) in v_two (n+1) end
@@ -19,7 +19,7 @@ let fun v_one n =
 
     val _ = send (service, ("UPDATE", v_two))
     val _ = send (service, ("COMPUTE", self(), fn x => x * x, 42))
-    val _ = receive [ hn x => printWithLabels x]
+    val _ = receive [ hn x => printL x]
     val _ = send (service, "STOP")
 in ()
 end

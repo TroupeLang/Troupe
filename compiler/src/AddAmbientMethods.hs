@@ -42,8 +42,8 @@ printDecl = FunDecl "print"
       (App (Var "printString") [App (Var "toString") [Var "x"]])
     ] NoPos
 
-printWithLabelsDecl :: FunDecl
-printWithLabelsDecl = FunDecl "printWithLabels"
+printLDecl :: FunDecl
+printLDecl = FunDecl "printL"
     [Lambda [ VarPattern "x" ] $
       (App (Var "printString") [App (Var "toStringL") [Var "x"]])
     ] NoPos
@@ -57,5 +57,5 @@ inputLineDecl = FunDecl "inputLine"
 
 addAmbientMethods :: Prog -> Prog
 addAmbientMethods (Prog imports atoms t) =
-    let t' = Let [FunDecs [printStringDecl,printDecl,printWithLabelsDecl,inputLineDecl]] t
+    let t' = Let [FunDecs [printStringDecl,printDecl,printLDecl,inputLineDecl]] t
     in Prog imports atoms t'

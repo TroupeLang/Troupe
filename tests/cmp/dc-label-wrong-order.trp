@@ -1,3 +1,3 @@
 let val x = 60 raisedTo `<#root-integrity; #null-confidentiality>`
-in printWithLabels x
+in printL x
 end

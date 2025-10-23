@@ -8,7 +8,7 @@ let fun alice () =
                  val s = send (sender, result)
              in alice()
              end
-        , hn ( Shutdown) => printWithLabels 111111
+        , hn ( Shutdown) => printL 111111
         ]
 
 

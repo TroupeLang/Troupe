@@ -2,7 +2,7 @@ let fun pingpong () =
       let val h = hn x => x
           val (x, sender) = receive [h]
           val _ = send (sender, (x + 1, self()))
-          val _ = printWithLabels x
+          val _ = printL x
       in pingpong()
       end
 

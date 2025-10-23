@@ -1,7 +1,7 @@
 import List
 
 let fun mapspawn f = 
-        List.map (fn x => spawn ( fn () => printWithLabels (f x) ))
+        List.map (fn x => spawn ( fn () => printL (f x) ))
 
 
     val ls = [ 1 raisedTo `{alice}`, 
@@ -9,7 +9,7 @@ let fun mapspawn f =
                3 raisedTo `{charlie}` ]   
 
     val _ = mapspawn (fn x => x + 1) ls
-    val _ = printWithLabels ls
+    val _ = printL ls
 
 in  adv ()
 end

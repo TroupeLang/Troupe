@@ -1,5 +1,5 @@
 let fun foo () =
-      receive [hn x => printWithLabels ("foo received", x)]
+      receive [hn x => printL ("foo received", x)]
     val p = spawn foo
 in send (p, "hello")
 end

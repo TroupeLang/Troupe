@@ -1,9 +1,12 @@
-(* TODO: Make strings merely lists of characters, similar to Haskell? Then a lot of things can be
- *       moved out of the TCB? *)
 import Number
 import List
 
-let (** The maximum length of a string.
+(* TODO: Make strings merely lists of characters, similar to Haskell and SML? Then a lot of things
+ *       can be moved out of the TCB. *)
+
+let val __substring = substring
+
+    (** The maximum length of a string.
      *
      * ECMA-262: 6.1.4 The String Type
      *
@@ -19,15 +22,15 @@ let (** The maximum length of a string.
 
     (** Returns the `i`th character of `s`, counting from zero. If `i` is out of bounds, then "" is
      *  returned. *)
-    fun sub (s,i) = substring (s, i, i+1)
+    fun sub s i = __substring (s, i, i+1)
 
     (** The character value at the given index. If `i` is out of bounds, then 0 (NULL) is
      *  returned. *)
     (* TODO (#59): Rename to `sub'` when `'` symbols are properly supported. *)
-    fun subCode (s,i) = charCodeAtWithDefault (s, i, 0)
+    fun subCode s i = charCodeAtWithDefault (s, i, 0)
 
     (** Returns the substring of `s`. Indices beyond the end of string are silently truncated. *)
-    val substring = substring
+    fun substring s i j = __substring (s, i, j)
 
     (** The concatenation of all strings in `xs`. *)
     fun concat xs = let fun f ("",x') = x'
@@ -55,7 +58,7 @@ let (** The maximum length of a string.
 
     (** Returns the list of characters in the string `s`. *)
     fun explode s = let fun go 0 acc = acc
-                          | go i acc = go (i-1) ((sub (s,i-1))::acc)
+                          | go i acc = go (i-1) ((sub s (i-1))::acc)
                     in go (size s) [] end
 
     (** Applies `f` to each element of `f` from left to right, returning the resulting string. *)

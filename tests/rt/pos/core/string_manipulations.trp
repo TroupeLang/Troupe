@@ -1,9 +1,7 @@
-import String
-
-let val x = String.sub ("hello", 0)
+let val x = substring ("hello", 0, 1)
     val y = "1" ^ "2"
     val s = ("Hello" raisedTo `{alice}`)  ^ ", " ^ ("World" raisedTo `{bob}`)
     val i = 3 raisedTo `{charlie}`
     val j = 5 raisedTo `{dorothy}`
-in (x,y,s, substring (s, i, j))
-end 
+in (x, y, s, substring (s, i, j))
+end

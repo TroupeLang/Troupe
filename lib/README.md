@@ -27,9 +27,9 @@ target of the *makefile*.
 ## Design Principles
 
 - File names are written in `CamelCase`. This makes them conform to the Standard ML Basis Library.
-- It is more important to match the function names and signatures in the Standard ML library than to
-  improve on them. For example, `String.sub` would make more sense with the type `[Char] -> Int ->
-  Char` but to match the SML library, we will stick with `[Char] * Int -> Char`.
+- While we will try to match function names in the Standard ML library, we may take the liberty to
+  improve on the function signatures. For example, the function `String.sub` uses the same name as
+  in SML but uses the signature `[Char] -> Int -> Char` rather than `[Char] * Int -> Char`.
 - Each module exports a single *record* with the same name as the file. This (1) makes it closer to
   the SML module system and (2) allows for name resolution, e.g. `HashMap.findOpt` and
   `ListPair.findOpt` can be used in the same file.

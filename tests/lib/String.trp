@@ -11,32 +11,32 @@ let val tests = Unit.group "String" [
             ],
             let val s = "Hello"
             in Unit.group "sub" [
-                    Unit.it "is 'H' for 0" (Unit.isEq "H" (String.sub (s, 0)))
-                  , Unit.it "is 'e' for 1" (Unit.isEq "e" (String.sub (s, 1)))
-                  , Unit.it "is 'l' for 2" (Unit.isEq "l" (String.sub (s, 2)))
-                  , Unit.it "is 'l' for 3" (Unit.isEq "l" (String.sub (s, 3)))
-                  , Unit.it "is 'o' for 4" (Unit.isEq "o" (String.sub (s, 4)))
-                  , Unit.it "is ''  for 5" (Unit.isEq ""  (String.sub (s, 5)))
-                  , Unit.it "is ''  for 6" (Unit.isEq ""  (String.sub (s, 6)))
+                    Unit.it "is 'H' for 0" (Unit.isEq "H" (String.sub s 0))
+                  , Unit.it "is 'e' for 1" (Unit.isEq "e" (String.sub s 1))
+                  , Unit.it "is 'l' for 2" (Unit.isEq "l" (String.sub s 2))
+                  , Unit.it "is 'l' for 3" (Unit.isEq "l" (String.sub s 3))
+                  , Unit.it "is 'o' for 4" (Unit.isEq "o" (String.sub s 4))
+                  , Unit.it "is ''  for 5" (Unit.isEq ""  (String.sub s 5))
+                  , Unit.it "is ''  for 6" (Unit.isEq ""  (String.sub s 6))
                 ]
             end,
             let val s = "World!"
             in Unit.group "subCode" [
-                    Unit.it "is 87 for 0"  (Unit.isEq 87  (String.subCode (s,0)))
-                  , Unit.it "is 111 for 1" (Unit.isEq 111 (String.subCode (s,1)))
-                  , Unit.it "is 114 for 2" (Unit.isEq 114 (String.subCode (s,2)))
-                  , Unit.it "is 108 for 3" (Unit.isEq 108 (String.subCode (s,3)))
-                  , Unit.it "is 100 for 4" (Unit.isEq 100 (String.subCode (s,4)))
-                  , Unit.it "is 33  for 5" (Unit.isEq 33  (String.subCode (s,5)))
-                  , Unit.it "is 0   for 6" (Unit.isEq 0   (String.subCode (s,6)))
+                    Unit.it "is 87 for 0"  (Unit.isEq 87  (String.subCode s 0))
+                  , Unit.it "is 111 for 1" (Unit.isEq 111 (String.subCode s 1))
+                  , Unit.it "is 114 for 2" (Unit.isEq 114 (String.subCode s 2))
+                  , Unit.it "is 108 for 3" (Unit.isEq 108 (String.subCode s 3))
+                  , Unit.it "is 100 for 4" (Unit.isEq 100 (String.subCode s 4))
+                  , Unit.it "is 33  for 5" (Unit.isEq 33  (String.subCode s 5))
+                  , Unit.it "is 0   for 6" (Unit.isEq 0   (String.subCode s 6))
                 ]
             end,
             let val s = "Hello Troupe!"
             in Unit.group "substring" [
-                    Unit.it "is 'Hello' for 0 5"    (Unit.isEq "Hello" (String.substring (s, 0, 5)))
-                  , Unit.it "is 'Troupe' for 6 12"  (Unit.isEq "Troupe" (String.substring (s, 6, 12)))
-                  , Unit.it "is 'Troupe!' for 6 13" (Unit.isEq "Troupe!" (String.substring (s, 6, 13)))
-                  , Unit.it "is 'Troupe!' for 6 14" (Unit.isEq "Troupe!" (String.substring (s, 6, 13)))
+                    Unit.it "is 'Hello' for 0 5"    (Unit.isEq "Hello"   (String.substring s 0 5))
+                  , Unit.it "is 'Troupe' for 6 12"  (Unit.isEq "Troupe"  (String.substring s 6 12))
+                  , Unit.it "is 'Troupe!' for 6 13" (Unit.isEq "Troupe!" (String.substring s 6 13))
+                  , Unit.it "is 'Troupe!' for 6 14" (Unit.isEq "Troupe!" (String.substring s 6 14))
                 ]
             end,
             Unit.group "concat" [

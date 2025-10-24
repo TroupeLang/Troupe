@@ -10,15 +10,15 @@ let
      *)
     fun hashString s =
         (* String hash with fast paths for small strings *)
-        let val len = strlen s
-            val radix = 127
-            fun charCodeAt i = String.subCode (s,i)
+        let val len     = String.size s
+            val radix   = 127
+            val subCode = String.subCode s
         in case len of 0 => 0
-                     | 1 => charCodeAt 0
-                     | 2 => (radix * charCodeAt 0 + charCodeAt 1) andb Number.maxInt32
+                     | 1 => subCode 0
+                     | 2 => (radix * subCode 0 + subCode 1) andb Number.maxInt32
                      | _ => let fun go idx acc =
                                     if len <= idx then acc
-                                    else go (idx + 1) ((acc * radix + charCodeAt idx) andb Number.maxInt32)
+                                    else go (idx + 1) ((acc * radix + subCode idx) andb Number.maxInt32)
                             in go 0 0
                             end
         end

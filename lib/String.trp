@@ -26,8 +26,7 @@ let val __substring = substring
 
     (** The character value at the given index. If `i` is out of bounds, then 0 (NULL) is
      *  returned. *)
-    (* TODO (#59): Rename to `sub'` when `'` symbols are properly supported. *)
-    fun subCode s i = charCodeAtWithDefault (s, i, 0)
+    fun sub' s i = charCodeAtWithDefault (s, i, 0)
 
     (** Returns the substring of `s`. Indices beyond the end of string are silently truncated. *)
     fun substring s i j = __substring (s, i, j)
@@ -76,7 +75,7 @@ let val __substring = substring
         maxSize,
         size,
         sub,
-        subCode,
+        sub',
         substring,
         concat,
         concatWith,

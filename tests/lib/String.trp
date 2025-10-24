@@ -21,14 +21,14 @@ let val tests = Unit.group "String" [
                 ]
             end,
             let val s = "World!"
-            in Unit.group "subCode" [
-                    Unit.it "is 87 for 0"  (Unit.isEq 87  (String.subCode s 0))
-                  , Unit.it "is 111 for 1" (Unit.isEq 111 (String.subCode s 1))
-                  , Unit.it "is 114 for 2" (Unit.isEq 114 (String.subCode s 2))
-                  , Unit.it "is 108 for 3" (Unit.isEq 108 (String.subCode s 3))
-                  , Unit.it "is 100 for 4" (Unit.isEq 100 (String.subCode s 4))
-                  , Unit.it "is 33  for 5" (Unit.isEq 33  (String.subCode s 5))
-                  , Unit.it "is 0   for 6" (Unit.isEq 0   (String.subCode s 6))
+            in Unit.group "sub'" [
+                    Unit.it "is 87 for 0"  (Unit.isEq 87  (String.sub' s 0))
+                  , Unit.it "is 111 for 1" (Unit.isEq 111 (String.sub' s 1))
+                  , Unit.it "is 114 for 2" (Unit.isEq 114 (String.sub' s 2))
+                  , Unit.it "is 108 for 3" (Unit.isEq 108 (String.sub' s 3))
+                  , Unit.it "is 100 for 4" (Unit.isEq 100 (String.sub' s 4))
+                  , Unit.it "is 33  for 5" (Unit.isEq 33  (String.sub' s 5))
+                  , Unit.it "is 0   for 6" (Unit.isEq 0   (String.sub' s 6))
                 ]
             end,
             let val s = "Hello Troupe!"

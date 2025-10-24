@@ -22,14 +22,14 @@ let (* set secret to 0 or 1 *)
 
               
               val _ = adv i
-              val _ = printWithLabels i                     
+              val _ = printL i                     
               val _ = send (mainPid, ())
 
               val t = raisembox `<secret;#root-integrity>`
               val _ = rcv (`{}`, `<secret;#root-integrity>`, [g2])
               val _ = lowermbox (t, authority)
 
-          in printWithLabels "DONE"
+          in printL "DONE"
           end       
 
     (* uncomment to see that the secret is properly labelled *)

@@ -1,0 +1,4 @@
+let val _ = printL "What is your name?"
+    val name = inputLine ()
+in printL ("Hello", name) 
+end

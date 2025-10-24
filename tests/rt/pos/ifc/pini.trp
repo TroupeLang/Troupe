@@ -1,5 +1,3 @@
-import declassifyutil 
-
 let val secret = 1 raisedTo `<alice;#root-integrity>`
     val aliceAuth = attenuate (authority, `<alice;#root-integrity>`)
     (* val t = if secret > 0 then (1,2) else (3,4)  *)

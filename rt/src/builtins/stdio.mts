@@ -1,36 +1,39 @@
 import { UserRuntimeZero, Constructor, mkBase } from './UserRuntimeZero.mjs'
 import { LocalObject } from '../LocalObject.mjs'
-import * as levels from '../Level.mjs'
+import { mkV1Level, flowsTo, ROOT } from '../Level.mjs'
 import { mkLevel } from '../Level.mjs'
 import { assertIsAuthority, assertIsRootAuthority, assertIsNTuple, assertIsLocalObject, assertIsString, assertIsUnit, assertNormalState } from '../Asserts.mjs'
 import { __unit } from '../UnitVal.mjs';
 import { getCliArgs, TroupeCliArg } from '../TroupeCliArgs.mjs';
 const argv = getCliArgs();
 
-const flowsTo = levels.flowsTo;
+import * as rl from 'node:readline';
 
-import * as _rl from 'node:readline';
+const stdio_level = argv[TroupeCliArg.Stdiolev]
+    ? mkV1Level (argv[TroupeCliArg.Stdiolev])
+    : ROOT
 
-
-const readline = _rl.createInterface({
-    input: process.stdin,
-    output: process.stdout
-})
-
+/** Buffer of input lines that have been provided but not consumed. */
 const lineBuffer = [];
+
+/** Callbacks for awakening Troupe threads currently blocked due to them waiting for inputs. */
 const readlineCallbacks = []
 
-const __stdio_lev = argv[TroupeCliArg.Stdiolev] ? levels.mkV1Level (argv[TroupeCliArg.Stdiolev]): levels.ROOT
-
+/** For every new line, update either the buffer or notify a thread. */
 function lineListener(input) {
-    if (readlineCallbacks.length > 0) {
-        let cb = readlineCallbacks.shift();
-        cb(input);
-    } else {
+    if (readlineCallbacks.length === 0) {
         lineBuffer.push(input);
+    } else {
+        const cb = readlineCallbacks.shift();
+        cb(input);
     }
 }
 
+/** Node's readline interface */
+const readline = rl.createInterface({
+    input: process.stdin,
+    output: process.stdout
+})
 readline.on('line', lineListener)
 
 export function closeReadline() {
@@ -39,84 +42,95 @@ export function closeReadline() {
 
 export function BuiltinStdIo<TBase extends Constructor<UserRuntimeZero>>(Base: TBase) {
     return class extends Base {
-        getStdout = mkBase((arg) => {
+        stdin = mkBase((arg) => {
             assertIsAuthority(arg)
-            let sufficentAuthority = flowsTo(__stdio_lev, arg.val.authorityLevel)
-            if (sufficentAuthority) {
-                let obj = new LocalObject(process.stdout);
-                return this.runtime.ret(this.mkVal(obj))
-            } else {
+
+            const sufficentAuthority = flowsTo(stdio_level, arg.val.authorityLevel)
+            if (!sufficentAuthority) {
                 this.runtime.$t.threadError
-                     (`Not sufficient authority in getStdout\n` + 
-                     ` | Provided authority level ${arg.val.authorityLevel.stringRep()}\n` +
-                     ` | Required authority level ${__stdio_lev.stringRep()}`)
+                (`Not sufficient authority for stdIn\n` +
+                    ` | Provided authority level ${arg.val.authorityLevel.stringRep()}\n` +
+                    ` | Required authority level ${stdio_level.stringRep()}`);
+                return;
             }
-            
-        })
 
-        fprintln = mkBase((arg) => {
-            assertNormalState("fprintln")
-            assertIsNTuple(arg, 2);
-            assertIsLocalObject(arg.val[0]);
+            return this.runtime.ret(this.mkVal(new LocalObject(process.stdin)))
+        }, "stdin");
 
-            let out = arg.val[0].val._value;
-            out.write(arg.val[1].stringRep(true) + "\n");
-            return this.runtime.ret(__unit);
-        });
+        stdout = mkBase((arg) => {
+            assertIsAuthority(arg)
 
-        fprintlnWithLabels = mkBase((arg) => {
-            assertNormalState("fprintlnWithLabels")
-            assertIsNTuple(arg, 2);
-            assertIsLocalObject(arg.val[0]);
-            let out = arg.val[0].val._value;
-            out.write(this.runtime.$t.mkCopy(arg.val[1]).stringRep(false) + "\n");
-            // out.write((arg.val[1]).stringRep(false) + "\n");
-            return this.runtime.ret(__unit);
-        });
+            const sufficentAuthority = flowsTo(stdio_level, arg.val.authorityLevel)
+            if (!sufficentAuthority) {
+                this.runtime.$t.threadError
+                     (`Not sufficient authority for stdOut\n` +
+                     ` | Provided authority level ${arg.val.authorityLevel.stringRep()}\n` +
+                     ` | Required authority level ${stdio_level.stringRep()}`)
+                return;
+            }
+
+            return this.runtime.ret(this.mkVal(new LocalObject(process.stdout)));
+        }, "stdout");
+
+        stderr = mkBase((arg) => {
+            assertIsAuthority(arg)
+
+            const sufficentAuthority = flowsTo(stdio_level, arg.val.authorityLevel)
+            if (!sufficentAuthority) {
+                this.runtime.$t.threadError
+                (`Not sufficient authority for stdErr\n` +
+                    ` | Provided authority level ${arg.val.authorityLevel.stringRep()}\n` +
+                    ` | Required authority level ${stdio_level.stringRep()}`)
+                return;
+            }
+
+            return this.runtime.ret(this.mkVal(new LocalObject(process.stderr)));
+        }, "stderr");
+
+        freadln = mkBase((arg) => {
+            assertNormalState("freadLine")
+
+            assertIsLocalObject(arg);
+            const fd = arg.val._value;
+            if (fd !== process.stdin) {
+                this.runtime.$t
+                    .threadError(`value ${fd.stringRep()} is not an input descriptor`);
+            }
+
+            this.runtime.$t.raiseBlockingThreadLev(stdio_level)
+
+            // If input already has been provided, then proceed immediately.
+            if (lineBuffer.length > 0) {
+                let s = lineBuffer.shift();
+                let r = this.runtime.$t.mkValWithLev(s, stdio_level);
+                return this.runtime.$t.returnImmediateLValue(r);
+            }
+
+            // Otherwise, wait for input to arrive.
+            readlineCallbacks.push((s) => {
+                let r = this.runtime.$t.mkValWithLev(s, stdio_level)
+                this.runtime.$t.returnSuspended(r)
+                this.runtime.__sched.scheduleThread(this.runtime.$t);
+                this.runtime.__sched.resumeLoopAsync()
+            });
+        }, "freadln");
 
         fwrite = mkBase((arg) => {
             assertNormalState("fwrite")
             assertIsNTuple(arg, 2);
+
             assertIsLocalObject(arg.val[0]);
+
+            const fd = arg.val[0].val._value;
+            if (fd !== process.stdout && fd !== process.stderr) {
+                this.runtime.$t
+                    .threadError(`value ${fd.stringRep()} is not an output descriptor`);
+            }
+
             assertIsString(arg.val[1]);
-            let out = arg.val[0].val._value;
-            out.write(arg.val[1].val);
+
+            fd.write(arg.val[1].val);
             return this.runtime.ret(__unit);
         }, "fwrite");
-
-        inputLine = mkBase((arg) => {
-            assertNormalState("inputLine")
-            assertIsUnit(arg)
-            let theThread = this.runtime.$t;
-            theThread.raiseBlockingThreadLev(__stdio_lev)
-            if (lineBuffer.length > 0) {
-                let s = lineBuffer.shift();
-                let r = theThread.mkValWithLev(s, __stdio_lev);
-                return theThread.returnImmediateLValue(r);
-            } else {
-                readlineCallbacks.push((s) => {
-                    let r = theThread.mkValWithLev(s, __stdio_lev)
-                    theThread.returnSuspended(r)
-                    this.runtime.__sched.scheduleThread(theThread);
-                    this.runtime.__sched.resumeLoopAsync()
-                })  
-            }
-        }, "inputLine")
-
-        rt_question = mkBase((arg) => {
-            assertNormalState("rt_question")
-            readline.removeListener('line', lineListener);
-            let theThread = this.runtime.$t;
-            assertIsString(arg);
-            theThread.raiseBlockingThreadLev(__stdio_lev)
-            readline.question(arg.val, (s) => {
-                let r = theThread.mkValWithLev(s, __stdio_lev)
-                theThread.returnSuspended(r)
-                this.runtime.__sched.scheduleThread(theThread);
-                this.runtime.__sched.resumeLoopAsync()
-                readline.on('line', lineListener)
-            })
-
-        }, "question")
     }
 }

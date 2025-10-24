@@ -1,8 +1,17 @@
-import stdio
-let val out = getStdout authority
-    fun writeString x = fwrite (out, x)
-    val _ = writeString "Please input something: "
+let fun inputLineWithPini () =
+        let pini authority val s = freadln (stdin authority)
+        in s
+        end
+
+    fun inputLineAtLevel authority level =
+        let val s = inputLineWithPini ()
+        in declassify (s, authority, level)
+        end
+
+    fun print x = fwrite (stdout authority, x)
+
+    val _ = print "Please input something: "
     val s = inputLineAtLevel authority `{}`
-    val _ =  writeString ("You have provided input: " ^ s ^ "\n")
-in s 
-end 
+    val _ =  print ("You have provided input: " ^ s ^ "\n")
+
+in s end

@@ -1,4 +1,4 @@
 (* This should fail because it's missing the semicolon between alice and bob. The correct syntax would be <alice; bob>. *)
 let val x = 42 raisedTo `<alice bob>`
-in printWithLabels x
+in printL x
 end

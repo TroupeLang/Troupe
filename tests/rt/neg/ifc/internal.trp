@@ -22,7 +22,7 @@ let fun rcv_ hns = let val c = raisembox `<secret;#root-integrity>`
     fun loop 0 = ()
       | loop n = let val x = rcv_ [ hn x => x ]
                      val _ = adv x
-                     val _ = printWithLabels x
+                     val _ = printL x
                   in loop (n - 1)
                  end
 in loop 2

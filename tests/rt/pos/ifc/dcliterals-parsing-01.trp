@@ -6,5 +6,5 @@ let val x = 10 raisedTo `<#root-confidentiality; #null-integrity>`
     val a2 = 200 raisedTo `<alice; #root-integrity>`
     val a3 = 300 raisedTo `<#root-confidentiality; bob>`
     val a4 = 400 raisedTo `<#null-confidentiality; bob>`
-in printWithLabels (x, y, z, w, a1, a2, a3, a4)
+in printL (x, y, z, w, a1, a2, a3, a4)
 end

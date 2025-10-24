@@ -1,3 +1,3 @@
-let fun loop x = let val _ = printWithLabels x in loop (x+1) end 
+let fun loop x = let val _ = printL x in loop (x+1) end 
 in loop 0
 end

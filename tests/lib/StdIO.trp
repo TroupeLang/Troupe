@@ -1,0 +1,125 @@
+import StdIO
+
+let val StdIO = StdIO authority
+
+    fun hello name =
+        let pini authority
+            val _ = StdIO.Out.print "Hello, "
+            val _ = StdIO.Out.printL name
+            val _ = StdIO.Out.print  "\n"
+        in () end
+
+    fun printThread () =
+        let val pcStr = toString (_pc ())
+            val blStr = toString (_bl ())
+        in StdIO.Out.println ("PC: " pcStr ^ ", BL: " ^ blStr)
+        end
+
+    (* _____________________________________________________________________________________________
+     * StdIO.Out
+     *)
+    val _ = let pini authority
+                val _ = StdIO.Out.print ("Hello, Alice @ stdout!\n" raisedTo `{alice}`)
+
+                val _ = printThread ()
+            in () end
+
+    val _ = let pini authority
+                val _ = StdIO.Out.println ("Hello, Alice @ stdout... again!" raisedTo `{alice}`)
+
+                val _ = printThread ()
+            in () end
+
+    val _ = let pini authority
+                val _ = StdIO.Out.printL ("Hello, Bob @ stdout!" raisedTo `{bob}`)
+                val _ = StdIO.Out.print "\n"
+
+                val _ = printThread ()
+            in () end
+
+    val _ = let pini authority
+                val _ = StdIO.Out.printlnL ("Hello, Eve @ stdout!" raisedTo `{eve}`)
+
+                val _ = printThread ()
+            in () end
+
+    (* _____________________________________________________________________________________________
+     * StdIO.Err
+     *)
+    val _ = let pini authority
+                val _ = StdIO.Err.print ("Hello, Alice @ stderr!\n" raisedTo `{alice}`)
+
+                val _ = printThread ()
+            in () end
+
+    val _ = let pini authority
+                val _ = StdIO.Err.println ("Hello, Alice @ stderr... again!" raisedTo `{alice}`)
+
+                val _ = printThread ()
+            in () end
+
+    val _ = let pini authority
+                val _ = StdIO.Err.printL ("Hello, Bob @ stderr!" raisedTo `{bob}`)
+                val _ = StdIO.Err.print "\n"
+
+                val _ = printThread ()
+            in () end
+
+    val _ = let pini authority
+                val _ = StdIO.Err.printlnL ("Hello, Eve @ stderr!" raisedTo `{eve}`)
+
+                val _ = printThread ()
+            in () end
+
+    (* _____________________________________________________________________________________________
+     * StdIO.In and also StdIO.Out some more
+     *)
+    val _ = let pini authority
+                val _ = StdIO.Out.print "What is your name: "
+                val n = StdIO.In.readln ()
+                val _ = hello n
+
+                val _ = printThread ()
+            in () end
+
+    val _ = let pini authority
+                val _ = StdIO.Out.print "What is your name: "
+                val n = StdIO.In.readln' ()
+                val _ = hello n
+
+                val _ = printThread ()
+            in () end
+
+    val _ = let pini authority
+                val _ = StdIO.Out.print "What is your name: "
+                val n = StdIO.In.readlnAtLevel `{}`
+                val _ = hello n
+
+                val _ = printThread ()
+            in () end
+
+    (* _____________________________________________________________________________________________
+     * input*
+     *)
+    val _ = let pini authority
+                val n = StdIO.input "What is your name: "
+                val _ = hello n
+
+                val _ = printThread ()
+            in () end
+
+    val _ = let pini authority
+                val n = StdIO.input' "What is your name: "
+                val _ = hello n
+
+                val _ = printThread ()
+            in () end
+
+    val _ = let pini authority
+                val n = StdIO.inputAtLevel "What is your name: " `{}`
+                val _ = hello n
+
+                val _ = printThread ()
+            in () end
+in ()
+end

@@ -1,0 +1,5 @@
+let val _ = fwrite (stdout authority, (toString (_pc ())) ^ "\n")
+    val _ = fwrite (stdout authority, "Hello, World!\n")
+    val _ = fwrite (stdout authority, (toString (_pc ())) ^ "\n")
+in () end
+

@@ -105,6 +105,25 @@ let val tests = Unit.group "List" [
                   , Unit.it "id [1,3]" (Unit.isEq [(0,1), (1,3)] (List.mapi id [1,3]))
                 ]
             end,
+            let fun sum (a,b) = a+b
+            in Unit.group "foldl" [
+                    Unit.it "sums 0 []"    (Unit.isEq 0 (List.foldl sum 0 []))
+                  , Unit.it "sums 2 []"    (Unit.isEq 2 (List.foldl sum 2 []))
+                  , Unit.it "sums 0 [1]"   (Unit.isEq 1 (List.foldl sum 0 [1]))
+                  , Unit.it "sums 0 [1,1]" (Unit.isEq 2 (List.foldl sum 0 [1,1]))
+                  , Unit.it "sums 0 [1,3]" (Unit.isEq 4 (List.foldl sum 0 [1,3]))
+                  , Unit.it "sums 2 [1,3]" (Unit.isEq 6 (List.foldl sum 2 [1,3]))
+                ]
+            end,
+            let fun sum (a,b) = a+b
+            in Unit.group "foldl1" [
+                    Unit.it "sums [0]"   (Unit.isEq 0 (List.foldl1 sum [0]))
+                  , Unit.it "sums [1]"   (Unit.isEq 1 (List.foldl1 sum [1]))
+                  , Unit.it "sums [2]"   (Unit.isEq 2 (List.foldl1 sum [2]))
+                  , Unit.it "sums [1,1]" (Unit.isEq 2 (List.foldl1 sum [1,1]))
+                  , Unit.it "sums [1,3]" (Unit.isEq 4 (List.foldl1 sum [1,3]))
+                ]
+            end,
             let val xs = [0,1,2,3,4,5,6,7,8,9]
                 fun isOdd  x = (x mod 2) = 1
                 fun isEven x = (x mod 2) = 0

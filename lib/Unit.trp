@@ -6,11 +6,11 @@ let
     fun print auth indent str =
         let fun makeIndent 0 = ""
               | makeIndent i = "  " ^ (makeIndent (i-1))
-        in fwrite ((getStdout auth), (makeIndent indent) ^ str)
+        in fwrite ((stdout auth), (makeIndent indent) ^ str)
         end
 
-    fun printCR auth = fwrite ((getStdout auth), "\r")
-    fun printNL auth = fwrite ((getStdout auth), "\n")
+    fun printCR auth = fwrite ((stdout auth), "\r")
+    fun printNL auth = fwrite ((stdout auth), "\n")
 
     (* TODO (Issue #55) Move colours into helper functions. *)
     val testStr = "\x1b[33m" ^ "[ TEST ]" ^ "\x1b[0m" ^ " it "

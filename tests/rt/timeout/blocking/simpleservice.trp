@@ -11,12 +11,12 @@ let fun counter n =
     val _ = send (pid, (self()))
     val _ = send (pid, (self()))
 
-    val h = hn x => printWithLabels x
+    val h = hn x => printL x
 
     (* receive two messages *)
 
     val _ = receive [ h ]
-    val _ = receive [ hn x when x > 0 => printWithLabels x]
+    val _ = receive [ hn x when x > 0 => printL x]
 
 in ()
 end

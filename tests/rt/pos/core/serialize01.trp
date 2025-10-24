@@ -26,9 +26,9 @@ let val rawobj =
     val _ = save (authority,filename, obj)
     
     val (pid, rawobj2, f ) = restore (filename)
-in printWithLabels (rawobj2)
-;  printWithLabels (pid = self ())
-;  printWithLabels (rawobj = rawobj2)
-;  printWithLabels (f 10)
+in printL (rawobj2)
+;  printL (pid = self ())
+;  printL (rawobj = rawobj2)
+;  printL (f 10)
   
 end 

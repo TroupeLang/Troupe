@@ -1,3 +1,3 @@
 2025-06-24T21:28:33.638Z [RTM] info: Skipping network creation. Observe that all external IO operations will yield a runtime error.
-Warning: runtime exception in the handler or sandbox: invalid handler state in fprintln -- side effects are prohbited in handler pattern matching or sandboxed code
+Warning: runtime exception in the handler or sandbox: invalid handler state in fwrite -- side effects are prohbited in handler pattern matching or sandboxed code
 >>> Main thread finished with value: 0@{}%{}

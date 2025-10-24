@@ -1,0 +1,4 @@
+let val a = "Alice" raisedTo `{alice}`
+    val b = "Bob" raisedTo `{bob}`
+in ((a ^ " and ") ^ b) ^ " say 'Hello!'"
+end

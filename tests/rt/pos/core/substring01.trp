@@ -1,0 +1,1 @@
+substring ("Hello, World", 0, 5)

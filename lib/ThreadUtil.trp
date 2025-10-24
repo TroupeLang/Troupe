@@ -1,0 +1,23 @@
+let (** Run function `f` after `duration` milliseconds. The function `f` is given `()` as its
+     *  argument. *)
+    fun spawnTimeout f duration =
+        spawn (fn () => sleep duration; f ())
+
+    (** Run function `f` each `duration` milliseconds. The function `f` is given the current
+     *  iteration count as argument. *)
+    fun spawnInterval f duration =
+        (* TODO: If `f` takes a considerable time, this will drift! *)
+        let fun f' i = sleep duration; f i; f' (i+1)
+        in spawn (fn () => f' 0) end
+
+    (* TODO: Cancel `spawnTimeout` and `spawnInterval`. But, this requires a non-blocking `receive`
+     *       operation. *)
+
+    (*--- Module ---*)
+    val ThreadUtil = {
+        spawnTimeout,
+        spawnInterval
+    }
+
+in [ ("ThreadUtil", ThreadUtil) ]
+end

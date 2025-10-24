@@ -1,0 +1,121 @@
+let (** OS.IO module with file reading and writing.
+     *
+     * TODO: For now, this is only used internally for the StdIO library. But, when file reading and
+     * writing is properly added, then this needs to be moved to its own module. *)
+    fun OS_IO authority =
+        let (*--- File Reading ---*)
+            (* TODO: Sub-line input access. *)
+
+            (** Obtain the next line from `fd`.
+             *
+             *  This is merely reexposing the `freadln` language builtin.
+             **)
+            fun readln fd =
+                freadln fd
+
+            (** Similar to `readln` but ensures the blocking label is not raised. *)
+            fun readln' fd =
+                let pini authority
+                    val ln = readln fd
+                in ln end
+
+            (** Similar to `readln'` but declassifies what is read to the given level. *)
+            fun readlnAtLevel fd level =
+                declassify (readln' fd, authority, level)
+
+            (*--- File Writing ---*)
+            fun _write fd str = fwrite (fd, str)
+
+            (** Write `x` to the given file descriptor. *)
+            fun write fd x = case getType x of "string" => _write fd x
+                                             | _        => _write fd (toString x)
+
+            (** Write `x` and its security label(s) to the given file descriptor. *)
+            fun writeL fd x = _write fd (toStringL x)
+
+            (** Write `x` and a newline to the given file descriptor. *)
+            fun writeln fd x = (write fd x; _write fd "\n")
+
+            (** Write `x`, its security label(s), and a newline to the given file descriptor. *)
+            fun writelnL fd x = (writeL fd x; _write fd "\n")
+        in
+            { readln
+            , readln'
+            , readlnAtLevel
+            , write
+            , writeL
+            , writeln
+            , writelnL
+            }
+        end
+
+    (** Standard input and output handling. *)
+    fun StdIO authority =
+        let val OS = OS_IO authority
+
+            (*--- STD File Descriptors ---*)
+
+            (** Capability for standard input. *)
+            val stdin  = stdin authority
+
+            (** Capability for standard output. *)
+            val stdout = stdout authority
+
+            (** Capability for standard error. *)
+            val stderr = stderr authority
+
+            (*--- Input/Output ---*)
+
+            (** Write the given `question` to `stdout` and returns the answer provided from
+             *  `stdin`. *)
+            fun input question =
+                (OS.write stdout question; OS.readln stdin)
+
+            (** Similar to `input` but does not raise the blocking label. *)
+            fun input' question =
+                (OS.write stdout question; OS.readln' stdin)
+
+            (** Similar to `input'` but also declassifies the result. *)
+            fun inputAtLevel question level =
+                (OS.write stdout question; OS.readlnAtLevel stdin level)
+
+            (*--- Submodule(s) ---*)
+
+            (** Reading from `stdin`. *)
+            val In  =
+                { readln        = fn () => OS.readln  stdin
+                , readln'       = fn () => OS.readln' stdin
+                , readlnAtLevel = fn l  => OS.readlnAtLevel stdin l
+                }
+
+            (** Printing to `stdout`. *)
+            val Out =
+                { print    = OS.write    stdout
+                , println  = OS.writeln  stdout
+                , printL   = OS.writeL   stdout
+                , printlnL = OS.writelnL stdout
+                }
+
+            (** Printing to `stderr`. *)
+            val Err =
+                { print    = OS.write    stderr
+                , println  = OS.writeln  stderr
+                , printL   = OS.writeL   stderr
+                , printlnL = OS.writelnL stderr
+                }
+
+        in (*--- Module(s) ---*)
+            { stdin
+            , In
+            , stdout
+            , Out
+            , stderr
+            , Err
+            , input
+            , input'
+            , inputAtLevel
+            }
+        end
+
+in [ ("StdIO", StdIO) ]
+end

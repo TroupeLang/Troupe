@@ -17,9 +17,9 @@ let (* set secret to true or false *)
                      val _ = wait () 
                      val _ = pinipop c
                      val _ = adv i
-                     val _ = printWithLabels i                     
+                     val _ = printL i                     
                      val _ = signal mainPid
-                 in printWithLabels "DONE"
+                 in printL "DONE"
                  end       
 
     fun hang () = receive []

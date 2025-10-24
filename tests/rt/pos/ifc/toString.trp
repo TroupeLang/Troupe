@@ -1,0 +1,4 @@
+let val x = 42 raisedTo `{alice}`
+    val y = 11 raisedTo `{bob}`
+in fwrite (stdout authority, (toString (x,y)) ^ "\n")
+end

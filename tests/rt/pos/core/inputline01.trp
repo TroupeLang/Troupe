@@ -1,4 +1,0 @@
-let val _ = printWithLabels "What is your name?"
-    val name = inputLine ()
-in printWithLabels ("Hello", name) 
-end

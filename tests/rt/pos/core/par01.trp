@@ -2,7 +2,7 @@ let
     fun loop x n =
       let fun body n =
             if n  > 0 then 
-                let val dummy = printWithLabels x
+                let val dummy = printL x
                 in
                     body (n-1)
                 end
@@ -18,12 +18,12 @@ let
     val proc2 = fn () =>
               
                    let val dummy = spawn (proc3)
-                       val _ = printWithLabels dummy
+                       val _ = printL dummy
                    in loop 222 5
                    end
 in let val pid2 = spawn (proc2)
 
-    in let val x = printWithLabels pid2
+    in let val x = printL pid2
         in proc1 ()
         end
     end

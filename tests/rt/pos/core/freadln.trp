@@ -1,0 +1,5 @@
+let val _ = fwrite (stdout authority, "What is your name? ")
+    val name = freadln (stdin authority)
+    val _ = fwrite (stdout authority, "Hello " ^ name ^ "\n")
+in ()
+end

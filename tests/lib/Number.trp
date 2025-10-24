@@ -3,8 +3,10 @@ import Number
 
 let val tests = Unit.group "Number" [
             Unit.group "maxInt / minInt" [
-                Unit.it "maxInt++ = maxInt" (Unit.isEq Number.maxInt (Number.maxInt + 1))
-              , Unit.it "minInt-- = minInt" (Unit.isEq Number.minInt (Number.minInt - 1))
+                Unit.it "maxInt++ != maxInt"   (Unit.isNeq Number.maxInt (Number.maxInt + 1))
+              , Unit.it "minInt-- != minInt"   (Unit.isNeq Number.minInt (Number.minInt - 1))
+              , Unit.it "maxInt+2 == maxInt+1" (Unit.isEq (Number.maxInt + 1) (Number.maxInt + 2))
+              , Unit.it "minInt-2 == minInt+1" (Unit.isEq (Number.minInt - 1) (Number.minInt - 2))
             ],
             Unit.group "abs" [
                 Unit.it "keeps 0 as is"    (Unit.isEq 0 (Number.abs 0))

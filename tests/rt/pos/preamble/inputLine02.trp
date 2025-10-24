@@ -1,0 +1,8 @@
+let val _ = printL ("What is your name")
+    val name = inputLine ()
+    val _ =  printL ("Hello", name) 
+    val _ = printL ("What movie do you like?")
+    val movie = inputLine ()
+    val _ = printL ("OK, we will remember that ", name, " likes the movie", movie )
+in ()    
+end

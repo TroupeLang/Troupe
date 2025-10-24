@@ -1,8 +1,0 @@
-let val _ = printWithLabels ("What is your name")
-    val name = inputLine ()
-    val _ =  printWithLabels ("Hello", name) 
-    val _ = printWithLabels ("What movie do you like?")
-    val movie = inputLine ()
-    val _ = printWithLabels ("OK, we will remember that ", name, " likes the movie", movie )
-in ()    
-end

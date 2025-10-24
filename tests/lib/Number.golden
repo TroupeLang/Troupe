@@ -1,4 +1,4 @@
-2025-09-19T11:39:50.589Z [RTM] [32minfo[39m: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+2025-10-24T09:49:37.065Z [RTM] [32minfo[39m: Skipping network creation. Observe that all external IO operations will yield a runtime error.
 [34mbegin [0mNumber
   [34mbegin [0mmaxInt / minInt
       [33m[ TEST ][0m it maxInt++ = maxInt      [32m[ PASS ][0m it maxInt++ = maxInt
@@ -84,6 +84,72 @@
       [33m[ TEST ][0m it truncates  2^33-1      [32m[ PASS ][0m it truncates  2^33-1
       [33m[ TEST ][0m it truncates -2^33-1      [32m[ PASS ][0m it truncates -2^33-1
   [34mend [0m
+  [34mbegin [0meq
+      [33m[ TEST ][0m it accepts 0 0      [32m[ PASS ][0m it accepts 0 0
+      [33m[ TEST ][0m it accepts 1 1      [32m[ PASS ][0m it accepts 1 1
+      [33m[ TEST ][0m it accepts -1 -1      [32m[ PASS ][0m it accepts -1 -1
+      [33m[ TEST ][0m it accepts 42 42      [32m[ PASS ][0m it accepts 42 42
+      [33m[ TEST ][0m it accepts 1/2 2/4      [32m[ PASS ][0m it accepts 1/2 2/4
+      [33m[ TEST ][0m it rejects 0 1      [32m[ PASS ][0m it rejects 0 1
+      [33m[ TEST ][0m it rejects 1 0      [32m[ PASS ][0m it rejects 1 0
+      [33m[ TEST ][0m it rejects 0 -1      [32m[ PASS ][0m it rejects 0 -1
+      [33m[ TEST ][0m it rejects -1 0      [32m[ PASS ][0m it rejects -1 0
+      [33m[ TEST ][0m it rejects 2 1      [32m[ PASS ][0m it rejects 2 1
+      [33m[ TEST ][0m it rejects 2 1      [32m[ PASS ][0m it rejects 2 1
+      [33m[ TEST ][0m it rejects 42 12      [32m[ PASS ][0m it rejects 42 12
+  [34mend [0m
+  [34mbegin [0mlt
+      [33m[ TEST ][0m it accepts 0 1      [32m[ PASS ][0m it accepts 0 1
+      [33m[ TEST ][0m it accepts 1 2      [32m[ PASS ][0m it accepts 1 2
+      [33m[ TEST ][0m it accepts -1 0      [32m[ PASS ][0m it accepts -1 0
+      [33m[ TEST ][0m it accepts 12 42      [32m[ PASS ][0m it accepts 12 42
+      [33m[ TEST ][0m it accepts 0 1/2      [32m[ PASS ][0m it accepts 0 1/2
+      [33m[ TEST ][0m it rejects 0 0      [32m[ PASS ][0m it rejects 0 0
+      [33m[ TEST ][0m it rejects 42 42      [32m[ PASS ][0m it rejects 42 42
+      [33m[ TEST ][0m it rejects 1 0      [32m[ PASS ][0m it rejects 1 0
+      [33m[ TEST ][0m it rejects 2 1      [32m[ PASS ][0m it rejects 2 1
+      [33m[ TEST ][0m it rejects 0 -1      [32m[ PASS ][0m it rejects 0 -1
+      [33m[ TEST ][0m it rejects 42 12      [32m[ PASS ][0m it rejects 42 12
+  [34mend [0m
+  [34mbegin [0mle
+      [33m[ TEST ][0m it accepts 0 1      [32m[ PASS ][0m it accepts 0 1
+      [33m[ TEST ][0m it accepts 1 2      [32m[ PASS ][0m it accepts 1 2
+      [33m[ TEST ][0m it accepts -1 0      [32m[ PASS ][0m it accepts -1 0
+      [33m[ TEST ][0m it accepts 12 42      [32m[ PASS ][0m it accepts 12 42
+      [33m[ TEST ][0m it accepts 0 1/2      [32m[ PASS ][0m it accepts 0 1/2
+      [33m[ TEST ][0m it accepts 0 0      [32m[ PASS ][0m it accepts 0 0
+      [33m[ TEST ][0m it accepts 42 42      [32m[ PASS ][0m it accepts 42 42
+      [33m[ TEST ][0m it rejects 1 0      [32m[ PASS ][0m it rejects 1 0
+      [33m[ TEST ][0m it rejects 2 1      [32m[ PASS ][0m it rejects 2 1
+      [33m[ TEST ][0m it rejects 0 -1      [32m[ PASS ][0m it rejects 0 -1
+      [33m[ TEST ][0m it rejects 42 12      [32m[ PASS ][0m it rejects 42 12
+  [34mend [0m
+  [34mbegin [0mgt
+      [33m[ TEST ][0m it rejects 0 1      [32m[ PASS ][0m it rejects 0 1
+      [33m[ TEST ][0m it rejects 1 2      [32m[ PASS ][0m it rejects 1 2
+      [33m[ TEST ][0m it rejects -1 0      [32m[ PASS ][0m it rejects -1 0
+      [33m[ TEST ][0m it rejects 12 42      [32m[ PASS ][0m it rejects 12 42
+      [33m[ TEST ][0m it rejects 0 1/2      [32m[ PASS ][0m it rejects 0 1/2
+      [33m[ TEST ][0m it rejects 0 0      [32m[ PASS ][0m it rejects 0 0
+      [33m[ TEST ][0m it rejects 42 42      [32m[ PASS ][0m it rejects 42 42
+      [33m[ TEST ][0m it accepts 1 0      [32m[ PASS ][0m it accepts 1 0
+      [33m[ TEST ][0m it accepts 2 1      [32m[ PASS ][0m it accepts 2 1
+      [33m[ TEST ][0m it accepts 0 -1      [32m[ PASS ][0m it accepts 0 -1
+      [33m[ TEST ][0m it accepts 42 12      [32m[ PASS ][0m it accepts 42 12
+  [34mend [0m
+  [34mbegin [0mge
+      [33m[ TEST ][0m it rejects 0 1      [32m[ PASS ][0m it rejects 0 1
+      [33m[ TEST ][0m it rejects 1 2      [32m[ PASS ][0m it rejects 1 2
+      [33m[ TEST ][0m it rejects -1 0      [32m[ PASS ][0m it rejects -1 0
+      [33m[ TEST ][0m it rejects 12 42      [32m[ PASS ][0m it rejects 12 42
+      [33m[ TEST ][0m it rejects 0 1/2      [32m[ PASS ][0m it rejects 0 1/2
+      [33m[ TEST ][0m it accepts 0 0      [32m[ PASS ][0m it accepts 0 0
+      [33m[ TEST ][0m it accepts 42 42      [32m[ PASS ][0m it accepts 42 42
+      [33m[ TEST ][0m it accepts 1 0      [32m[ PASS ][0m it accepts 1 0
+      [33m[ TEST ][0m it accepts 2 1      [32m[ PASS ][0m it accepts 2 1
+      [33m[ TEST ][0m it accepts 0 -1      [32m[ PASS ][0m it accepts 0 -1
+      [33m[ TEST ][0m it accepts 42 12      [32m[ PASS ][0m it accepts 42 12
+  [34mend [0m
   [34mbegin [0mtoString
       [33m[ TEST ][0m it returns '0'        for 0      [32m[ PASS ][0m it returns '0'        for 0
       [33m[ TEST ][0m it returns '0'        for 0/2      [32m[ PASS ][0m it returns '0'        for 0/2
@@ -100,6 +166,6 @@
   [34mend [0m
 [34mend [0m
 
-Total:  72
-Passes: 72
+Total:  128
+Passes: 128
 >>> Main thread finished with value: true@{}%{}

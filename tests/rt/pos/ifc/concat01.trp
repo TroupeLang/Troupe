@@ -1,0 +1,4 @@
+let val x = "Hello"
+    val y = "Alice" raisedTo `{alice}`
+in x ^ ", " ^ y
+end

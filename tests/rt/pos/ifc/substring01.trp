@@ -1,0 +1,5 @@
+let val s = "Hello, World!"
+    val i = 3 raisedTo `{alice}`
+    val j = 5
+in substring (s, i, j)
+end

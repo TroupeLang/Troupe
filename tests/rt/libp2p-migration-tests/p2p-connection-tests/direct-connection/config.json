@@ -1,0 +1,30 @@
+{
+  "test_name": "p2p-direct-connection",
+  "timeout": 30,
+  "coordination": "parallel",
+  "network": {
+    "use_relay": false,
+    "bootstrap_peers": []
+  },
+  "nodes": [
+    {
+      "id": "server",
+      "script": "direct-server.trp",
+      "port": 6789,
+      "expected_exit_code": 0,
+      "extra_argv": "--debug-p2p"
+    },
+    {
+      "id": "client",
+      "script": "direct-client.trp", 
+      "port": 6790,
+      "start_delay": 2,
+      "expected_exit_code": 0,
+      "extra_argv": "--debug-p2p"
+    }
+  ],
+  "output": {
+    "merge_strategy": "timestamp",
+    "filter_patterns": ["uuid", "timestamp", "peer_id"]
+  }
+}

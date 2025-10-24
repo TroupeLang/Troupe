@@ -5,7 +5,7 @@ datatype Atoms = FIRST  | SECOND
 let 
     fun client i serverPid = 
      let val _ =  send (serverPid, (FIRST, i, self ()) )
-     in receive [ hn (SECOND, j)  => if i = j then printL ("OK", i) else printL ("FAIL", i) ]
+     in receive [ hn (SECOND, j)  => if i = j then printWithLabels ("OK", i) else printWithLabels ("FAIL", i) ]
      end 
 
     fun server (db, 0) = List.map  ( fn (x, pid) => send (pid, (SECOND, x))) db 

@@ -5,10 +5,10 @@ let val x = 100 raisedTo `{alice}`
                 val a = if y > 10 then z else "not an integer"
             in a 
             end
-    val _ = printL a
+    val _ = printWithLabels a
     val _ = debugpc()
     val w = a + x
-    val _ = printL w
+    val _ = printWithLabels w
 in debugpc()
 end
 

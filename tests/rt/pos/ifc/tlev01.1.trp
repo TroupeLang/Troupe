@@ -7,7 +7,7 @@ let val x = 42 raisedTo `{alice}`
                          else
                             x - y
 
-    val _ = printL aa
+    val _ = printWithLabels aa
     val _ = x + y
 in debugpc()
 end

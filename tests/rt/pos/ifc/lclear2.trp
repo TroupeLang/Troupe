@@ -12,8 +12,8 @@ let val main = self ()
     val _ = lowermbox (c, authority)
     val r2 = rcv (`{}`, `{}`, [hn x => x])
     val _ = debugpc ()
-    val _ = printL r1 
-    val _ = printL r2
+    val _ = printWithLabels r1 
+    val _ = printWithLabels r2
 in ()
 end
 

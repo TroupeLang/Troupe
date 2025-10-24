@@ -1,0 +1,35 @@
+(* Whereis Blocking Test - Delayed Server *)
+(* This server starts late to test whereis blocking behavior *)
+
+import NetHealth
+
+let 
+    val config = {print = print, auth = authority}
+    val timeout_pid = spawnTestTimeout(config, 30000, "DELAYED-SERVER")
+    
+    fun delayed_server() =
+        let val _ = print "DELAYED-SERVER: Starting after delay"
+            (* Register service *)
+            val _ = register("retry-test", self(), authority)
+            val _ = print "DELAYED-SERVER: Registered retry-test service"
+            
+            (* Wait for client connection attempts *)
+            val result = receive [
+                hn ("RETRY_TEST", attempt_num, sender) => 
+                    let val _ = print ("DELAYED-SERVER: Received connection from client, attempt #" ^ 
+                                      intToString(attempt_num))
+                        (* Send success response *)
+                        val _ = send(sender, ("RETRY_SUCCESS", attempt_num))
+                        val _ = print "DELAYED-SERVER: Sent success response"
+                    in "success"
+                    end
+            ]
+            
+        in if result = "success" then
+            exitSuccess(config, "DELAYED-SERVER", "Connection retry test completed successfully", 1000)
+           else
+            exitFailure(config, "DELAYED-SERVER", "Connection retry test failed")
+        end
+
+in delayed_server()
+end

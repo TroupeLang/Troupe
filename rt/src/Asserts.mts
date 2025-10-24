@@ -34,7 +34,6 @@ function __stringRep (v) {
 }
 
 let err = x => _thread().threadError(x)
-
 export function assertIsAtom (x: any) {
     _thread().raiseBlockingThreadLev(x.tlev)
     if (x.val._troupeType != TroupeType.ATOM ) {
@@ -210,6 +209,7 @@ export function assertIsProcessId(x: any) {
     }
 }
 
+
 export function assertIsCapability(x: any) {
     _thread().raiseBlockingThreadLev(x.tlev);
     if (!(x.val instanceof Capability)) {
@@ -229,7 +229,6 @@ export function rawAssertIsLevel (x:any) {
         err("value " + __stringRep(x) + " is not a level");
     }
 }
-
 export function assertIsRootAuthority(x: any) {
     let isTop = actsFor(x.val.authorityLevel, levels.ROOT);
     if (!isTop) {

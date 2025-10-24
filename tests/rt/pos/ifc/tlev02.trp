@@ -1,11 +1,7 @@
-let fun inputLineWithPini auth =
-        let pini auth val s = inputLine ()
-        in s
-        end
+import stdio
 
-    val out = stdout authority
-    val _ = fwrite (out, "What's your name: ")
-    val input = inputLineWithPini authority
 
-in fwrite (out, "Hello" ^ " " ^ input ^ "\n")
+let val _ = fwrite (getStdout authority, "What's your name: ")
+    val input = inputLineWithPini authority 
+in printString ("Hello" ^ " " ^ input )
 end

@@ -19,7 +19,6 @@ import { BuiltinToString } from './builtins/toString.mjs'
 import { BuiltinSend } from './builtins/send.mjs'
 import { BuiltinSpawn } from './builtins/spawn.mjs'
 import { BuiltinReceive } from './builtins/receive.mjs'
-import { BuiltinThread } from './builtins/thread.mjs'
 import { BuiltinAttenuate } from './builtins/attenuate.mjs'
 import { BuiltinRegistry } from './builtins/whereis.mjs'
 import { BuiltinDeclassify } from './builtins/declassify.mjs'
@@ -47,7 +46,6 @@ export const UserRuntime =
     BuiltinRegistry(
     BuiltinAttenuate(
     BuiltSpawnSendReceive(
-    BuiltinThread(
     BuiltinStringToInt(
     BuiltinToString(
     BuiltinGetTime(
@@ -66,5 +64,5 @@ export const UserRuntime =
     BuiltinMath(
     BuiltinRecordReflection(
     BuiltinTypeInformation(
-    BuiltinStdIo(UserRuntimeZero)
-    ))))))))))))))))))))))))))))))
+    BuiltinStdIo(UserRuntimeZero)    
+    )))))))))))))))))))))))))))))

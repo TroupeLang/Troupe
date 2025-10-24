@@ -2,6 +2,6 @@ datatype Atoms = Hello | Bye
 
 let val t = Hello
 in case t of
-      Hello => printL 1
-    | _ => printL 0
+      Hello => printWithLabels 1
+    | _ => printWithLabels 0
 end

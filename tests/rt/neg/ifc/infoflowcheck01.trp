@@ -1,6 +1,6 @@
 let fun f ()
       = let val _ = rcv (`{secret}`, `{secret}`, [ hn 1 => () ])
-            val _ = printL "hi"
+            val _ = printWithLabels "hi"
         in adv (100)
         end
 

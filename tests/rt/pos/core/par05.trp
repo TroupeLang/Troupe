@@ -16,7 +16,7 @@ let fun alice () =
 
     fun bob () =
       let val handler =
-           hn (Result, n) => let val _ = printL n
+           hn (Result, n) => let val _ = printWithLabels n
                              in bob ()
                              end
       in  receive [

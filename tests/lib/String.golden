@@ -16,7 +16,7 @@
       [33m[ TEST ][0m it is ''  for 5      [32m[ PASS ][0m it is ''  for 5
       [33m[ TEST ][0m it is ''  for 6      [32m[ PASS ][0m it is ''  for 6
   [34mend [0m
-  [34mbegin [0msub'
+  [34mbegin [0msubCode
       [33m[ TEST ][0m it is 87 for 0      [32m[ PASS ][0m it is 87 for 0
       [33m[ TEST ][0m it is 111 for 1      [32m[ PASS ][0m it is 111 for 1
       [33m[ TEST ][0m it is 114 for 2      [32m[ PASS ][0m it is 114 for 2

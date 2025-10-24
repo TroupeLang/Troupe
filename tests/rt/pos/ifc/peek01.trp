@@ -1,6 +1,6 @@
 let fun f () = 
       let val x = peek (0 raisedTo `{alice}`, `{}`, `{secret}`) 
-      in printL x 
+      in printWithLabels x 
       ;  debugpc()
       end 
     val p = spawn f 

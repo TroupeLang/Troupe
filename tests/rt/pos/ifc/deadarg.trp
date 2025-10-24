@@ -1,5 +1,5 @@
-let fun foo x = let val _ = printL x
-                    val _ = printL "hi" 
+let fun foo x = let val _ = printWithLabels x
+                    val _ = printWithLabels "hi" 
                 in () 
                 end 
     val s = 42 raisedTo `{alice}` 

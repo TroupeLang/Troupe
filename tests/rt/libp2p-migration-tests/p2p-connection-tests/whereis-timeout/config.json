@@ -1,0 +1,22 @@
+{
+  "test_name": "p2p-whereis-timeout",
+  "timeout": 30,
+  "coordination": "sequential",
+  "network": {
+    "use_relay": false,
+    "bootstrap_peers": []
+  },
+  "nodes": [
+    {
+      "id": "timeout-client",
+      "script": "timeout-client.trp",
+      "port": 6797,
+      "expected_exit_code": 0,
+      "extra_argv": "--debug-p2p"
+    }
+  ],
+  "output": {
+    "merge_strategy": "timestamp",
+    "filter_patterns": ["uuid", "timestamp", "peer_id"]
+  }
+}

@@ -1,0 +1,63 @@
+(* Direct P2P Connection Test - Client *)
+(* Tests direct peer-to-peer connection without relay *)
+
+import NetHealth
+
+let 
+    val config = {print = print, auth = authority}
+    val timeout_pid = spawnTestTimeout(config, 28000, "CLIENT")
+    
+    fun connection_test_client() =
+        let val _ = print "CLIENT: Starting direct connection test"
+            
+            (* Give server time to start and register *)
+            val _ = sleep 1000
+            
+            (* Measure connection time *)
+            val _ = print "CLIENT: Looking up direct-test service on server"
+            val (test_service, connect_time) = measureConnectionTime("@server", "direct-test")
+            val _ = reportPerformanceMetric(config, "CLIENT", "Service lookup time", connect_time, "ms")
+            
+            (* Verify we got a valid service reference *)
+            val _ = print "CLIENT: Successfully found service"
+            
+            (* Send test message *)
+            val test_msg = "Hello via direct connection"
+            val _ = print "CLIENT: Sending connection test message"
+            val _ = send(test_service, ("CONNECTION_TEST", test_msg, self()))
+            
+            (* Wait for acknowledgment *)
+            val ack_result = receive [
+                hn ("CONNECTION_ACK", msg) => 
+                    let val _ = print ("CLIENT: Received acknowledgment: " ^ msg)
+                    in "ack_received"
+                    end
+            ]
+            
+            (* Request timing data to verify bidirectional communication *)
+            val _ = print "CLIENT: Requesting timing data"
+            val _ = send(test_service, ("GET_TIMING", self()))
+            val _ = print "CLIENT: Waiting for timing data response"
+            val timing_result = receive [
+                hn ("TIMING_DATA", data) =>
+                    let val _ = print ("CLIENT: Received timing data: " ^ data)
+                    in "timing_received"
+                    end
+            ]
+            
+            (* Collect test results *)
+            val test_results = [
+                ("Connection established", connect_time < 5000),
+                ("Acknowledgment received", ack_result = "ack_received"),
+                ("Bidirectional communication", timing_result = "timing_received")
+            ]
+            
+            (* Report performance metrics *)
+            val _ = reportPerformanceMetric(config, "CLIENT", 
+                "Connection establishment time", connect_time, "ms")
+            
+        in exitOnTestResults(config, "CLIENT", test_results, 0)
+        end
+
+in connection_test_client()
+end

@@ -9,7 +9,7 @@ let fun loop () = loop ()
         let fun f () =
               let val _ = adv i
                   val _ = if (hd bits) > 0 then loop () else ()
-                  val _ = printL (i, "x")
+                  val _ = printWithLabels (i, "x")
               in adv i
               end
             val _ = adv i

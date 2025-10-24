@@ -1,3 +1,3 @@
 let val x = 42 raisedTo `<alice bob>`
-in printL x
+in printWithLabels x
 end

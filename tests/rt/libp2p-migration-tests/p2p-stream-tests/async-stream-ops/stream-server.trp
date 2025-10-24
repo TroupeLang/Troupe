@@ -1,0 +1,69 @@
+(* Async Stream Operations Test - Server *)
+(* Tests async stream handling critical for libp2p v0.46+ *)
+
+import NetHealth
+
+let 
+    val config = {print = print, auth = authority}
+    val timeout_pid = spawnTestTimeout(config, 30000, "STREAM-SERVER")
+    
+    fun generate_large_data(size) =
+        (* Generate data that will require chunking *)
+        let fun build(n, acc) =
+                if n <= 0 then acc
+                else build(n - 1, acc ^ "X")
+        in build(size, "DATA:")
+        end
+    
+    fun stream_server() =
+        let val _ = print "STREAM-SERVER: Starting async stream test server"
+            
+            (* Register stream test service *)
+            val _ = register("stream-test", self(), authority)
+            val _ = print "STREAM-SERVER: Registered stream-test service"
+            
+            (* Handle multiple message types to test async operations *)
+            fun handle_messages(msg_count) =
+                if msg_count >= 5 then "complete"  (* Expect 5 messages: 1 small + 1 large + 3 concurrent *)
+                else
+                    let val result = receive [
+                        (* Small message test *)
+                        hn ("SMALL_MSG", data, sender) =>
+                            let val _ = print ("STREAM-SERVER: Received small message")
+                                val _ = send(sender, ("SMALL_ACK", "Received: " ^ data))
+                            in handle_messages(msg_count + 1)
+                            end,
+                            
+                        (* Large message test - simulates chunked transfer *)
+                        hn ("LARGE_MSG", size_request, sender) =>
+                            let val _ = print ("STREAM-SERVER: Large message request for " ^ 
+                                             intToString(size_request) ^ " bytes")
+                                val large_data = generate_large_data(size_request)
+                                val _ = print "STREAM-SERVER: Sending large response"
+                                val _ = send(sender, ("LARGE_DATA", large_data))
+                            in handle_messages(msg_count + 1)
+                            end,
+                            
+                        (* Concurrent stream test *)
+                        hn ("CONCURRENT_TEST", stream_id, sender) =>
+                            let val _ = print ("STREAM-SERVER: Concurrent stream test, ID: " ^ 
+                                             intToString(stream_id))
+                                (* Simulate async processing *)
+                                val _ = sleep 100
+                                val _ = send(sender, ("STREAM_RESULT", stream_id, "Processed"))
+                            in handle_messages(msg_count + 1)
+                            end
+                    ]
+                    in result
+                    end
+            
+            val test_result = handle_messages(0)
+            
+        in if test_result = "complete" then
+            exitSuccess(config, "STREAM-SERVER", "Async stream operations test completed successfully", 1000)
+           else
+            exitFailure(config, "STREAM-SERVER", "Async stream operations test failed")
+        end
+
+in stream_server()
+end

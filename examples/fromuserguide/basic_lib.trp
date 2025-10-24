@@ -1,4 +1,4 @@
 import List
-printL (List.map ( fn i => i + 1) [1,2,3])
+printWithLabels (List.map ( fn i => i + 1) [1,2,3])
 
 

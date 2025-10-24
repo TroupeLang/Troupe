@@ -2,7 +2,7 @@ datatype Atoms = Compute | Shutdown
 
 let fun alice () =
         receive [
-          hn Shutdown => printL 111111,
+          hn Shutdown => printWithLabels 111111,
           hn (Compute, x, f, sender) =>
              let
                  val result = f x

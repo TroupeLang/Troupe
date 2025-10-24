@@ -1,13 +1,13 @@
 (** In Troupe, there is not per-se an `int` type. Rather, there is a `number` and some integral
  *  operations on them which treats them as if they were 32 bit signed integers. *)
 
-let (** Largest (safe) possible integral value. Anything larger than +1 of this cannot represent an
+let (** Largest (safe) possible integral value. Anything larger than this cannot represent an
      *  increment of 1.
      *
      * NOTE: Value copied from the JavaScript documentation for `Number.MAX_SAFE_INTEGER`. *)
-    val maxInt = 9007199254740991
+    val maxInt = 9007199254740992
 
-    (** Smallest (safe) possible integral value. Anything smaller than -1 this cannot represent an
+    (** Smallest (safe) possible integral value. Anything smaller than this cannot represent an
      *  increment of 1. *)
     val minInt = -maxInt
 

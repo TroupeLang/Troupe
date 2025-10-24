@@ -1,5 +1,4 @@
-import ThreadUtil
-
+import timeout
 let fun v_one n =
          receive [ hn ("REQUEST", senderid) => 
                         let val _ = send (senderid, n) 
@@ -27,8 +26,7 @@ let fun v_one n =
     val _ = send (service, ("UPDATE", v_two))
     val _ = send (service, ("COMPUTE", self(), fn x => x * x, 42))
     val _ = receive [ hn x => print x]
-in ThreadUtil.spawnTimeout (fn () => print "force terminating the server example after 1s";
-                                     exit (authority, 0))
-                           1000
+in exitAfterTimeout 
+        authority 1000 0 "force terminating the server example after 1s"
 end    
 

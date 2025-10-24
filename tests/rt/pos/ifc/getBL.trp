@@ -1,4 +1,0 @@
-let val x = if true raisedTo `{bob}` then 21 else "..."
-    val y = x + (21 raisedTo `{alice}`)
-in _bl ()
-end

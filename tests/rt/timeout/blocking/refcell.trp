@@ -32,7 +32,7 @@ let val receive = fn h =>
 
     val x = spawn (fn () => cell initValue )
          
-    val _ = printL ( read x )    
+    val _ = printWithLabels ( read x )    
     (* prints 42@`{secret}`%`{secret}` *)
 
     val c = pinipush authority
@@ -42,14 +42,14 @@ let val receive = fn h =>
     (* It also taints the PC of the current process but we lower it later via pinpop *)
 
     val _ = write x 20     
-    val _ = printL ( read x ) 
+    val _ = printWithLabels ( read x ) 
 
     (* prints 20@`{secret}`%`{secret}` *)
 
     val _ = pinipop c
     
     val _ = write x 10     
-    val _ = printL ( read x )
+    val _ = printWithLabels ( read x )
 
     (* prints 10@`{secret}`%`{secret}` *)
         

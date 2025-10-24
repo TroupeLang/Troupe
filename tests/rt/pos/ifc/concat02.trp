@@ -1,3 +1,0 @@
-let val x = "Bob" raisedTo `{bob}`
-in x ^ " says 'Hello!'"
-end

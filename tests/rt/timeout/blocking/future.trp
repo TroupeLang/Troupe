@@ -17,5 +17,5 @@ let
     val _ = send (ft, (SET, 42)) 
     val _ = send (ft, (VALUE, self()))
     val x = receive [ hn x => x ]
-in printL x
+in printWithLabels x
 end

@@ -2,7 +2,7 @@ let fun foo x =
      let fun printX y = 32 
      in 
 
-        if x < 1 then printL 100 else foo (x-1)
+        if x < 1 then printWithLabels 100 else foo (x-1)
      end
 in foo 20
 end 

@@ -16,7 +16,7 @@ let val main = self ()
     *)
 
     val r1 = rcv (`<bob;#root-integrity>`, `<alice & bob;#root-integrity>`, [hn x => x])
-    val _ = printL r1 
+    val _ = printWithLabels r1 
     val _ = lowermbox (c, auth_alice)
 
     (* the mailbox clearance at this point is restored to BOT *)
@@ -24,6 +24,6 @@ let val main = self ()
     val _ = debugpc()
     val r2 = rcv (`<bob;#root-integrity>`, `<bob;#root-integrity>`, [hn x => x])
     val _ = debugpc ()
-    val _ = printL r2
+    val _ = printWithLabels r2
 in ()
 end

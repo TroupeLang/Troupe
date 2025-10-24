@@ -1,4 +1,4 @@
-2025-09-09T14:12:55.766Z [RTM] [32minfo[39m: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+2025-10-24T08:31:14.889Z [RTM] [32minfo[39m: Skipping network creation. Observe that all external IO operations will yield a runtime error.
 [34mbegin [0mList
   [34mbegin [0mhead
       [33m[ TEST ][0m it returns 42 for [42]      [32m[ PASS ][0m it returns 42 for [42]
@@ -91,6 +91,21 @@
       [33m[ TEST ][0m it id [1,1]      [32m[ PASS ][0m it id [1,1]
       [33m[ TEST ][0m it id [1,3]      [32m[ PASS ][0m it id [1,3]
   [34mend [0m
+  [34mbegin [0mfoldl
+      [33m[ TEST ][0m it sums 0 []      [32m[ PASS ][0m it sums 0 []
+      [33m[ TEST ][0m it sums 2 []      [32m[ PASS ][0m it sums 2 []
+      [33m[ TEST ][0m it sums 0 [1]      [32m[ PASS ][0m it sums 0 [1]
+      [33m[ TEST ][0m it sums 0 [1,1]      [32m[ PASS ][0m it sums 0 [1,1]
+      [33m[ TEST ][0m it sums 0 [1,3]      [32m[ PASS ][0m it sums 0 [1,3]
+      [33m[ TEST ][0m it sums 2 [1,3]      [32m[ PASS ][0m it sums 2 [1,3]
+  [34mend [0m
+  [34mbegin [0mfoldl1
+      [33m[ TEST ][0m it sums [0]      [32m[ PASS ][0m it sums [0]
+      [33m[ TEST ][0m it sums [1]      [32m[ PASS ][0m it sums [1]
+      [33m[ TEST ][0m it sums [2]      [32m[ PASS ][0m it sums [2]
+      [33m[ TEST ][0m it sums [1,1]      [32m[ PASS ][0m it sums [1,1]
+      [33m[ TEST ][0m it sums [1,3]      [32m[ PASS ][0m it sums [1,3]
+  [34mend [0m
   [34mbegin [0mfilter
       [33m[ TEST ][0m it isOdd  []      [32m[ PASS ][0m it isOdd  []
       [33m[ TEST ][0m it isEven []      [32m[ PASS ][0m it isEven []
@@ -128,6 +143,6 @@
   [34mend [0m
 [34mend [0m
 
-Total:  90
-Passes: 90
+Total:  101
+Passes: 101
 >>> Main thread finished with value: true@{}%{}

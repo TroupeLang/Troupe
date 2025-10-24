@@ -83,6 +83,9 @@ let (* -- List Access -- *)
     fun foldl f y []    = y
       | foldl f y x::xs = foldl f (f (x,y)) xs
 
+    (** Left-fold of `f` on a non-empty list using the head as the initial value. *)
+    fun foldl1 f x::xs = foldl f x xs
+
     (* TODO: foldr *)
 
     (** Returns the sublist of elements that satisfy `f`. Not tail-recursive. *)
@@ -183,6 +186,7 @@ let (* -- List Access -- *)
         map,
         mapi,
         foldl,
+        foldl1,
         filter,
         filteri,
         partition,

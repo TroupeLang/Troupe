@@ -12,15 +12,14 @@ export class Record implements TroupeAggregateRawValue {
     __obj : Map<string, LVal>
 
     stringRep (omitLevels?: boolean, taintRef?: any) {
-        // return ("{" + listStringRep(this.toArray(), omitLevels, taintRef) + "}")
         let s = "{"
         let spaceOrComma = ""
         for (let [k,v] of this.__obj.entries()) {            
-            s += spaceOrComma + k + "=" + v.stringRep(omitLevels, taintRef)
-            spaceOrComma = ", "
+	    s += spaceOrComma + k + "=" + v.stringRep(omitLevels, taintRef)
+	    spaceOrComma = ", "
         }
         s += "}"
-        return s 
+        return s
     }
 
     constructor(fields: Iterable<readonly [string, LVal]>) {

@@ -108,8 +108,8 @@ export class Scheduler implements SchedulerInterface {
             let thisPid = this.__currentThread.tid;
             let statusVal = this.__currentThread.mkVal ( status ) ;
             let reason = TerminationStatus.OK == status ? statusVal : 
-                mkTuple ( [statusVal,  mkVal (errstr)] );
-            let message = mkVal (mkTuple ([ mkVal("DONE"), refUUID, thisPid, reason]))             
+                mkTuple ( [statusVal,  mkVal (errstr)], false );
+            let message = mkVal (mkTuple ([ mkVal("DONE"), refUUID, thisPid, reason], false))             
             this.rtObj.sendMessageNoChecks ( toPid, message , false) // false flag means no need to return in the process
         }
     }

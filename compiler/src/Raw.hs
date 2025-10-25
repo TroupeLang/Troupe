@@ -103,7 +103,7 @@ data RawExpr
   | Un Basics.UnaryOp RawVar
   | ProjectLVal VarAccess LValField
   | ProjectState MonComponent
-  | Tuple [VarAccess]
+  | Tuple [VarAccess] Basics.SynVariantTag
   | Record Fields
   | WithRecord RawVar Fields 
   | ProjField RawVar Basics.FieldName
@@ -200,7 +200,7 @@ data FunDef = FunDef
 
 -- An IR program is just a collection of atoms declarations 
 -- and function definitions
-data RawProgram = RawProgram C.Atoms [FunDef] 
+data RawProgram = RawProgram [FunDef] 
 
 
 -----------------------------------------------------------
@@ -208,7 +208,6 @@ data RawProgram = RawProgram C.Atoms [FunDef]
 -----------------------------------------------------------
 data RawUnit 
   = FunRawUnit FunDef 
-  | AtomRawUnit C.Atoms 
   | ProgramRawUnit RawProgram 
 
 
@@ -263,7 +262,7 @@ instructionType i = case i of
 -- PRETTY PRINTING
 -----------------------------------------------------------
 
-ppProg (RawProgram atoms funs) =
+ppProg (RawProgram funs) =
   vcat $ (map ppFunDef funs)
 
 instance Show RawProgram where
@@ -282,7 +281,7 @@ ppRawExpr (Bin binop _ va1 va2) = -- TODO: 2025-07-31; also print the fast flag
   ppId va1 <+> text (show binop) <+> ppId va2
 ppRawExpr (Un op v) =
   text (show op) <> PP.parens (ppId v)
-ppRawExpr (Tuple vars) =
+ppRawExpr (Tuple vars _) =
   PP.parens $ PP.hsep $ PP.punctuate (text ",") (map ppId vars)
 ppRawExpr (List vars) =
   PP.brackets $ PP.hsep $ PP.punctuate (text ",") (map ppId vars)

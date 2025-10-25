@@ -146,7 +146,7 @@ instance MarkUsed RawExpr where
     Un _ x -> markUsed x
     ProjectLVal x _ -> markUsed x
     ProjectState _ -> return ()
-    Tuple xs -> markUsed xs 
+    Tuple xs _ -> markUsed xs 
     Record fields -> markUsed (snd (unzip fields))
     WithRecord x fields -> do 
       markUsed x 
@@ -189,7 +189,6 @@ typeOfLit lit =
       Core.LString _ -> Just RawString
       Core.LLabel _ -> Just RawLevel               
       Core.LBool _ -> Just RawBoolean 
-      Core.LAtom _ -> Nothing
       Core.LDCLabel _ -> Just RawDCLabel
       
 
@@ -241,7 +240,7 @@ guessType = \case
     Basics.Tail -> Nothing
     Basics.LevelOf -> Just RawLevel
 
-  Tuple _ -> Just RawTuple
+  Tuple _ _ -> Just RawTuple
   List _ -> Just RawList
   ListCons _ _ -> Just RawList
   Record _ -> Just RawRecord
@@ -590,16 +589,12 @@ class RawOptable a where
 
 
 instance RawOptable RawProgram where   
-  rawopt (RawProgram atoms fdefs) = 
-      RawProgram (rawopt atoms)  (map rawopt fdefs)
+  rawopt (RawProgram fdefs) = 
+      RawProgram (map rawopt fdefs)
 
 instance RawOptable FunDef where 
   rawopt = funopt 
 
-instance RawOptable Core.Atoms where 
-  rawopt = id 
-
 instance RawOptable RawUnit where 
   rawopt (FunRawUnit f) = FunRawUnit (rawopt f)
-  rawopt (AtomRawUnit c) = AtomRawUnit (rawopt c)
   rawopt (ProgramRawUnit p) = ProgramRawUnit (rawopt p)

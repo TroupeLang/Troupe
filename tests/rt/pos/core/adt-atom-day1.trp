@@ -1,0 +1,18 @@
+datatype Day = MONDAY
+	     | TUESDAY
+	     | WEDNESDAY
+	     | THURSDAY
+	     | FRIDAY
+	     | SATURDAY
+	     | SUNDAY
+	     
+let fun print_day MONDAY = print "monday"
+      | print_day TUESDAY = print "tuesday"
+      | print_day WEDNESDAY = print "wednesday"
+      | print_day THURSDAY = print "thursday"
+      | print_day FRIDAY = print "friday"
+      | print_day SATURDAY = print "saturday"
+      | print_day SUNDAY = print "sunday"
+in print_day FRIDAY;
+   print_day TUESDAY
+end

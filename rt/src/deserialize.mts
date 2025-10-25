@@ -6,7 +6,6 @@ import { LVal } from './Lval.mjs';
 import { mkTuple, mkList } from './ValuesUtil.mjs';
 import { ProcessID } from './process.mjs';
 import { Authority } from './Authority.mjs';
-import { Atom } from './Atom.mjs';
 import { __unitbase }from './UnitBase.mjs'
 import { glb, mkLevel } from './Level.mjs';
 import { RuntimeInterface } from './RuntimeInterface.mjs';
@@ -92,8 +91,6 @@ function unindent() {
     indentcounter--;
 }
 
-
-
 function deserializationError() {
     console.log("DESERIALIZATION ERROR HANDLING IS NOT IMPLEMENTED")
     process.exit(1);
@@ -121,17 +118,6 @@ function constructCurrent(compilerOutput: string) {
         let ns = serobj.namespaces[i]
         let nsFun = HEADER
 
-        let atomSet = new Set<string>()
-
-        // nsFun += "this.libSet = new Set () \n"
-        // nsFun += "this.libs = [] \n"
-        // nsFun += "this.addLib = function (lib, decl) " +
-        //     " { if (!this.libSet.has (lib +'.'+decl)) { " +
-        //     " this.libSet.add (lib +'.'+decl); " +
-        //     " this.libs.push ({lib:lib, decl:decl})} } \n"
-        // nsFun += "this.loadlibs = function (cb) { rt.linkLibs (this.libs, this, cb) } \n"
-
-
         for (let j = 0; j < ns.length; j++) {
             if (j > 0) {
                 nsFun += "\n\n" // looks neater this way
@@ -140,30 +126,16 @@ function constructCurrent(compilerOutput: string) {
             // console.log (snippetJson.libs);
             // console.log (snippetJson.fname);
             nsFun += snippetJson.code;
-
-            for (let atom of snippetJson.atoms) {
-                atomSet.add(atom)
-            }
-            // console.log (snippetJson.atoms)
         }
-        let argNames = Array.from(atomSet);
-        let argValues = argNames.map( argName => {return new Atom(argName)})
-        argNames.unshift('rt')        
-        argNames.push(nsFun)        
+	
         // Observe that there is some serious level of 
         // reflection going on in here 
-        //    Arguments to Function are 
-        //             'rt', ATOM1, ..., ATOMk, nsFun 
-        //    
-        // 
-        let NS: any = Reflect.construct (Function, argNames)
-
+        // Arguments to Function are 'rt', nsFun 
+	let NS: any = Reflect.construct (Function, ['rt', nsFun])
+	
         // We now construct an instance of the newly constructed object
-        // that takes the runtime object + atoms as its arguments
-
-        // console.log (NS.toString()); // debugging
-        argValues.unshift(__rtObj)
-        ctxt.namespaces[i] = Reflect.construct (NS, argValues) 
+        // that takes the runtime object as its argument
+        ctxt.namespaces[i] = Reflect.construct (NS, [__rtObj]) 
         
     }
 
@@ -243,14 +215,14 @@ function constructCurrent(compilerOutput: string) {
                 case Ty.TroupeType.RECORD:
                     // for reords, the serialization format is  [[key, value_json], ...]
                     let a = [];
-                    for (let i = 0; i < obj.length; i++) {
-                        a.push ([ obj[i][0], mkValue(obj[i][1]) ])
+                    for (let i = 0; i < obj.fields.length; i++) {
+                        a.push ([ obj.fields[i][0], mkValue(obj.fields[i][1]) ])
                     }
                     return Record.mkRecord(a);
                 case Ty.TroupeType.LIST:
                     return mkList(deserializeArray(obj))
                 case Ty.TroupeType.TUPLE:
-                    return mkTuple(deserializeArray(obj))
+                    return mkTuple(deserializeArray(obj.vals), obj.isSynVariant)
                 case Ty.TroupeType.CLOSURE:
                     return mkClosure(obj.ClosureID)
                 case Ty.TroupeType.NUMBER: 
@@ -266,8 +238,6 @@ function constructCurrent(compilerOutput: string) {
                     return mkLevel(obj.lev)
                 case Ty.TroupeType.LVAL:
                     return mkValue(obj)
-                case Ty.TroupeType.ATOM:
-                     return new Atom(obj.atom, obj.creation_uuid)
                 case Ty.TroupeType.UNIT:
                     return __unitbase
                 default:

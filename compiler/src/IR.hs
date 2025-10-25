@@ -52,7 +52,7 @@ type Fields =  [(Basics.FieldName, VarAccess)]
 data IRExpr
   = Bin Basics.BinOp VarAccess VarAccess
   | Un Basics.UnaryOp VarAccess
-  | Tuple [VarAccess]
+  | Tuple [VarAccess] Basics.SynVariantTag
   | Record Fields
   | WithRecord VarAccess Fields 
   | ProjField VarAccess Basics.FieldName
@@ -118,7 +118,7 @@ data FunDef = FunDef
 
 -- An IR program is just a collection of atoms declarations 
 -- and function definitions
-data IRProgram = IRProgram C.Atoms [FunDef] deriving (Generic)
+data IRProgram = IRProgram [FunDef] deriving (Generic)
 
 -----------------------------------------------------------
 -- Dependency calculation
@@ -127,16 +127,13 @@ data IRProgram = IRProgram C.Atoms [FunDef] deriving (Generic)
 -- For dependencies, we only need the function dependencies
 
 class ComputesDependencies a where
-  dependencies :: a -> Writer ([HFN], [Basics.LibName], [Basics.AtomName])  ()
+  dependencies :: a -> Writer ([HFN], [Basics.LibName], [Basics.SyntacticVariantName])  ()
 
 instance ComputesDependencies IRInst where 
    dependencies (MkFunClosures _ fdefs) = 
         mapM_ (\(_, hfn) -> tell ([hfn],[],[])) fdefs
    dependencies (Assign _ (Lib libname _)) = 
-        tell ([], [libname],[])
-   dependencies (Assign _ (Const (C.LAtom a))) = 
-        tell ([], [], [a])
-                                       
+        tell ([], [libname],[])        
    dependencies _ = return ()
 
 instance ComputesDependencies IRBBTree where
@@ -182,7 +179,6 @@ instance Serialize IRBBTree
 -----------------------------------------------------------
 data SerializationUnit
   = FunSerialization FunDef
-  | AtomsSerialization C.Atoms
   | ProgramSerialization IRProgram
   deriving (Generic)
 
@@ -191,12 +187,6 @@ instance Serialize SerializationUnit
 
 serializeFunDef :: FunDef -> BS.ByteString
 serializeFunDef fdef = Serialize.runPut ( Serialize.put (FunSerialization fdef) )
-
-serializeAtoms :: C.Atoms -> BS.ByteString
-serializeAtoms atoms = Serialize.runPut (Serialize.put (AtomsSerialization atoms))
-
-deserializeAtoms :: BS.ByteString -> Either String C.Atoms
-deserializeAtoms bs = Serialize.runGet (Serialize.get) bs
 
 deserialize :: BS.ByteString -> Either String SerializationUnit
 deserialize bs =
@@ -355,7 +345,7 @@ instance WellFormedIRCheck IRExpr where
 -- they may need to be checked too...
 
 wfIRProg :: IRProgram -> Except String ()
-wfIRProg (IRProgram _ funs) = mapM_ wfFun funs
+wfIRProg (IRProgram funs) = mapM_ wfFun funs
 
 wfFun :: FunDef -> Except String () 
 wfFun (FunDef (HFN fn) (VN arg) consts bb) = 
@@ -381,7 +371,7 @@ checkFromBB initState bb =
 -- PRETTY PRINTING
 -----------------------------------------------------------
 
-ppProg (IRProgram atoms funs) =
+ppProg (IRProgram funs) =
   vcat $ (map ppFunDef funs)
 
 instance Show IRProgram where
@@ -404,7 +394,7 @@ ppIRExpr (Bin binop va1 va2) =
   ppId va1 <+> text (show binop) <+> ppId va2
 ppIRExpr (Un op v) =
   text (show op) <> PP.parens (ppId v)
-ppIRExpr (Tuple vars) =
+ppIRExpr (Tuple vars _) =
   PP.parens $ PP.hsep $ PP.punctuate (text ",") (map ppId vars)
 ppIRExpr (List vars) =
   PP.brackets $ PP.hsep $ PP.punctuate (text ",") (map ppId vars)
@@ -498,7 +488,7 @@ instance Identifier HFN where
 instance Identifier Basics.LibName where 
   ppId (Basics.LibName s) = text s
 
-instance Identifier Basics.AtomName where 
+instance Identifier Basics.SyntacticVariantName where 
   ppId = text
 
 

@@ -2,7 +2,7 @@
 
 module Main (main) where
 
-import qualified AtomFolding as AF
+import qualified SynVarFolding as SF
 import Parser
 import qualified Core as Core
 import RetDFCPS
@@ -107,7 +107,7 @@ process flags fname input = do
                         putStrLn (showIndent 2 prog)
 
       --------------------------------------------------
-      prog' <- case runExcept (C.trans compileMode (AF.visitProg prog)) of
+      prog' <- case runExcept (C.trans compileMode (SF.visitProg prog)) of
         Right p -> return p
         Left s -> die s
       when verbose $ do printSep "PATTERN MATCH ELIMINATION"

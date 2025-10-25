@@ -9,8 +9,12 @@ import GHC.Generics(Generic)
 import Data.Serialize (Serialize)
 
 type VarName = String
-type AtomName = String
+type SyntacticVariantName = String
+type SyntacticVariantConstructorName = String
+type SyntacticVariantConstructor = (SyntacticVariantConstructorName, [VarName])
+type SyntacticVariantDef = (SyntacticVariantName, [SyntacticVariantConstructor])
 type FieldName = String
+type SynVariantTag = Bool
 
 -- | Eq and Neq: deep equality check on the two parameters, including the types (any type inequality results in false being returned).
 data BinOp = Plus | Minus | Mult | Div | Mod |  Eq | Neq | Le | Lt | Ge | Gt | And | Or | RaisedTo | FlowsTo | Concat| IntDiv | BinAnd | BinOr | BinXor | BinShiftLeft | BinShiftRight | BinZeroShiftRight | HasField | LatticeJoin | LatticeMeet

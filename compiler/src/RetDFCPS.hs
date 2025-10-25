@@ -32,8 +32,8 @@ transFunDecl (Core.FunDecl fname (Core.Nullary e)) = do
   return $ CPS.Fun (VN fname) (CPS.Nullary e')
 
 transProg :: Core.Prog -> CPS.Prog
-transProg (Core.Prog imports atoms t) =
-  Prog atoms $ evalState (trans t (\z -> return $ Halt z)) 1
+transProg (Core.Prog imports t) =
+  Prog $ evalState (trans t (\z -> return $ Halt z)) 1
 
 
 transFields k fields context = 
@@ -124,13 +124,13 @@ transExplicit (Core.AssertElseError e0 e1 e2 p) = do
       return $ AssertElseError v0 e1' v2 p))
 
 
-transExplicit (Core.Tuple ts)  =
+transExplicit (Core.Tuple ts tag)  =
   transTuple ts []
   where
     transTuple :: [Core.Term] -> [CPS.VarName] -> S KTerm
     transTuple [] acc  = do
       v <- freshV
-      return $ LetSimple v (Tuple (reverse acc)) (KontReturn v)
+      return $ LetSimple v (Tuple (reverse acc) tag) (KontReturn v)
     transTuple (t:ts) acc  =
       trans t (\v -> transTuple ts (v:acc) )
 
@@ -258,13 +258,13 @@ trans (Core.AssertElseError e0 e1 e2 p) context = do
 
 
 
-trans (Core.Tuple ts) context =
+trans (Core.Tuple ts tag) context =
   transTuple ts [] context
   where
     transTuple [] acc context = do
       v <- freshV
       e' <- context v
-      return $ LetSimple v (Tuple (reverse acc)) e'
+      return $ LetSimple v (Tuple (reverse acc) tag) e'
     transTuple (t:ts) acc context =
       trans t (\v -> transTuple ts (v:acc) context)
 

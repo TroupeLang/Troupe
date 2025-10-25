@@ -20,7 +20,7 @@ import Control.Monad.Reader
 import Data.List
 import CompileMode
 
-import           Control.Monad.Except
+import Control.Monad.Except
 import IR as CCIR
 
 import Control.Monad.Identity
@@ -45,7 +45,7 @@ type CC = RWS
             FreshCounter                  -- state:  the counter for fresh name generation
 
 
-type CCEnv   = (CompileMode, C.Atoms, NestingLevel, Map VarName VarLevel, Maybe VarName)
+type CCEnv   = (CompileMode, NestingLevel, Map VarName VarLevel, Maybe VarName)
 type Frees   = [(VarName, NestingLevel)]
 type FunDefs = [CCIR.FunDef]
 type ConstEntry = (VarName, C.Lit)
@@ -59,9 +59,8 @@ consBB:: CCIR.IRInst -> CCIR.IRBBTree -> CCIR.IRBBTree
 consBB i (BB insts t) = BB (i:insts) t
 
 insVar :: VarName -> CCEnv -> CCEnv
-insVar vn (compileMode, atms, lev, vmap, fname) =
+insVar vn (compileMode, lev, vmap, fname) =
     ( compileMode
-    , atms
     , lev
     , Map.insert vn (VarNested lev) vmap
     , fname
@@ -73,12 +72,12 @@ insVars vars ccenv =
 
 
 askLev = do
-  (_, _, lev, _, _) <- ask
+  (_, lev, _, _) <- ask
   return lev
 
 
-incLev fname (compileMode, atms, lev, vmap, _) =
-    (compileMode, atms, lev + 1, vmap, (Just fname))
+incLev fname (compileMode, lev, vmap, _) =
+    (compileMode, lev + 1, vmap, (Just fname))
 
 
 -- this helper function looks up the variable name 
@@ -87,7 +86,7 @@ incLev fname (compileMode, atms, lev, vmap, _) =
 
 transVar :: VarName -> CC VarAccess
 transVar v@(VN vname) = do 
-  (_, C.Atoms atms, lev, vmap, maybe_fname) <- ask
+  (_, lev, vmap, maybe_fname) <- ask
   case maybe_fname of 
     Just fname | fname == v  -> return $ VarFunSelfRef
     _ -> 
@@ -99,10 +98,7 @@ transVar v@(VN vname) = do
             return $ VarEnv v 
           else 
             return $ VarLocal v 
-        Nothing -> 
-          if vname `elem` atms
-            then return $ VarLocal v 
-            else error $ "undeclared variable: " ++ (show v)
+        Nothing -> error $ "undeclared variable: " ++ (show v)
 
 
 transVars = mapM transVar         
@@ -162,9 +158,9 @@ cpsToIR (CPS.LetSimple vname@(VN ident) st kt) = do
         CPS.Un unop v -> do 
           v' <- transVar v
           _assign (Un unop v')
-        CPS.Tuple lst -> do 
+        CPS.Tuple lst tag -> do 
           lst' <- transVars lst 
-          _assign (Tuple lst')
+          _assign (Tuple lst' tag)
         CPS.Record fields -> do
           fields' <- transFields fields
           _assign (Record fields')
@@ -221,7 +217,7 @@ cpsToIR (CPS.LetFun fdefs kt) = do
 -- Special Halt continuation, for exiting program
 cpsToIR (CPS.Halt v) = do 
     v' <- transVar v
-    (compileMode,_ , _ , _, _ ) <- ask 
+    (compileMode, _ , _, _ ) <- ask 
     let constructor =
           case compileMode of
               Normal -> CCIR.Ret
@@ -263,10 +259,8 @@ cpsToIR (CPS.Error v p) = do
 ------------------------------------------------------------
 
 closureConvert :: CompileMode -> CPS.Prog -> Except String CCIR.IRProgram
-closureConvert compileMode (CPS.Prog (C.Atoms atms) t) =
-  let atms' = C.Atoms atms
-      initEnv = ( compileMode
-                , atms'
+closureConvert compileMode (CPS.Prog t) =
+  let initEnv = ( compileMode
                 , 0 -- initial nesting counter
                 , Map.empty
                 , Nothing -- top level code has no function name 
@@ -282,7 +276,7 @@ closureConvert compileMode (CPS.Prog (C.Atoms atms) t) =
       consts = (fst.unzip) consts_wo_levs
       main = FunDef (HFN toplevel) (VN argumentName) consts bb
 
-      irProg = CCIR.IRProgram (C.Atoms atms) $ fdefs++[main]
+      irProg = CCIR.IRProgram $ fdefs++[main]
     in do CCIR.wfIRProg irProg 
           return irProg
     -- then irProg

@@ -10,7 +10,7 @@ where
 import IR (SerializationUnit(..), HFN(..)
           , ppId, ppFunCall, ppArgs, Fields (..), Ident
           , serializeFunDef
-          , serializeAtoms )
+          )
 import qualified IR           
 import qualified Raw 
 import qualified Stack 
@@ -46,6 +46,7 @@ import           IR ( Identifier(..)
                     )
 
 import RawDefUse
+import qualified GHC.Stack.Types as GHC.Stack
 
 data TEnv = TEnv { defsUses :: DefUse, offsets :: OffsetMap, localCallDepth :: Int, __consts :: Raw.ConstMap }
 type BlockNumber = Int 
@@ -54,7 +55,6 @@ type Tr = RWS TEnv () BlockNumber
 
 getBlockNumber :: Tr BlockNumber 
 getBlockNumber = get 
-
 
 setBlockNumber :: BlockNumber -> Tr ()
 setBlockNumber = put
@@ -236,8 +236,8 @@ trFun fdef@(Raw.FunDef hfn consts bb ir) =
 
 
 rawProg2Stack :: Raw.RawProgram -> Stack.StackProgram
-rawProg2Stack (Raw.RawProgram atms fdefs)  =
-  Stack.StackProgram atms (map trFun fdefs)
+rawProg2Stack (Raw.RawProgram fdefs)  =
+  Stack.StackProgram (map trFun fdefs)
 
 
 rawFun2Stack = trFun 
@@ -245,5 +245,4 @@ rawFun2Stack = trFun
 raw2Stack :: Raw.RawUnit -> Stack.StackUnit 
 raw2Stack r = case r of 
   Raw.FunRawUnit f -> Stack.FunStackUnit (trFun f)
-  Raw.AtomRawUnit c -> Stack.AtomStackUnit c 
   Raw.ProgramRawUnit p -> Stack.ProgramStackUnit (rawProg2Stack p)

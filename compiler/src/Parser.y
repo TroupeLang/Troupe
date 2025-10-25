@@ -41,7 +41,6 @@ import Control.Monad.Except
     of    { L _ TokenOf }
     import { L _ TokenImport }
     datatype { L _ TokenDatatype }
-    Atoms { L _ TokenAtoms }
     fn    { L _ TokenFn }
     hn    { L _ TokenHn }
     pini  { L _ TokenPini }
@@ -134,18 +133,27 @@ import Control.Monad.Except
 
 
 
-Prog : ImportDecl AtomsDecl Expr                       { Prog (Imports $1) (Atoms $2) $3 }
+Prog : ImportDecl SyntacticVariantDecl Expr { Prog (Imports $1) (SyntacticVariants $2) $3 }
 
 ImportDecl: import  VAR ImportDecl { ((LibName (varTok $2), Nothing)): $3  }
           | { [] }
 
 
-AtomsDecl : datatype Atoms '=' VAR AtomsList    { (varTok $4):$5 }
+SyntacticVariantDecl : datatype VAR '='
+		SyntacticVariantConstructor
+		SyntacticVariantList
+		SyntacticVariantDecl { (varTok $2, $4:$5):$6 }
           |  {[]}
+		
+SyntacticVariantList : { [] }
+          | '|' SyntacticVariantConstructor SyntacticVariantList  { $2: $3 } 	
 
-AtomsList : { [] }
-          | '|' VAR AtomsList  { (varTok $2): $3 }
+SyntacticVariantConstructor : VAR { (varTok $1, []) }
+	            | VAR of SyntacticVariantConstructorArgs { (varTok $1, $3) }
 
+SyntacticVariantConstructorArgs : VAR { (varTok $1):[] }
+	                | VAR '*' SyntacticVariantConstructorArgs { (varTok $1):$3 }
+	                | '(' SyntacticVariantConstructorArgs ')' { $2 }	
 
 Expr: Form                        { $1 }
     | let pini Expr Decs in Expr end  { Let (piniDecl $3 $4)  $6 }
@@ -155,7 +163,7 @@ Expr: Form                        { $1 }
     | hn Pattern '=>' Expr                  { Hnd (Handler $2 Nothing Nothing $4)}
     | hn Pattern '|' Pattern '=>' Expr      { Hnd (Handler $2 (Just $4) Nothing $6) }
     | hn Pattern when Expr '=>' Expr        { Hnd (Handler $2 Nothing (Just $4) $6)}
-    | hn Pattern '|' Pattern when Expr '=>' Expr      { Hnd (Handler $2 (Just $4) (Just $6) $8)}
+    | hn Pattern '|' Pattern when Expr '=>' Expr { Hnd (Handler $2 (Just $4) (Just $6) $8)}
     | case Expr of Match          { Case $2 $4 (pos $1) }
     | Expr ';' Expr               { mkSeq $1 $3 }
     | Expr '-' Expr               { Bin Minus $1 $3 }
@@ -163,8 +171,8 @@ Expr: Form                        { $1 }
     | Expr '>=' Expr              { Bin Ge $1 $3 }
     | Expr '*' Expr               { Bin Mult $1 $3 }
     | Expr '/' Expr               { Bin Div $1 $3 }
-    | Expr div Expr             { Bin IntDiv $1 $3}
-    | Expr mod Expr             { Bin Mod $1 $3}
+    | Expr div Expr               { Bin IntDiv $1 $3}
+    | Expr mod Expr               { Bin Mod $1 $3}
     | Expr '^' Expr               { Bin Concat $1 $3 }
     | Expr '=' Expr               { Bin Eq $1 $3 }
     | Expr '<=' Expr              { Bin Le $1 $3 }
@@ -184,16 +192,18 @@ Expr: Form                        { $1 }
     | Expr '::' Expr              { ListCons $1 $3 }
     | Expr 'raisedTo' Expr        { Bin RaisedTo $1 $3 }
     | 'isTuple' Expr              { Un IsTuple $2 }
-    | 'isList' Expr              { Un IsList $2 }
-    | 'isRecord' Expr              { Un IsRecord $2 }
+    | 'isList' Expr               { Un IsList $2 }
+    | 'isRecord' Expr             { Un IsRecord $2 }
 
 
-Match : Pattern '=>' Expr                      { [($1,$3)] }
-      | Pattern '=>' Expr '|' Match            { ($1,$3):$5 }
+Match : Pattern '=>' Expr                              { [($1,$3)] }
+      | Pattern '=>' Expr '|' Match                    { ($1,$3):$5 }
+      |	SyntacticVariantPattern '=>' Expr              { [($1,$3)] }
+      |	SyntacticVariantPattern '=>' Expr '|' Match    { ($1,$3):$5 }
 
 
 Form :: { Term }
-Form :  '-' Form                    { Un UnMinus $2 }
+Form : '-' Form                    { Un UnMinus $2 }
      | Fact                        { fromFact $1 }
 
 
@@ -218,9 +228,9 @@ IntLabelExp :                      { Right LabelTrue }
      | LabelExp                    { Left $1 }     
 
 DCLabelExp:
-     ConfLabelExp ';' IntLabelExp         { DCLabelExp ($1, $3) } 
+     ConfLabelExp ';' IntLabelExp  { DCLabelExp ($1, $3) } 
 
-Lit:   NUM                        { LInt (numTok $1) (pos $1) }
+Lit:   NUM                         { LInt (numTok $1) (pos $1) }
      | STRING                      { LString (strTok $1) }
      | true                        { LBool True }
      | false                       { LBool False }
@@ -233,7 +243,7 @@ Atom : '(' Expr ')'                { $2 }
      | Lit                         { Lit $1 }
      | VAR                         { Var (varTok $1) }
      | '(' ')'                     { Lit LUnit }
-     | '(' CSExpr Expr ')'         { Tuple (reverse ($3:$2)) }
+     | '(' CSExpr Expr ')'         { Tuple (reverse ($3:$2)) False }
      | '{' '}'                     { Record [] }
      | RecordExpr                  { $1 }
      | ListExpr                    { $1 }
@@ -265,6 +275,8 @@ ListExpr : '[' ']'                 { List []   }
 CSExpr : Expr ','                  { [$1] }
      | CSExpr Expr ','             { ($2:$1) }
 
+SyntacticVariantPattern : VAR Pattern      { SyntacticVariantPattern (varTok $1) $2 }
+     | VAR '(' SyntacticVariantPattern ')' { SyntacticVariantPattern (varTok $1) $3 }
 
 Pattern : VAR                               { VarPattern (varTok $1) }
     | '(' Pattern ')'                       { $2 }
@@ -274,8 +286,7 @@ Pattern : VAR                               { VarPattern (varTok $1) }
     | Lit                                   { ValPattern $1 }
     | '(' CSPattern Pattern ')'             { TuplePattern (reverse ($3:$2)) }
     | FieldPattern                          { $1 }
-    | ListPattern   { $1}
-
+    | ListPattern                           { $1 }
 
 FieldPattern :
       '{' '}'                                        { RecordPattern [] ExactMatch }
@@ -305,7 +316,7 @@ CSPattern : Pattern ','         { [$1] }
     | CSPattern  Pattern ','    { ($2:$1) }
 
 
-Dec : val Pattern '=' Expr      { ValDecl $2 $4 (pos $1 )}
+Dec : val Pattern '=' Expr         { ValDecl $2 $4 (pos $1 )}
     | FunDecs                      { FunDecs $1 }
 
 Decs : Dec                         { [$1] }
@@ -334,8 +345,10 @@ OtherFunOption : '|' VAR FunArgs '=' Expr { Lambda $3 $5}
 FunDecl    : fun VAR FunOptions { FunDecl (varTok $2) $3 (pos $2) }
 AndFunDecl : and VAR FunOptions { FunDecl (varTok $2) $3 (pos $2) }
 
-FunArgs : Pattern                        { [$1]  }
-        | Pattern FunArgs                { $1 : $2}
+FunArgs : Pattern                         { [$1]  }
+        | Pattern FunArgs                 { $1 : $2}
+	| '(' SyntacticVariantPattern ')'         { [$2] }
+	| '(' SyntacticVariantPattern ')' FunArgs { $2 : $4 }
 
 {
 

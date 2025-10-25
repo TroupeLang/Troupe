@@ -22,7 +22,7 @@ import { Thread } from "./Thread.mjs";
 
 
 function createMessage(msg, fromNodeId, pc) {
-    let tuple:any = mkTuple ([msg, fromNodeId]);  
+    let tuple:any = mkTuple ([msg, fromNodeId], false);  
     // tuple.isTuple = true; // hack! 2018-10-19: AA
     // tuple._troupeType = TroupeType.TUPLE
     // tuple.dataLevel = lub (msg.dataLevel, pc)

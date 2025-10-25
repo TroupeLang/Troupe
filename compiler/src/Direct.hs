@@ -5,8 +5,9 @@ module Direct ( Lambda (..)
               , Lit(..)
               , DeclPattern(..)
               , RecordPatternMode(..)
-              , AtomName
-              , Atoms(..)
+              , SyntacticVariantName
+              , SyntacticVariantConstructor
+              , SyntacticVariants(..)
               , Prog(..)
               , Handler(..)
               , FieldName
@@ -21,6 +22,7 @@ import Text.PrettyPrint.HughesPJ (
     (<+>), ($$), text, hsep, vcat, nest)
 import           ShowIndent
 import           TroupePositionInfo
+import Data.List (find)
 
 
 data PrimType
@@ -48,7 +50,6 @@ type Guard = Maybe Term
 data Handler = Handler DeclPattern (Maybe DeclPattern) Guard Term
   deriving (Eq)
 
-
 data DeclPattern
     = VarPattern VarName --SrcPosInf
     | ValPattern Lit 
@@ -58,6 +59,7 @@ data DeclPattern
     | ConsPattern DeclPattern DeclPattern --SrcPosInf
     | ListPattern [DeclPattern] --SrcPosInf
     | RecordPattern [(FieldName, Maybe DeclPattern)] RecordPatternMode
+    | SyntacticVariantPattern SyntacticVariantConstructorName DeclPattern
       deriving (Eq)
 
 data RecordPatternMode = ExactMatch | WildcardMatch
@@ -78,7 +80,7 @@ data Lit
     | LString String --SrcPosInf
     | LLabel String --SrcPosInf
     | LDCLabel DCLabelExp
-    | LAtom AtomName --SrcPosInf
+    | LSyntacticVariant SyntacticVariantConstructorName --SrcPosInf
   deriving (Eq, Show)
 
 
@@ -93,8 +95,8 @@ data Term
     | Let [Decl] Term
     | Case Term [(DeclPattern, Term)] PosInf
     | If Term Term Term
-    | Tuple [Term]
-    | Record Fields 
+    | Tuple [Term] SynVariantTag
+    | Record Fields
     | WithRecord Term Fields
     | ProjField Term FieldName
     | ProjIdx Term Word
@@ -106,11 +108,11 @@ data Term
     | Error Term
           deriving (Eq)
 
-data Atoms = Atoms [AtomName]
+data SyntacticVariants = SyntacticVariants [SyntacticVariantDef]
       deriving (Eq, Show)
 
 
-data Prog = Prog Imports Atoms Term
+data Prog = Prog Imports SyntacticVariants Term
   deriving (Eq, Show)
 
 
@@ -130,13 +132,16 @@ instance ShowIndent Prog where
 
 
 ppProg :: Prog -> PP.Doc
-ppProg (Prog (Imports imports) (Atoms atoms) term) =
-  let ppAtoms =
-        if null atoms
-          then PP.empty
-          else (text "datatype Atoms = ") <+>
-               (hsep $ PP.punctuate (text " |") (map text atoms))
-
+ppProg (Prog (Imports imports) (SyntacticVariants datatypes) term) =
+  let ppSyntacticVariants =
+        if null datatypes
+        then PP.empty
+        else vcat $ flip map datatypes (\dt -> (text "datatype ") <+>
+                                         (text $ fst dt) <+>
+                                         (hsep $ PP.punctuate (text " |") (map ppConstructor $ snd dt)))
+        where ppConstructor (s, []) = text s
+              ppConstructor (s, x:[]) = text s <+> text " of " <+> text x
+              ppConstructor (s, xs) = text s <+> text " of " <+> PP.parens (hsep $ PP.punctuate (text " *") (map text xs))
       ppImports =
         if null imports then PP.empty
         else
@@ -144,7 +149,7 @@ ppProg (Prog (Imports imports) (Atoms atoms) term) =
           in
             (vcat $ (map ppLibName imports)) $$ PP.text ""
   in vcat [ ppImports
-          , ppAtoms
+          , ppSyntacticVariants
           , ppTerm 0 term ]
 
 
@@ -162,13 +167,16 @@ ppTerm' (Lit literal) = ppLit literal
 
 ppTerm' (Error t) = text "error " PP.<> ppTerm' t
 
-ppTerm'  (Tuple ts) =
+ppTerm' (Tuple ts False) =
   PP.parens $
   PP.hcat $
   PP.punctuate (text ",") (map (ppTerm 0) ts)
+ppTerm' (Tuple ts True) =
+  case ts of [Lit (LString nm)] -> text nm
+             [Lit (LString nm), t] -> text nm PP.<> PP.space PP.<> ppTerm 0 t
+             otherwise -> text "error: Missing syntactiv variant"
 
-ppTerm' (Record fs) = 
-  PP.braces $ qqFields fs 
+ppTerm' (Record fs) = PP.braces $ qqFields fs
 
 ppTerm' (WithRecord t fs) = 
   PP.braces $ PP.hsep [ppTerm 0 t, text "with", qqFields fs] 
@@ -337,6 +345,10 @@ ppDeclPattern (RecordPattern fields mode) =
               wildcard = case mode of
                 ExactMatch -> []
                 WildcardMatch -> [text ".."]
+ppDeclPattern (SyntacticVariantPattern nm pat) =
+  text nm PP.<> PP.space PP.<>
+  case pat of SyntacticVariantPattern _ _ -> PP.parens $ ppDeclPattern pat
+              otherwise -> ppDeclPattern pat
 
 ppLit :: Lit -> PP.Doc
 ppLit (LInt i _ )      = PP.integer i
@@ -346,12 +358,12 @@ ppLit (LUnit )       = text "()"
 ppLit (LBool True  )  = text "true"
 ppLit (LBool False) = text "false"
 ppLit (LLabel s ) = PP.braces (text s)
-ppLit (LAtom s) = text s 
+ppLit (LSyntacticVariant s) = text s
 
 
 termPrec :: Term -> Precedence
 termPrec (Lit _)         = maxPrec
-termPrec (Tuple _)       = maxPrec
+termPrec (Tuple _ _)       = maxPrec
 termPrec (List _ )       = maxPrec
 termPrec (Var _)         = maxPrec
 termPrec (App _ _)       = appPrec

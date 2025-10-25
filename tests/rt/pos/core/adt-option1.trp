@@ -1,0 +1,6 @@
+datatype option = NONE | SOME of a
+let fun sum_of_some_tuple (SOME (a, b)) = SOME (a + b)
+      | sum_of_some_tuple NONE = NONE
+    fun get_with_default (SOME a) _ = a
+      | get_with_default NONE d = d
+in get_with_default (sum_of_some_tuple (SOME (2,3))) 0 end

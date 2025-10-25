@@ -57,7 +57,7 @@ function setupSandbox($r:RuntimeInterface, delay, resumeState = null) {
 
 
     function mk_tupleVal(x) {
-        return theThread.mkVal(mkTuple(x));
+        return theThread.mkVal(mkTuple(x, false));
     }
 
     function ok(x, l) {

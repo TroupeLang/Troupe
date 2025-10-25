@@ -11,7 +11,7 @@ import qualified Basics
 
 
 mkP :: IRBBTree -> IRProgram
-mkP tree = IRProgram (Core.Atoms []) [FunDef (HFN "main") (VN "arg") [] tree]
+mkP tree = IRProgram [FunDef (HFN "main") (VN "arg") [] tree]
 
 tcs :: [(String, IRProgram)]
 tcs = map (second mkP)
@@ -20,6 +20,6 @@ tcs = map (second mkP)
     )
   ,
     ( "TreeAssign"
-    , BB [Assign (VN "r") (Tuple [])] (Ret (mkV "r"))
+    , BB [Assign (VN "r") (Tuple [] False)] (Ret (mkV "r"))
     )
   ]

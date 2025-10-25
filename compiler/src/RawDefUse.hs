@@ -16,7 +16,7 @@ import Raw
 import IR (SerializationUnit(..), HFN(..)
           , ppId, ppFunCall, ppArgs, Fields (..), Ident
           , serializeFunDef
-          , serializeAtoms )
+          )
 import qualified IR           
 import qualified Stack 
 import qualified Data.Maybe as Maybe
@@ -196,7 +196,7 @@ instance Usable RawExpr b where
         Raw.Un _ x -> use x
         Raw.ProjectLVal x _ -> use x
         Raw.ProjectState _ -> return ()
-        Raw.Tuple xs -> use xs 
+        Raw.Tuple xs _ -> use xs 
         Raw.Record fields -> use (snd (unzip fields))
         Raw.WithRecord x fields -> do 
           use x 

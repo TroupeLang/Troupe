@@ -1,5 +1,5 @@
 import { UserRuntimeZero, Constructor, mkBase, mkService } from './UserRuntimeZero.mjs'
-import { assertNormalState, assertIsNTuple, assertIsLevel, assertIsList, assertIsAtom, assertIsNumber, assertIsUnit, assertIsFunction } from '../Asserts.mjs'
+import { assertNormalState, assertIsNTuple, assertIsLevel, assertIsList, assertIsNumber, assertIsUnit, assertIsFunction } from '../Asserts.mjs'
 import { flowsTo, lub, glb, BOT } from '../Level.mjs';
 import { RuntimeInterface } from '../RuntimeInterface.mjs';
 import { ReceiveTaintAction } from '../ReceiveTaintAction.mjs';
@@ -9,46 +9,6 @@ import { __unit } from '../UnitVal.mjs';
 import SandboxStatus from '../SandboxStatus.mjs';
 import { Thread } from '../Thread.mjs';
 import { debug } from 'console';
-
-
-
-/*
-// this function must only be called from 
-// one of the checked functions 
-function _receiveFromMailbox ($r:RuntimeInterface, lowb, highb, handlers) {
-  let mclear = $r.$t.mailbox.mclear
-  
-  let is_sufficient_clearance = 
-    flowsTo( lub (highb.val, $r.$t.pc)
-          ,  lub (lowb.val, mclear.boost_level ))
-
-    if (!is_sufficient_clearance)  {  
-      let errorMessage = 
-        "Not enough mailbox clearance for this receive\n" +
-        ` | receive lower bound: ${lowb.val.stringRep()}\n` + 
-        ` | receive upper bound: ${highb.val.stringRep()}\n` +
-        ` | pc level           : ${$r.$t.pc.stringRep()}\n` +
-        ` | mailbox clearance  : ${mclear.boost_level.stringRep()}` 
-      $r.$t.threadError (errorMessage);
-    }    
-  
-    let is_clearance_a_leak = flowsTo( mclear.pc_at_creation, glb ($r.$t.pc, lowb.val))
-
-    if (!is_clearance_a_leak)  {
-      let errorMessage = 
-        "PC level at the time of raising the mailbox clearance is too sensitive for this receive\n" +
-        ` | receive lower bound: ${lowb.val.stringRep()}\n` + 
-        ` | pc level at the time of receive: ${$r.$t.pc.stringRep()}\n` +        
-        ` | pc level at the time of raise: ${mclear.pc_at_creation.stringRep()}`  // we need better terminology for these       
-      $r.$t.threadError (errorMessage);
-    }
-
-
-    return $r.__mbox.rcv(lowb.val, highb.val, handlers, mclear.boost_level)
-    
-}
-*/
-
  
 /** Receiving functionality; 2020-02-12; AA 
  *
@@ -71,9 +31,6 @@ function _receiveFromMailbox ($r:RuntimeInterface, lowb, highb, handlers) {
  *
  *
  */ 
-
-
-
 
 export function BuiltinReceive<TBase extends Constructor<UserRuntimeZero>>(Base: TBase) {
     return class extends Base {
@@ -142,7 +99,6 @@ export function BuiltinReceive<TBase extends Constructor<UserRuntimeZero>>(Base:
           return this.runtime.ret (
             new LVal (this.runtime.$t.pc, this.runtime.$t.pc, BOT))
         })
- 
 
         guard = mkBase (arg => {
           assertIsNTuple(arg, 3)

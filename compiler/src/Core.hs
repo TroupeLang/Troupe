@@ -7,8 +7,6 @@ module Core (   Lambda (..)
               , Decl (..)
               , FunDecl (..)
               , Lit(..)
-              , AtomName
-              , Atoms(..)
               , Prog(..)
               , VarAccess(..)
               , lowerProg
@@ -34,6 +32,7 @@ import           ShowIndent
 
 import           TroupePositionInfo
 import           DCLabels
+import Data.List (find)
 
 --------------------------------------------------
 -- AST is the same as Direct, but lambda are unary (or nullary)
@@ -57,7 +56,6 @@ data Lit
     | LDCLabel DCLabelExp
     | LUnit
     | LBool Bool
-    | LAtom AtomName
   deriving (Show, Generic)
 instance Serialize Lit
 instance Eq Lit where 
@@ -66,7 +64,6 @@ instance Eq Lit where
   (LLabel l) == (LLabel l') = l == l' 
   LUnit == LUnit = True 
   (LBool x) == (LBool y) = x == y 
-  (LAtom x) == (LAtom y) = x == y
   (LDCLabel dc) == (LDCLabel dc') = dc == dc' 
   _ == _ = False
 instance Ord Lit where 
@@ -75,15 +72,12 @@ instance Ord Lit where
   (LLabel x)   <= (LLabel y)   = x <=y
   (LUnit)      <= (LUnit)      = True 
   (LBool x)    <= (LBool y)    = x <=y
-  (LAtom x)    <= (LAtom y)    = x <=y
   (LDCLabel x) <= (LDCLabel y) = x <= y
   (LInt _ _)   <= (LString _)  = True 
   (LString _)  <= (LLabel _)   = True 
   (LLabel _)   <= (LUnit)      = True 
   (LUnit)      <= (LBool _)    = True 
-  (LBool _)    <= (LAtom _)    = True 
-  (LAtom _)    <= (LDCLabel _) = True
-  _ <= _                       = False 
+  _            <= _            = False 
 
 instance GetPosInfo Lit where
   posInfo (LInt _ p) = p
@@ -107,8 +101,8 @@ data Term
     | Let Decl Term
     | If Term Term Term
     | AssertElseError Term Term Term PosInf
-    | Tuple [Term]
-    | Record Fields 
+    | Tuple [Term] SynVariantTag
+    | Record Fields
     | WithRecord Term Fields
     | ProjField Term FieldName 
     | ProjIdx Term Word
@@ -120,12 +114,7 @@ data Term
   deriving (Eq)
 
 
-data Atoms = Atoms [AtomName]
-  deriving (Eq, Show, Generic)
-instance Serialize Atoms
-
-
-data Prog = Prog Imports Atoms Term
+data Prog = Prog Imports Term
   deriving (Eq, Show)
 
 
@@ -151,14 +140,11 @@ The module also contains pretty printing for the Core representation.
 -- 1. Lowering 
 --------------------------------------------------
 
-lowerProg (D.Prog imports atms term) = Prog imports (trans atms) (lower term)
+lowerProg (D.Prog imports _ term) = Prog imports (lower term)
 
 
 
 -- the rest of the declarations in this part are not exported
-
-trans :: D.Atoms -> Atoms
-trans (D.Atoms atms) = Atoms atms
 
 lowerLam (D.Lambda vs t) =
   case vs of
@@ -172,7 +158,7 @@ lowerLit (D.LLabel s) = LLabel s
 lowerLit (D.LDCLabel dc) = LDCLabel dc
 lowerLit D.LUnit = LUnit
 lowerLit (D.LBool b) = LBool b
-lowerLit (D.LAtom n) = LAtom n
+lowerLit (D.LSyntacticVariant n) = error $ "Unexpected syntactic variant: \"" ++ n ++ "\""
 
 lower :: D.Term -> Core.Term
 lower (D.Lit l) = Lit (lowerLit l)
@@ -198,7 +184,7 @@ lower (D.Let decls e) =
 -- lower (D.Case t patTermLst) = Case (lower t) (map (\(p,t) -> (lowerDeclPat p, lower t)) patTermLst)
 lower (D.If e1 e2 e3) = If (lower e1) (lower e2) (lower e3)
 lower (D.AssertElseError e1 e2 e3 p) = AssertElseError (lower e1 ) (lower e2) (lower e3) p
-lower (D.Tuple terms) = Tuple (map lower terms)
+lower (D.Tuple terms tag) = Tuple (map lower terms) tag
 lower (D.Record fields) = Record (map (\(f, t) -> (f, lower t)) fields)
 lower (D.WithRecord  e fields) = WithRecord (lower e) (map (\(f, t) -> (f, lower t)) fields)
 lower (D.ProjField t f) = ProjField (lower t) f
@@ -221,13 +207,12 @@ lower (D.Un op e) = Un op (lower e)
 -- This is the only function that is exported here
 
 renameProg :: Prog -> Prog
-renameProg (Prog imports (Atoms atms) term) =
-  let alist = map (\ a -> (a, a)) atms
-      initEnv    = Map.fromList alist
+renameProg (Prog imports term) =
+  let initEnv    = Map.empty
       initReader = mapFromImports imports
       initState  = 0
       (term', _) = evalRWS (rename term initEnv) initReader initState
-  in Prog imports (Atoms atms) term'
+  in Prog imports term'
 
 -- The rest of the declarations here are not exported
 
@@ -330,8 +315,8 @@ rename (AssertElseError t1 t2 t3 p) m = do
   return $ AssertElseError t1' t2' t3' p
 
 
-rename (Tuple terms) m =
-  Tuple <$> mapM (flip rename m) terms
+rename (Tuple terms tag) m =
+  (\x -> Tuple x tag) <$> mapM (flip rename m) terms
 
 rename (Record fields) m = 
   Record <$> mapM renameField fields 
@@ -413,15 +398,9 @@ instance ShowIndent Prog where
 
 
 ppProg :: Prog -> PP.Doc
-ppProg (Prog (Imports imports) (Atoms atoms) term) =
-  let ppAtoms =
-        if null atoms
-          then PP.empty
-          else (text "datatype Atoms = ") <+>
-               (hsep $ PP.punctuate (text " |") (map text atoms))
-
-      ppImports = if null imports then PP.empty else text "<<imports>>\n"
-  in ppImports $$ ppAtoms $$ ppTerm 0 term
+ppProg (Prog (Imports imports) term) =
+  let ppImports = if null imports then PP.empty else text "<<imports>>\n"
+  in ppImports $$ ppTerm 0 term
 
 
 ppTerm :: Precedence -> Term -> PP.Doc
@@ -438,10 +417,14 @@ ppTerm' (Lit literal) = ppLit literal
 
 ppTerm' (Error t _) = text "error " PP.<> ppTerm' t
 
-ppTerm'  (Tuple ts) =
+ppTerm' (Tuple ts False) =
   PP.parens $
   PP.hcat $
   PP.punctuate (text ",") (map (ppTerm 0) ts)
+ppTerm' (Tuple ts True) =
+  case ts of [Lit (LString nm)] -> text nm
+             [Lit (LString nm), t] -> text nm PP.<> PP.space PP.<> ppTerm 0 t
+             otherwise -> text "error: Missing syntactic variant"
 
 ppTerm'  (List ts) =
   PP.brackets $
@@ -549,19 +532,18 @@ ppDecl (FunDecs fs) = ppFuns fs
 
 
 ppLit :: Lit -> PP.Doc
-ppLit (LInt i _)      = PP.integer i
+ppLit (LInt i _)    = PP.integer i
 ppLit (LString s)   = PP.doubleQuotes (text s)
 ppLit (LLabel s)    = PP.braces (text s)
 ppLit LUnit         = text "()"
 ppLit (LBool True)  = text "true"
 ppLit (LBool False) = text "false"
-ppLit (LAtom a) = text a
 ppLit (LDCLabel dc) = ppDCLabelExpLit dc
 
 
 termPrec :: Term -> Precedence
 termPrec (Lit _)         = maxPrec
-termPrec (Tuple _)       = maxPrec
+termPrec (Tuple _ _)     = maxPrec
 termPrec (List _ )       = maxPrec
 termPrec (Var _)         = maxPrec
 termPrec (App _ _)       = appPrec

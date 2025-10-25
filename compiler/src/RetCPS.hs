@@ -60,7 +60,7 @@ data SimpleTerm
    = Bin BinOp VarName VarName
    | Un UnaryOp VarName
    | ValSimpleTerm SVal
-   | Tuple [VarName]
+   | Tuple [VarName] Basics.SynVariantTag
    | Record Fields 
    | WithRecord VarName Fields
    | ProjField VarName Basics.FieldName
@@ -86,7 +86,7 @@ data KTerm
 
       deriving (Eq, Ord)
 
-data Prog = Prog C.Atoms KTerm
+data Prog = Prog KTerm
   deriving (Eq, Show)
 
 --------------------------------------------------
@@ -103,22 +103,13 @@ instance ShowIndent Prog where
 --
 
 ppProg :: Prog -> PP.Doc
-ppProg (Prog (C.Atoms atoms) kterm) =
-  let ppAtoms =
-        if null atoms
-          then PP.empty
-          else (text "datatype Atoms = ") <+>
-               (hsep $ PP.punctuate (text " |") (map text atoms))
-  in ppAtoms $$ ppKTerm 0 kterm
+ppProg (Prog  kterm) = ppKTerm 0 kterm
 
 ppKTerm :: Precedence -> KTerm -> PP.Doc
 
 ppKTerm parentPrec t =
    let thisTermPrec = 1000
    in PP.maybeParens (thisTermPrec < parentPrec   )  $ ppKTerm' t
-
-   -- uncomment to pretty print explicitly; 2017-10-14: AA
-   -- in PP.maybeParens (thisTermPrec < 10000)  $ ppTerm'       Core.LAtom _ -> Nothingt
 
 -- ppLit :: C.Lit -> PP.Doc
 -- ppLit = C.ppLit 
@@ -141,7 +132,7 @@ ppSimpleTerm (ValSimpleTerm (Lit lit)) =
   ppLit lit
 ppSimpleTerm (ValSimpleTerm (KAbs klam)) =
   ppKLambda klam
-ppSimpleTerm (Tuple vars) =
+ppSimpleTerm (Tuple vars _) =
   PP.parens $ PP.hsep $ PP.punctuate (text ",") (map textv vars)
 ppSimpleTerm (List vars) =
   PP.brackets $ PP.hsep $ PP.punctuate (text ",") (map textv vars)
@@ -149,7 +140,7 @@ ppSimpleTerm (ListCons v1 v2) =
   PP.parens $ textv v1 PP.<> text "::" PP.<> textv v2
 ppSimpleTerm (Base b) = text b PP.<> text "$base"
 ppSimpleTerm (Lib (Basics.LibName lib) v) = text lib <+> text "." <+> text v
-ppSimpleTerm (Record fields) = PP.braces $ qqFields fields 
+ppSimpleTerm (Record fields) = PP.braces $ qqFields fields
 ppSimpleTerm (WithRecord x fields) = 
     PP.braces $ PP.hsep [textv x, text "with", qqFields fields]
 

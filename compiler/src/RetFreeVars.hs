@@ -38,7 +38,6 @@ instance FreeNames KLambda where
 
 instance FreeNames SVal where
   freeVars (KAbs klam) = freeVars klam
-  freeVars (Lit (C.LAtom nm)) = FreeVars (Set.singleton $ VN nm)
   freeVars _ = emptyFreeVars
 
 instance FreeNames ContDef where
@@ -51,7 +50,7 @@ instance FreeNames SimpleTerm where
   freeVars (Bin _ v1 v2) = FreeVars (Set.fromList [v1, v2])
   freeVars (Un _ v) = FreeVars (Set.singleton v)
   freeVars (ValSimpleTerm sval) = freeVars sval
-  freeVars (Tuple vs) = FreeVars (Set.fromList vs)
+  freeVars (Tuple vs _) = FreeVars (Set.fromList vs)
   freeVars (List vs)  = FreeVars (Set.fromList vs)
   freeVars (ListCons v1 v2) = FreeVars (Set.fromList [v1, v2])
   freeVars (Base _ ) = FreeVars $ Set.empty

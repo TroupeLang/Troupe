@@ -34,12 +34,6 @@ function __stringRep (v) {
 }
 
 let err = x => _thread().threadError(x)
-export function assertIsAtom (x: any) {
-    _thread().raiseBlockingThreadLev(x.tlev)
-    if (x.val._troupeType != TroupeType.ATOM ) {
-        err ("value " + __stringRep(x) + " is not an atom")        
-    }
-}
 
 export function rawAssertIsNumber (x) {
     if (typeof x != 'number') {

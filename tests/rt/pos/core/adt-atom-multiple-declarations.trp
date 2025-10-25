@@ -1,0 +1,8 @@
+datatype Temperature = HOT | COLD
+datatype Food = SOUP | ICECREAM
+
+let fun serving_temperature SOUP = HOT
+      | serving_temperature ICECREAM = COLD
+in print (serving_temperature ICECREAM);
+   print (serving_temperature SOUP)
+end

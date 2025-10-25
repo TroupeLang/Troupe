@@ -19,7 +19,7 @@ module Stack2JS where
 import IR (SerializationUnit(..), HFN(..)
           , ppFunCall, ppArgs, Fields (..), Ident
           , serializeFunDef
-          , serializeAtoms )
+          )
 import qualified Data.ByteString.Lazy.Char8 as BL
 import qualified IR
 import qualified Raw
@@ -64,7 +64,6 @@ data LibAccess = LibAccess Basics.LibName Basics.VarName
 data JSOutput = JSOutput { libs :: [LibAccess] 
                          , fname:: Maybe String 
                          , code :: String 
-                         , atoms :: [Basics.AtomName]
                          } deriving (Show, Generic)
 
 instance Aeson.ToJSON Basics.LibName 
@@ -104,7 +103,7 @@ data TheState = TheState { freshCounter :: Integer
 
 type RetKontText = PP.Doc
 
-type W = RWS Bool  ([LibAccess], [Basics.AtomName], [RetKontText]) TheState
+type W = RWS Bool  ([LibAccess], [RetKontText]) TheState
 
 
 initState = TheState { freshCounter = 0
@@ -134,7 +133,7 @@ instance Identifier HFN where
 instance Identifier Basics.LibName where 
   ppId (Basics.LibName s) = text s
 
-instance Identifier Basics.AtomName where 
+instance Identifier Basics.SyntacticVariantName where 
   ppId = text
 
 instance Identifier RawVar where 
@@ -153,7 +152,7 @@ class ToJS a where
 
 irProg2JSString :: CompileMode -> Bool -> StackProgram -> String
 irProg2JSString compileMode debugOut ir =
-  let (fns, _, (_,_,konts)) = runRWS (toJS ir) debugOut initState
+  let (fns, _, (_,konts)) = runRWS (toJS ir) debugOut initState
       inner = vcat (fns:konts)
       outer = vcat $
         stdlib
@@ -173,7 +172,7 @@ irProg2JSString compileMode debugOut ir =
 
 stack2JSString :: StackUnit -> String
 stack2JSString x =
-  let (inner, _, (libs, atoms, konts)) = runRWS (toJS x) False initState
+  let (inner, _, (libs, konts)) = runRWS (toJS x) False initState
   in PP.render (addLibs libs $$ (vcat (inner:konts)))
 
 
@@ -181,18 +180,15 @@ stack2JSString x =
 stack2JSON :: StackUnit -> ByteString
 stack2JSON (ProgramStackUnit _) = error "needs to be ported"
 stack2JSON x = 
-  let (inner, _, (libs, atoms, konts)) = runRWS (toJS x) False initState
+  let (inner, _, (libs, konts)) = runRWS (toJS x) False initState
   in Aeson.encode $ JSOutput { libs = libs
                              , fname = case x of FunStackUnit (FunDef (HFN n)_ _ _ _) -> Just n
-                                                 _ -> Nothing
-                             , atoms = atoms                              
                              , code = PP.render (addLibs libs $$ (vcat (inner:konts))) 
                              } 
 
 
 instance ToJS StackUnit where
   toJS (FunStackUnit fdecl) = toJS fdecl
-  toJS (AtomStackUnit ca) = toJS ca
   toJS (ProgramStackUnit p) = error "not implemented"
 
 instance ToJS IR.VarAccess where 
@@ -219,27 +215,13 @@ irProg2JsWrapped prog = do
 
 
 instance ToJS StackProgram where
-  toJS (StackProgram atoms funs) = do
-     jjA <- toJS atoms
-     (jjF, (libsF, atoms', _)) <- listen $ mapM toJS funs
+  toJS (StackProgram funs) = do
+     (jjF, (libsF, _)) <- listen $ mapM toJS funs
      
      return $
           vcat $ [ jsLoadLibs
                  , addLibs libsF
-                 , jjA
                  ] ++ jjF
-
-          
-
-
-instance ToJS C.Atoms where
-  toJS catoms@(C.Atoms atoms) = return $
-    vcat [ vcat $ (map  (\a -> hsep ["const"
-                                    , text a
-                                    , "= new rt.Atom"
-                                                  , (PP.parens ( (PP.doubleQuotes.text) a))]) atoms)
-         , text "this.serializedatoms =" <+> (pickle.serializeAtoms) catoms]
-
 
 jsonValueToString :: Value -> String
 jsonValueToString val = BL.unpack (Aeson.encode val)
@@ -488,7 +470,7 @@ tr2js (Call bb bb2) = do
                     ]
 
 
-    tell ([], [], [jsKont] )
+    tell ([], [jsKont] )
     return $ vcat [
       "_SP_OLD = _SP; ", -- 2021-04-23; hack ! ;AA
       "_SP = _SP + " <+> text (show (_frameSize + 5)) <+> ";",
@@ -589,12 +571,16 @@ instance ToJS RawExpr where
           then hsep [ ppId va1, text', ppId va2 ]
           else jsFunCall text' [ppId va1, ppId va2]
       Un op v -> return $ text (unaryOpToJS op) <> PP.parens (ppId v)
-      Tuple vars -> return $
-        text "rt.mkTuple" <> PP.parens (PP.brackets $ PP.hsep $ PP.punctuate (text ",") (map ppVarName vars))
+      Tuple vars tag -> return $
+        text "rt.mkTuple" <> PP.parens ((PP.brackets $ PP.hsep $ PP.punctuate (text ",") (map ppVarName vars)) <> text "," <> tagToJS tag)
+        where tagToJS True  = text "true"
+              tagToJS False = text "false"
       Record fields -> do
         jsFields <- fieldsToJS fields 
         return $
-          PP.parens $ text "rt.mkRecord" <> PP.parens (PP.brackets $ PP.hsep $ jsFields )
+          PP.parens $ text "rt.mkRecord" <> PP.parens (PP.hsep [PP.brackets $ PP.hsep $ jsFields])
+        where tagToJS True = text "true"
+              tagToJS False = text "false"
       WithRecord r fields -> do 
         jsFields <- fieldsToJS fields 
         return $
@@ -611,13 +597,9 @@ instance ToJS RawExpr where
       Const C.LUnit -> return $ text "rt.__unitbase"
       Const (C.LLabel s) -> return $
         text "rt.mkV1Label" <> (PP.parens . PP.doubleQuotes) (text s)
-      Const lit -> do
-        case lit of
-          C.LAtom atom -> tell ([], [atom], [])
-          _ -> return ()
-        return $ ppLit lit
+      Const lit -> return $ ppLit lit
       Lib lib'@(Basics.LibName libname) varname -> do
-        tell ([LibAccess lib' varname], [], [])
+        tell ([LibAccess lib' varname], [])
         return $
           text "rt.loadLib" <> PP.parens ((PP.doubleQuotes.text) libname <> text ", " <> (PP.doubleQuotes.text) varname <> text ", this")
       ConstructLVal r1 r2 r3 -> return $

@@ -27,12 +27,12 @@ trans mode (S.Prog imports atms tm) = do
                   S.Let [ S.ValDecl (S.VarPattern "authority") (S.Var "$$authorityarg") _srcRT ]
                         tm
               Export -> tm
-  atms' <- transAtoms atms
+  atms' <- transSynVars atms
   tm'' <- transTerm tm'
   return (T.Prog imports atms' tm'')
 
-transAtoms :: S.Atoms -> Trans T.Atoms
-transAtoms (S.Atoms atms) = return (T.Atoms atms)
+transSynVars :: S.SyntacticVariants -> Trans T.SyntacticVariants
+transSynVars (S.SyntacticVariants atms) = return (T.SyntacticVariants atms)
 
 transLit :: S.Lit -> T.Lit
 transLit (S.LInt n pi)    = T.LInt n pi
@@ -41,7 +41,7 @@ transLit (S.LLabel s)  = T.LLabel s
 transLit (S.LDCLabel dc)  = T.LDCLabel dc
 transLit (S.LUnit)     = T.LUnit
 transLit (S.LBool b)   = T.LBool b
-transLit (S.LAtom a)   = T.LAtom a
+transLit (S.LSyntacticVariant a)   = T.LSyntacticVariant a
 
 
 transLambda_aux :: S.Lambda -> ReaderT T.Term Trans Lambda
@@ -95,8 +95,8 @@ transHandler (S.Handler pat1 mbpat2 guard body) = do
               Just pat2 -> pat2
               Nothing   -> S.Wildcard      
       lambdaPats = [S.VarPattern argInput] 
-      callFailure = S.Tuple [S.Lit (S.LInt 1 _srcRT), S.Lit S.LUnit ]  
-      body' =  S.Tuple[ S.Lit (S.LInt 0 _srcRT), S.Abs ( S.Lambda [S.Wildcard] body )  ]
+      callFailure = S.Tuple [S.Lit (S.LInt 1 _srcRT), S.Lit S.LUnit ] False
+      body' =  S.Tuple[ S.Lit (S.LInt 0 _srcRT), S.Abs ( S.Lambda [S.Wildcard] body )  ] False
       guardCheck = case guard of
          Nothing -> body'
          Just g -> S.If g body' callFailure
@@ -188,7 +188,8 @@ compilePattern succ (v, S.RecordPattern fieldPatterns mode) = do
               
           compileField succ (f, Nothing) = do 
               ifHasField f $ compilePattern succ (T.ProjField v f, S.VarPattern f)
-  
+compilePattern _ (_, (S.SyntacticVariantPattern nm _)) =
+  lift $ throwError $ "Unexpected syntactic variant pattern: \"" ++ nm ++ "\""
 
 
 -- | Tranform a declaration, compiling patterns into terms.
@@ -211,7 +212,7 @@ transDecl (S.FunDecs fundecs) succ = do
       let lams' = map (transLambda_aux . (\(S.Lambda args e) -> S.Lambda [S.TuplePattern args] e)) lams
           names = map (((f ++ "_pat") ++) . show) [1..(length lams)]
           args =  map (((f ++ "_arg") ++) . show) [1..(argLength lams)]
-          args' =  Tuple (map Var args)
+          args' =  Tuple (map Var args) False
           errorMsg = Error (Lit (LString $ "pattern match failure in function " ++ f)) pos
       (fst, decls) <- foldr (\(n, l) acc -> do
             (fail, decls) <- acc
@@ -257,9 +258,9 @@ transTerm (S.If t1 t2 t3) = do
   t2' <- transTerm t2
   t3' <- transTerm t3
   return (If t1' t2' t3')
-transTerm (S.Tuple tms) = do
+transTerm (S.Tuple tms tag) = do
   tms' <- mapM transTerm tms
-  return (T.Tuple tms')
+  return (T.Tuple tms' tag)
 transTerm (S.Record fields) = do
   fields' <- transFields fields
   return (T.Record fields')

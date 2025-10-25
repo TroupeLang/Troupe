@@ -85,18 +85,17 @@ data FunDef = FunDef
 
 -- An IR program is just a collection of atoms declarations 
 -- and function definitions
-data StackProgram = StackProgram C.Atoms [FunDef] 
+data StackProgram = StackProgram [FunDef] 
 
 data StackUnit 
   = FunStackUnit FunDef 
-  | AtomStackUnit C.Atoms 
   | ProgramStackUnit StackProgram
 
 -----------------------------------------------------------
 -- PRETTY PRINTING
 -----------------------------------------------------------
 
-ppProg (StackProgram atoms funs) =
+ppProg (StackProgram funs) =
   vcat $ (map ppFunDef funs)
 
 instance Show StackProgram where

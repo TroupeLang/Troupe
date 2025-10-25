@@ -416,9 +416,9 @@ expr2rawComp = \case
 
   -- The following constructor operations take labelled values as arguments,
   -- but these labels do not affect the labels of the resulting compound value.
-  IR.Tuple vs ->
+  IR.Tuple vs tag ->
     return SimpleRawComp
-      { cVal = RExpr $ Tuple vs
+      { cVal = RExpr $ Tuple vs tag
       , cValLbl = PC
       , cTyLbl = PC
       }
@@ -777,12 +777,11 @@ fun2raw irfdef@(IR.FunDef hfn vname consts (IR.BB irInsts irTr)) =
 -- Revision 2023-08: unchanged
 ir2raw :: IR.SerializationUnit -> RawUnit
 ir2raw (IR.FunSerialization f) = FunRawUnit (fun2raw f)
-ir2raw (IR.AtomsSerialization c) = AtomRawUnit c
 ir2raw (IR.ProgramSerialization prog) = ProgramRawUnit (prog2raw prog)
 
 -- Revision 2023-08: unchanged
 prog2raw :: IR.IRProgram -> RawProgram
-prog2raw (IR.IRProgram atoms funs) =
-    RawProgram atoms (map fun2raw funs)
+prog2raw (IR.IRProgram funs) =
+    RawProgram (map fun2raw funs)
 
 

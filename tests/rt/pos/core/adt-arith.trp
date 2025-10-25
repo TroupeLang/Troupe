@@ -1,0 +1,17 @@
+datatype binop = ADD | SUB | MUL | DIV
+datatype expr = LIT of int | BINOP of binop * expr * expr
+
+let fun eval (LIT i) = i
+      | eval (BINOP (oper, e1, e2)) = 
+	let val v1 = eval e1 
+	    val v2 = eval e2
+	in case oper of ADD => v1 + v2
+		      | SUB => v1 - v2
+		      | MUL => v1 * v2
+		      | DIV => v1 div v2
+	end
+in eval (BINOP (ADD, 
+		(BINOP (SUB, LIT 8, LIT 4)), 
+		(BINOP (MUL, LIT 6, 
+			(BINOP (DIV, LIT 6, LIT 3))))))
+end

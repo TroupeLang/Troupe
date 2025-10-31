@@ -1,0 +1,6 @@
+Troupe
+    filter remove_between_general (* *)
+    extension trp
+    extension pico
+    extension picox
+    3rd_gen_scale 3.00

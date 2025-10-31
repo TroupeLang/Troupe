@@ -56,6 +56,14 @@ test/ci-relay: p2p-tools
 	@echo "Running CI relay test..."
 	./tests/ci-relay-test.sh
 
+CLOC_DIR=.
+cloc:
+	cloc --read-lang-def=cloc.txt $(CLOC_DIR)
+cloc/lib:
+	$(MAKE) cloc CLOC_DIR=lib
+cloc/test:
+	$(MAKE) cloc CLOC_DIR=tests
+
 dist: stack npm rt p2p-tools lib
 	rm -rf ./build/
 	mkdir -p ./build/Troupe/rt/built

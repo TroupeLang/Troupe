@@ -24,7 +24,6 @@ import { BuiltinRegistry } from './builtins/whereis.mjs'
 import { BuiltinDeclassify } from './builtins/declassify.mjs'
 import { BuiltinRaiseTrust } from './builtins/raiseTrust.mjs'
 import { BuiltinSandbox } from './builtins/sandbox.mjs'
-import { BuiltinLocalArrays } from './builtins/localarrays.mjs'
 import { RuntimeAssert } from './builtins/runtimeassert.mjs'
 import { BuiltinService } from './builtins/service.mjs'
 import { BuiltinString } from './builtins/string.mjs'
@@ -39,7 +38,6 @@ export const UserRuntime =
     BuiltinString (
     BuiltinService (
     RuntimeAssert(
-    BuiltinLocalArrays(
     BuiltinSandbox(
     BuiltinRaiseTrust(
     BuiltinDeclassify (

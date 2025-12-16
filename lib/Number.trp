@@ -134,10 +134,10 @@ in [ ("maxInt", maxInt)
    , ("toInt", toInt)
    , ("toInt32", toInt32)
    , ("eq", eq)
-   , ("lt", lt),
-   , ("le", le),
-   , ("gt", gt),
-   , ("ge", ge),
+   , ("lt", lt)
+   , ("le", le)
+   , ("gt", gt)
+   , ("ge", ge)
    , ("toString", toString)
    , ("fromString", fromString)
    ]

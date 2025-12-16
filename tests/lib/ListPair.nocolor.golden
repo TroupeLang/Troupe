@@ -1,0 +1,77 @@
+2025-12-14T11:44:43.960Z [RTM] info: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+[34mbegin [0mListPair
+  [34mbegin [0mzip
+      [33m[ TEST ][0m it merges [] []      [32m[ PASS ][0m it merges [] []
+      [33m[ TEST ][0m it merges [42] ['a']      [32m[ PASS ][0m it merges [42] ['a']
+      [33m[ TEST ][0m it merges ['a'] [42]      [32m[ PASS ][0m it merges ['a'] [42]
+      [33m[ TEST ][0m it merges [0,1] [2,3]      [32m[ PASS ][0m it merges [0,1] [2,3]
+      [33m[ TEST ][0m it drops [] [42]      [32m[ PASS ][0m it drops [] [42]
+      [33m[ TEST ][0m it drops [] [42]      [32m[ PASS ][0m it drops [] [42]
+      [33m[ TEST ][0m it drops [0,1,2] [3,4]      [32m[ PASS ][0m it drops [0,1,2] [3,4]
+      [33m[ TEST ][0m it drops [0,1] [2,3,4]      [32m[ PASS ][0m it drops [0,1] [2,3,4]
+  [34mend [0m
+  [34mbegin [0munzip
+      [33m[ TEST ][0m it splits []      [32m[ PASS ][0m it splits []
+      [33m[ TEST ][0m it splits [(42,'a')]      [32m[ PASS ][0m it splits [(42,'a')]
+      [33m[ TEST ][0m it splits [(0,1), (2,3)]      [32m[ PASS ][0m it splits [(0,1), (2,3)]
+  [34mend [0m
+  [34mbegin [0mnull
+      [33m[ TEST ][0m it accepts []      [32m[ PASS ][0m it accepts []
+      [33m[ TEST ][0m it rejects [(42,'a')]      [32m[ PASS ][0m it rejects [(42,'a')]
+      [33m[ TEST ][0m it rejects [(0,1), (2,3)]      [32m[ PASS ][0m it rejects [(0,1), (2,3)]
+  [34mend [0m
+  [34mbegin [0mlength
+      [33m[ TEST ][0m it is 0 for []      [32m[ PASS ][0m it is 0 for []
+      [33m[ TEST ][0m it is 1 for [(42,'a')]      [32m[ PASS ][0m it is 1 for [(42,'a')]
+      [33m[ TEST ][0m it is 2 for [(0,1), (2,3)]      [32m[ PASS ][0m it is 2 for [(0,1), (2,3)]
+  [34mend [0m
+  [34mbegin [0mreverse
+      [33m[ TEST ][0m it reverses []      [32m[ PASS ][0m it reverses []
+      [33m[ TEST ][0m it reverses [(0,1), (2,3)]      [32m[ PASS ][0m it reverses [(0,1), (2,3)]
+  [34mend [0m
+  [34mbegin [0mappend
+      [33m[ TEST ][0m it appends [] []      [32m[ PASS ][0m it appends [] []
+      [33m[ TEST ][0m it appends [] [(0,1), (2,3)]      [32m[ PASS ][0m it appends [] [(0,1), (2,3)]
+      [33m[ TEST ][0m it appends [(0,1), (2,3)] []      [32m[ PASS ][0m it appends [(0,1), (2,3)] []
+  [34mend [0m
+  [34mbegin [0mrevAppend
+      [33m[ TEST ][0m it appends [] []      [32m[ PASS ][0m it appends [] []
+      [33m[ TEST ][0m it appends [] [(0,1), (2,3)]      [32m[ PASS ][0m it appends [] [(0,1), (2,3)]
+      [33m[ TEST ][0m it appends [(0,1), (2,3)] []      [32m[ PASS ][0m it appends [(0,1), (2,3)] []
+  [34mend [0m
+  [34mbegin [0mfindOpt
+      [33m[ TEST ][0m it returns NONE for [] 42      [32m[ PASS ][0m it returns NONE for [] 42
+      [33m[ TEST ][0m it returns NONE for [(0,42)] 42      [32m[ PASS ][0m it returns NONE for [(0,42)] 42
+      [33m[ TEST ][0m it returns (SOME 42) for [(0,42)] 0      [32m[ PASS ][0m it returns (SOME 42) for [(0,42)] 0
+      [33m[ TEST ][0m it returns (SOME 42) for [(1,'a'), (0,42), (2,3), (0,'no')] 0      [32m[ PASS ][0m it returns (SOME 42) for [(1,'a'), (0,42), (2,3), (0,'no')] 0
+  [34mend [0m
+  [34mbegin [0mfind
+      [33m[ TEST ][0m it returns 42 for [(0,42)] 0      [32m[ PASS ][0m it returns 42 for [(0,42)] 0
+      [33m[ TEST ][0m it returns 42 for [(1,'a'), (0,42), (2,3), (0,'no')] 0      [32m[ PASS ][0m it returns 42 for [(1,'a'), (0,42), (2,3), (0,'no')] 0
+  [34mend [0m
+  [34mbegin [0mmem
+      [33m[ TEST ][0m it rejects [] for 42      [32m[ PASS ][0m it rejects [] for 42
+      [33m[ TEST ][0m it rejects [(0,42)] for 42      [32m[ PASS ][0m it rejects [(0,42)] for 42
+      [33m[ TEST ][0m it accepts [(0,42)] for 0      [32m[ PASS ][0m it accepts [(0,42)] for 0
+      [33m[ TEST ][0m it accepts [(1,'a'), (0,42), (2,3), (0,'no')] for 0      [32m[ PASS ][0m it accepts [(1,'a'), (0,42), (2,3), (0,'no')] for 0
+  [34mend [0m
+  [34mbegin [0mmap
+      [33m[ TEST ][0m it maps [] []      [32m[ PASS ][0m it maps [] []
+      [33m[ TEST ][0m it maps ['answer'] [41]      [32m[ PASS ][0m it maps ['answer'] [41]
+      [33m[ TEST ][0m it maps [0,1] [2,8]      [32m[ PASS ][0m it maps [0,1] [2,8]
+      [33m[ TEST ][0m it maps [0,1,3] [2,8]      [32m[ PASS ][0m it maps [0,1,3] [2,8]
+      [33m[ TEST ][0m it maps [0,1] [2,8,3]      [32m[ PASS ][0m it maps [0,1] [2,8,3]
+  [34mend [0m
+  [34mbegin [0mfoldl
+      [33m[ TEST ][0m it folds (*) 1 [] []      [32m[ PASS ][0m it folds (*) 1 [] []
+      [33m[ TEST ][0m it folds (*) 1 [] [2]      [32m[ PASS ][0m it folds (*) 1 [] [2]
+      [33m[ TEST ][0m it folds (*) 1 [2] []      [32m[ PASS ][0m it folds (*) 1 [2] []
+      [33m[ TEST ][0m it folds (*) 1 [2] [3]      [32m[ PASS ][0m it folds (*) 1 [2] [3]
+      [33m[ TEST ][0m it folds (*) 0 [2] [3]      [32m[ PASS ][0m it folds (*) 0 [2] [3]
+      [33m[ TEST ][0m it folds (*) 1 [2,3] [5,7]      [32m[ PASS ][0m it folds (*) 1 [2,3] [5,7]
+  [34mend [0m
+[34mend [0m
+
+Total:  46
+Passes: 46
+>>> Main thread finished with value: true@{}%{}

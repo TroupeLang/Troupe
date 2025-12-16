@@ -1,0 +1,7 @@
+(* Test shadowing: local binding should win over qualified import *)
+import qualified List
+
+let val List = { head = fn _ => "shadowed" }
+    val result = List.head [1, 2, 3]
+in print result
+end

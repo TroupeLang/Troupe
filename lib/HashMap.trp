@@ -200,23 +200,19 @@ let (* NOTE: The map is implemented as a Hash Array Mapped Trie (HAMT), i.e. a p
         given list. Tail-recursive. *)
     fun fromList hf xs = List.foldl (fn ((k,v), m) => insert m k v) (empty hf) xs
 
-    (*--- Module ---*)
-    val HashMap = {
-        empty,
-        singleton,
-        insert,
-        remove,
-        null,
-        size,
-        findOpt,
-        find,
-        mem,
-        fold,
-        keys,
-        values,
-        toList,
-        fromList
-    }
-
-in [ ("HashMap", HashMap) ]
+in [ ("empty", empty)
+   , ("singleton", singleton)
+   , ("insert", insert)
+   , ("remove", remove)
+   , ("null", null)
+   , ("size", size)
+   , ("findOpt", findOpt)
+   , ("find", find)
+   , ("mem", mem)
+   , ("fold", fold)
+   , ("keys", keys)
+   , ("values", values)
+   , ("toList", toList)
+   , ("fromList", fromList)
+   ]
 end

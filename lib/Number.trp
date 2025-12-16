@@ -116,33 +116,29 @@ let (*--- Constants ---*)
      *)
     val fromString = stringToInt
 
-    (*--- Module ---*)
-    val Number = {
-        maxInt,
-        minInt,
-        precision,
-        maxInt32,
-        minInt32,
-        maxNum,
-        minNum,
-        abs,
-        min,
-        max,
-        ceil,
-        floor,
-        round,
-        sqrt,
-        isInt,
-        toInt,
-        toInt32,
-        eq,
-        lt,
-        le,
-        gt,
-        ge,
-        toString,
-        fromString
-    }
-
-in [("Number", Number)]
+in [ ("maxInt", maxInt)
+   , ("minInt", minInt)
+   , ("precision", precision)
+   , ("maxInt32", maxInt32)
+   , ("minInt32", minInt32)
+   , ("maxNum", maxNum)
+   , ("minNum", minNum)
+   , ("abs", abs)
+   , ("min", min)
+   , ("max", max)
+   , ("ceil", ceil)
+   , ("floor", floor)
+   , ("round", round)
+   , ("sqrt", sqrt)
+   , ("isInt", isInt)
+   , ("toInt", toInt)
+   , ("toInt32", toInt32)
+   , ("eq", eq),
+   , ("lt", lt),
+   , ("le", le),
+   , ("gt", gt),
+   , ("ge", ge),
+   , ("toString", toString)
+   , ("fromString", fromString)
+   ]
 end

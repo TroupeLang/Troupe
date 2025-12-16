@@ -1,0 +1,6 @@
+(* Test: qualified import with selective imports and 'as' combined *)
+import qualified { head } List as L
+
+let val result = L.head [10, 20, 30]
+in print result
+end

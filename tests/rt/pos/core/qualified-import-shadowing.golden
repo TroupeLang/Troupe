@@ -1,0 +1,3 @@
+2025-12-14T21:14:46.521Z [RTM] [32minfo[39m: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+"shadowed"
+>>> Main thread finished with value: ()@{}%{}

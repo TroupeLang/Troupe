@@ -1,0 +1,4 @@
+(* Negative test: selective import of non-existent function *)
+import { nonExistentFunc } List
+
+print 1

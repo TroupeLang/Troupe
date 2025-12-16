@@ -1,0 +1,8 @@
+(* Test qualified imports from two different libraries *)
+import qualified List
+import qualified String
+
+let val listResult = List.head [1, 2, 3]
+    val stringResult = String.size "hello"
+in print listResult; print stringResult
+end

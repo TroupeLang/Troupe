@@ -2,26 +2,26 @@
 import List
 
 let val tainted = true raisedTo `<; alice | bob>`
-    fun doTaintBlock () = 
+    fun doTaintBlock () =
          let val _ = debugpc ()
-             val _ = if tainted then () else print "tainted" 
+             val _ = if tainted then () else print "tainted"
          in debugpc ()
          end
 
-    fun testBlockEndorse (auth, lev ) = 
-         doTaintBlock (); 
+    fun testBlockEndorse (auth, lev ) =
+         doTaintBlock ();
          blockendorseto (auth, lev )
 
 
     val levs = [`<; alice>` , `<; bob>` ]
 
-    val auth_levs = List.map (fn l => (attenuate (authority, l), l)) levs 
-    
+    val auth_levs = map (fn l => (attenuate (authority, l), l)) levs
+
     (* val aliceIntegrityAuth = attenuate (authority, `<; alice>`)
     val bobIntegrityAuth = attenuate (authority, `<; bob >`)
  *)
 
     (* val _ = blockendorseto (aliceIntegrityAuth, `<;alice>`) *)
-in List.map testBlockEndorse auth_levs; 
+in map testBlockEndorse auth_levs;
    debugpc ()
 end

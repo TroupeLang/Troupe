@@ -1,7 +1,7 @@
 import Unit
-import StencilVector
+import StencilVector as SV
 
-let val SV = StencilVector
+let
 
     val tests = Unit.group "StencilVector" [
             Unit.group "maskBits" [

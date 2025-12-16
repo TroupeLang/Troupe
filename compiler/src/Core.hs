@@ -23,9 +23,11 @@ import qualified Data.Ord
 import           Basics
 import qualified DirectWOPats as D
 import qualified Data.Map.Strict as Map
+import qualified Data.Set as Set
 import           Control.Monad
 import           Control.Monad.State.Lazy as State
 import           Control.Monad.RWS
+import           Control.Monad.Except
 
 import qualified Text.PrettyPrint.HughesPJ as PP
 import           Text.PrettyPrint.HughesPJ (
@@ -220,14 +222,15 @@ lower (D.Un op e) = Un op (lower e)
 
 -- This is the only function that is exported here
 
-renameProg :: Prog -> Prog
+renameProg :: Prog -> Except String Prog
 renameProg (Prog imports (Atoms atms) term) =
   let alist = map (\ a -> (a, a)) atms
       initEnv    = Map.fromList alist
       initReader = mapFromImports imports
       initState  = 0
-      (term', _) = evalRWS (rename term initEnv) initReader initState
-  in Prog imports (Atoms atms) term'
+  in do
+      (term', _, _) <- runRWST (rename term initEnv) initReader initState
+      return $ Prog imports (Atoms atms) term'
 
 -- The rest of the declarations here are not exported
 
@@ -245,22 +248,53 @@ threaded explicitly. That is encoded in the `Env` map.
 --}
 
 
-type S = RWS LibEnv () Integer
+type S = RWST LibEnv () Integer (Except String)
 
-type LibEnv = Map.Map VarName LibName
+-- | Environment for unqualified imports: maps function names to their library
+type UnqualifiedLibEnv = Map.Map VarName LibName
+-- | Map from effective library name (alias or original) to:
+--   (original library name for codegen, set of available exports)
+-- Used for resolving and validating A.foo() syntax
+type LibExports = Map.Map LibName (LibName, Set.Set VarName)
+-- | Combined environment for the Reader monad
+type LibEnv = (UnqualifiedLibEnv, LibExports)
+
 type Env    = Map.Map VarName VarName
 
 
 mapFromImports :: Imports -> LibEnv
 mapFromImports (Imports imports) =
-  foldl insLib Map.empty imports
-     where
-       insLib map (lib, Just defs) =
-             foldl (\map def -> Map.insert def lib map) map defs
-       insLib map (lib, Nothing) = error "malformed lib import data structure"
-           -- TODO: 2018-07-02; better error message for the above case
-           -- or even better: a data structure that avoids needing to make a check like that
-           -- (we should be in theory able to do that)
+  let
+    -- Get effective exports: use selected if specified, otherwise all exports
+    effectiveExports imp = case importSelected imp of
+      Just selected -> selected
+      Nothing -> case importExports imp of
+        Just exports -> exports
+        Nothing -> []
+
+    -- Get effective name for qualified access: alias if present, otherwise original
+    effectiveName imp = case importAlias imp of
+      Just alias -> alias
+      Nothing -> importLib imp
+
+    -- Build unqualified environment (only unqualified imports)
+    -- Maps each exported function name to the original library
+    unqualifiedImports = [imp | imp <- imports, importMode imp == Unqualified]
+    unqualEnv = foldl insLib Map.empty unqualifiedImports
+      where
+        insLib m imp =
+          let lib = importLib imp
+              defs = effectiveExports imp
+          in foldl (\m' def -> Map.insert def lib m') m defs
+
+    -- Build map from effective name (alias or original) to (original lib, effective exports)
+    -- This is used for resolving and validating A.foo() syntax
+    libExports = Map.fromList
+      [ (effectiveName imp, (importLib imp, Set.fromList (effectiveExports imp)))
+      | imp <- imports
+      ]
+  in
+    (unqualEnv, libExports)
 
 
 -- | Sanitize variable names to be JavaScript-compatible identifiers
@@ -286,8 +320,8 @@ lookforgen v m =
     case Map.lookup v m of
        Just v -> return $ RegVar v
        Nothing -> do
-          libmap <- ask
-          case Map.lookup v libmap of
+          (unqualEnv, _) <- ask
+          case Map.lookup v unqualEnv of
             Just lib' -> return $ LibVar lib' v
             Nothing -> return  $ BaseName v
 
@@ -348,8 +382,26 @@ rename (WithRecord e fields) m = do
                    return (f, t')
   
 rename (ProjField t f) m = do
-  t' <- rename t m
-  return $ ProjField t' f
+  maybeQualified <- tryQualifiedAccess
+  case maybeQualified of
+    Just term -> return term
+    Nothing   -> do
+      t' <- rename t m
+      return $ ProjField t' f
+  where
+    tryQualifiedAccess = case t of
+      -- Check if this is a qualified module access (e.g., A.foo or Alias.foo)
+      -- At this stage, vars are RegVar from lowering, so we check RegVar
+      Var (RegVar v) | not (Map.member v m) -> do
+        (_, libExports) <- ask
+        case Map.lookup (LibName v) libExports of
+          Just (originalLib, exports) ->
+            if Set.member f exports
+            then return $ Just (Var (LibVar originalLib f))  -- Use original lib for codegen
+            else lift $ throwError $
+              "Library '" ++ v ++ "' does not export '" ++ f ++ "'"
+          Nothing -> return Nothing  -- Not a library access
+      _ -> return Nothing
 rename (ProjIdx t idx) m = do
   t' <- rename t m
   return $ ProjIdx t' idx

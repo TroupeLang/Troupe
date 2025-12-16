@@ -43,8 +43,8 @@ let
     fun reportTestSummary({print, auth, ..}, nodeName, results) =
         let (* Use List.filter to count passed tests *)
             val passedTests = List.filter (fn (name, passed) => passed) results
-            val total = length results
-            val passed = length passedTests
+            val total = List.length results
+            val passed = List.length passedTests
             
             val _ = print (nodeName ^ ": Test summary:")
             val _ = print (nodeName ^ ": Total tests: " ^ intToString(total))
@@ -147,15 +147,15 @@ let
 
     (* Count passed tests - simplified with lists library *)
     fun countPassedTests(results) =
-        length (List.filter (fn (name, passed) => passed) results)
+        List.length (List.filter (fn (name, passed) => passed) results)
 
     (* Count total tests - simplified with lists library *)
     fun countTotalTests(results) =
-        length results
+        List.length results
 
     (* Check if all tests passed - simplified *)
     fun allTestsPassed(results) =
-        let val total = length results
+        let val total = List.length results
             val passed = countPassedTests(results)
         in total > 0 andalso passed = total
         end

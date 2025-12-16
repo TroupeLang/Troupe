@@ -3,7 +3,7 @@ datatype Atoms = TEST
 let val rawobj = 
              ()
   
-    val filename = "serialization_test"
+    val filename = "serialization_test_2"
     val _ = save (authority,filename, rawobj)    
     val rawobj2 = restore (filename)
 in printWithLabels (rawobj2)

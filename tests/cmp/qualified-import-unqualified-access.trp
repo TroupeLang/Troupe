@@ -1,0 +1,6 @@
+(* Negative test: trying to use unqualified access with qualified import *)
+import qualified List
+
+let val result = head [1, 2, 3]  (* Should fail: head not in scope *)
+in print result
+end

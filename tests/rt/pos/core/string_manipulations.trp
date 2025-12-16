@@ -1,6 +1,6 @@
 import String
 
-let val x = String.sub ("hello", 0)
+let val x = sub ("hello", 0)
     val y = "1" ^ "2"
     val s = ("Hello" raisedTo `{alice}`)  ^ ", " ^ ("World" raisedTo `{bob}`)
     val i = 3 raisedTo `{charlie}`

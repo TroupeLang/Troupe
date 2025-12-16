@@ -1,0 +1,81 @@
+2025-12-14T11:44:43.869Z [RTM] info: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+[34mbegin [0mString
+  [34mbegin [0msize
+      [33m[ TEST ][0m it is 0 for ''      [32m[ PASS ][0m it is 0 for ''
+      [33m[ TEST ][0m it is 1 for 'a'      [32m[ PASS ][0m it is 1 for 'a'
+      [33m[ TEST ][0m it is 1 for 'b'      [32m[ PASS ][0m it is 1 for 'b'
+      [33m[ TEST ][0m it is 5 for 'Hello'      [32m[ PASS ][0m it is 5 for 'Hello'
+      [33m[ TEST ][0m it is 7 for 'Troupe!'      [32m[ PASS ][0m it is 7 for 'Troupe!'
+  [34mend [0m
+  [34mbegin [0msub
+      [33m[ TEST ][0m it is 'H' for 0      [32m[ PASS ][0m it is 'H' for 0
+      [33m[ TEST ][0m it is 'e' for 1      [32m[ PASS ][0m it is 'e' for 1
+      [33m[ TEST ][0m it is 'l' for 2      [32m[ PASS ][0m it is 'l' for 2
+      [33m[ TEST ][0m it is 'l' for 3      [32m[ PASS ][0m it is 'l' for 3
+      [33m[ TEST ][0m it is 'o' for 4      [32m[ PASS ][0m it is 'o' for 4
+      [33m[ TEST ][0m it is ''  for 5      [32m[ PASS ][0m it is ''  for 5
+      [33m[ TEST ][0m it is ''  for 6      [32m[ PASS ][0m it is ''  for 6
+  [34mend [0m
+  [34mbegin [0msubCode
+      [33m[ TEST ][0m it is 87 for 0      [32m[ PASS ][0m it is 87 for 0
+      [33m[ TEST ][0m it is 111 for 1      [32m[ PASS ][0m it is 111 for 1
+      [33m[ TEST ][0m it is 114 for 2      [32m[ PASS ][0m it is 114 for 2
+      [33m[ TEST ][0m it is 108 for 3      [32m[ PASS ][0m it is 108 for 3
+      [33m[ TEST ][0m it is 100 for 4      [32m[ PASS ][0m it is 100 for 4
+      [33m[ TEST ][0m it is 33  for 5      [32m[ PASS ][0m it is 33  for 5
+      [33m[ TEST ][0m it is 0   for 6      [32m[ PASS ][0m it is 0   for 6
+  [34mend [0m
+  [34mbegin [0msubstring
+      [33m[ TEST ][0m it is 'Hello' for 0 5      [32m[ PASS ][0m it is 'Hello' for 0 5
+      [33m[ TEST ][0m it is 'Troupe' for 6 12      [32m[ PASS ][0m it is 'Troupe' for 6 12
+      [33m[ TEST ][0m it is 'Troupe!' for 6 13      [32m[ PASS ][0m it is 'Troupe!' for 6 13
+      [33m[ TEST ][0m it is 'Troupe!' for 6 14      [32m[ PASS ][0m it is 'Troupe!' for 6 14
+  [34mend [0m
+  [34mbegin [0mconcat
+      [33m[ TEST ][0m it is '' for []      [32m[ PASS ][0m it is '' for []
+      [33m[ TEST ][0m it is 'a' for ['a']      [32m[ PASS ][0m it is 'a' for ['a']
+      [33m[ TEST ][0m it is 'a' for ['', 'a']      [32m[ PASS ][0m it is 'a' for ['', 'a']
+      [33m[ TEST ][0m it is 'a' for ['a', '']      [32m[ PASS ][0m it is 'a' for ['a', '']
+      [33m[ TEST ][0m it is 'ab' for ['a', 'b']      [32m[ PASS ][0m it is 'ab' for ['a', 'b']
+  [34mend [0m
+  [34mbegin [0mconcatWith
+      [33m[ TEST ][0m it is '' for []      [32m[ PASS ][0m it is '' for []
+      [33m[ TEST ][0m it skips separator for ['a']      [32m[ PASS ][0m it skips separator for ['a']
+      [33m[ TEST ][0m it skips separator for ['b']      [32m[ PASS ][0m it skips separator for ['b']
+      [33m[ TEST ][0m it adds separator for ['a', 'b']      [32m[ PASS ][0m it adds separator for ['a', 'b']
+      [33m[ TEST ][0m it adds separator for ['a', 'b', 'c']      [32m[ PASS ][0m it adds separator for ['a', 'b', 'c']
+      [33m[ TEST ][0m it adds separator around '' too      [32m[ PASS ][0m it adds separator around '' too
+  [34mend [0m
+  [34mbegin [0mimplode
+      [33m[ TEST ][0m it is '' for []      [32m[ PASS ][0m it is '' for []
+      [33m[ TEST ][0m it is 'a' for ['a']      [32m[ PASS ][0m it is 'a' for ['a']
+      [33m[ TEST ][0m it is 'b' for ['b']      [32m[ PASS ][0m it is 'b' for ['b']
+      [33m[ TEST ][0m it is 'ab' for ['a','b']      [32m[ PASS ][0m it is 'ab' for ['a','b']
+      [33m[ TEST ][0m it is 'ba' for ['b','a']      [32m[ PASS ][0m it is 'ba' for ['b','a']
+  [34mend [0m
+  [34mbegin [0mexplode
+      [33m[ TEST ][0m it is [] for ''      [32m[ PASS ][0m it is [] for ''
+      [33m[ TEST ][0m it is ['a'] for 'a'      [32m[ PASS ][0m it is ['a'] for 'a'
+      [33m[ TEST ][0m it is ['b'] for 'b'      [32m[ PASS ][0m it is ['b'] for 'b'
+      [33m[ TEST ][0m it is ['a','b'] for 'ab'      [32m[ PASS ][0m it is ['a','b'] for 'ab'
+      [33m[ TEST ][0m it is ['b','a'] for 'ba'      [32m[ PASS ][0m it is ['b','a'] for 'ba'
+  [34mend [0m
+  [34mbegin [0mmap
+      [33m[ TEST ][0m it is '' for ''      [32m[ PASS ][0m it is '' for ''
+      [33m[ TEST ][0m it is 'b' for 'a'      [32m[ PASS ][0m it is 'b' for 'a'
+      [33m[ TEST ][0m it is 'a' for 'b'      [32m[ PASS ][0m it is 'a' for 'b'
+      [33m[ TEST ][0m it is 'ba' for 'ab'      [32m[ PASS ][0m it is 'ba' for 'ab'
+      [33m[ TEST ][0m it is 'a b' for 'b a'      [32m[ PASS ][0m it is 'a b' for 'b a'
+  [34mend [0m
+  [34mbegin [0mtranslate
+      [33m[ TEST ][0m it is '' for ''      [32m[ PASS ][0m it is '' for ''
+      [33m[ TEST ][0m it is 'a_' for 'a'      [32m[ PASS ][0m it is 'a_' for 'a'
+      [33m[ TEST ][0m it is 'b_' for 'b'      [32m[ PASS ][0m it is 'b_' for 'b'
+      [33m[ TEST ][0m it is 'a_b_' for 'ab'      [32m[ PASS ][0m it is 'a_b_' for 'ab'
+      [33m[ TEST ][0m it is 'b_a_' for 'ba'      [32m[ PASS ][0m it is 'b_a_' for 'ba'
+  [34mend [0m
+[34mend [0m
+
+Total:  54
+Passes: 54
+>>> Main thread finished with value: true@{}%{}

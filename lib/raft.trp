@@ -40,7 +40,7 @@ let val DURATION = 500
         else (sz, xs)
 
     fun log_add_new_entries (sz, xs) ys =
-        (sz + length ys, List.append ys xs)
+        (sz + List.length ys, List.append ys xs)
 
     (* Get all the entries after index n *)
     fun log_take_entries (sz, xs) n =
@@ -95,7 +95,7 @@ let val DURATION = 500
             end
         else let val log1 = log_discard log prevLogIndex
                  val newLog = log_add_new_entries log1 entries
-                 val newCommitIndex = new_commit_index commitIndex (prevLogIndex + length entries) leaderCommit
+                 val newCommitIndex = new_commit_index commitIndex (prevLogIndex + List.length entries) leaderCommit
                  val _ = send (leaderId, (APPEND_ENTRIES_RESPONSE, self(), prevLogIndex, entries, currentTerm, true))
              in (newLog, newCommitIndex)
              end
@@ -126,7 +126,7 @@ let val DURATION = 500
 
     (* Takes the list of all machines present in the cluster represented by a list of pairs (number * process id) *)
     fun machine index machines apply_entry init_state print =
-        let val threshold = ((length machines) + 1) / 2
+        let val threshold = ((List.length machines) + 1) / 2
             val cluster = machines
             val print = fn term => fn string => print ("TERM " ^ (toString term) ^ ": " ^ string)
 
@@ -177,10 +177,10 @@ let val DURATION = 500
                                  decrement nextIndex and retry *)
                                   let val follower_index = index_of cluster from
                                       val _ = if result then
-                                                  arraySet (matchIndex, follower_index - 1, prevLogIndex + (length entries))
+                                                  arraySet (matchIndex, follower_index - 1, prevLogIndex + (List.length entries))
                                               else ()
                                       val _ = if result then
-                                                  arraySet (nextIndex, follower_index - 1, prevLogIndex + (length entries) + 1)
+                                                  arraySet (nextIndex, follower_index - 1, prevLogIndex + (List.length entries) + 1)
                                               else arraySet (nextIndex, follower_index - 1, (arrayGet (nextIndex, follower_index - 1)) - 1)
                                       val commitIndex = if result then check_commitIndex cluster threshold log commitIndex matchIndex else commitIndex
                                       val (lastApplied, state) = if result andalso commitIndex > lastApplied then (lastApplied + 1, apply_entry true state (snd (log_get log (lastApplied + 1)))) else (lastApplied, state)
@@ -248,7 +248,7 @@ let val DURATION = 500
                         (* print "wait for vote"; *)
                         if votes > threshold then
                             print currentTerm "*** elected as leader ***";
-                            leader 0 (currentTerm, self (), log, commitIndex, lastApplied, arrayCreate (`{}`, length cluster + 1, last_log_index log + 1), arrayCreate (`{}`, length cluster + 1, 0)) state
+                            leader 0 (currentTerm, self (), log, commitIndex, lastApplied, arrayCreate (`{}`, List.length cluster + 1, last_log_index log + 1), arrayCreate (`{}`, List.length cluster + 1, 0)) state
                         else
                         receive
                             [ hn (TIMEOUT, k) when k <> n => loop votes n

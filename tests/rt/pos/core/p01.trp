@@ -2,5 +2,5 @@ import List
 
 let val z = 42
 in
-    List.map (fn x => x + 1) (List.reverse  [1,2])
+    map (fn x => x + 1) (reverse  [1,2])
 end

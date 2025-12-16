@@ -27,11 +27,21 @@ getTroupeHome = do
       
 
 
-processImport (LibName lib, _) = do
+processImport :: ImportDecl -> IO ImportDecl
+processImport imp = do
   troupeEnv <- getTroupeHome
-  let fname = troupeEnv ++ defaultLibFolder ++ lib ++ ".exports" 
+  let LibName lib = importLib imp
+  let fname = troupeEnv ++ defaultLibFolder ++ lib ++ ".exports"
   input <- readFile fname
-  return ( LibName lib, Just (lines input))
+  let exports = lines input
+  -- Validate selective imports if specified
+  case importSelected imp of
+    Just selected -> do
+      let missing = filter (`notElem` exports) selected
+      if null missing
+        then return imp { importExports = Just exports }
+        else die $ "Library '" ++ lib ++ "' does not export: " ++ unwords missing
+    Nothing -> return imp { importExports = Just exports }
 
 
 processImports' :: Imports -> IO Imports

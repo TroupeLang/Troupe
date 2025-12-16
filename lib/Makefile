@@ -14,6 +14,8 @@ build:
 	$(COMPILER) ./StencilVector.trp -l
 	$(COMPILER) ./HashMap.trp -l
 	$(COMPILER) ./HashSet.trp -l
+  # Transition hack; 2025-12-14; AA 
+	$(COMPILER) ./Missing.trp -l 
   # Old stuff, here be dragons...
 	$(COMPILER) ./nsuref.trp -l
 	$(COMPILER) ./printService.trp -l

@@ -1,0 +1,2 @@
+2025-12-14T11:44:20.918Z [RTM] info: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+>>> Main thread finished with value: 174@{}%{}

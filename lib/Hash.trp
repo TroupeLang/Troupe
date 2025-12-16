@@ -66,15 +66,11 @@ let
                               (* | "function" => TODO: How to hash the function body? *)
                                  | _          => hashString (toString x)
 
-    (*--- Module ---*)
-    val Hash = {
-        hashString,
-        hashMultiplyShift,
-        hashInt,
-        hashNumber,
-        hashList,
-        hash
-    }
-
-in [ ("Hash", Hash), ("hash", hash) ]
+in [ ("hashString", hashString)
+   , ("hashMultiplyShift", hashMultiplyShift)
+   , ("hashInt", hashInt)
+   , ("hashNumber", hashNumber)
+   , ("hashList", hashList)
+   , ("hash", hash)
+   ]
 end

@@ -68,20 +68,17 @@ let (** The maximum length of a string.
 
     (* TODO: `translateCode`/`translate'` where one maps over charCodes instead. *)
 
-    (*--- Module ---*)
-    val String = {
-        maxSize,
-        size,
-        sub,
-        subCode,
-        substring,
-        concat,
-        concatWith,
-        implode,
-        explode,
-        map,
-        translate
-    }
-
-in [("String", String)]
+in [ ("maxSize", maxSize)
+   , ("size", size)
+   , ("sub", sub)
+   , ("subCode", subCode)
+   , ("substring", substring)
+   , ("concat", concat)
+   , ("concatWith", concatWith)
+   , ("str", str)
+   , ("implode", implode)
+   , ("explode", explode)
+   , ("map", map)
+   , ("translate", translate)
+   ]
 end

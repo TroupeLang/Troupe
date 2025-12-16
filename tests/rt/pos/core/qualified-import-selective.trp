@@ -1,0 +1,10 @@
+(* Test: selective import with curly braces syntax *)
+import { head, tail } List
+
+let val h = head [1, 2, 3]
+    val t = tail [1, 2, 3]
+    val h2 = List.head [4, 5, 6]
+in print h;
+   print t;
+   print h2
+end

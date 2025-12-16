@@ -295,6 +295,17 @@ See the user guide for the exact language syntax, that is useful when creating t
 
 Troupe programs use Standard ML - style syntax, and that can be used for syntax highlighting.
 
+## Markdown Formatting
+
+When creating markdown tables, align columns for readability in raw view:
+
+```markdown
+| Column One                | Column Two   | Column Three                |
+|---------------------------|--------------|------------------------------|
+| `short`                   | `value`      | Description here             |
+| `longer_entry`            | `val`        | Another description          |
+```
+
 ## Common Pitfalls
 
 - Remember to rebuild both compiler and runtime after pulling changes

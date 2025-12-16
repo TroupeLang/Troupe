@@ -1,0 +1,63 @@
+2025-12-14T11:44:43.289Z [RTM] info: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+[34mbegin [0mHashSet
+  [34mbegin [0mempty
+      [33m[ TEST ][0m it is null      [32m[ PASS ][0m it is null
+      [33m[ TEST ][0m it has size 0      [32m[ PASS ][0m it has size 0
+      [33m[ TEST ][0m it does not contain 0      [32m[ PASS ][0m it does not contain 0
+      [33m[ TEST ][0m it does not contain 1      [32m[ PASS ][0m it does not contain 1
+  [34mend [0m
+  [34mbegin [0minsert (empty) 0
+      [33m[ TEST ][0m it is not null      [32m[ PASS ][0m it is not null
+      [33m[ TEST ][0m it has size 1      [32m[ PASS ][0m it has size 1
+      [33m[ TEST ][0m it contains 0      [32m[ PASS ][0m it contains 0
+      [33m[ TEST ][0m it does not contain 1      [32m[ PASS ][0m it does not contain 1
+  [34mend [0m
+  [34mbegin [0msingleton 0
+      [33m[ TEST ][0m it is equivalent to 'insert (empty) 0'      [32m[ PASS ][0m it is equivalent to 'insert (empty) 0'
+  [34mend [0m
+  [34mbegin [0mfromList [0]
+      [33m[ TEST ][0m it is equivalent to 'insert (empty) 0'      [32m[ PASS ][0m it is equivalent to 'insert (empty) 0'
+  [34mend [0m
+  [34mbegin [0mfromList [1]
+      [33m[ TEST ][0m it is not null      [32m[ PASS ][0m it is not null
+      [33m[ TEST ][0m it has size 1      [32m[ PASS ][0m it has size 1
+      [33m[ TEST ][0m it does not contain 0      [32m[ PASS ][0m it does not contain 0
+      [33m[ TEST ][0m it contains 1      [32m[ PASS ][0m it contains 1
+  [34mend [0m
+  [34mbegin [0minsert (fromList [0]) 0
+      [33m[ TEST ][0m it is not null      [32m[ PASS ][0m it is not null
+      [33m[ TEST ][0m it has size 1      [32m[ PASS ][0m it has size 1
+      [33m[ TEST ][0m it contains 0      [32m[ PASS ][0m it contains 0
+      [33m[ TEST ][0m it does not contain 1      [32m[ PASS ][0m it does not contain 1
+  [34mend [0m
+  [34mbegin [0mfromList [1, 0]
+      [33m[ TEST ][0m it is not null      [32m[ PASS ][0m it is not null
+      [33m[ TEST ][0m it has size 2      [32m[ PASS ][0m it has size 2
+      [33m[ TEST ][0m it contains 0      [32m[ PASS ][0m it contains 0
+      [33m[ TEST ][0m it contains 1      [32m[ PASS ][0m it contains 1
+  [34mend [0m
+  [34mbegin [0mfromList [1, 0]
+      [33m[ TEST ][0m it is not null      [32m[ PASS ][0m it is not null
+      [33m[ TEST ][0m it has size 2      [32m[ PASS ][0m it has size 2
+      [33m[ TEST ][0m it contains 0      [32m[ PASS ][0m it contains 0
+      [33m[ TEST ][0m it contains 1      [32m[ PASS ][0m it contains 1
+  [34mend [0m
+  [34mbegin [0mremove (fromList [0]) 0
+      [33m[ TEST ][0m it is equivalent to fromList []      [32m[ PASS ][0m it is equivalent to fromList []
+  [34mend [0m
+  [34mbegin [0mremove (fromList [0, 1]) 0
+      [33m[ TEST ][0m it is equivalent to fromList [1]      [32m[ PASS ][0m it is equivalent to fromList [1]
+  [34mend [0m
+  [34mbegin [0mremove (fromList [0, 1]) 1
+      [33m[ TEST ][0m it is equivalent to fromList [0]      [32m[ PASS ][0m it is equivalent to fromList [0]
+  [34mend [0m
+  [34mbegin [0melems / toList
+      [33m[ TEST ][0m it converts []      [32m[ PASS ][0m it converts []
+      [33m[ TEST ][0m it converts [0]      [32m[ PASS ][0m it converts [0]
+      [33m[ TEST ][0m it converts [0, 1]      [32m[ PASS ][0m it converts [0, 1]
+  [34mend [0m
+[34mend [0m
+
+Total:  32
+Passes: 32
+>>> Main thread finished with value: true@{}%{}

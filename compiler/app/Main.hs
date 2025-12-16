@@ -112,7 +112,9 @@ process flags fname input = do
       when verbose $ do printSep  "LOWERING FUNS AND LETS"
                         writeFileD "out/out.lowered" (showIndent 2 lowered)
       ------------------------------------------------------
-      let renamed = Core.renameProg lowered
+      renamed <- case runExcept (Core.renameProg lowered) of
+        Right p -> return p
+        Left s -> die $ "troupec: " ++ s
       when verbose $ do printSep "α RENAMING"
                         writeFileD "out/out.alpha" (showIndent 2 renamed)
       ------------------------------------------------------

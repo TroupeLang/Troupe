@@ -1,0 +1,9 @@
+(* Test: unqualified import with 'as' alias *)
+(* Both direct access and alias access should work *)
+import List as L
+
+let val h1 = head [1, 2, 3]
+    val h2 = L.head [4, 5, 6]
+in print h1;
+   print h2
+end

@@ -1,0 +1,105 @@
+2025-12-14T11:44:46.039Z [RTM] info: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+[34mbegin [0mNumber
+  [34mbegin [0mmaxInt / minInt
+      [33m[ TEST ][0m it maxInt++ = maxInt      [32m[ PASS ][0m it maxInt++ = maxInt
+      [33m[ TEST ][0m it minInt-- = minInt      [32m[ PASS ][0m it minInt-- = minInt
+  [34mend [0m
+  [34mbegin [0mabs
+      [33m[ TEST ][0m it keeps 0 as is      [32m[ PASS ][0m it keeps 0 as is
+      [33m[ TEST ][0m it keeps +2 as is      [32m[ PASS ][0m it keeps +2 as is
+      [33m[ TEST ][0m it negates -1 as is      [32m[ PASS ][0m it negates -1 as is
+  [34mend [0m
+  [34mbegin [0mmin
+      [33m[ TEST ][0m it returns 1  for ( 1, 2)      [32m[ PASS ][0m it returns 1  for ( 1, 2)
+      [33m[ TEST ][0m it returns -1 for ( 1, 0)      [32m[ PASS ][0m it returns -1 for ( 1, 0)
+      [33m[ TEST ][0m it returns -1 for (-1, 0)      [32m[ PASS ][0m it returns -1 for (-1, 0)
+  [34mend [0m
+  [34mbegin [0mmax
+      [33m[ TEST ][0m it returns 2 for ( 1, 2)      [32m[ PASS ][0m it returns 2 for ( 1, 2)
+      [33m[ TEST ][0m it returns 2 for ( 3, 1)      [32m[ PASS ][0m it returns 2 for ( 3, 1)
+      [33m[ TEST ][0m it returns 0 for (-1, 0)      [32m[ PASS ][0m it returns 0 for (-1, 0)
+  [34mend [0m
+  [34mbegin [0mceil
+      [33m[ TEST ][0m it returns 0 for 0      [32m[ PASS ][0m it returns 0 for 0
+      [33m[ TEST ][0m it returns 1 for 1      [32m[ PASS ][0m it returns 1 for 1
+      [33m[ TEST ][0m it returns -1 for -1      [32m[ PASS ][0m it returns -1 for -1
+      [33m[ TEST ][0m it returns 2 for 3/2      [32m[ PASS ][0m it returns 2 for 3/2
+      [33m[ TEST ][0m it returns 2 for 4/3      [32m[ PASS ][0m it returns 2 for 4/3
+      [33m[ TEST ][0m it returns 2 for 5/3      [32m[ PASS ][0m it returns 2 for 5/3
+      [33m[ TEST ][0m it returns 9 for 42/5      [32m[ PASS ][0m it returns 9 for 42/5
+      [33m[ TEST ][0m it returns 8 for 43/5      [32m[ PASS ][0m it returns 8 for 43/5
+  [34mend [0m
+  [34mbegin [0mfloor
+      [33m[ TEST ][0m it returns 0 for 0      [32m[ PASS ][0m it returns 0 for 0
+      [33m[ TEST ][0m it returns 1 for 1      [32m[ PASS ][0m it returns 1 for 1
+      [33m[ TEST ][0m it returns -1 for -1      [32m[ PASS ][0m it returns -1 for -1
+      [33m[ TEST ][0m it returns 1 for 3/2      [32m[ PASS ][0m it returns 1 for 3/2
+      [33m[ TEST ][0m it returns 1 for 4/3      [32m[ PASS ][0m it returns 1 for 4/3
+      [33m[ TEST ][0m it returns 1 for 5/3      [32m[ PASS ][0m it returns 1 for 5/3
+      [33m[ TEST ][0m it returns 8 for 42/5      [32m[ PASS ][0m it returns 8 for 42/5
+      [33m[ TEST ][0m it returns 8 for 43/5      [32m[ PASS ][0m it returns 8 for 43/5
+  [34mend [0m
+  [34mbegin [0mfloor
+      [33m[ TEST ][0m it returns 0 for 0      [32m[ PASS ][0m it returns 0 for 0
+      [33m[ TEST ][0m it returns 1 for 1      [32m[ PASS ][0m it returns 1 for 1
+      [33m[ TEST ][0m it returns -1 for -1      [32m[ PASS ][0m it returns -1 for -1
+      [33m[ TEST ][0m it returns 2 for 3/2      [32m[ PASS ][0m it returns 2 for 3/2
+      [33m[ TEST ][0m it returns 1 for 4/3      [32m[ PASS ][0m it returns 1 for 4/3
+      [33m[ TEST ][0m it returns 2 for 5/3      [32m[ PASS ][0m it returns 2 for 5/3
+      [33m[ TEST ][0m it returns 8 for 42/5      [32m[ PASS ][0m it returns 8 for 42/5
+      [33m[ TEST ][0m it returns 9 for 43/5      [32m[ PASS ][0m it returns 9 for 43/5
+  [34mend [0m
+  [34mbegin [0msqrt
+      [33m[ TEST ][0m it returns 0 for 0      [32m[ PASS ][0m it returns 0 for 0
+      [33m[ TEST ][0m it returns 1 for 1      [32m[ PASS ][0m it returns 1 for 1
+      [33m[ TEST ][0m it returns 2 for 4      [32m[ PASS ][0m it returns 2 for 4
+      [33m[ TEST ][0m it returns 3 for 9      [32m[ PASS ][0m it returns 3 for 9
+  [34mend [0m
+  [34mbegin [0misInt
+      [33m[ TEST ][0m it accepts 0      [32m[ PASS ][0m it accepts 0
+      [33m[ TEST ][0m it accepts 1      [32m[ PASS ][0m it accepts 1
+      [33m[ TEST ][0m it accepts -1      [32m[ PASS ][0m it accepts -1
+      [33m[ TEST ][0m it accepts 42      [32m[ PASS ][0m it accepts 42
+      [33m[ TEST ][0m it accepts 0/2      [32m[ PASS ][0m it accepts 0/2
+      [33m[ TEST ][0m it accepts 1/-1      [32m[ PASS ][0m it accepts 1/-1
+      [33m[ TEST ][0m it accepts -1/1      [32m[ PASS ][0m it accepts -1/1
+      [33m[ TEST ][0m it accepts 42/42      [32m[ PASS ][0m it accepts 42/42
+      [33m[ TEST ][0m it rejects 3/2      [32m[ PASS ][0m it rejects 3/2
+      [33m[ TEST ][0m it rejects 42/5      [32m[ PASS ][0m it rejects 42/5
+  [34mend [0m
+  [34mbegin [0mtoInt
+      [33m[ TEST ][0m it leaves 0 as is      [32m[ PASS ][0m it leaves 0 as is
+      [33m[ TEST ][0m it leaves 1 as is      [32m[ PASS ][0m it leaves 1 as is
+      [33m[ TEST ][0m it leaves -1 as is      [32m[ PASS ][0m it leaves -1 as is
+      [33m[ TEST ][0m it leaves 42 as is      [32m[ PASS ][0m it leaves 42 as is
+      [33m[ TEST ][0m it omits fraction for 3/2      [32m[ PASS ][0m it omits fraction for 3/2
+      [33m[ TEST ][0m it omits fraction for 5/2      [32m[ PASS ][0m it omits fraction for 5/2
+  [34mend [0m
+  [34mbegin [0mtoInt32
+      [33m[ TEST ][0m it leaves 0 as is      [32m[ PASS ][0m it leaves 0 as is
+      [33m[ TEST ][0m it leaves 1 as is      [32m[ PASS ][0m it leaves 1 as is
+      [33m[ TEST ][0m it leaves -1 as is      [32m[ PASS ][0m it leaves -1 as is
+      [33m[ TEST ][0m it leaves 42 as is      [32m[ PASS ][0m it leaves 42 as is
+      [33m[ TEST ][0m it omits fraction for 3/2      [32m[ PASS ][0m it omits fraction for 3/2
+      [33m[ TEST ][0m it truncates  2^33-1      [32m[ PASS ][0m it truncates  2^33-1
+      [33m[ TEST ][0m it truncates -2^33-1      [32m[ PASS ][0m it truncates -2^33-1
+  [34mend [0m
+  [34mbegin [0mtoString
+      [33m[ TEST ][0m it returns '0'        for 0      [32m[ PASS ][0m it returns '0'        for 0
+      [33m[ TEST ][0m it returns '0'        for 0/2      [32m[ PASS ][0m it returns '0'        for 0/2
+      [33m[ TEST ][0m it returns '1'        for 1      [32m[ PASS ][0m it returns '1'        for 1
+      [33m[ TEST ][0m it returns '1.5'      for 3/2      [32m[ PASS ][0m it returns '1.5'      for 3/2
+      [33m[ TEST ][0m it returns '0.333...' for 1/3      [32m[ PASS ][0m it returns '0.333...' for 1/3
+  [34mend [0m
+  [34mbegin [0mfromString
+      [33m[ TEST ][0m it returns 0     for '0'      [32m[ PASS ][0m it returns 0     for '0'
+      [33m[ TEST ][0m it returns 0     for '0.'      [32m[ PASS ][0m it returns 0     for '0.'
+      [33m[ TEST ][0m it returns 0     for '0.0'      [32m[ PASS ][0m it returns 0     for '0.0'
+      [33m[ TEST ][0m it returns 42    for '42'      [32m[ PASS ][0m it returns 42    for '42'
+      [33m[ TEST ][0m it returns 42/10 for '4.2'      [32m[ PASS ][0m it returns 42/10 for '4.2'
+  [34mend [0m
+[34mend [0m
+
+Total:  72
+Passes: 72
+>>> Main thread finished with value: true@{}%{}

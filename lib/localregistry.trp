@@ -1,4 +1,5 @@
 import List
+import Missing 
 
 datatype Atoms = REGISTER | LOOKUP | FOUND | NOT_FOUND | SHUTDOWN 
 
@@ -15,7 +16,7 @@ let fun local_registry () =
                         , hn (LOOKUP, name, pid_requester ) => 
                             registry_worker
                                 (active, 
-                                    case List.lookup active name NOT_FOUND of 
+                                    case Missing.list_lookup active name NOT_FOUND of 
                                       NOT_FOUND => (name,pid_requester)::pending 
                                     | pid_found => send (pid_requester, (FOUND, pid_found)); pending 
                                 )

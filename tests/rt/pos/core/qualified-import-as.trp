@@ -1,0 +1,6 @@
+(* Test: import qualified with 'as' alias *)
+import qualified List as L
+
+let val result = L.head [1, 2, 3]
+in print result
+end

@@ -1,0 +1,16 @@
+2025-12-14T11:44:21.545Z [RTM] info: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+("bitAnd 15 & 7 ="@{}%{}, 7@{}%{})@{}%{}
+("bitAnd 255 & 128 ="@{}%{}, 128@{}%{})@{}%{}
+("bitAnd 0 & 65535 ="@{}%{}, 0@{}%{})@{}%{}
+("bitOr 8 | 4 ="@{}%{}, 12@{}%{})@{}%{}
+("bitOr 1 | 2 | 4 ="@{}%{}, 7@{}%{})@{}%{}
+("bitOr 0 | 255 ="@{}%{}, 255@{}%{})@{}%{}
+("bitXor 15 ^ 10 ="@{}%{}, 5@{}%{})@{}%{}
+("bitXor 255 ^ 255 ="@{}%{}, 0@{}%{})@{}%{}
+("bitXor 170 ^ 85 ="@{}%{}, 255@{}%{})@{}%{}
+("bitShiftLeft 1 << 3 ="@{}%{}, 8@{}%{})@{}%{}
+("bitShiftRight 16 >> 2 ="@{}%{}, 4@{}%{})@{}%{}
+("bitZeroShiftRight 4294967295 >>> 1 ="@{}%{}, 2147483647@{}%{})@{}%{}
+("HAMT-style index calculation: (42 >> 5) & 31 ="@{}%{}, 1@{}%{})@{}%{}
+"All bit operation tests completed!"@{}%{}
+>>> Main thread finished with value: ()@{}%{}

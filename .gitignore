@@ -36,10 +36,17 @@ cabal.project.local
 ##################################################
 # Binaries from `compiler`
 bin/*
+compiler/bin/*
 
 ##################################################
 # Troupe Compiler (`troupec`) output
 out/*
+compiler/out/*
+
+##################################################
+# Generated parser files
+compiler/src/Parser.hs
+compiler/src/Parser.info
 
 ##################################################
 # Editors

@@ -1,0 +1,10 @@
+(** 2025-12-14; AA: 
+    Some missing functionality that should find better home *)
+
+let fun lookup list key default =
+      case list of [] => default
+                 | ((x, v):: xs) =>
+                   if x = key then v
+                   else lookup xs key default
+in [("list_lookup", lookup)]
+end

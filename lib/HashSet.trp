@@ -45,20 +45,16 @@ let (* NOTE: The set is implemented as a HashMap with dummy values, `()`. This i
      *       would result in O(n) extra time and space usage. *)
     fun fromList hf xs = List.foldl (fn (x, s) => insert s x) (empty hf) xs
 
-    (*--- Module ---*)
-    val HashSet = {
-        empty,
-        singleton,
-        insert,
-        remove,
-        null,
-        size,
-        mem,
-        fold,
-        elems,
-        toList,
-        fromList
-    }
-
-in [ ("HashSet", HashSet) ]
+in [ ("empty", empty)
+   , ("singleton", singleton)
+   , ("insert", insert)
+   , ("remove", remove)
+   , ("null", null)
+   , ("size", size)
+   , ("mem", mem)
+   , ("fold", fold)
+   , ("elems", elems)
+   , ("toList", toList)
+   , ("fromList", fromList)
+   ]
 end

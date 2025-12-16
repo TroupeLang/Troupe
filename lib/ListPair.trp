@@ -62,21 +62,17 @@ let (* -- ListPair Generation -- *)
     (** Equivalent to `List.foldl f z (zip xs ys)`. *)
     fun foldl f z xs ys = List.foldl f z (zip xs ys)
 
-    (*--- Module ---*)
-    val ListPair = {
-        zip,
-        unzip,
-        null,
-        length,
-        reverse,
-        append,
-        revAppend,
-        findOpt,
-        find,
-        mem,
-        map,
-        foldl
-    }
-
-in [ ("ListPair", ListPair) ]
+in [ ("zip", zip)
+   , ("unzip", unzip)
+   , ("null", null)
+   , ("length", length)
+   , ("reverse", reverse)
+   , ("append", append)
+   , ("revAppend", revAppend)
+   , ("findOpt", findOpt)
+   , ("find", find)
+   , ("mem", mem)
+   , ("map", map)
+   , ("foldl", foldl)
+   ]
 end

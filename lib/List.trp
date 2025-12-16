@@ -167,28 +167,24 @@ let (* -- List Access -- *)
         in sort_inner (split xs [])
         end
 
-    (*--- Module ---*)
-    val List = {
-        head,
-        tail,
-        nth,
-        null,
-        elem,
-        length,
-        reverse,
-        append,
-        revAppend,
-        appendAt,
-        sublist,
-        map,
-        mapi,
-        foldl,
-        filter,
-        filteri,
-        partition,
-        range,
-        sort
-    }
-
-in [ ("List", List), ("length", length) ]
+in [ ("head", head)
+   , ("tail", tail)
+   , ("nth", nth)
+   , ("null", null)
+   , ("elem", elem)
+   , ("length", length)
+   , ("reverse", reverse)
+   , ("append", append)
+   , ("revAppend", revAppend)
+   , ("appendAt", appendAt)
+   , ("sublist", sublist)
+   , ("map", map)
+   , ("mapi", mapi)
+   , ("foldl", foldl)
+   , ("filter", filter)
+   , ("filteri", filteri)
+   , ("partition", partition)
+   , ("range", range)
+   , ("sort", sort)
+   ]
 end

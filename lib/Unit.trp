@@ -110,16 +110,13 @@ let
             val _ = print auth 0 ("Passes: " ^ (intToString passed) ^ "\n")
         in total = passed end
 
-    (*--- Module ---*)
-    val Unit = {
-        group,
-        it,
-        isEq,
-        isTrue,
-        isFalse,
-        isNeq,
-        run
-    }
-
-in [ ("Unit", Unit) ]
+in [ ("group", group)
+   , ("it", it)
+   , ("isEq", isEq)
+   , ("isTrue", isTrue)
+   , ("isFalse", isFalse)
+   , ("isNeq", isNeq)
+   , ("size", size)
+   , ("run", run)
+   ]
 end

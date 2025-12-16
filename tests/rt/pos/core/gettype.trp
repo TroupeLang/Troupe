@@ -1,9 +1,9 @@
-(* we want a simple function 
-   getType x that returns 
+(* we want a simple function
+   getType x that returns
    the information about the type
 *)
 import List
 let val ls = [ "hello", fn x => x + 1, 2, () , {x = 2}]
-in List.map getType ls 
+in map getType ls
 end 
 

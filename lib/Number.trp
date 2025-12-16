@@ -133,7 +133,7 @@ in [ ("maxInt", maxInt)
    , ("isInt", isInt)
    , ("toInt", toInt)
    , ("toInt32", toInt32)
-   , ("eq", eq),
+   , ("eq", eq)
    , ("lt", lt),
    , ("le", le),
    , ("gt", gt),

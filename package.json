@@ -48,10 +48,16 @@
     "@rollup/plugin-node-resolve": "^16.0.3",
     "@rollup/plugin-terser": "^0.4.4",
     "@types/archy": "^0.0.36",
+    "@eslint/js": "^9.37.0",
     "@types/ws": "^8.18.1",
     "@types/yargs": "^17.0.33",
+    "eslint": "^9.37.0",
+    "globals": "^16.4.0",
+    "jiti": "^2.6.1",
     "rollup": "^4.41.0",
     "source-map": "^0.7.6",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.46.1"
   }
 }

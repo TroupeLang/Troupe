@@ -16,6 +16,9 @@ npm:
 rt:
 	cd rt; $(MAKE) all
 
+rt/format:
+	cd rt; $(MAKE) lint
+
 COMPILER=./bin/troupec
 compiler:
 	cd compiler; $(MAKE) all

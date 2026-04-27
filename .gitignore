@@ -5,6 +5,10 @@ TAGS
 node_modules
 
 ##################################################
+# TypeScript incremental build cache
+*.tsbuildinfo
+
+##################################################
 # Haskell
 
 ## Cabal Sandbox
@@ -72,3 +76,4 @@ compiler/src/Parser.info
 _claude_planning/
 _troupe_notebook_planning
 .notebook-storage
+.claude/

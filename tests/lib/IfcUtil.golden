@@ -44,10 +44,10 @@ invokeAtLevel, invokeAtLevel
 
 declassifyDeep, endorseDeep, downgradeDeep
 ============================================================
-1@<alice;#root-integrity>%<alice;#root-integrity>
+1@<alice;#root-integrity>%{}
 1@{}%{}
 1@{}%{}
-"secret!"@<alice;#root-integrity>%<alice;#root-integrity>
+"secret!"@<alice;#root-integrity>%{}
 "secret!"@{}%{}
 "secret!"@{}%{}
 (1@<alice;#root-integrity>%<alice;#root-integrity>, 2@<alice;#root-integrity>%<alice;#root-integrity>)@<alice;#root-integrity>%<alice;#root-integrity>

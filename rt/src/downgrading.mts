@@ -1,7 +1,7 @@
 import { LCopyVal, LVal } from './Lval.mjs';
 import { assertIsNTuple, assertIsAuthority, assertIsLevel } from './Asserts.mjs'
 import { __unit } from './UnitVal.mjs';
-import { lub, flowsTo, okToDeclassify, okToEndorse, okToCrossDimensionalDowngrade}  from './Level.mjs'
+import { lub, glb, okToDeclassify, okToEndorse, okToCrossDimensionalDowngrade}  from './Level.mjs'
 import { DowngradeResult, DowngradeDimension, DowngradeErrorReason, DowngradeKind, ValueDowngradeGranularity } from './DowngradeEnums.mjs';
 import {
     formatIntegrityMismatchMsg,
@@ -84,7 +84,7 @@ export function downgrader (runtime: RuntimeInterface,
                 const taintedLevTo = lub(lev_to, pc, arg.lev, auth.lev);
                 const r = typeOnly
                     ? new LCopyVal(data, lub(data.lev, taintedLevTo), taintedLevTo)
-                    : new LCopyVal(data, taintedLevTo);
+                    : new LCopyVal(data, taintedLevTo, glb(data.tlev, taintedLevTo) );
                 return runtime.ret(r)
             } else {
                 let errorMessage = "";

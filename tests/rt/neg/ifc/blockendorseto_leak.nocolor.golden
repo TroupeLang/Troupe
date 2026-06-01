@@ -1,0 +1,11 @@
+2026-03-11T16:28:44.203Z [RTM] info: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+Runtime error in thread 07dc6946-984c-4699-9170-951408975ec7@{}%{}
+
+  20 |     val _ = blockendorseto (intAliceAuth, target)
+     |             ^
+
+>> Not enough authority for blocking level integrity
+ | from level of the blocking level: <#null-confidentiality;bob>
+ | level of the authority: <#null-confidentiality;alice>
+ | to level of the blocking level: {}
+>> at tests/rt/neg/ifc/blockendorseto_leak.trp:20:13

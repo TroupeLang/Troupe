@@ -1,430 +1,155 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
-## Overview
-
-Troupe is an actor-based programming language with dynamic information flow control. The codebase consists of three main components:
-
-1. **Compiler** (`/compiler/`) - Haskell-based compiler that transforms Troupe code to JavaScript
-2. **Runtime** (`/rt/`) - TypeScript/JavaScript runtime implementing the actor model and information flow control. Note that the folder (`/rt/built`) is used as target for the generated code; it should be ignored for source code analysis.
-3. **Standard Library** (`/lib/`) - Built-in libraries written in Troupe
-
-### Additional tools 
-
-In addition to the core language runtime  and the compiler, the codebase includes a few tools. 
-
-1. **P2P** tools (`/p2p-tools`). 
-
-   1. **Libp2p relay** (`relay/`) - TypeScript/JavaScript implementation of a libp2p relay. In multinode deployments we want to offer to our users at least one relay in order to allow communicating with Troupe nodes behind NAT.
-
-
-
-## Folders with executables
-
-- Executable binaries (`/bin`). Contains compiled binaries. Important to not add any scripts or other version-controllable artifacts in here, because this folder is to be ignored by version control. 
-
-- Executiable scripts (`/scripts`). Contains useful executable scripts that are version controlled. 
-
-
-## Essential Commands
-
-### Building the Project
-
-```bash
-# Build everything (recommended for significant changes)
-make all
-
-# Build individual components
-make compiler   # Build the compiler
-make rt         # Build the runtime
-make libs       # Compile standard libraries
-make service    # Compile service module
-```
-
-### When to Rebuild
-
-Before running Troupe programs or tests, check for stale builds:
-
-**Compiler needs rebuilding if:**
-- Any `.hs` file in `compiler/src/` was modified
-- `bin/troupec` doesn't exist or isn't executable
-- Error: "troupec: command not found" or parse errors in valid code
-
-**Runtime needs rebuilding if:**
-- Any `.mts` file in `rt/src/` was modified
-- `rt/built/troupe.mjs` doesn't exist
-- Error: "Cannot find module" for runtime files
-
-**Libraries need rebuilding if:**
-- Compiler was rebuilt
-- Any `.trp` file in `lib/` was modified
-- Error: "Cannot find module" for library files
-
-| Changed                   | Command          |
-|---------------------------|------------------|
-| Haskell (`compiler/`)     | `make compiler`  |
-| TypeScript (`rt/src/`)    | `make rt`        |
-| Troupe libraries (`lib/`) | `make lib`       |
-| Everything                | `make all`       |
-
-**After git operations:** Always run `make all` after `git pull`, `git checkout`, or `git merge`.
-
-### Running Tests
-
-```bash
-# Run full test suite
-make test
-
-# Run golden tests with options
-bin/golden
-
-# Run a test with specific pattern. Beware that slashes are not allowed in the patterns.
-bin/golden -p <the-pattern>
-
-# Quick mode: skip unoptimized pass for faster iteration
-bin/golden --quick
-bin/golden -p <the-pattern> --quick
-```
-
-### Running Troupe Programs
-There are two convenient scripts for running Troupe programs. They are in the root folder, and should remain there because of how frequently they are accessed.
-
-
-```bash
-# Local execution (no P2P networking, faster startup)
-./local.sh myprogram.trp
-
-# Network execution (with P2P support)
-./network.sh myprogram.trp
-
-# With debugging
-./local.sh myprogram.trp --debug
-```
-
-### Development Commands
-
-```bash
-# Clean build artifacts
-make clear-built-rt
-
-# Interactive Haskell REPL for compiler development
-cd compiler && make ghci-troupec
-
-# Check parser info
-cd compiler && make parser-info
-```
-
-## Architecture Overview
-
-### Compilation Pipeline
-
-The Troupe compiler transforms source code through multiple stages:
-
-1. **Parsing** (`Parser.y`, `Lexer.x`) - Parse `.trp` files into AST
-2. **Core Transformations**:
-   - Pattern elimination (`DirectWOPats.hs`)
-   - Function/let lowering
-   - Alpha renaming
-   - CPS transformation (`RetCPS.hs`, `RetDFCPS.hs`)
-   - CPS optimization (`CPSOpt.hs`)
-   - Closure conversion (`ClosureConv.hs`)
-3. **Code Generation**:
-   - IR → Raw (`IR2Raw.hs`)
-   - Raw → Stack (`Raw2Stack.hs`)
-   - Stack → JavaScript (`Stack2JS.hs`)
-
-### Runtime Architecture
-
-The runtime implements:
-
-- **Actor System**: Process spawning, message passing, mailbox management
-- **Information Flow Control**: Security levels, label tracking, declassification
-- **P2P Networking**: libp2p integration for distributed actors
-- **Built-in Functions**: Located in `/rt/src/builtins/`
-- **Level System**: Various label implementations in `/rt/src/levels/`
-
-### Key Runtime Components
-
-- `troupe.mts` - Main entry point
-- `runtimeMonitored.mts` - Gluing point for most of the runtime
-- `Scheduler.mts` - Scheduler
-- `MailboxProcessor.mts` - Message handling
-- `TrustManager.mts` - Trust and security management
-- `p2p/p2p.mts` - P2P networking layer
-- `builtins` - Many language built-ins.
-
-## Testing Strategy
-
-
-Tests are organized in `/tests/`, with the following subfolders
-
-- `cmp` - Negative compiler tests.
-- `rt` - Runtime tests 
-   - `pos/` - Positive tests (should succeed)
-      - `core/` - Core language features
-      - `ifc/` - Information flow control
-      - `sandbox/` - Sandboxing tests
-   - `neg/` - Negative tests (should fail)
-   - `timeout/` - Tests with timeouts
-   - `warn/` - Tests that should produce warnings
-   - `multinode/` - Multinode (networking) tests
-
-
-## Creating new tests
-
-Do not put tests into the folders with existing .golden files, without explicit permission! 
-
-### Testing non-networking functionality
-
-Non-network tests have a `.trp` source file and a `.golden` file with expected output. The comparison of the expected output is handled using the golden utility. This is needed because outputs often include timestamped value and that utility invokes the special diff that discards the timestamps. 
-
-
-### Multinode tests 
-
-Multinode tests do not use the `golden` functionality. They should instead use the functionality described in 
-`tests/rt/multinode-tests/README.md` using the scripts in the `scripts` folder. 
-
-When creating new multinode tests, do not create any ids or aliases or trustmaps. Instead, this needs to be coordinated using the corresponding `config.json`.
-
-### Guidelines for creating new tests 
-
-- Use Troupe syntax (unless working specifically on negative parsing tests)! Please consult both the existing positive test corpus for examples of Troupe programs and the user-guide referenced in this document for how to write Troupe programs.
-
-- The easiest way to list all the built-ins is by inspecting the `compiler/src/IR.hs` where they are included in a long list.
-
-- Remember that there is Troupe standard library that may have useful functionality. 
-
-- Troupe compiler `troupec` can be used to test tests for syntactic validity.
-
-- Local tests can be executed directly using `local.sh` script. 
-
-#### Golden files for new tests
-
-When creating new tests, do not create `.golden` files manually. They are auto-generated by the `bin/golden` utility upon detection of a missing `.golden` file, for the non-network tests; and are not required at all for the multinode tests.
-
-
-
-
-## Information Flow Control
-
-Troupe implements dynamic information flow control with:
-
-- **Security Levels**: High/Low, DC labels, custom lattices
-- **PC (Program Counter) Label**: Tracks implicit flows
-- **Declassification**: Controlled information release
-- **Sandboxing**: Isolated execution with label constraints
-
-
-## File Extensions
-
-- `.trp` - Troupe source files
-- `.picox`, `.pico`, `.femto`, `.atto` - Test file variants
-- `.golden` - Expected test outputs
-- `.exports` - Library export definitions
-
-## Troupe language user guide
-
-Troupe language user guide is available at https://troupelang.github.io/troupe-user-guide-jb/. The guide currently uses the V1 label syntax `` `{alice}` ``, which the present Troupe runtime interprets as DC Labels corresponding to `` `<alice ; alice >` ``. 
-
-
-## Development Tips
-
-1. Use `./local.sh` for quick testing without P2P overhead
-2. The compiler must be rebuilt after changes to Haskell code
-3. Runtime changes require `make rt` to recompile TypeScript
-4. Library changes require `make libs` to recompile
-5. VSCode with Haskell and TypeScript extensions provides good IDE support
-6. Set `TROUPE` environment variable to the repository root
-
-### Adding New Built-in Functions
-
-To add a new built-in function to Troupe, you need to make changes in both the compiler and runtime:
-
-#### 1. Compiler Registration
-Add the function name to the built-in list in `/compiler/src/IR.hs` (around lines 262-337):
-```haskell
-wfir (Base fname) =
-    if  fname `elem`[ 
-        -- existing built-ins...
-        , "yourNewFunction"  -- Add your function name here
-        ]
-```
-
-#### 2. Runtime Implementation
-Create a new file `/rt/src/builtins/yourFunction.mts`:
-```typescript
-'use strict'
-import { UserRuntimeZero, Constructor, mkBase } from './UserRuntimeZero.mjs'
-import { LVal } from '../Lval.mjs';
-
-export function BuiltinYourFunction<TBase extends Constructor<UserRuntimeZero>>(Base: TBase) {
-    return class extends Base {
-        yourNewFunction = mkBase((larg) => {
-            // Your implementation here
-            // Use assertIsX functions for type checking
-            // Use lub() for security level calculations
-            return this.runtime.ret(new LVal(result, resultLevel));
-        }, "yourNewFunction")
-    }
-}
-```
-
-#### 3. Runtime Registration
-Update `/rt/src/UserRuntime.mts`:
-1. Import your new built-in:
-   ```typescript
-   import { BuiltinYourFunction } from './builtins/yourFunction.mjs'
-   ```
-2. Add it to the composition chain (order matters for dependencies):
-   ```typescript
-   export const UserRuntime =
-       BuiltinYourFunction (
-       // ... rest of the existing chain
-   ```
-
-#### 4. Build and Test
-```bash
-make compiler   # Rebuild compiler
-make rt         # Rebuild runtime
-make test       # Run tests
-```
-
-#### Notes:
-- Built-in functions must handle Troupe's information flow control using `lub()` for security levels
-- Use appropriate `assertIsX` functions from `Asserts.mjs` for type safety
-- The function name in IR.hs must exactly match the runtime function name
-- Consider adding tests in `/tests/rt/pos/core/` for your new built-in
-
-
-
-
-### Temporary test generation
-
-For temporary test generation, please use the folder `tests/_unautomated/claude`. 
-
-### Testing the compiler-generated output.
-
-The compiler binary `troupec` has an option for verbose output `-v`, and the generated files are written into the `/out` folder, named with different stages of the compilation. 
-
-
-#### Turning off raw optimizations
-
-Some bugs may be further caught by turning off the raw ouptimizations. There is a flag `--no-rawopt` that disables Raw optimizations. It can be helpful for some corner compiler-related bugs.
-
-#### Troupe parser implementation.
-
-There should be no shift/reduce or reduce/reduce conflicts in the Troupe parser.
-
-#### Avoid unnecessary beautification
-
-Do not introduce cosmetic changes to the code as part of another goal, e.g., removing trailing spaces, etc. That 
-will unnecessary clutter the diffs. 
-
-
-### Troupe programs
-
-#### Syntax 
-
-See the user guide for the exact language syntax, that is useful when creating tests.
-
-#### Syntax highlighting
-
-Troupe programs use Standard ML - style syntax, and that can be used for syntax highlighting.
-
-## Markdown Formatting
-
-When creating markdown tables, align columns for readability in raw view:
+Agent-specific directives for working in this repository. This file contains **only** directives
+for how to work here. For human-facing reference material, see:
+
+- [README.md](README.md) — overview, project components, repository layout
+- [docs/INSTALL.md](docs/INSTALL.md) — dependencies and installation
+- [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — build/test commands, running programs, source maps
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — compilation pipeline, runtime, IFC, file extensions
+- [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) — test-suite layout, adding a built-in
+- [docs/NETWORKING.md](docs/NETWORKING.md) — P2P runtime
+
+## Build before running
+
+Before running Troupe programs or tests, check for stale builds and rebuild what changed. Build
+commands are documented in [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) ("Building and running").
+
+| Changed                   | Command         | Symptom of a stale build                  |
+|---------------------------|-----------------|-------------------------------------------|
+| Haskell (`compiler/src/`) | `make compiler` | `troupec: command not found`, parse errors in valid code |
+| TypeScript (`rt/src/`)    | `make rt`       | `Cannot find module` for runtime files    |
+| Troupe libraries (`lib/`) | `make libs`     | `Cannot find module` for library files    |
+| Everything                | `make all`      | —                                         |
+
+- Libraries also need rebuilding (`make libs`) after the compiler is rebuilt.
+- After any `git pull`, `git checkout`, or `git merge`, run `make all`.
+- `rt/built/` holds generated code — ignore it for source-code analysis.
+
+## Make
+
+Always invoke `/usr/bin/make` instead of `make`, to avoid a zsh function conflict.
+
+## Running tests
+
+- Running the suite takes time. Run it once, redirect output to a temp file, and read that file
+  for failures and status instead of re-running from scratch.
+- When a golden test `t.trp` fails, run `./local.sh t.trp` to see the actual output before
+  drawing any conclusions.
+- When a golden output changes, first confirm the new result is *correct* (understand **why** it
+  changed) before regenerating goldens.
+
+## Creating tests
+
+- Do **not** put new tests into folders that already contain `.golden` files without explicit
+  permission.
+- Do **not** create `.golden` files by hand — `bin/golden` auto-generates them on first run for
+  non-network tests (multinode tests need none).
+- For multinode tests, do not create ids, aliases, or trustmaps; coordinate them through the
+  corresponding `config.json`. Follow `tests/rt/multinode-tests/README.md` and the scripts in
+  `scripts/`.
+- Put temporary/throwaway tests in `tests/_unautomated/claude`.
+- A test that reads stdin may require a corresponding `.input` file. Golden tests are sensitive to
+  output formatting.
+- When adding a new language primitive, add one or more brief tests demonstrating syntax, expected
+  behavior, and error messages; propose where in the corpus they belong.
+- Write tests in real Troupe syntax (consult the user guide and the existing positive test corpus).
+  `troupec` can be used to check a test for syntactic validity. Remember the standard library may
+  already provide useful functionality.
+
+## Information flow claims
+
+Do not make untested claims about IFC relationships between levels. Use `debugpc()` to inspect the
+current pc and blocking labels for correct information.
+
+## Compiler work
+
+- `troupec -v` writes per-stage generated files into `/out`; inspect these to debug codegen.
+- `--no-rawopt` disables Raw optimizations and can surface corner-case compiler bugs.
+- The Troupe parser must have no shift/reduce or reduce/reduce conflicts.
+- For changes that span the whole compiler pipeline, prefer approaches that keep the compiler
+  working at each changed phase, so changes can be tested modularly.
+
+## Code and commit quality
+
+AI-generated commits must be held to the highest quality bar.
+
+- **Never commit an unverified change.** Verify code changes by the relevant tests passing
+  (`make test` / `bin/golden`), behavioral changes by observing the new behavior directly, and
+  documentation by review. A change that merely builds or type-checks is **not** verified.
+- If a change cannot be verified — the tool that exercises it hangs, is broken, or is unavailable —
+  **do not commit it.** Leave it in the working tree and surface the situation; never commit on
+  faith.
+- Do not bundle unverified changes together with verified ones to slip them in. Prefer several
+  small, individually-verified commits over one large commit whose parts have not all been checked.
+- Do not introduce cosmetic changes (trailing-space removal, reformatting) as part of an unrelated
+  goal — it clutters diffs.
+- When choosing between a clean-but-laborious approach and a quick partial one, in this codebase we
+  almost always do the clean thing that is *right*.
+
+## Conventions
+
+- Use absolute paths in runtime code.
+- Backticks in info-flow label syntax interact badly with the shell; save example programs that use
+  backticks to files rather than creating them via `echo`.
+- Use `--localonly` for local testing to skip slow p2p initialization.
+
+### Markdown tables
+
+Align columns for readability in raw view:
 
 ```markdown
-| Column One                | Column Two   | Column Three                |
-|---------------------------|--------------|------------------------------|
-| `short`                   | `value`      | Description here             |
-| `longer_entry`            | `val`        | Another description          |
+| Column One     | Column Two | Column Three        |
+|----------------|------------|---------------------|
+| `short`        | `value`    | Description here    |
+| `longer_entry` | `val`      | Another description |
 ```
 
-## Common Pitfalls
+## Writing documentation
 
-- Remember to rebuild both compiler and runtime after pulling changes
-- Use absolute paths in the runtime code
-- P2P initialization can be slow; use `--localonly` for local testing.
-- Test files may require specific `.input` files for stdin
-- Golden tests are sensitive to output formatting
-- Always use `/usr/bin/make` instead of `make` to avoid zsh function conflicts
+- Write factually. State what something is and how to use it; do not editorialize.
+- Avoid value judgments and color the reader did not ask for: words like *convenient*, *useful*,
+  *powerful*, *simply*, *just*, *easy*, *nice*, *day-to-day*; hedging like *hopefully* or *should be
+  fine*; and hype.
+- Drop self-justifying asides about why a choice was made unless the rationale is actionable for the
+  reader.
+- Prefer a fact to an opinion: "skips p2p initialization" over "a convenient script that skips p2p
+  initialization."
 
+## Estimates
 
-## What to do when a golden test fails
+Give estimates as **degree of autonomy**, not weeks (which make little sense for agent-assisted
+development).
 
-In most cases the right thing to do is to locally run the file, i.e.,
-if the test `t.trp` fails, run `./local.sh t.trp` to see what the output is.
-
-Be careful making untested claims about information flow relationships between levels; 
-do use `debugpc()` functionality to see the present values of the pc and blocking labels
-for correct information.
-
-
-## Working on changes that affect the whole compiler pipeline
-
-When working on changes that affect the whole compiler, consider approaches that 
-would maintain a working compiler at each changed phase, so that changes can be
-modularly tested. 
-
-
-## Estimates 
-
-All estimates should be given in the degree of autonomy (as opposed to weeks that make little sense 
-for the agent-assisted development)
-
-
-## Choosing between the cleanest and the partial easy solutions.
-
-When choosing between the obviosuly clean but laborious approach and 
-a quick easy but partial solution, in this code base we almost always want to do the clean thing that is _right_! 
-
-
-## Note on backticks in the labels.
-
-Beware of the backticks in the syntax of the info flow labels that can have unfortunate 
-interactions with the shell. Example programs that use bacticks should probably not be
-created via echo, but saved in files.
-
-## Executing tests
-
-Running tests takes time; to save on running them, run them and save the results in a temp file and read that file for failures and status (instead of re-running them from scratch)
-
-
-## New primitives should have tests
-
-When adding new primitives into the language, make sure to create one or more tests that would demonstrate the syntax, the expected behavior, expected error messages, etc. Keep these demo tests brief and down to the chase; propose to add them to the appropriate place in the test corpus.
-
-
-## Auto-structuring Large Plans
+## Auto-structuring large plans
 
 Before finalizing any implementation plan, assess its complexity and structure accordingly:
 
-| Complexity | Criteria                            | Structure                                      |
-|------------|-------------------------------------|------------------------------------------------|
-| Small      | <3 tasks, single focus              | Inline in conversation                         |
-| Medium     | 3-4 tasks, 2-3 areas                | Single plan file with sections                 |
-| Large      | 4+ tasks, multiple areas/phases     | Multi-file structure in `_claude_planning/`    |
+| Complexity | Criteria                        | Structure                                   |
+|------------|---------------------------------|---------------------------------------------|
+| Small      | <3 tasks, single focus          | Inline in conversation                      |
+| Medium     | 3-4 tasks, 2-3 areas            | Single plan file with sections              |
+| Large      | 4+ tasks, multiple areas/phases | Multi-file structure in `_claude_planning/` |
 
 **For large plans**, automatically create the following structure without being asked:
 
 ```
 _claude_planning/<feature-name>/
-  index.md          # Overview, progress tracking, step links
-  step-1-<name>.md       # Self-contained step file
+  index.md             # Overview, progress tracking, step links
+  step-1-<name>.md     # Self-contained step file
   step-2-<name>.md
   ...
 ```
 
 **Requirements for multi-file plans:**
-1. **index.md**: Progress table with status indicators, links to all steps, decision log
-2. **Step files**: Each must be self-contained with enough context to execute in a fresh session
-3. **Progress tracking**: Use checkboxes and status indicators (Pending/In Progress/Complete/Blocked)
 
-**Templates are available at:** `_claude_planning/_template/`
-- `index.md` - Index file template
-- `step-N-template.md` - Step file template
+1. **index.md**: progress table with status indicators, links to all steps, decision log.
+2. **Step files**: each must be self-contained with enough context to execute in a fresh session.
+3. **Progress tracking**: use checkboxes and status indicators (Pending/In Progress/Complete/Blocked).
+
+**Templates are available at** `_claude_planning/_template/`:
+
+- `index.md` — index file template
+- `step-N-template.md` — step file template
 
 When creating a new large plan, copy and adapt these templates.

@@ -30,9 +30,6 @@
 └──────────────────────────┘                                         
 ```
  
-## Applications
-
-    
 ## Integrity 
  
 - [x] Integrity of blocking and mailboxes
@@ -47,8 +44,8 @@
 
 ## Quarantining 
 
-- [ ] Outline of the quarantining in the security model (done)
-- [ ] Implementation
+- [x] Outline of the quarantining in the security model
+- [x] Implementation (quarantine builtins, multinode tests, `--no-quarantine` CLI opt-out)
 
 
 ## NMIFC evaluation
@@ -96,12 +93,10 @@
 
 ### Other improvements
 
-#### Frontend 
-
 #### Backend
 
 - [x] Provide a runtime option to NOT use V1 compatible pretty printing
-      (done: `--no-v1-labels` / `--v1-labels` runtime options)
+      (done: `--label-format v1|v2|v2-full` runtime option)
 
 ## Refactoring
 
@@ -109,6 +104,8 @@
 ### Runtime 
 
 - [+ongoing+] Consolidate error handling of downgrading
+      (declassification rework merged via PR #151; verify whether further
+      consolidation is still needed or this can be closed)
 
 - [x] Get rid of lubs in the runtime codebase, because it is redundant, now that we have a multi-arg lub
 

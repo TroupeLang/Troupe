@@ -1,0 +1,11 @@
+2026-03-11T16:28:42.123Z [RTM] info: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+Runtime error in thread a78fc27c-27c8-47ec-b735-d603107edeb3@{}%{}
+
+  20 |     val _ = blockdeclto (aliceAuth, target)
+     |             ^
+
+>> Not enough authority for blocking level declassification
+ | from level of the blocking level: <bob;#root-integrity>
+ | level of the authority: <alice;#root-integrity>
+ | to level of the blocking level: {}
+>> at tests/rt/neg/ifc/blockdeclto_leak.trp:20:13

@@ -1,0 +1,11 @@
+2026-03-11T16:28:44.223Z [RTM] info: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+Runtime error in thread 952f5c93-c87e-4854-b055-bfde8ee9c4aa@{}%{}
+
+  5 |     val x' = downgradeType (x, attenuate (authority, `{bob}`), `{}`)
+    |              ^
+
+>> Not enough authority for downgrade
+ | level of the data: {alice}
+ | level of the authority: {bob}
+ | target level of the downgrade: {}
+>> at tests/rt/neg/ifc/downgradeType.trp:5:14

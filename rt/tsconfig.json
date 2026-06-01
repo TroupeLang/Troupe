@@ -1,6 +1,8 @@
 {
     "compilerOptions": {
         "outDir": "./built",
+        "rootDir": "./src", 
+        "strict": false,
         "allowJs": true,
         "moduleResolution": "node16",
         "module": "Node16",

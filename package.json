@@ -46,12 +46,12 @@
     "@rollup/plugin-commonjs": "^29.0.0",
     "@rollup/plugin-json": "^6.1.0",
     "@rollup/plugin-node-resolve": "^16.0.3",
-    "@rollup/plugin-terser": "^0.4.4",
+    "@rollup/plugin-terser": "^1.0.0",
     "@types/archy": "^0.0.36",
     "@types/ws": "^8.18.1",
     "@types/yargs": "^17.0.33",
     "rollup": "^4.41.0",
     "source-map": "^0.7.6",
-    "typescript": "^5.8.3"
+    "typescript": "^6.0.3"
   }
 }

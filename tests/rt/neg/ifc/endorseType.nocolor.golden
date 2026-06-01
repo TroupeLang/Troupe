@@ -1,0 +1,11 @@
+2026-03-11T16:28:42.830Z [RTM] info: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+Runtime error in thread d1bbdcc8-00ee-4dce-9fa0-d6582b323253@{}%{}
+
+  5 |     val x' = endorseType (x, attenuate (authority, `{bob}`), `<alice; #root-integrity>`)
+    |              ^
+
+>> Not enough authority for endorsement
+ | level of the data: {alice}
+ | level of the authority: {bob}
+ | target level of the endorsement: <alice;#root-integrity>
+>> at tests/rt/neg/ifc/endorseType.trp:5:14

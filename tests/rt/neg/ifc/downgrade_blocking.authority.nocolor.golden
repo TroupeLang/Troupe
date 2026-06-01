@@ -1,0 +1,11 @@
+2026-03-11T16:28:42.588Z [RTM] info: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+Runtime error in thread 4fe033b0-253d-41e2-a40f-a3cf754dee24@{}%{}
+
+  19 | in adv ()
+     |    ^
+
+>> Illegal flow in adv function:
+ |    pc: {}
+ | block: <alice&bob;#root-integrity>
+ | value: ()@{}%{}
+>> at tests/rt/neg/ifc/downgrade_blocking.authority.trp:19:4

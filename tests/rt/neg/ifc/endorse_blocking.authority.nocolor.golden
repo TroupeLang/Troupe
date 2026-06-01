@@ -1,0 +1,11 @@
+2026-03-11T16:28:44.494Z [RTM] info: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+Runtime error in thread a9b27294-76cd-4d04-8642-58f5d8b3b609@{}%{}
+
+  22 | in cert ()
+     |    ^
+
+>> Illegal flow in cert function:
+ |    pc: {}
+ | block: <#null-confidentiality;(alice|bob)&(bob|charlie)>
+ | value: ()@{}%{}
+>> at tests/rt/neg/ifc/endorse_blocking.authority.trp:22:4

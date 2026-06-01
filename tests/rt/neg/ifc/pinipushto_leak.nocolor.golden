@@ -1,0 +1,10 @@
+2026-03-11T16:28:44.508Z [RTM] info: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+Runtime error in thread bff20588-f8de-47b5-b304-0cc8727cd6bb@{}%{}
+
+  16 |     val cap = pinipushto (aliceAuth, target)
+     |               ^
+
+>> level argument of pinipushto operation must flow to the current blocking level
+| the blocking level: <bob;#root-integrity>
+| the level argument: {}@<bob;#root-integrity>%{}
+>> at tests/rt/neg/ifc/pinipushto_leak.trp:16:15

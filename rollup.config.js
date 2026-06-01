@@ -18,6 +18,16 @@ export default {
     format: 'cjs'
   },
 
+  // Rollup's tree-shaking pass hangs indefinitely (observed 5+ CPU-hours) on
+  // the compiled runtime in rt/built; with treeshake disabled the same bundle
+  // builds in ~1s. The exact trigger is unconfirmed -- it is a known class of
+  // Rollup tree-shaking performance pathology (cf. rollup/rollup#5729), and
+  // this graph does have circular dependencies (e.g. runtimeMonitored <->
+  // MailboxProcessor <-> QuarantineUtils <-> deserialize), but those have not
+  // been confirmed as the cause. We don't need dead-code elimination here
+  // (terser still minifies the output), so disable tree-shaking.
+  treeshake: false,
+
   plugins: [
     resolve(),
     commonjs({

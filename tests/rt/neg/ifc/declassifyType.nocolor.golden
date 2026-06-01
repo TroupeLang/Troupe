@@ -1,0 +1,11 @@
+2026-03-11T16:28:44.506Z [RTM] info: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+Runtime error in thread 1b93eeb5-175c-4675-a4d3-701e45720c04@{}%{}
+
+  5 |     val x' = declassifyType (x, attenuate (authority, `{bob}`), `{}`)
+    |              ^
+
+>> Not enough authority for declassification
+ | level of the data: <alice;#root-integrity>
+ | level of the authority: {bob}
+ | target level of the declassification: {}
+>> at tests/rt/neg/ifc/declassifyType.trp:5:14

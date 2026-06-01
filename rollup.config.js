@@ -18,6 +18,13 @@ export default {
     format: 'cjs'
   },
 
+  // The compiled runtime in rt/built has circular dependencies (e.g.
+  // runtimeMonitored <-> MailboxProcessor <-> QuarantineUtils <-> deserialize),
+  // which make Rollup's tree-shaking pass hang indefinitely on this graph.
+  // We don't need dead-code elimination here (terser still minifies the
+  // output), so disable tree-shaking to keep the bundle build fast.
+  treeshake: false,
+
   plugins: [
     resolve(),
     commonjs({

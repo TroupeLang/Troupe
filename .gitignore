@@ -80,8 +80,8 @@ compiler/src/Parser.info
 *.DS_Store
 
 ##################################################
-# Claude Code planning files
-_claude_planning/
+# Dev and Claude Code planning files
+_dev_planning/
 _troupe_notebook_planning
 .notebook-storage
 .claude/

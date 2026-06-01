@@ -382,6 +382,17 @@ When choosing between the obviosuly clean but laborious approach and
 a quick easy but partial solution, in this code base we almost always want to do the clean thing that is _right_! 
 
 
+## Commit quality — no unverified or untested changes
+
+AI-generated commits must be held to the highest quality bar. **Never commit a change that has not been verified.**
+
+- Every committed change must be verified *before* it is committed: code changes by the relevant tests passing (`make test` / `bin/golden`), behavioral changes by observing the new behavior directly, and documentation by review. A change that merely builds or type-checks is **not** verified.
+- If a change cannot be verified — e.g. the tool that exercises it hangs, is broken, or is unavailable — **do not commit it**. Leave it in the working tree and surface the situation to the user; never commit on faith.
+- Do not bundle unverified changes together with verified ones to slip them in. Commit only what is verified and hold the rest in separate, clearly-scoped commits.
+- When a behavior or a golden output changes, first confirm the new result is *correct* (not merely *different*) — understand why it changed — before regenerating goldens or committing.
+- Prefer several small, individually-verified commits over one large commit whose parts have not all been checked.
+
+
 ## Note on backticks in the labels.
 
 Beware of the backticks in the syntax of the info flow labels that can have unfortunate 

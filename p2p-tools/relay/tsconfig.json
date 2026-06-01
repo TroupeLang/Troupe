@@ -8,7 +8,9 @@
         "esModuleInterop": true,
         "incremental": false,
         "lib": ["ESNext"],
-        "skipLibCheck": true
+        "skipLibCheck": true,
+        "strict": false,
+        "types": ["node"]
     },
     "include": ["./relay.mts"],
     "exclude": []

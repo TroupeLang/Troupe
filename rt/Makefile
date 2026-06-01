@@ -2,4 +2,4 @@ all:
 	tsc
 
 clean:
-	rm -rf built
+	rm -rf built tsconfig.tsbuildinfo

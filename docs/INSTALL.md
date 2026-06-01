@@ -1,0 +1,84 @@
+# Installing Troupe
+
+> **Scope:** how to obtain dependencies and build Troupe for the first time. For build, test, and
+> run commands once installed, see [DEVELOPMENT.md](DEVELOPMENT.md).
+
+## Troupe development container
+
+If you want to try out Troupe without manual installation (e.g., for a class exercise or just checking the system), check out the VSCode development container available through the [Troupe/example-project](https://github.com/TroupeLang/example-project) repository.
+
+## Installation
+
+Once all dependencies have been installed, the whole project can be built and Troupe installed to the `bin` directory with `make all`. The following shows step-by-step which dependencies are needed for which parts and how to install them.
+
+### Step 1. Install JS runtime
+1. Install NodeJS (e.g. `sudo apt-get install nodejs`)
+2. Install js dependencies via `npm install`
+3. Set the `TROUPE` environment variable to point to the folder that contains the main README. In bash this is done by adding the following lines to a file such as `~/.bashrc` or `~/.bash_profile`:
+   ```
+   TROUPE=<path to the installation directory>
+   export TROUPE=<path to the installation directory>
+   ```
+   Read [here](https://www.digitalocean.com/community/tutorials/how-to-read-and-set-environmental-and-shell-variables-on-a-linux-vps") for more info on environment variables.
+6. Install [TypeScript](https://www.typescriptlang.org/): `npm install -g typescript`
+   - To install to the home directory without root, first run `npm config set prefix ~/.npm` and add `~/.npm/bin` to your PATH
+7. Compile Troupe runtime by typing `make rt`
+
+### Step 2. Install Troupe compiler
+
+1. Get [Haskell stack](https://www.haskellstack.org).
+2. Change to the `compiler` directory and run `make`
+
+The above make script copies the binary of the compiler into the
+bin folder of the project under name `troupec`. That name is then used
+by the runtime module.
+
+
+### Step 3. Install Troupe top-level scripts
+
+Type `make compiler` (in the repository's root) to compile Troupe's bin scripts
+
+### Step 4. Install Troupe standard library
+
+Type
+
+- `make libs` to compile Troupe's built-in libraries, and
+- `make service` to compile the service module placeholder.
+
+
+### Step 5. Running the test suite
+
+#### OS X specific utilities for testing
+
+On OS X, make sure to have `gtimeout`, `greadlink`, and GNU `diff` utilities. 
+
+- `gtimeout` and `greadlink` can be installed via `brew install coreutils`
+- GNU `diff` can be installed via `brew install diffutils`
+
+The GNU diff is required because Troupe's test suite relies on specific diff features not available in the default macOS diff. After installation, verify that GNU diff is available:
+
+```bash
+diff --version
+```
+
+Expected output:
+```
+diff (GNU diffutils) 3.10
+Copyright (C) 2023 Free Software Foundation, Inc.
+License GPLv3+: GNU GPL version 3 or later <https://gnu.org/licenses/gpl.html>.
+This is free software: you are free to change and redistribute it.
+There is NO WARRANTY, to the extent permitted by law.
+
+Written by Paul Eggert, Mike Haertel, David Hayes,
+Richard Stallman, and Len Tower.
+```
+
+#### Checking the installation
+
+Check that the installation works by running the local test suite: `$TROUPE/bin/golden`
+(alternatively `make test` in this directory).
+
+#### Multinode tests
+
+Multinode tests are located in `tests/rt/multinode-tests/` and can be run using the script:
+`scripts/run-multinode-tests.sh`

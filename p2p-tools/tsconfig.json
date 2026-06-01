@@ -9,6 +9,8 @@
         "skipLibCheck": true,
         "incremental": true,
         "lib": ["ESNext"],
+        "strict": false,
+        "types": ["node"]
     },
     "include": [
         "./*.ts",

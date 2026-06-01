@@ -8,7 +8,7 @@ export class LVal implements TroupeRawValue{
     lev: Level;
     tlev: Level;
     dlev: Level;
-    posInfo: string;
+    posInfo: string | null;
 
     /* 2020-06-06: AA   
 
@@ -21,7 +21,7 @@ export class LVal implements TroupeRawValue{
     */
     __troupeType : Ty.TroupeType 
     
-    constructor(v:any, l:Level, tlev:Level = null, posInfo:string = null) {
+    constructor(v:any, l:Level, tlev:Level | null = null, posInfo:string | null = null) {
         this.val = v;
         this.lev = l;
         this.tlev = tlev == null?l:tlev;
@@ -95,7 +95,7 @@ export class LValCopyAt extends LVal {
 }
 
 export class LCopyVal extends LVal {
-    constructor (x:LVal, l1:Level, l2:Level = null) {
+    constructor (x:LVal, l1:Level, l2:Level | null = null) {
         super (x.val, l1, l2);
     }
 }

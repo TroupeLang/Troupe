@@ -5,6 +5,14 @@ TAGS
 node_modules
 
 ##################################################
+# Distribution bundle output (`make dist` / `rollup -c`)
+/build/
+
+##################################################
+# TypeScript incremental build cache
+*.tsbuildinfo
+
+##################################################
 # Haskell
 
 ## Cabal Sandbox
@@ -76,3 +84,4 @@ compiler/src/Parser.info
 _claude_planning/
 _troupe_notebook_planning
 .notebook-storage
+.claude/

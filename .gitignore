@@ -5,6 +5,10 @@ TAGS
 node_modules
 
 ##################################################
+# Distribution bundle output (`make dist` / `rollup -c`)
+/build/
+
+##################################################
 # TypeScript incremental build cache
 *.tsbuildinfo
 

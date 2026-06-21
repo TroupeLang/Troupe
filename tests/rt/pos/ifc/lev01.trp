@@ -1,0 +1,8 @@
+let val x = `{alice}` raisedTo `{alice}`
+    val y = `{bob}` raisedTo `{bob}`
+    val _ = printWithLabels (x lub y)
+    val _ = debugpc()
+    val _ = printWithLabels (x glb y)
+    val _ = debugpc()
+in ()
+end

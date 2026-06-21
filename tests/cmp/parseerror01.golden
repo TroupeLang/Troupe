@@ -1,5 +1,5 @@
 tests/cmp/parseerror01.trp:0:0: parse error
   (while parsing let declarations)
   unexpected end of input
-  expected one of: keyword 'end', 'andalso', 'orelse', '=', '+', '-', '*', '/', ';', '^', '<=', '>=', '<', '>', '<>', 'div', 'mod', andb, orb, xorb, '<<', '>>', '~>>', 'raisedTo', '::'
+  expected one of: keyword 'end', 'andalso', 'orelse', '=', '+', '-', '*', '/', ';', '^', '<=', '>=', '<', '>', '<>', 'div', 'mod', andb, orb, xorb, '<<', '>>', '~>>', 'raisedTo', 'lub', 'glb', '::'
 

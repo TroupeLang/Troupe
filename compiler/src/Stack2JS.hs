@@ -479,11 +479,11 @@ binOpToJS op (Raw.UseNativeBinop isNative) = case op of
     Concat -> "+"
     HasField -> "rt.hasField"
     LatticeJoin -> "rt.raw_join"
+    LatticeMeet -> "rt.raw_meet"
     -- No RT operations (should be moved to a different datatype)
     RaisedTo -> error "Not a runtime operation"
     -- Not yet implemented in IR2Raw
     FlowsTo -> error "Not yet implemented: FlowsTo" -- (implemented in tagsets.ts: "rt.flowsTo")
-    LatticeMeet -> error "Not yet implemented: LatticeMeet"
 
 unaryOpToJS :: UnaryOp -> String
 unaryOpToJS = \case

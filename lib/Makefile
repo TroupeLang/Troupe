@@ -23,6 +23,7 @@ build:
 	$(COMPILER) ./Set.trp -l
 	$(COMPILER) ./IfcUtil.trp -l
 	$(COMPILER) ./StencilVector.trp -l
+	$(COMPILER) ./FVal.trp -l
 
   # Dependency on `List` and `Number`
 	$(COMPILER) ./String.trp -l

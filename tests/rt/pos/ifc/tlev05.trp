@@ -1,0 +1,7 @@
+let val x = `{alice}` raisedTo `{alice}`
+    val y = `{bob}` raisedTo `{bob}`
+
+    val z = if flowsTo (x, x lub y) then y else x
+    val _ =  debugpc()
+in z
+end

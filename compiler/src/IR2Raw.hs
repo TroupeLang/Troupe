@@ -625,6 +625,13 @@ expr2rawComp = \case
         , ccValLbl = \resValLbl -> Join PC (ValLbl lv1) [ValLbl lv2, resValLbl]
         , ccTyLbl = const PC -- The result type is always boolean
         }
+      Basics.HasField -> do
+        assertTypeAndRaise lv1 RawRecord
+        assertTypeAndRaise lv2 RawString
+        basicBinOpComp
+
+      -- IFC Level Operations
+
       -- Revision 2023-08: Introduced new instruction InvalidateSparseBit
       -- (before this was called by a runtime raisedTo operation, which is now not necessary anymore).
       -- Otherwise equivalent except for order of instructions.
@@ -637,10 +644,24 @@ expr2rawComp = \case
           , cValLbl = Join PC (ValLbl lv1) [ValLbl lv2, Lbl rRaiseTo]
           , cTyLbl = Join PC (TyLbl lv1) []
           }
-      Basics.HasField -> do
-        assertTypeAndRaise lv1 RawRecord
-        assertTypeAndRaise lv2 RawString
-        basicBinOpComp
+
+      Basics.LatticeMeet -> do
+        assertTypeAndRaise lv1 RawLevel
+        assertTypeAndRaise lv2 RawLevel
+        return SimpleRawComp
+          { cVal = RBin lv1 lv2 $ Bin op $ (UseNativeBinop False)
+          , cValLbl = Join PC (ValLbl lv1) [ValLbl lv2]
+          , cTyLbl = Join PC (TyLbl lv1) [TyLbl lv2]
+          }
+
+      Basics.LatticeJoin -> do
+        assertTypeAndRaise lv1 RawLevel
+        assertTypeAndRaise lv2 RawLevel
+        return SimpleRawComp
+          { cVal = RBin lv1 lv2 $ Bin op $ (UseNativeBinop False)
+          , cValLbl = Join PC (ValLbl lv1) [ValLbl lv2]
+          , cTyLbl = Join PC (TyLbl lv1) [TyLbl lv2]
+          }
 
       -- Bit operations
       Basics.BinAnd -> numBinOpComp

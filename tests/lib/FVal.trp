@@ -1,0 +1,160 @@
+import FVal
+
+let val _ = printString "Public Context"
+    val _ = printString "======================================================================"
+
+    val _ = printString "FVal.empty"
+    val fv = FVal.empty
+    val _ = printWithLabels fv
+    val _ = blockdown authority
+
+    val _ = printString "\nFVal.insert authority fv (1 raisedTo `{}`)"
+    val fv = FVal.insert authority fv (1 raisedTo `{}`)
+    val _ = printWithLabels fv
+    val _ = blockdown authority
+
+    val _ = printString "\nFVal.insert authority fv (2 raisedTo `{alice}`)"
+    val fv = FVal.insert authority fv (2 raisedTo `{alice}`)
+    val _ = printWithLabels fv
+    val _ = blockdown authority
+
+    val _ = printString "\nFVal.insert authority fv (3 raisedTo `{bob}`)"
+    val fv = FVal.insert authority fv (3 raisedTo `{bob}`)
+    val _ = printWithLabels fv
+    val _ = blockdown authority
+
+    val _ = printString "\nFVal.insert authority fv (4 raisedTo `{bob}`)"
+    val fv = FVal.insert authority fv (4 raisedTo `{charlie}`)
+    val _ = printWithLabels fv
+    val _ = blockdown authority
+
+    val _ = printString "\nFVal.insert authority fv (5 raisedTo `{alice}`)"
+    val fv = FVal.insert authority fv (5 raisedTo `{alice}`)
+    val _ = printWithLabels fv
+    val _ = blockdown authority
+
+    val _ = printString "\nFVal.mem authority <...>"
+    val _ = printWithLabels (FVal.mem authority fv `{}`)
+    val _ = blockdown authority
+    val _ = printWithLabels (FVal.mem authority fv `{alice}`)
+    val _ = blockdown authority
+    val _ = printWithLabels (FVal.mem authority fv `{bob}`)
+    val _ = blockdown authority
+    val _ = printWithLabels (FVal.mem authority fv `{charlie}`)
+    val _ = blockdown authority
+    val _ = printWithLabels (FVal.mem authority fv `{alice, bob}`)
+    val _ = blockdown authority
+
+    val _ = printString "\nFVal.find authority <...>"
+    val _ = printWithLabels (FVal.find authority fv `{}`)
+    val _ = blockdown authority
+    val _ = printWithLabels (FVal.find authority fv `{alice}`)
+    val _ = blockdown authority
+    val _ = printWithLabels (FVal.find authority fv `{bob}`)
+    val _ = blockdown authority
+    val _ = printWithLabels (FVal.find authority fv `{alice,bob}`)
+    val _ = blockdown authority
+    val _ = printWithLabels (FVal.find authority fv `{charlie}`)
+    val _ = blockdown authority
+
+    val _ = printString "\nFVal.insert authority fv (6 raisedTo `{}`)"
+    val fv = FVal.insert authority fv (6 raisedTo `{}`)
+    val _ = printWithLabels fv
+    val _ = blockdown authority
+
+    val _ = printString ""
+    val _ = printString "Secret Context"
+    val _ = printString "======================================================================"
+
+    val _ = printString "if `{alice}` then FVal.empty"
+    val fv = if true raisedTo `{alice}` then FVal.empty else "..."
+    val _ = printWithLabels fv
+    val _ = blockdown authority
+
+    val _ = printString "\nif `{alice}` then FVal.insert authority fv (1 raisedTo `{alice}`)"
+    val fv = if true raisedTo `{alice}`
+             then FVal.insert authority fv 1
+             else "..."
+    val _ = printWithLabels fv
+    val _ = blockdown authority
+
+    val _ = printString "\nFVal.insert authority fv (2 raisedTo `<alice; #root>`)"
+    val fv = FVal.insert authority fv (2 raisedTo `<alice; #root-integrity>`)
+    val _ = printWithLabels fv
+    val _ = blockdown authority
+
+    val _ = printString "\nFVal.insert authority fv (3 raisedTo `<bob; #root>`)"
+    val fv = FVal.insert authority fv (3 raisedTo `<bob; #root-integrity>`)
+    val _ = printWithLabels fv
+    val _ = blockdown authority
+
+    val _ = printString "\nFVal.insert authority fv (4 raisedTo `{alice}`)"
+    val fv = FVal.insert authority fv (4 raisedTo `{alice}`)
+    val _ = printWithLabels fv
+    val _ = blockdown authority
+
+    val _ = printString "\nif `<alice; #root>` then FVal.insert authority fv 5"
+    val fv = if true raisedTo `<alice; #root-integrity>`
+             then FVal.insert authority fv 5
+             else "..."
+    val _ = printWithLabels fv
+    val _ = blockdown authority
+
+    val _ = printString "\nif `{alice}` then FVal.insert authority fv 6"
+    val fv = if true raisedTo `{alice}`
+             then FVal.insert authority fv 6
+             else "..."
+    val _ = printWithLabels fv
+    val _ = blockdown authority
+
+    val _ = printString "\nif `<alice; #root>` then FVal.insertAtPC authority fv 7"
+    val fv = if true raisedTo `<alice; #root-integrity>`
+             then FVal.insert authority fv 7
+             else "..."
+    val _ = printWithLabels fv
+    val _ = blockdown authority
+
+    val _ = printString "\nif `<alice; #root>` then FVal.insert authority fv (8 raisedTo `<bob; #root>`)"
+    val fv = let val x = 8 raisedTo `<bob; #root-integrity>`
+             in  if true raisedTo `<alice; #root-integrity>`
+                 then FVal.insert authority fv x
+                 else "..."
+             end
+    val _ = printWithLabels fv
+    val _ = blockdown authority
+
+    val _ = printString "\nif `<bob; #root>` then FVal.insert authority fv 9"
+    val fv = if true raisedTo `<bob; #root-integrity>`
+             then FVal.insert authority fv 9
+             else "..."
+    val _ = printWithLabels fv
+    val _ = blockdown authority
+
+    val _ = spawn (
+            fn () =>
+               let val _ = printString ""
+                   val _ = printString "Secret Context (Malleable)"
+                   val _ = printString "======================================================================"
+
+                   val _ = printString "FVal.empty"
+                   val fv = FVal.empty
+                   val _ = printWithLabels fv
+                   val _ = blockdown authority
+
+                   val _ = printString "\nif `{alice}` then FVal.insert authority fv 1"
+                   val fv = if true raisedTo `{alice}`
+                            then FVal.insert authority fv 1
+                            else "..."
+                   val _ = printWithLabels fv
+                   val _ = blockdown authority
+
+                   val _ = printString "\nif `<bob; #root>` then FVal.insert authority fv 2"
+                   val fv = if true raisedTo `<bob; #root-integrity>`
+                            then FVal.insert authority fv 2
+                            else "..."
+                   val _ = printWithLabels fv
+                   val _ = blockdown authority
+               in ()
+               end)
+in ()
+end

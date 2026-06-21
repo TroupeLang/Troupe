@@ -61,6 +61,7 @@ import Data.List (group, sort, intercalate)
     false { L _ TokenFalse }
     andalso { L _ TokenAndAlso }
     orelse  { L _ TokenOrElse }
+    'not' { L _ TokenNot }
     NUM   { L _ (TokenNum _) }
     FLOAT { L _ (TokenFloat _) }
     STRING{ L _ (TokenString _)}
@@ -91,16 +92,20 @@ import Data.List (group, sort, intercalate)
     '`<'    { L _ TokenDCLabelLeft  } 
     '>`'    { L _ TokenDCLabelRight } 
     '&'     { L _ TokenAmpersand }
+    '#true'  { L _ TokenDCTrue }
+    '#false' { L _ TokenDCFalse }
     '#root-confidentiality' { L _ TokenDCRootConf }
     '#null-confidentiality' { L _ TokenDCNullConf }
     '#root-integrity' { L _ TokenDCRootInteg }
     '#null-integrity' { L _ TokenDCNullInteg }    
 
-    'raisedTo' { L _ TokenRaisedTo }
+    'raisedTo'    { L _ TokenRaisedTo }
+    'latticeJoin' { L _ TokenLatticeJoin }
+    'latticeMeet' { L _ TokenLatticeMeet }
+
     'isTuple' { L _ TokenIsTuple }
     'isList' { L _ TokenIsList }
     'isRecord' { L _ TokenIsRecord }
-    'not' { L _ TokenNot }
 
     '('   { L _ TokenLParen }
     ')'   { L _ TokenRParen }
@@ -121,30 +126,43 @@ import Data.List (group, sort, intercalate)
 
 
 %nonassoc with
-%right '=>' 
+%right '=>'
 %right '|'
-%right else 
+%right else
 %right ';'
 %left andalso orelse
+
 %nonassoc '=' '<=' '>=' '<>' '<' '>' '@'
+
 %left andb orb xorb
 %left '<<' '>>' '~>>'
-%left '+' '-' 
+
+%left '+' '-'
 %left '*' '/' div mod
-%left '|' 
+
+%left '|'
 %left '&'
+
 %right '::'
+
 %right '.'
 
 %left 'raisedTo'
+
 %left 'isTuple'
 %left 'isList'
 %left 'isRecord'
+
 %left 'not'
+
+%left 'latticeJoin'
+%left 'latticeMeet'
+
 %left '^'
 %%
 
 
+-- Syntax
 
 
 Prog : ImportDecl AtomsDecl Expr                       { Prog (Imports $1) (Atoms $2) $3 }
@@ -185,6 +203,8 @@ Expr: Form                        { $1 }
     | hn Pattern '|' Pattern when Expr '=>' Expr      {% atPos $1 (Hnd (Handler $2 (Just $4) (Just $6) $8)) }
     | case Expr of Match          {% atPos $1 (Case $2 $4) }
     | Expr ';' Expr               {% mkSeq $1 $3 $2 }
+    | Expr 'latticeMeet' Expr     {% atPos $2 (Bin LatticeMeet $1 $3) }
+    | Expr 'latticeJoin' Expr     {% atPos $2 (Bin LatticeJoin $1 $3) }
     | Expr '-' Expr               {% atPos $2 (Bin Minus $1 $3) }
     | Expr '+' Expr               {% atPos $2 (Bin Plus $1 $3) }
     | Expr '>=' Expr              {% atPos $2 (Bin Ge $1 $3) }
@@ -238,11 +258,15 @@ LabelExp:
 ConfLabelExp :                     { ConstComponent LabelTrue }
      | '#root-confidentiality'     { ConstComponent LabelFalse }
      | '#null-confidentiality'     { ConstComponent LabelTrue }
+     | '#false'                    { ConstComponent LabelFalse }
+     | '#true'                     { ConstComponent LabelTrue }
      | LabelExp                    { ExprComponent $1 }
 
 IntLabelExp :                      { ConstComponent LabelTrue }
      | '#root-integrity'           { ConstComponent LabelFalse }
      | '#null-integrity'           { ConstComponent LabelTrue }
+     | '#false'                    { ConstComponent LabelFalse }
+     | '#true'                     { ConstComponent LabelTrue }
      | LabelExp                    { ExprComponent $1 }     
 
 DCLabelExp:
@@ -396,6 +420,7 @@ errorExpr _ = Loc (RTGen "error-recovery") (Lit LUnit)  -- Placeholder expressio
 
 errorPattern :: L Token -> LDeclPattern
 errorPattern _ = Loc (RTGen "error-recovery") ErrorPattern
+
 
 errorDecl :: L Token -> Decl
 errorDecl _ = ErrorDecl
@@ -587,6 +612,8 @@ cleanExpectedToken "'isRecord'" = "'isRecord'"
 cleanExpectedToken "'not'" = "'not'"
 cleanExpectedToken "'flowsTo'" = "'flowsTo'"
 cleanExpectedToken "'levelOf'" = "'levelOf'"
+cleanExpectedToken "'latticeMeet'" = "'glb'"
+cleanExpectedToken "'latticeJoin'" = "'lub'"
 cleanExpectedToken s = s  -- fallback
 
 

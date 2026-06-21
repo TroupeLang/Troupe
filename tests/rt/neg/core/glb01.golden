@@ -1,0 +1,8 @@
+2026-02-18T10:50:29.206Z [RTM] [32minfo[39m: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+Runtime error in thread fe5dfbc7-0f41-492e-86ce-98926c5b3af5@{}%{}
+
+  1 | "{bob}" glb `{alice}`
+    | ^
+
+>> value "{bob}" is not a level
+>> at tests/rt/neg/core/glb01.trp:1:1

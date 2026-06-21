@@ -1,0 +1,91 @@
+2026-03-30T09:11:14.773Z [RTM] [32minfo[39m: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+Public Context
+======================================================================
+FVal.empty
+[]@{}%{}
+
+FVal.insert authority fv (1 raisedTo `{}`)
+[({}@{}%{}, 1@{}%{})@{}%{}]@{}%{}
+
+FVal.insert authority fv (2 raisedTo `{alice}`)
+[({alice}@{alice}%{}, 2@{alice}%{})@{}%{}, ({}@{}%{}, 1@{}%{})@{}%{}]@{}%{}
+
+FVal.insert authority fv (3 raisedTo `{bob}`)
+[({bob}@{bob}%{}, 3@{bob}%{})@{}%{}, ({alice}@{alice}%{}, 2@{alice}%{})@{}%{}, ({}@{}%{}, 1@{}%{})@{}%{}]@{}%{}
+
+FVal.insert authority fv (4 raisedTo `{bob}`)
+[({charlie}@{charlie}%{}, 4@{charlie}%{})@{}%{}, ({bob}@{bob}%{}, 3@{bob}%{})@{}%{}, ({alice}@{alice}%{}, 2@{alice}%{})@{}%{}, ({}@{}%{}, 1@{}%{})@{}%{}]@{}%{}
+
+FVal.insert authority fv (5 raisedTo `{alice}`)
+[({alice}@{alice}%{}, 5@{alice}%{})@{}%{}, ({charlie}@{charlie}%{}, 4@{charlie}%{})@{}%{}, ({bob}@{bob}%{}, 3@{bob}%{})@{}%{}, ({}@{}%{}, 1@{}%{})@{}%{}]@{}%{}
+
+FVal.mem authority <...>
+false@{}%{}
+true@{alice}%{}
+true@{bob}%{}
+true@{charlie}%{}
+true@{alice,bob}%{}
+
+FVal.find authority <...>
+1@{}%{}
+5@{alice}%{}
+5@{alice,bob}%{}
+5@{alice,bob}%{}
+5@{alice,charlie}%{}
+
+FVal.insert authority fv (6 raisedTo `{}`)
+[({}@{}%{}, 6@{}%{})@{}%{}]@{}%{}
+
+Secret Context
+======================================================================
+if `{alice}` then FVal.empty
+[]@{alice}%{alice}
+
+if `{alice}` then FVal.insert authority fv (1 raisedTo `{alice}`)
+[({alice}@{alice}%{alice}, 1@{alice}%{alice})@{alice}%{alice}]@{alice}%{alice}
+
+FVal.insert authority fv (2 raisedTo `<alice; #root>`)
+[(<alice;#root-integrity>@<alice;#root-integrity>%{}, 2@<alice;#root-integrity>%{})@{}%{}]@<alice;#root-integrity>%{}
+
+FVal.insert authority fv (3 raisedTo `<bob; #root>`)
+[(<bob;#root-integrity>@<bob;#root-integrity>%{}, 3@<bob;#root-integrity>%{})@{}%{}, (<alice;#root-integrity>@<alice;#root-integrity>%{}, 2@<alice;#root-integrity>%{})@{}%{}]@<alice;#root-integrity>%{}
+
+FVal.insert authority fv (4 raisedTo `{alice}`)
+[({alice}@{alice}%{}, 4@{alice}%{})@{}%{}, (<bob;#root-integrity>@<bob;#root-integrity>%{}, 3@<bob;#root-integrity>%{})@{}%{}, (<alice;#root-integrity>@<alice;#root-integrity>%{}, 2@<alice;#root-integrity>%{})@{}%{}]@<alice;#root-integrity>%{}
+
+if `<alice; #root>` then FVal.insert authority fv 5
+[({}@<alice;#root-integrity>%{}, 5@{}%{})@<alice;#root-integrity>%<alice;#root-integrity>]@<alice;#root-integrity>%<alice;#root-integrity>
+
+if `{alice}` then FVal.insert authority fv 6
+[({alice}@{alice}%{alice}, 6@{alice}%{alice})@{alice}%{alice}, ({}@<alice;#root-integrity>%{}, 5@{}%{})@{alice}%{alice}]@{alice}%{alice}
+
+if `<alice; #root>` then FVal.insertAtPC authority fv 7
+[({}@<alice;#root-integrity>%{}, 7@{}%{})@<alice;#root-integrity>%<alice;#root-integrity>]@<alice;#root-integrity>%<alice;#root-integrity>
+
+if `<alice; #root>` then FVal.insert authority fv (8 raisedTo `<bob; #root>`)
+[(<bob;#root-integrity>@<alice&bob;#root-integrity>%{}, 8@<bob;#root-integrity>%{})@<alice;#root-integrity>%<alice;#root-integrity>, ({}@<alice;#root-integrity>%{}, 7@{}%{})@<alice;#root-integrity>%<alice;#root-integrity>]@<alice;#root-integrity>%<alice;#root-integrity>
+
+if `<bob; #root>` then FVal.insert authority fv 9
+[({}@<bob;#root-integrity>%{}, 9@{}%{})@<bob;#root-integrity>%<bob;#root-integrity>]@<alice&bob;#root-integrity>%<bob;#root-integrity>
+>>> Main thread finished with value: ()@{}%{}
+
+Secret Context (Malleable)
+======================================================================
+FVal.empty
+[]@{}%{}
+
+if `{alice}` then FVal.insert authority fv 1
+[({alice}@{alice}%{alice}, 1@{alice}%{alice})@{alice}%{alice}]@{alice}%{alice}
+
+if `<bob; #root>` then FVal.insert authority fv 2
+Runtime error in thread 91b63f4d-1a55-41e4-8f21-840249ad1b14@{}%{}
+
+  153 |                             then FVal.insert authority fv 2
+      |                                      ^
+
+>> NMIFC transparency violation for downgrade
+ | The confidentiality of the data and PC do not permit this endorsement.
+ | level of the data: <alice&bob;alice> (corrupt: true)
+ | target level: <bob;#root-integrity>
+ | PC level: <bob;#root-integrity> (corrupt: false)
+>> at tests/lib/FVal.trp:153:38

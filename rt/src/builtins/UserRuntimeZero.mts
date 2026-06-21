@@ -24,7 +24,7 @@ import { rawAssertNotZero } from '../Asserts.mjs'
 export type Constructor<T = {}> = new (...args: any[]) => T;
 
 
-const {lub} = levels
+const { lub, glb } = levels
 
 class RtEnv {
     _is_rt_env: boolean;
@@ -100,6 +100,10 @@ export class UserRuntimeZero {
     // SimpleRT
     raw_join(...xs) : Level {
         return lub.apply (null, xs)
+    }
+
+    raw_meet(...xs) : Level {
+        return glb.apply (null, xs)
     }
 
     // SpecialRT

@@ -1,0 +1,28 @@
+(* A3 — the declassification target's LEVEL OPERAND carries its own data label
+ * (toLevV.lev), and that label must taint the RESULT value's data AND type
+ * labels. Reference: Troupe/Machine.lean, downgrade `.value`/`.typeOnly` arms,
+ * occ = pc ⊔ auth.lev ⊔ lv.dataLabel  (lv.dataLabel = toLevV.lev).
+ *
+ * The target VALUE is the public level botL, but the level operand itself is
+ * labelled <alice>. Declassifying bob's 42 lands the data at botL, yet the
+ * CHOICE of target is alice-labelled, so the released value must carry <alice>.
+ *
+ *   with A3   (correct): 42@<alice;#root-integrity>%<alice;#root-integrity>
+ *   before A3 (buggy)  : 42@{}%{}          -- alice dropped from the result
+ *
+ * The blocking label already carries alice (raiseBlockingThreadLev, line 69);
+ * A3 is about the result VALUE's labels, a distinct channel.
+ *)
+let val aliceL = `<alice; #root-integrity>`
+    val bobL   = `<bob; #root-integrity>`
+    val botL   = `<#null-confidentiality; #root-integrity>`
+
+    val target  = botL raisedTo aliceL          (* toLevV.val = botL, toLevV.lev = <alice> *)
+    val x       = 42 raisedTo bobL
+    val bobAuth = attenuate (authority, bobL)
+
+    val r = declassify (x, bobAuth, target)
+    val _ = printString "declassify result (expect data%type both <alice;#root-integrity>):"
+    val _ = printWithLabels r
+in ()
+end

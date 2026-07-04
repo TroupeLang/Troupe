@@ -1,0 +1,37 @@
+(* A3 — security. Without the level operand's label in the RESULT, the
+ * confinement of a secret-labelled declassification target rests only on the
+ * blocking label the downgrade raises (downgrading.mts line 69). Releasing the
+ * progress channel with `blockdecl` then exposes the gap — the same
+ * "blockdecl exposes it" fragility documented for tuple projection
+ * (troupe-projection-type-progress-leak.md, Fragility 1), here on the
+ * downgrade path.
+ *
+ * The target's VALUE is public (botL) but the operand is labelled <alice>.
+ * `r + 0` is a type-dependent operation: it raises the blocking label by
+ * r's TYPE label. `adv` fires only at a public blocking label.
+ *
+ *   with A3   : r.tlev = <alice>  -> `r + 0` re-raises bl to <alice> -> adv BLOCKED
+ *               (confinement follows from the value itself, surviving blockdecl)
+ *   before A3 : r.tlev = {}       -> bl stays public                -> adv FIRES
+ *               (the alice-labelled target choice leaks to the public sink)
+ *)
+let val aliceL = `<alice; #root-integrity>`
+    val botL   = `<#null-confidentiality; #root-integrity>`
+
+    val target    = botL raisedTo aliceL          (* operand labelled <alice>, value botL *)
+    val x         = 42 raisedTo aliceL
+    val aliceAuth = attenuate (authority, aliceL)
+
+    val r = declassify (x, aliceAuth, target)      (* line 69 raises bl by <alice> *)
+    val _ = printString "after declassify:"
+    val _ = debugpc ()
+
+    val _ = blockdecl authority                    (* release progress channel: clears the <alice> block *)
+    val _ = printString "after blockdecl (bl back to pc):"
+    val _ = debugpc ()
+
+    val y = r + 0                                  (* type-dependent op: raises bl by r.tlev *)
+    val _ = printString "after r + 0 (with A3, bl re-raised by r.tlev = <alice>):"
+    val _ = debugpc ()
+in adv ()
+end

@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Reject commit messages that leak internal planning-doc item IDs.
+# See .githooks/check-plan-ids.sh for the rule and escape hatch.
+exec "$(dirname "$0")/check-plan-ids.sh" "$1"

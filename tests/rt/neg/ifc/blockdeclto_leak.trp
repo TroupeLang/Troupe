@@ -1,7 +1,7 @@
-(* Demonstrates information leak through blockdeclto.
- * With secret=true, adv() succeeds. Changing to false makes it fail,
- * proving that secret information (at bobL) leaks through the blocking level
- * without requiring Bob's authority.
+(* Leak through blockdeclto: the target level operand is chosen by branching
+ * on a bob-labeled secret, so the choice of target is itself secret. The
+ * monitor rejects it because the level operand's data label must flow to the
+ * target; declassifying to an observable target would leak the choice.
  *)
 let val botL   = `<#null-confidentiality; #root-integrity>`
     val aliceL = `<alice; #root-integrity>`

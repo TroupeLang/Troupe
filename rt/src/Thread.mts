@@ -922,7 +922,7 @@ export class Thread {
     }
 
 
-    blockDeclassifyTo (auth, bl_to = this.pc) {
+    blockDeclassifyTo (auth, bl_to = this.pc, levOperandLabel = null) {
         if (! flowsTo (this.pc, bl_to)) {
             this.threadError ("The provided target blocking level is lower than the current pc\n" +
                               ` | the current pc: ${this.pc.stringRep()}\n` +
@@ -934,6 +934,17 @@ export class Thread {
         if (!ok_to_use) {
             this.threadError ("The provided authority value is tainted\n" +
                               ` | the level of the authority value: ${auth.lev.stringRep()}\n` +
+                              ` | target blocking level: ${bl_to.stringRep()}`, false, null, ErrorKind.IFCCheck)
+        }
+
+        // The choice of declassification target must not itself be secret with
+        // respect to that target: the pc-declassification event is emitted at the
+        // bare target level, so a high-labeled level operand would leak the choice
+        // of target. Mirror of the authority-label check above, on the level
+        // operand instead of the authority value.
+        if (levOperandLabel !== null && ! flowsTo (levOperandLabel, bl_to)) {
+            this.threadError ("The provided target level operand is tainted\n" +
+                              ` | the level of the target level operand: ${levOperandLabel.stringRep()}\n` +
                               ` | target blocking level: ${bl_to.stringRep()}`, false, null, ErrorKind.IFCCheck)
         }
 

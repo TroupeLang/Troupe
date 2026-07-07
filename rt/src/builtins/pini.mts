@@ -61,7 +61,7 @@ export function BuiltinPini <TBase extends Constructor<UserRuntimeZero>> (Base:T
             assertIsAuthority(arg.val[0])
             assertIsLevel(arg.val[1]);
             this.runtime.$t.raiseBlockingThreadLev (arg.val[1].lev);
-            return this.runtime.$t.blockDeclassifyTo(arg.val[0], arg.val[1].val)
+            return this.runtime.$t.blockDeclassifyTo(arg.val[0], arg.val[1].val, arg.val[1].lev)
         })
 
         blockendorse = mkBase ((arg) => {

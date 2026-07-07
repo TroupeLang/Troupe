@@ -17,22 +17,26 @@ Troupe consists of three main components:
 
 ### Repository layout
 
-| Path         | Contents                                                                |
-|--------------|-------------------------------------------------------------------------|
-| `compiler/`  | Haskell compiler sources (`troupec`)                                     |
-| `rt/`        | TypeScript runtime; `rt/built/` is the generated build output           |
-| `lib/`       | Troupe standard library (`.trp` sources)                                |
-| `bin/`       | Compiled binaries — **not** version-controlled; do not add scripts here |
-| `scripts/`   | Version-controlled executable scripts                                   |
+| Path         | Contents                                                                         |
+|--------------|----------------------------------------------------------------------------------|
+| `compiler/`  | Haskell compiler sources (`troupec`)                                             |
+| `rt/`        | TypeScript runtime; `rt/built/` is the generated build output                    |
+| `lib/`       | Troupe standard library (`.trp` sources)                                         |
+| `trp-rt/`    | Service module placeholder (`service.trp`), built by `make trp-rt`               |
+| `bin/`       | Compiled binaries — **not** version-controlled; do not add scripts here          |
+| `scripts/`   | Version-controlled executable scripts                                            |
+| `dev-utils/` | Developer helper scripts (e.g. `build-snapshot.sh`)                              |
 | `tests/`     | Test corpus (see [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md#test-suite-layout)) |
-| `p2p-tools/` | P2P utilities and relay                                                  |
+| `p2p-tools/` | P2P utilities and relay                                                          |
+| `notebook/`  | Notebook front end and back end, built by `make notebook`                        |
+| `docs/`      | Project documentation                                                            |
 
 ## Quick start
 
 With all [dependencies installed](docs/INSTALL.md), build everything and run a program:
 
 ```bash
-make all                 # build compiler, runtime, libraries, and service
+make all                 # build compiler, runtime, libraries, service placeholder (trp-rt), and p2p-tools
 ./local.sh myprogram.trp # run a program locally (no P2P)
 ```
 

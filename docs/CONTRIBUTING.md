@@ -9,12 +9,15 @@
 Tests live in `tests/`:
 
 - `cmp/` — negative compiler tests
+- `lib/` — standard-library tests
 - `rt/` — runtime tests
-  - `pos/` — positive tests (should succeed): `core/`, `ifc/`, `sandbox/`
+  - `pos/` — positive tests (should succeed): `core/`, `ifc/` (with `ifc/sandbox/`), `preamble/`
   - `neg/` — negative tests (should fail)
   - `timeout/` — tests with timeouts
   - `warn/` — tests that should produce warnings
-  - `multinode/` — multinode (networking) tests
+  - `multinode-tests/` — multinode (networking) tests
+
+Throwaway/experimental tests go in `tests/_unautomated/` (see `CLAUDE.md`).
 
 Non-networking tests pair a `.trp` source with a `.golden` expected-output file; the `bin/golden` utility compares output using a diff that discards timestamped values. Multinode tests do not use golden files — see `tests/rt/multinode-tests/README.md`.
 

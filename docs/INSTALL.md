@@ -34,19 +34,18 @@ bin folder of the project under name `troupec`. That name is then used
 by the runtime module.
 
 
-### Step 3. Install Troupe top-level scripts
-
-Type `make compiler` (in the repository's root) to compile Troupe's bin scripts
-
-### Step 4. Install Troupe standard library
+### Step 3. Install Troupe standard library
 
 Type
 
 - `make libs` to compile Troupe's built-in libraries, and
-- `make service` to compile the service module placeholder.
+- `make trp-rt` to compile the service module placeholder from `trp-rt/service.trp`.
+
+Steps 1–3 above can be run together from the repository root with `make all`, which builds the
+compiler, runtime, libraries, service placeholder (`trp-rt`), and p2p-tools.
 
 
-### Step 5. Running the test suite
+### Step 4. Running the test suite
 
 #### OS X specific utilities for testing
 

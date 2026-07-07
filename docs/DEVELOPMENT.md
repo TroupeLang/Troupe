@@ -65,11 +65,11 @@ Use `Ctrl-k m` ("Change language mode") to set the current file's language mode 
 
 The following commands build specific parts of the project and install the results to the `bin`, `rt/built` and `lib` directories.
 
-- `make all`: build everything (compiler, runtime, libraries, and service)
+- `make all`: build everything (compiler, runtime, libraries, service placeholder (`trp-rt`), and p2p-tools)
 - `make` / `make compiler`: build the compiler
 - `make rt`: build the runtime (into the `rt/built` directory)
 - `make libs`: compile Troupe's built-in libraries (into the `lib` directory)
-- `make service` compile the service module placeholder
+- `make trp-rt`: compile the service module placeholder from `trp-rt/service.trp`
 
 ### Tests
 
@@ -91,8 +91,9 @@ For the test-suite layout and conventions, see [CONTRIBUTING.md](CONTRIBUTING.md
 ### Development commands
 
 ```bash
-make clear-built-rt                 # clean runtime build artifacts
-cd compiler && make ghci-troupec    # interactive Haskell REPL for compiler development
+make clean/rt                       # clean runtime build artifacts
+cd compiler && make ghci/troupec    # interactive Haskell REPL for compiler development
+cd compiler && make ghci/irtester   # interactive Haskell REPL for the IR tester
 cd compiler && make parser-info     # parser info
 ```
 
@@ -123,8 +124,9 @@ Note: CLI arguments are treated as sensitive data and are labeled at the highest
 
 ### Building and naming the snapshot
 
-Script `dev-utils/build.sh` runs `make` and copies the executables to `../bin/<current git HEAD hash>`,
-so snapshots from different versions can be compared.
+Script `dev-utils/build-snapshot.sh` runs `make` and copies the executables to
+`bin/<git describe output>` (the current commit description via `git describe --long --dirty
+--always`), so snapshots from different versions can be compared.
 
 ## Source Maps
 
@@ -145,7 +147,7 @@ This generates both `myprogram.js` and `myprogram.js.map`.
 A tool is provided for inspecting generated source maps:
 
 ```bash
-npx ts-node rt/src/tools/inspect-sourcemap.ts <file.js.map>
+node rt/built/tools/inspect-sourcemap.js <file.js.map>
 ```
 
 This displays:

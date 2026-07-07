@@ -23,12 +23,12 @@ If the id file is omitted, a new id (via a fresh key/pair) is generated upon
 start. Observe that this induces a bigger runtime overhead than loading a key pair
 from a file.
 
-## Stability issues and patches.
+## Stability issues.
 
-Libp2p is a fast-moving project, and there are stability issues. We
-apply local patches to work around these issues (hence the patch application in the installation of JS runtime), but this should be used on a temporary
-basis only and removed once the actual bugs are fixed (either in the official
-  packages or in our codebase).
+Libp2p is a fast-moving project, and there are stability issues. Workarounds live in the runtime
+code — for example, relay keep-alive messages and the `--relay-fault-tolerance` and `--disable-relay`
+runtime flags handled in `rt/src/p2p/p2p.mts`. The libp2p versions are pinned in the root
+`package.json`; there is no separate patch-application step during installation.
 
 
 ## Notes on the p2p runtime
@@ -45,7 +45,7 @@ accessible from the outside.
 
 ## Navigating the code base
 
-The main p2p runtime module is in [rt/src/p2p/p2p.ts](../rt/src/p2p/p2p.ts).
+The main p2p runtime module is in [rt/src/p2p/p2p.mts](../rt/src/p2p/p2p.mts).
 
 
 ## How node discovery works

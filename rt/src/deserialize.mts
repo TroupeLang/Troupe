@@ -197,22 +197,11 @@ function constructCurrent(compilerOutput: string) {
         // Collect source maps from all snippets in this namespace
         let namespaceMappings: any[] = []
 
-        // nsFun += "this.libSet = new Set () \n"
-        // nsFun += "this.libs = [] \n"
-        // nsFun += "this.addLib = function (lib, decl) " +
-        //     " { if (!this.libSet.has (lib +'.'+decl)) { " +
-        //     " this.libSet.add (lib +'.'+decl); " +
-        //     " this.libs.push ({lib:lib, decl:decl})} } \n"
-        // nsFun += "this.loadlibs = function (cb) { rt.linkLibs (this.libs, this, cb) } \n"
-
-
         for (let j = 0; j < ns.length; j++) {
             if (j > 0) {
                 nsFun += "\n\n" // looks neater this way
             }
             let snippetJson = JSON.parse(snippets[k++]);
-            // console.log (snippetJson.libs);
-            // console.log (snippetJson.fname);
             nsFun += snippetJson.code;
 
             for (let atom of snippetJson.atoms) {
@@ -222,7 +211,6 @@ function constructCurrent(compilerOutput: string) {
             if (snippetJson.sourceMap) {
                 namespaceMappings.push(snippetJson.sourceMap)
             }
-            // console.log (snippetJson.atoms)
         }
         let argNames = Array.from(atomSet);
         let argValues = argNames.map( argName => {return new Atom(argName)})
@@ -239,7 +227,6 @@ function constructCurrent(compilerOutput: string) {
         // We now construct an instance of the newly constructed object
         // that takes the runtime object + atoms as its arguments
 
-        // console.log (NS.toString()); // debugging
         argValues.unshift(__rtObj)
         ctxt.namespaces[i] = Reflect.construct (NS, argValues)
         // Mark namespace as restored code for error reporting

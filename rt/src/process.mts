@@ -4,7 +4,6 @@ import { BOT } from './Level.mjs'
 
 export function pid_equals (o1, o2) {
     let eq = o1.val.pid.toString() == o2.val.pid.toString();
-    //console.log("pid eq", o1, o2, eq);
     return (eq);
   }
 
@@ -30,9 +29,8 @@ export class ProcessID implements TroupeRawValue {
       this.stringRep = this.toString;
     }   
   
-    toString () {      
+    toString () {
       let x = this.pid.toString();
-      // console.log (x);
       return x;
     }
 }

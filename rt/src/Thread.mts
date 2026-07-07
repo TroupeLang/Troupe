@@ -200,9 +200,11 @@ export class Thread {
     }
     public set r0_lev(value: any) {
         if (!value?.isLevel ) {
-            console.log ("RO-LEV debugging")
-            console.log ( (new Error().stack) )
-            this.showStack()
+            debug ("RO-LEV debugging")
+            debug (new Error().stack)
+            if (argv[TroupeCliArg.Debug]) {
+                this.showStack()
+            }
         }
         this._r0_lev = value;
     }
@@ -664,8 +666,7 @@ export class Thread {
     }
 
     pushFrame (cb, framesize=0) {
-        // console.log ("CALL", this._sp, this.r0_val, framesize )
-        let _prev_sp = this._sp 
+        let _prev_sp = this._sp
         this._sp = this._sp + framesize + CALLSIZE
         this.callStack[this._sp - SPOFFSET] = _prev_sp
         this.callStack[this._sp - PCOFFSET] = this.pc 
@@ -685,8 +686,7 @@ export class Thread {
         this.callStack[this._sp - BRANCHFLAGOFFSET] = BRANCH_FLAG_ON
     }
     
-    returnSuspended (arg) {       
-        // console.log("RET", this._sp)
+    returnSuspended (arg) {
         let rv = new LValCopyAt (arg, this.pc);
         this.next = () => {            
             return this.returnImmediateLValue (rv);

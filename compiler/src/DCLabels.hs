@@ -17,6 +17,7 @@ module DCLabels
   , ppDCLabelExp
   , ppDCLabelExpLit
   , labelExpToCNF
+  , mkCNF
   , dcLabelExpToDCLabel
   , dcLabelEq
   , cnfEq
@@ -81,6 +82,14 @@ labelExpToCNF (OpExp op e1 e2) =
            Disj ->
              [DisjTags $ snub (d1 ++ d2)
                  | DisjTags d1 <- c1, DisjTags d2 <- c2 ]
+
+-- | Build a CNF directly from clauses of principal strings, applying the same
+-- syntactic normalization as 'labelExpToCNF': lowercase each tag, then sort and
+-- dedup within each clause ('snub'), then dedup the clauses ('nub'). An empty
+-- clause list yields @CNF []@ (TRUE); a list containing an empty clause yields a
+-- CNF with an empty 'DisjTags' (FALSE), matching 'labelConstToCNF'.
+mkCNF :: [[String]] -> CNF
+mkCNF clauses = CNF $ nub [ DisjTags (snub (map lowerString c)) | c <- clauses ]
 
 newtype DCLabel = DCLabel (CNF,CNF)
      deriving (Eq, Generic, Ord, Show)

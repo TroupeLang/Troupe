@@ -152,3 +152,14 @@ tests:
     - Troupe-compiler
     - QuickCheck
     - tasty-quickcheck
+  labelrt-prop-test:
+    main: LabelRoundtripProps.hs
+    source-dirs: test/prop-labelrt
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - Troupe-compiler
+    - QuickCheck
+    - tasty-quickcheck

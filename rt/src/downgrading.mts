@@ -1,7 +1,7 @@
 import { LCopyVal, LVal } from './Lval.mjs';
 import { assertIsNTuple, assertIsAuthority, assertIsLevel } from './Asserts.mjs'
 import { __unit } from './UnitVal.mjs';
-import { lub, glb, okToDeclassify, okToEndorse, okToCrossDimensionalDowngrade}  from './Level.mjs'
+import { lub, glb, okToDeclassify, okToEndorse, okToCrossDimensionalDowngrade, Level}  from './Level.mjs'
 import { DowngradeResult, DowngradeDimension, DowngradeErrorReason, DowngradeKind, ValueDowngradeGranularity } from './DowngradeEnums.mjs';
 import {
     formatIntegrityMismatchMsg,
@@ -14,6 +14,37 @@ import {
 import { ErrorKind } from './TroupeError.mjs';
 import { RuntimeInterface } from './RuntimeInterface.mjs';
 
+
+/**
+ * Pure result-label computation for a successful downgrade.
+ *
+ * Occurrence floor: the context the release's success and target choice depend
+ * on. Mirrors the proven-sound model's `occ = pc ⊔ auth.lev ⊔ lv.dataLabel`
+ * (Troupe/Machine.lean, `.value`/`.typeOnly` arms). The level operand's own
+ * label `toLev` must taint the result value's labels — otherwise a secret-chosen
+ * declassification target lands in a value labelled below that secret. `argLev`
+ * is kept as a conservative (⊑ pc) extra.
+ *
+ * Returns the `(lev, tlev)` pair for the resulting `LCopyVal`, depending on the
+ * granularity (`typeOnly` = TYPE_ONLY vs BOTH_VALUE_AND_TYPE). Kept side-effect
+ * free so it can be property-tested without a runtime/thread.
+ */
+export function downgradeResultLabels(
+    typeOnly: boolean,
+    dataLev: Level,
+    dataTlev: Level,
+    levTo: Level,
+    pc: Level,
+    argLev: Level,
+    authLev: Level,
+    toLev: Level
+): { lev: Level, tlev: Level } {
+    const floor = lub(pc, argLev, authLev, toLev);
+    const taintedLevTo = lub(levTo, floor);
+    return typeOnly
+        ? { lev: lub(dataLev, taintedLevTo), tlev: taintedLevTo }
+        : { lev: taintedLevTo, tlev: lub(glb(dataTlev, levTo), floor) };
+}
 
 function stringOfDowngrader (d: DowngradeDimension): string {
     switch (d) {
@@ -81,19 +112,13 @@ export function downgrader (runtime: RuntimeInterface,
                 dg_f(levFrom, lev_to, auth.val.authorityLevel, bl, isNMIFC, pc)
 
             if (ok_to_downgrade_result.kind === "SUCCESS") {
-                // Occurrence floor: the context the release's success and target choice
-                // depend on. Mirrors the proven-sound model's `occ = pc ⊔ auth.lev ⊔
-                // lv.dataLabel` (Troupe/Machine.lean, `.value`/`.typeOnly` arms). The level
-                // operand's own label `toLevV.lev` must taint the result value's labels —
-                // otherwise a secret-chosen declassification target lands in a value
-                // labelled below that secret (the blocking raise on line 69 already
-                // carries it, but the result labels did not). `arg.lev` is kept as a
-                // conservative (⊑ pc) extra.
-                const floor = lub(pc, arg.lev, auth.lev, toLevV.lev);
-                const taintedLevTo = lub(lev_to, floor);
-                const r = typeOnly
-                    ? new LCopyVal(data, lub(data.lev, taintedLevTo), taintedLevTo)
-                    : new LCopyVal(data, taintedLevTo, lub(glb(data.tlev, lev_to), floor) );
+                // Occurrence-floor result labels (see downgradeResultLabels): the
+                // blocking raise on line 69 already carries toLevV.lev, but the result
+                // labels must too, otherwise a secret-chosen declassification target
+                // lands in a value labelled below that secret.
+                const { lev, tlev } = downgradeResultLabels(
+                    typeOnly, data.lev, data.tlev, lev_to, pc, arg.lev, auth.lev, toLevV.lev);
+                const r = new LCopyVal(data, lev, tlev);
                 return runtime.ret(r)
             } else {
                 let errorMessage = "";

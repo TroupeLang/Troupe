@@ -44,7 +44,7 @@ import Raw
 import RetCPS(VarName(..))
 import Control.Monad
 import Control.Monad.Trans.RWS(RWS, evalRWS, ask, get, put, tell, censor, listen, local)
-import TroupePositionInfo (Located(..), getLoc, unLoc, noLoc, PosInf(..))
+import TroupePositionInfo (Located(..), PosInf(..))
 
 -- ===== Monad definition =====
 
@@ -659,8 +659,13 @@ expr2rawComp = \case
       Basics.BinShiftRight -> numBinOpComp
       Basics.BinZeroShiftRight -> numBinOpComp
 
-      -- TODO Implement remaining operations
-      _ -> error $ "Binary operation not yet implemented: " ++ show op
+      -- And/Or are desugared to conditionals in Core.lower and never
+      -- reach the IR; LatticeJoin is only generated at the Raw level
+      -- (label computations). Listed explicitly (instead of a wildcard)
+      -- so that -Wincomplete-patterns flags any newly added BinOp.
+      Basics.And -> error $ "Binary operation not yet implemented: " ++ show op
+      Basics.Or -> error $ "Binary operation not yet implemented: " ++ show op
+      Basics.LatticeJoin -> error $ "Binary operation not yet implemented: " ++ show op
 
   -- Now uses LVarAccess (lv) for position tracking
   IR.Un op lv ->
@@ -717,8 +722,10 @@ expr2rawComp = \case
         assertTypeAndRaise lv RawBoolean
         basicUnOpComp
 
-      -- TODO Implement remaining operations
-      _ -> error $ "Unary operation not yet implemented: " ++ show op
+      -- TODO Implement LevelOf (constructed by CaseElimination for
+      -- label patterns). Listed explicitly (instead of a wildcard) so
+      -- that -Wincomplete-patterns flags any newly added UnaryOp.
+      Basics.LevelOf -> error $ "Unary operation not yet implemented: " ++ show op
 
 
 -- Revision 2023-08: Changed and moved handling of the complex operations Eq and Neq to expr2Raw.

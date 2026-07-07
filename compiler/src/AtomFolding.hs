@@ -2,9 +2,7 @@ module AtomFolding ( visitProg )
 where
 import Basics
 import Direct
-import TroupePositionInfo (Located(..), getLoc)
-import Data.Maybe
-import Control.Monad
+import TroupePositionInfo (Located(..))
 
 visitProg :: Prog -> Prog
 visitProg (Prog imports (Atoms atms) tm) =

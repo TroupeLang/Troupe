@@ -108,13 +108,13 @@ genLit = oneof
 genBinOp :: Gen BinOp
 genBinOp = elements
   [ Plus, Minus, Mult, Div, Mod, Eq, Neq, Le, Lt, Ge, Gt, And, Or
-  , RaisedTo, FlowsTo, Concat, IntDiv, BinAnd, BinOr, BinXor
+  , RaisedTo, Concat, IntDiv, BinAnd, BinOr, BinXor
   , BinShiftLeft, BinShiftRight, BinZeroShiftRight, HasField
-  , LatticeJoin, LatticeMeet ]
+  , LatticeJoin ]
 
 genUnOp :: Gen UnaryOp
 genUnOp = elements
-  [ IsList, IsTuple, IsRecord, Head, Tail, Fst, Snd, ListLength
+  [ IsList, IsTuple, IsRecord, Head, Tail, ListLength
   , TupleLength, RecordSize, LevelOf, UnMinus, Not ]
 
 genField :: Gen (String, LVarAccess)

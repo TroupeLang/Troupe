@@ -55,10 +55,10 @@ unops = enumFrom minBound
 
 -- TODO remove when implemented
 notimplBinops :: [BinOp]
-notimplBinops =  [And, Or, BinAnd, BinOr, BinXor, BinShiftLeft, BinShiftRight, BinZeroShiftRight, FlowsTo, LatticeJoin, LatticeMeet]
+notimplBinops =  [And, Or, BinAnd, BinOr, BinXor, BinShiftLeft, BinShiftRight, BinZeroShiftRight, LatticeJoin]
 
 notimplUnops :: [UnaryOp]
-notimplUnops = [Fst, Snd, LevelOf]
+notimplUnops = [LevelOf]
 
 implBinops = filter (`notElem` notimplBinops) binops
 

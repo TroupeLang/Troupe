@@ -5,26 +5,20 @@
 
 module ClosureConv where 
 
-import qualified Basics
+import InternalError (internalError)
 import RetCPS(VarName(..))
 import qualified RetCPS as CPS
 import qualified Core as C
 import Control.Monad.RWS
 import Data.Map.Lazy(Map)
 import qualified Data.Map.Lazy as Map
-import Data.Serialize(Serialize)
-import GHC.Generics
-import Control.Monad.State
-import Control.Monad.Writer
-import Control.Monad.Reader
 import Data.List
 import CompileMode
 
 import           Control.Monad.Except
 import IR as CCIR
 
-import Control.Monad.Identity
-import TroupePositionInfo (Located(..), getLoc, unLoc, PosInf(..), GetPosInfo(..))
+import TroupePositionInfo (Located(..), PosInf(..))
 
 data VarLevel = VarNested Integer
                 deriving (Eq, Ord, Show)
@@ -103,7 +97,7 @@ transVar v@(VN vname) = do
         Nothing ->
           if vname `elem` atms
             then return $ VarLocal v
-            else error $ "undeclared variable: " ++ (show v)
+            else internalError $ "undeclared variable: " ++ (show v)
 
 -- | Translate a Located VarName (LVarName) to Located VarAccess (LVarAccess)
 -- Preserves the source position from the input
@@ -136,7 +130,7 @@ transFunDec f@(VN fname) (CPS.Unary (Loc varPos var) lkt) pos = do
   tell ([Loc pos (FunDef (HFN fname) (Loc varPos var) consts bb)], [], [])
   return (nub frees)
 
-transFunDec (VN _) (CPS.Nullary _) _ = error "not implemented"
+transFunDec (VN _) (CPS.Nullary _) _ = internalError "transFunDec: not implemented for nullary functions"
 
 -- state accessors
 

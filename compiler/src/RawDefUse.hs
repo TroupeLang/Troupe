@@ -12,42 +12,20 @@ module RawDefUse (offsetMap
                  , iDefUse
                  ) where
 
+import InternalError (internalError)
 import Raw
-import IR (SerializationUnit(..), HFN(..)
-          , ppId, ppFunCall, ppArgs, Fields (..), Ident
-          , serializeFunDef
-          , serializeAtoms )
 import qualified IR
-import qualified Stack
-import qualified Data.Maybe as Maybe
-import Data.Map.Lazy (Map, (!))
+import Data.Map.Lazy (Map)
 import qualified Data.Map.Lazy as Map
 
 import Data.Set(Set)
 import qualified Data.Set as Set
 
-import qualified Basics
-import qualified Core as C
 import RetCPS(VarName(..))
-import qualified RetCPS as CPS
 import Control.Monad.RWS
-import Control.Monad.State
-import Control.Monad.Writer
-import Control.Monad.Reader
-import Data.List
-import qualified Data.Text as T
-import Data.Text.Encoding
-import Data.ByteString.Lazy (ByteString)
-import Data.ByteString.Base64 (encode,decode)
-import TroupePositionInfo (Located(..), getLoc, unLoc, PosInf(..))
-import qualified Data.Aeson as Aeson
-import GHC.Generics (Generic)
-import           RetCPS (VarName (..))
+import TroupePositionInfo (Located(..), unLoc)
 
-import           IR ( Identifier(..)
-                    , VarAccess(..), HFN (..), Fields (..), Ident
-                    , ppId,ppFunCall,ppArgs
-                    )
+import           IR ( VarAccess(..) )
 
 type CallLocation = Int
 type ZoneLocation = Int 
@@ -111,9 +89,9 @@ __insertUsePure x state =
         escUse = escapingUses defsUses 
         block@(c_use,_) = locInfo state
         (c_def, _) = 
-          case Map.lookup x defMap of 
-                 Nothing -> error $ "insert use: cannot find " ++ (show x)
-                 Just w -> w 
+          case Map.lookup x defMap of
+                 Nothing -> internalError $ "insert use: cannot find " ++ (show x)
+                 Just w -> w
         currentUses = Map.findWithDefault (Set.empty) x useMap
         currentEsc = Map.findWithDefault (Set.empty) (fst block) escUse
         newUse = Set.insert block currentUses
@@ -132,8 +110,8 @@ __insertDefPure x state =
       defMap = defs defsUses
       block = locInfo state
   in
-    if Map.member x defMap 
-      then error $ "Duplicate bindings for " ++ (show x)
+    if Map.member x defMap
+      then internalError $ "Duplicate bindings for " ++ (show x)
       else  state { 
                   defUseMaps = 
                     defsUses {

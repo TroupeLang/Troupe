@@ -50,7 +50,7 @@ build-tools:
 
 library:
   source-dirs: src
-  ghc-options: -Wincomplete-patterns
+  ghc-options: -Wincomplete-patterns -Wincomplete-uni-patterns -Wunused-imports -Wunused-top-binds
 
 # pico ml Info flow
 
@@ -98,15 +98,10 @@ executables:
     - Troupe-compiler
 
 tests:
-  Troupe-golden-test:
-    main:                Golden.hs
-    source-dirs:         test
-    ghc-options:
-    - -threaded
-    - -rtsopts
-    - -with-rtsopts=-N
-    dependencies:
-    - Troupe-compiler
+  # The golden suite is built once, as the installed `golden` executable
+  # (see above); `make test` runs it via `stack exec golden`. A duplicate
+  # test-suite stanza from the same source was removed to avoid the two
+  # builds silently diverging.
   ir2raw-test:
     main: IR2RawTest.hs
     source-dirs:

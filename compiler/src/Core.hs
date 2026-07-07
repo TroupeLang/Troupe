@@ -28,7 +28,6 @@ where
 import GHC.Generics(Generic)
 import Data.Serialize (Serialize)
 
-import qualified Data.Ord 
 import           Basics
 import qualified DirectWOPats as D
 import qualified Data.Map.Strict as Map
@@ -43,8 +42,8 @@ import           Text.PrettyPrint.HughesPJ (
    (<+>), ($$), text, hsep, vcat, nest, nest)
 import           ShowIndent
 
-import           TroupePositionInfo (Located(..), getLoc, unLoc, noLoc, atLoc, PosInf(..), GetPosInfo(..))
-import           PrettyPrint (PP, PPConfig, runPP, runPPDefault, ppLocated, ShowDebug(..))
+import           TroupePositionInfo (Located(..), getLoc, PosInf(..))
+import           PrettyPrint (PP, runPP, runPPDefault, ppLocated, ShowDebug(..))
 import           DCLabels (DCLabelExp, ppDCLabelExpLit, dcLabelEq, v1LabelEq, v1LabelToDCLabelExp)
 
 --------------------------------------------------
@@ -149,9 +148,6 @@ litEq _ _ = False
 -- | Semantic inequality for literals
 litNeq :: Lit -> Lit -> Bool
 litNeq x y = not (litEq x y)
-
--- Old Fields type kept for backward compatibility in pretty printing
-type Fields = [(FieldName, Term)]
 
 data VarAccess
     -- | A normal variable

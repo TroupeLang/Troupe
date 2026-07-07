@@ -9,7 +9,7 @@ import qualified Data.Set as Set
 import qualified Basics
 import qualified Core                      as C
 import Core (Numeric(..))
-import           TroupePositionInfo (Located(..), getLoc, unLoc, noLoc, atLoc, PosInf(..), GetPosInfo(..))
+import           TroupePositionInfo (Located(..), unLoc)
 
 import qualified Data.Map.Lazy as Map 
 import           RetCPS                    (VarName (..))
@@ -22,10 +22,6 @@ newtype Subst = Subst (Map VarName VarAccess)
 
 class Substitutable a where
   apply :: Subst -> a -> a
-
-idSubst :: Subst
-idSubst = Subst (Map.empty)
-
 
 instance Substitutable VarAccess where 
     apply _ x@(VarEnv _) = x 
@@ -87,7 +83,6 @@ instance Substitutable IRBBTree where
 -- | Partial value.
 data PValue = Unknown
             | TupleVal [LVarAccess]
-            | ListVal
             | NumericConst Numeric
             | BoolConst Bool
             | StringConst String
@@ -167,9 +162,7 @@ canFailOrHasEffects expr = case expr of
         Basics.Eq -> False
         Basics.Neq -> False
         -- Level operations might be safe but conservative
-        Basics.FlowsTo -> True
         Basics.LatticeJoin -> True
-        Basics.LatticeMeet -> True
         Basics.RaisedTo -> True
     
     -- Unary operations
@@ -177,8 +170,6 @@ canFailOrHasEffects expr = case expr of
         -- List/tuple operations can fail
         Basics.Head -> True
         Basics.Tail -> True
-        Basics.Fst -> True
-        Basics.Snd -> True
         -- Arithmetic
         Basics.UnMinus -> True
         -- Length operations can fail 
@@ -316,7 +307,6 @@ irExprPeval e =
                             Basics.Ge ->    bb ( >= )
                             Basics.Gt ->    bb ( > )
                             _ -> def_
-                            -- _  -> fail "Type error discovered at compliation time"
 
             _ -> do
               markUsedL' x

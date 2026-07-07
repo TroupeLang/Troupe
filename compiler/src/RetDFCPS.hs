@@ -1,12 +1,11 @@
 {-# LANGUAGE TupleSections #-}
 module RetDFCPS (transProg) where
 
-import           Basics
 import           Control.Monad.State.Lazy as State
 import           qualified RetCPS as CPS
 import           RetCPS
 import qualified Core
-import           TroupePositionInfo (Located(..), PosInf(..), GetPosInfo(..), getLoc, noLoc, atLoc)
+import           TroupePositionInfo (Located(..), PosInf(..), GetPosInfo(..))
 
 type S = State Integer
 
@@ -189,14 +188,6 @@ transExplicit (Loc pos (Core.ListCons lh lt)) = do
   v <- freshV
   -- trans now passes LVarName; use directly in ListCons
   trans lh (\lvh -> trans lt (\lvt -> return $ Loc pos $ LetSimple v (Loc pos (ListCons lvh lvt)) (Loc pos (KontReturn v))))
-
-transFunDef :: Core.Lambda -> S CPS.KLambda
-transFunDef (Core.Unary (Loc xPos x) le) = do
-  e' <- transExplicit le
-  return (CPS.Unary (Loc xPos (VN x)) e')
-transFunDef (Core.Nullary le) = do
-  e' <- transExplicit le
-  return (CPS.Nullary e')
 
 -- | Transform a Located Core term with a continuation
 -- Produces Located CPS terms

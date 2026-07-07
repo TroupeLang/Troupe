@@ -60,18 +60,17 @@ binOpTable =
   [ ("Plus", Plus), ("Minus", Minus), ("Mult", Mult), ("Div", Div)
   , ("Mod", Mod), ("Eq", Eq), ("Neq", Neq), ("Le", Le), ("Lt", Lt)
   , ("Ge", Ge), ("Gt", Gt), ("And", And), ("Or", Or)
-  , ("RaisedTo", RaisedTo), ("FlowsTo", FlowsTo), ("Concat", Concat)
+  , ("RaisedTo", RaisedTo), ("Concat", Concat)
   , ("IntDiv", IntDiv), ("BinAnd", BinAnd), ("BinOr", BinOr)
   , ("BinXor", BinXor), ("BinShiftLeft", BinShiftLeft)
   , ("BinShiftRight", BinShiftRight), ("BinZeroShiftRight", BinZeroShiftRight)
   , ("HasField", HasField), ("LatticeJoin", LatticeJoin)
-  , ("LatticeMeet", LatticeMeet)
   ]
 
 unOpTable :: [(String, UnaryOp)]
 unOpTable =
   [ ("IsList", IsList), ("IsTuple", IsTuple), ("IsRecord", IsRecord)
-  , ("Head", Head), ("Tail", Tail), ("Fst", Fst), ("Snd", Snd)
+  , ("Head", Head), ("Tail", Tail)
   , ("ListLength", ListLength), ("TupleLength", TupleLength)
   , ("RecordSize", RecordSize), ("LevelOf", LevelOf)
   , ("UnMinus", UnMinus), ("Not", Not)

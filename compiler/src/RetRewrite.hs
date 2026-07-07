@@ -13,22 +13,13 @@ module RetRewrite(rewrite) where
 -- todo: consider renaming this to CPSRewrite
 
 
-import qualified Basics
+import InternalError (internalError)
 import RetCPS as CPS
-import qualified Core as C
-import Control.Monad.RWS
-import Control.Monad.State
-import Control.Monad.Writer
-import Control.Monad.Reader
-import Data.List
 import Data.Map.Lazy(Map)
 import qualified Data.Map.Lazy as Map
-import Control.Monad.Trans.Maybe
-import Control.Monad.Identity
-import Data.Set (Set)
 import qualified Data.Set as Set
 import RetFreeVars as FreeVars
-import TroupePositionInfo (Located(..), getLoc, unLoc, noLoc, atLoc, PosInf(..))
+import TroupePositionInfo (Located(..), unLoc, noLoc, PosInf(..))
 
 
 -- substitution is a collection of both variable substitutions and
@@ -40,10 +31,6 @@ newtype Subst = Subst (Map VarName VarName)
 
 class Substitutable a where
   apply :: Subst -> a -> a
-
-idSubst :: Subst
-idSubst = Subst (Map.empty)
-
 
 instance Substitutable KLambda where
   apply subst@(Subst (varmap)) kl =
@@ -306,22 +293,7 @@ betaCont lkt@(Loc p (LetRet cdef@(Cont xn lktBody) lkt')) =
                           else Loc p $ LetRet cdef' lkt''
                   _ -> Loc p $ LetRet cdef'  (walk betaContPred betaCont lkt')
 
-betaCont _ = error "should not be called here"
-
---------------------------------------------------
--- Dead-Cont
---------------------------------------------------
-
--- deadContPred (LetRet _ _) = True
-deadContPred _ = False
-
--- deadCont (LetRet cdef@(Cont _ kt) kt') =
---     let FreeVars (_, freeKs) = freeVars kt'
---     in if not (Set.member kn freeKs) then (walk deadContPred deadCont kt')
---        else
---            let cdef' = walk deadContPred deadCont cdef
---            in LetRet cdef' (walk deadContPred deadCont kt')
-
+betaCont _ = internalError "betaCont: should not be called here"
 
 --------------------------------------------------
 -- β-Fun (-Lin)
@@ -367,7 +339,7 @@ betaFun lkt@(Loc p2 (LetSimple fn (Loc p1 (ValSimpleTerm (KAbs klam@(Unary (Loc 
 
 
 
-betaFun _ = error "this should not be called"
+betaFun _ = internalError "betaFun: this should not be called"
 
 
 --------------------------------------------------

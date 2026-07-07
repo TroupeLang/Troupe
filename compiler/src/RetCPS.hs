@@ -27,7 +27,7 @@ where
 import GHC.Generics
 import qualified Data.Serialize as Serialize
 
-import Basics(BinOp(..),UnaryOp(..),Precedence, opPrec, appPrec, maxPrec)
+import Basics(BinOp(..),UnaryOp(..),Precedence)
 import qualified Basics
 import qualified Core as C
 import Core (ppLit)
@@ -36,8 +36,8 @@ import Text.PrettyPrint.HughesPJ (
     (<+>), ($$), text, hsep, vcat, nest)
 import           ShowIndent
 
-import TroupePositionInfo (Located(..), getLoc, unLoc, noLoc, atLoc, PosInf(..), GetPosInfo(..))
-import PrettyPrint (PP, PPConfig, runPP, runPPDefault, ppLocated, ShowDebug(..))
+import TroupePositionInfo (Located(..), noLoc)
+import PrettyPrint (PP, runPP, runPPDefault, ppLocated, ShowDebug(..))
 
 newtype VarName = VN Basics.VarName
     deriving (Eq, Ord, Generic)
@@ -314,21 +314,3 @@ ppKTerm' (AssertElseError vname kt1 verr) = do
     kt1Doc $$
     text "elseError" <+>
     textv verr
-
-
-
-
--- appPrec and maxPrec are imported from Basics
-
-termPrec :: KTerm -> Precedence
-termPrec (Halt _)       = maxPrec
-termPrec (ApplyFun _ _) = appPrec
-termPrec (KontReturn _)    = appPrec
-termPrec (If _ _ _)        = 0
-termPrec (LetSimple _ _ _) = 0
--- termPrec (LetCont   _ _)   = 0
-termPrec (LetFun    _ _)   = 0
---termPrec (Case _ _)        = 0
-termPrec (LetRet _ _) = 0
-termPrec (AssertElseError _ _ _) = 0
-termPrec (Error _) = 0

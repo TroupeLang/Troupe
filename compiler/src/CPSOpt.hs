@@ -11,32 +11,22 @@ module CPSOpt (rewrite) where
 
 -- todo: consider renaming this to CPSRewrite
 
-import Debug.Trace
+import InternalError (internalError)
 import qualified Basics
 import RetCPS as CPS
 import qualified Core as C
 import Core (Numeric(..))
 import Control.Monad.RWS
 import Control.Monad.State
-import Control.Monad.Writer
-import Control.Monad.Reader
 import Data.List
 
 import Data.Map.Lazy(Map)
 
 import qualified Data.Map.Lazy as Map
 
-import Control.Monad.Trans.Maybe
 import Control.Monad.Identity ()
 
-import Data.Set (Set)
-
-import qualified Data.List
-import qualified Data.Maybe
-
-import qualified Data.Set as Set
-import RetFreeVars as FreeVars
-import TroupePositionInfo (Located(..), getLoc, unLoc, noLoc, atLoc, PosInf(..), GetPosInfo(..))
+import TroupePositionInfo (Located(..), unLoc, noLoc)
 
 -- 2025-06-23: AA+cc
 -- Helper function to get the last occurrence of a key in an association list.
@@ -53,9 +43,6 @@ newtype Subst = Subst (Map VarName VarName)
 
 class Substitutable a where
   apply :: Subst -> a -> a
-
-idSubst :: Subst
-idSubst = Subst (Map.empty)
 
 instance Substitutable KLambda where
   apply subst@(Subst varmap) kl =
@@ -272,9 +259,7 @@ instance Simplifiable KLambda where
 look :: VarName -> Opt Term
 look x = do
   m <- __env_of_state <$> get
-  return $ Map.findWithDefault Unknown
-              -- (error $ "cannot find binding for name" ++ (show x))
-              x m
+  return $ Map.findWithDefault Unknown x m
 
 -- | Look up a Located VarName (extracts VarName from Located wrapper)
 lookL :: LVarName -> Opt Term
@@ -428,12 +413,6 @@ simplifySimpleTerm t =
   ValSimpleTerm (KAbs klam) -> do
         klam' <- withResetRetState $ simpl klam
         _ret $ ValSimpleTerm (KAbs klam')
-{--
-  List _ -> _nochange
-  ListCons _ _ -> _nochange
-  Base _ -> _nochange
-  Lib _ _ -> _nochange
-        --}
   _ -> _nochange
 
   where
@@ -442,21 +421,13 @@ simplifySimpleTerm t =
     isLit _ = False
     litVal (St (ValSimpleTerm (Lit (C.LNumeric n)))) = (C.LNumeric n)
     litVal (St (ValSimpleTerm (Lit x))) = x
-    litVal _ = error "incorrect application of litVal"
+    litVal _ = internalError "incorrect application of litVal"
     __trueLit = lit (C.LBool True)
     __falseLit = lit (C.LBool False)
 
 
-subst x v t = apply (Subst (Map.singleton  x v )) t
-
-withResetRetState = local (\r -> r {__rewrite_ret_of_reader = Nothing}) 
+withResetRetState = local (\r -> r {__rewrite_ret_of_reader = Nothing})
 withRetState st = local (\r -> r {__rewrite_ret_of_reader = Just st})
-
-state_info :: Opt String 
-state_info = do 
-  r <- __rewrite_ret_of_reader <$> ask 
-  return $ "ret\n"  ++ (show r)
-
 
 failFree :: SimpleTerm -> Bool -- 2021-05-19; AA; hack
 failFree st = case st of

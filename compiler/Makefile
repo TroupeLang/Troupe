@@ -24,6 +24,7 @@ clean:
 
 test:
 	stack test $(STACK_OPTS)
+	stack exec golden
 
 parser-info:
 	stack exec happy -- -i src/Parser.y

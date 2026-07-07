@@ -16,15 +16,15 @@ TODO
 module Stack2JS where
 -- import qualified IR2JS 
 
-import IR (SerializationUnit(..), HFN(..)
-          , ppFunCall, ppArgs, Fields (..), Ident
+import IR (HFN(..)
+          , ppFunCall, ppArgs
           , serializeFunDef
           , serializeAtoms )
 import qualified Data.ByteString.Lazy.Char8 as BL
 import qualified IR
 import qualified Raw
 
-import Raw (RawExpr (..), RawType(..), RawVar (..), MonComponent(..), RTAssertion(..),
+import Raw (RawExpr (..), RawVar (..), MonComponent(..),
             ppRawExpr, ppRTAssertionCode)
 
 import Stack
@@ -34,16 +34,12 @@ import           Basics(BinOp(..), UnaryOp(..))
 import qualified Core as C
 import           Core (ppLit)
 import           RetCPS(VarName(..))
-import qualified RetCPS as CPS
 import           Control.Monad.RWS
-import           Control.Monad.State
-import           Control.Monad.Writer
-import           Control.Monad.Reader
 import           Data.List
 import qualified Data.Text as T
 import           Data.Text.Encoding
 import           Data.ByteString.Lazy (ByteString)
-import           Data.ByteString.Base64 (encode,decode)
+import           Data.ByteString.Base64 (encode)
 import           CompileMode
 import           TroupePositionInfo
 import qualified Data.Aeson as Aeson
@@ -55,7 +51,6 @@ import Text.PrettyPrint.HughesPJ (
     (<+>), ($$), text, hsep, vcat, nest)
 import Data.Aeson (ToJSON(toJSON), Value)
 import DCLabels (dcLabelExpToDCLabel)
-import Debug.Trace (trace, traceShow)
 import SourceMap.Types (Mapping(..))
 import TroupeSourceMap (collectMapping, buildSourceMap)
 
@@ -481,9 +476,6 @@ binOpToJS op (Raw.UseNativeBinop isNative) = case op of
     LatticeJoin -> "rt.raw_join"
     -- No RT operations (should be moved to a different datatype)
     RaisedTo -> error "Not a runtime operation"
-    -- Not yet implemented in IR2Raw
-    FlowsTo -> error "Not yet implemented: FlowsTo" -- (implemented in tagsets.ts: "rt.flowsTo")
-    LatticeMeet -> error "Not yet implemented: LatticeMeet"
 
 unaryOpToJS :: UnaryOp -> String
 unaryOpToJS = \case
@@ -500,8 +492,6 @@ unaryOpToJS = \case
     UnMinus -> "-"
     Not -> "!"
     -- Not yet implemented in IR2Raw
-    Fst -> error "Not yet implemented: Fst"
-    Snd -> error "Not yet implemented: Snd"
     LevelOf -> error "Not yet implemented: LevelOf" -- (implemented in levelops.ts: "rt.levelOf")
 
 {-- INSTRUCTIONS --}
@@ -881,8 +871,6 @@ isInfixBinop op (Raw.UseNativeBinop use_native) = case op of
   Neq -> use_native 
   -- Not infix
   RaisedTo -> False
-  FlowsTo -> False
   IntDiv -> False
   HasField -> False
   LatticeJoin -> False
-  LatticeMeet -> False

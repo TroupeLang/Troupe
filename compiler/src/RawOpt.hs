@@ -5,9 +5,7 @@
 
 module RawOpt (rawopt) where
 import Raw
-import qualified Data.Maybe
 import Control.Monad.RWS.Lazy
-import Control.Monad
 import Data.Map.Lazy (Map)
 import Data.Set(Set)
 import qualified Data.List
@@ -18,17 +16,11 @@ import qualified Core
 import Core (Numeric(..))
 import           RetCPS (VarName (..))
 import qualified Data.Map.Lazy as Map
-import           IR ( Identifier(..)
-                    , VarAccess(..), HFN (..), Ident
+import           IR ( VarAccess(..)
                     , LVarAccess
-                    , ppId,ppFunCall,ppArgs
                     )
-import qualified IR
-import qualified Data.List
-import qualified Data.Ord
-import TroupePositionInfo (Located(..), getLoc, unLoc, noLoc, PosInf(..))
+import TroupePositionInfo (Located(..), getLoc, unLoc, PosInf(..))
 
-import Debug.Trace
 --------------------------------------------------
 --  substitutions for Raw 
 --------------------------------------------------
@@ -36,12 +28,6 @@ newtype Subst = Subst (Map RawVar RawVar)
 
 class Substitutable a where
   apply :: Subst -> a -> a
-
-idSubst :: Subst
-idSubst = Subst (Map.empty)
-
-
-
 
 instance Substitutable RawVar where 
     apply subst@(Subst varmap) x =
@@ -251,9 +237,7 @@ guessType = \case
     -- Revision 2023-08: Added missing cases
     Basics.IntDiv -> Just RawNumber
     Basics.BinOr -> Just RawNumber
-    Basics.FlowsTo -> Just RawBoolean
     Basics.LatticeJoin -> Just RawLevel
-    Basics.LatticeMeet -> Just RawLevel
     Basics.RaisedTo -> Nothing -- depends on operand type
 
   Un op x -> case op of
@@ -266,8 +250,6 @@ guessType = \case
     Basics.IsRecord -> Just RawBoolean
     Basics.Not -> Just RawBoolean
     -- Revision 2023-08: Added missing cases
-    Basics.Fst -> Nothing
-    Basics.Snd -> Nothing
     Basics.Head -> Nothing
     Basics.Tail -> Nothing
     Basics.LevelOf -> Just RawLevel

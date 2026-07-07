@@ -32,8 +32,7 @@ import Data.List (sort, nub, dropWhileEnd)
 import Data.List.Utils (split)
 import Data.Char (toLower, isSpace)
 import qualified Text.PrettyPrint.HughesPJ as PP
-import Text.PrettyPrint.HughesPJ (
-    (<+>), ($$), text, hsep, vcat, nest)
+import Text.PrettyPrint.HughesPJ (text, hsep)
 import Data.Aeson
 
 type Tag = String
@@ -69,20 +68,7 @@ lowerString = map toLower
 snub = sort.nub
 
 
---- Syntactic normalization of a list of disjunctions
--- lowercases, sorts, and removes duplicates
-
-normDisj :: DisjTags -> DisjTags
-normDisj (DisjTags t) =
-   DisjTags $ snub (map lowerString t)
-
---- Syntactic normalizsation of conjunctions
---- (removes duplicates)
-syntaxNorm :: CNF -> CNF
-syntaxNorm (CNF c) = CNF $ nub (map normDisj c)
-
- 
---- Conversion from labelExps to CNF 
+--- Conversion from labelExps to CNF
 
 labelExpToCNF :: LabelExp -> CNF
 labelExpToCNF (TagExp t) = CNF [DisjTags [lowerString t]]

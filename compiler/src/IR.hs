@@ -16,7 +16,6 @@ import           RetCPS                    (VarName (..))
 
 
 import qualified Core                      as C
-import qualified RetCPS                    as CPS
 import           Core (ppLit)
 import           Control.Monad.Except
 import           Control.Monad.Reader
@@ -36,9 +35,8 @@ import           GHC.Generics              (Generic)
 
 import           Text.PrettyPrint.HughesPJ (hsep, nest, text, vcat, ($$), (<+>))
 import qualified Text.PrettyPrint.HughesPJ as PP
-import           TroupePositionInfo (Located(..), getLoc, unLoc, noLoc, atLoc, PosInf(..), GetPosInfo(..))
-import           PrettyPrint (PP, PPConfig, runPP, runPPDefault, ppLocated, vcatMapPP, ShowDebug(..))
-import           DCLabels
+import           TroupePositionInfo (Located(..))
+import           PrettyPrint (PP, runPP, runPPDefault, ppLocated, vcatMapPP, ShowDebug(..))
 
 ------------------------------------------------------------
 -- Located type aliases
@@ -484,14 +482,6 @@ wfFun (FunDef (HFN fn) (Loc _ (VN arg)) consts bb) =
       Right _ -> return ()
       Left s -> throwError s
 
-
-{--
-checkFromBB initState bb =
-          case evalState (runExceptT (wfir bb)) initState of
-            Right _ -> True
-            Left s  -> error s -- False   -- todo: better exception handling here in the future;
-                               -- 2018-02-18; aa
---}
 -----------------------------------------------------------
 -- PRETTY PRINTING
 -----------------------------------------------------------

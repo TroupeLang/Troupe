@@ -108,11 +108,28 @@ runLocal testname tc = do
 -- We use this to test the commands with timeouts.
 -- Observe the current value for the timeout is 2 seconds.
 
+-- | GNU timeout command used by the timeout and diverging test groups.
+-- On macOS the stock system has no `timeout`; `gtimeout` comes from
+-- GNU coreutils.
+timeoutCommand :: String
+timeoutCommand = if os == "darwin" then "gtimeout" else "timeout"
+
+-- | Fail at startup with an actionable message when the timeout
+-- command is missing, instead of a command-not-found error per test.
+checkTimeoutCommand :: IO ()
+checkTimeoutCommand = do
+    found <- findExecutable timeoutCommand
+    case found of
+        Just _  -> return ()
+        Nothing -> die $ unlines $
+            [ "Cannot find '" ++ timeoutCommand ++ "' on PATH."
+            , "The timeout and diverging test groups require it." ] ++
+            [ "Install GNU coreutils: brew install coreutils" | os == "darwin" ]
+
 runTimeout :: Int -> String -> TestConfig -> IO (ExitCode, String, String)
 runTimeout n testname tc = do
     args <- mkLocalArgs testname tc
-    let timeout = if os == "darwin" then "gtimeout" else "timeout"
-    readProcessWithExitCode timeout ([show n, "./local.sh"] ++ args) ""
+    readProcessWithExitCode timeoutCommand ([show n, "./local.sh"] ++ args) ""
 
 
 runPositiveTimeout :: Int -> String -> TestConfig -> IO LBS.ByteString
@@ -214,6 +231,7 @@ main :: IO ()
 main = do
     troupeDir <- getTroupeRoot
     setCurrentDirectory troupeDir
+    checkTimeoutCommand
 
     -- Pre-generate test configurations (full and quick variants)
     testsWithColorFull <- sequence

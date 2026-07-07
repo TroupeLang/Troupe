@@ -116,25 +116,34 @@ export function BuiltinPersist<TBase extends Constructor<UserRuntimeZero>>(Base:
             let file = arg;
 
             (async () => {
-                let jsonStr = await fs.promises.readFile("./out/saved." + file.val + ".persist.json", 'utf8');
-                // Use ROOT (most trusted) for local deserialization - we trust our own persisted data
-                let result = await deserialize(levels.ROOT, JSON.parse(jsonStr));
+                try {
+                    let jsonStr = await fs.promises.readFile("./out/saved." + file.val + ".persist.json", 'utf8');
+                    // Use ROOT (most trusted) for local deserialization - we trust our own persisted data
+                    let result = await deserialize(levels.ROOT, JSON.parse(jsonStr));
 
-                // For restore, DROP means the persisted data was corrupted
-                if (shouldDrop(result)) {
-                    theThread.throwInSuspended("Corrupt data in persisted file");
+                    // For restore, DROP means the persisted data was corrupted
+                    if (shouldDrop(result)) {
+                        theThread.throwInSuspended("Corrupt data in persisted file");
+                        this.runtime.__sched.scheduleThread(theThread);
+                        this.runtime.__sched.resumeLoopAsync();
+                        return;
+                    }
+
+                    // For local restore, we trust TOP so QUARANTINE should not happen
+                    // but if it does, we still use the value
+                    let data = result.value!;
+                    theThread.returnSuspended(data);
                     this.runtime.__sched.scheduleThread(theThread);
                     this.runtime.__sched.resumeLoopAsync();
-                    return;
+                } catch (err) {
+                    // Failure to read or deserialize the file becomes a
+                    // thread-level error handled by the scheduler, not a
+                    // node crash.
+                    const m = err instanceof Error ? err.message : String(err);
+                    theThread.throwInSuspended("Error restoring value: " + m);
+                    this.runtime.__sched.scheduleThread(theThread);
+                    this.runtime.__sched.resumeLoopAsync();
                 }
-
-                // For local restore, we trust TOP so QUARANTINE should not happen
-                // but if it does, we still use the value
-                let data = result.value!;
-                theThread.returnSuspended(data);
-                this.runtime.__sched.scheduleThread(theThread);
-                this.runtime.__sched.resumeLoopAsync();
-
             })()
         }, "restore")
 

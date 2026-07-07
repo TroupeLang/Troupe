@@ -130,3 +130,5 @@ tests:
     - Troupe-compiler
     - tasty
     - tasty-hunit
+    - tasty-quickcheck
+    - QuickCheck

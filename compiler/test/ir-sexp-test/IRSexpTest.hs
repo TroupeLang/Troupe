@@ -14,8 +14,10 @@ module Main (main) where
 
 import           Test.Tasty
 import           Test.Tasty.HUnit
+import           Test.Tasty.QuickCheck (testProperty, forAll, (===), withMaxSuccess, Property)
 
 import           IRSexp (printProg, parseProg, erasePosProg)
+import           Gen (genProg)
 import           IR
 import qualified Core
 import           Basics (BinOp(..), UnaryOp(..), LibName(..))
@@ -62,7 +64,16 @@ main = defaultMain $ testGroup "troupe-ir-sexp round-trip"
   , mkCases "literal forms"                litCases
   , mkCases "dc-label forms"               dcLabelCases
   , mkCases "structural extras"            structuralCases
+  , testProperty "R1: parse (print p) == p (positions erased)"
+      (withMaxSuccess 2000 propRoundTrip)
   ]
+
+-- | R1, over generated wrapped documents: parsing a printed program
+-- reproduces it structurally, modulo source positions.
+propRoundTrip :: Property
+propRoundTrip =
+  forAll genProg $ \p ->
+    parseProg (printProg p) === Right (erasePosProg p)
 
 ------------------------------------------------------------
 -- Program builders.

@@ -186,17 +186,25 @@ ppLabelExp :: LabelExp -> PP.Doc
 ppLabelExp = ppLabelExp' 0
 
 
-ppDCLabelExp :: DCLabelExp -> PP.Doc 
-ppDCLabelExp (DCLabelExp (e1, e2))  = 
+ppDCLabelExp :: DCLabelExp -> PP.Doc
+ppDCLabelExp (DCLabelExp (e1, e2))  =
      hsep [ text "<"
-          , ppMLabelExp e1
+          , ppMLabelExp confConst e1
           , text ";"
-          , ppMLabelExp e2
-          , text ">" 
+          , ppMLabelExp intConst e2
+          , text ">"
           ]
         where
-          ppMLabelExp (ExprComponent e) = ppLabelExp e
-          ppMLabelExp (ConstComponent s) = text (show s)
+          -- Constant components are rendered with the dimension-specific
+          -- spellings the grammar accepts (ConfLabelExp / IntLabelExp in
+          -- Parser.y), not `show`'s display-only #true/#false, so the printed
+          -- label reparses to the same DCLabelExp.
+          ppMLabelExp _        (ExprComponent e) = ppLabelExp e
+          ppMLabelExp constText (ConstComponent s) = text (constText s)
+          confConst LabelTrue  = "#null-confidentiality"
+          confConst LabelFalse = "#root-confidentiality"
+          intConst  LabelTrue  = "#null-integrity"
+          intConst  LabelFalse = "#root-integrity"
 
 ppDCLabelExpLit e = 
      text "`" PP.<> (ppDCLabelExp e) PP.<> text "`"

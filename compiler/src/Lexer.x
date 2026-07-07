@@ -255,8 +255,6 @@ data Token
   | TokenIsList
   | TokenIsRecord
   | TokenNot
-  | TokenFlowsTo
-  | TokenLevelOf
   | TokenLabel String
   | TokenAt
   | TokenCaret 
@@ -456,8 +454,6 @@ showToken TokenIsTuple = "'isTuple'"
 showToken TokenIsList = "'isList'"
 showToken TokenIsRecord = "'isRecord'"
 showToken TokenNot = "'not'"
-showToken TokenFlowsTo = "'flowsTo'"
-showToken TokenLevelOf = "'levelOf'"
 showToken TokenAt = "'@'"
 showToken TokenCaret = "'^'"
 showToken TokenBinAnd = "'andb'"

@@ -585,8 +585,6 @@ cleanExpectedToken "'isTuple'" = "'isTuple'"
 cleanExpectedToken "'isList'" = "'isList'"
 cleanExpectedToken "'isRecord'" = "'isRecord'"
 cleanExpectedToken "'not'" = "'not'"
-cleanExpectedToken "'flowsTo'" = "'flowsTo'"
-cleanExpectedToken "'levelOf'" = "'levelOf'"
 cleanExpectedToken s = s  -- fallback
 
 

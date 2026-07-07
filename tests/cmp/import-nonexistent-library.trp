@@ -1,0 +1,4 @@
+(* Negative test: import of a library that does not exist *)
+import NoSuchLibrary
+
+print 1

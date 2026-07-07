@@ -1,6 +1,7 @@
 module ProcessImports (processImports) where
 import Basics
 import Direct
+import Control.Monad (unless)
 import System.Environment
 import System.Exit
 import System.Directory (doesFileExist)
@@ -40,6 +41,12 @@ processImport imp = do
   troupeEnv <- getTroupeHome
   let LibName lib = importLib imp
   let fname = troupeEnv ++ defaultLibFolder ++ lib ++ ".exports"
+  fileExists <- doesFileExist fname
+  unless fileExists $
+    -- Report the location relative to the Troupe home ($TROUPE) so the
+    -- message is stable across checkouts (it is captured in golden tests).
+    die $ "cannot find library '" ++ lib
+        ++ "' (looked in $TROUPE" ++ defaultLibFolder ++ lib ++ ".exports)"
   input <- readFile fname
   let exports = lines input
   -- Validate selective imports if specified
@@ -61,7 +68,3 @@ processImports :: Prog -> IO Prog
 processImports (Prog imports atoms term) = do
   imports' <- processImports' imports
   return $ Prog imports' atoms term
-
-
--- TODO: 2018-07-02: AA: proper error handling in case we have errors
--- loading information from the lib files

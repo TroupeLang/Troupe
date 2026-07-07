@@ -3,7 +3,10 @@
 import * as fs from 'node:fs'
 import * as levels from "./Level.mjs";
 import { getCliArgs, TroupeCliArg } from './TroupeCliArgs.mjs';
+import { ImplementationError } from './TroupeError.mjs';
+import { mkLogger } from './logger.mjs';
 const argv = getCliArgs();
+const logger = mkLogger('NodeManager');
 
 
 class Node {
@@ -32,8 +35,8 @@ class NodeManager {
 
     setLocalPeerId (peerid)  {
         if (this.localNode != null) {
-            console.log ("error: local port already set. quitting...");
-            process.exit(1);
+            logger.error ("local node identity already set");
+            throw new ImplementationError ("local node identity already set");
         }
         this.localNode = new Node (peerid);
     }
@@ -58,10 +61,9 @@ class NodeManager {
         if (id == "<null>") {
             return true;
         }
-        // console.log ("local node id is ", this.localNode)
         if (this.localNode == undefined) {
-            console.log("ERROR: local node undefined; should not happen")
-            process.exit(1);
+            logger.error("local node undefined; should not happen")
+            throw new ImplementationError("local node undefined")
         }
         return this.localNode.nodeId == this.getNode(id).nodeId
     }
@@ -69,9 +71,9 @@ class NodeManager {
     // Another hack; 2018-03-10; aa
     getLocalNode() {
         if (this.localNode == undefined) {
-            console.log("ERROR: local node undefined; should not happen")
-            process.exit(1);
-        }        
+            logger.error("local node undefined; should not happen")
+            throw new ImplementationError("local node undefined")
+        }
         return this.localNode;
     }
 }

@@ -15,6 +15,7 @@ import qualified IROpt
 -- import qualified RetRewrite as Rewrite
 import qualified CPSOpt as CPSOpt
 import qualified IR2Raw
+import qualified IRSexp
 import qualified Raw
 import qualified Raw2Stack
 import qualified Stack
@@ -59,6 +60,8 @@ data Flag
   | SourceMap
   | DebugPP
   | PPPosFormat String
+  | EmitIRSexp
+  | IngestIRSexp
   deriving (Show, Eq)
 
 options :: [OptDescr Flag]
@@ -74,6 +77,8 @@ options =
   , Option ['m'] ["source-map"] (NoArg SourceMap)         "generate source map"
   , Option []    ["debug-pp"]  (NoArg DebugPP)            "show positions in IR dumps"
   , Option []    ["pp-pos-format"] (ReqArg PPPosFormat "FMT") "position format: inline|comment|bracket|none"
+  , Option []    ["emit-ir-sexp"]   (NoArg EmitIRSexp)   "compile a .trp and emit the IR as troupe-ir-sexp text (to -o FILE, else stdout)"
+  , Option []    ["ingest-ir-sexp"] (NoArg IngestIRSexp) "read a troupe-ir-sexp file and compile it to JS (program must be self-contained; no ambient methods are injected)"
   ]
 
 --------------------------------------------------------------------------------
@@ -158,6 +163,14 @@ process flags fname input = do
       let iropt = IROpt.iropt ir
       when verbose $ writeFileD "out/out.iropt" (PP.render $ PPrint.runPP ppConfig $ CCIR.ppProg iropt)
 
+      ------ EMIT troupe-ir-sexp (and stop) ----------------
+      when (EmitIRSexp `elem` flags) $ do
+        let sexp = IRSexp.printProg iropt
+        case List.find isOutputFile flags of
+          Just (OutputFile f) -> writeFile f sexp
+          _                   -> putStr sexp
+        exitSuccess
+
       ------ RAW -------------------------------------------
       let raw = IR2Raw.prog2raw iropt
       when verbose $ printSep  "GENERATING RAW"
@@ -210,6 +223,32 @@ process flags fname input = do
 
       ----- EPILOGUE --------------------------------------
       when verbose printHr
+      exitSuccess
+
+isOutputFile :: Flag -> Bool
+isOutputFile (OutputFile _) = True
+isOutputFile _              = False
+
+--------------------------------------------------------------------------------
+----- INGEST: troupe-ir-sexp file -> whole-program backend -> JS ---------------
+-- Reads an s-expression IR file, parses it to an IRProgram, and runs the normal
+-- whole-program backend (prog2raw -> rawopt -> raw2Stack -> stack2JS). No
+-- ambient methods are injected: the ingested program must be self-contained.
+ingestIRSexp :: [Flag] -> String -> String -> IO ExitCode
+ingestIRSexp flags file input =
+  case IRSexp.parseProg input of
+    Left err -> die ("troupec: troupe-ir-sexp parse error: " ++ err)
+    Right ir -> do
+      let outPath  = outFile flags file
+          noRawOpt = NoRawOpt `elem` flags
+          debugJS  = Debug `elem` flags
+          raw      = IR2Raw.prog2raw ir
+          rawopt   = if noRawOpt then raw else RawOpt.rawopt raw
+          stack    = Raw2Stack.rawProg2Stack rawopt
+          (stackjs, _mappings) =
+            Stack2JS.stack2JSWithMappings CompileMode.Normal debugJS False
+                                          (Stack.ProgramStackUnit stack)
+      writeFile outPath stackjs
       exitSuccess
 
 -- TODO: 'where' for all helper functions below?
@@ -302,7 +341,9 @@ main = do
 
     (o, [file], []) | optionsOK o -> do
       input <- readFile file
-      process o (Just file) input
+      if IngestIRSexp `elem` o
+        then ingestIRSexp o file input
+        else process o (Just file) input
 
     (_,_, errs) -> die $ concat errs ++ compilerUsage
  where

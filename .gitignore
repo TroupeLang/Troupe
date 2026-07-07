@@ -80,6 +80,11 @@ compiler/src/Parser.info
 multinode_debug.log
 
 ##################################################
+# Generated JavaScript in the test tree
+tests/**/*.js
+tests/**/*.js.map
+
+##################################################
 # Dev and Claude Code planning files
 _dev_planning/
 _troupe_notebook_planning

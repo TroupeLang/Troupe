@@ -49,7 +49,7 @@ build-tools:
 
 library:
   source-dirs: src
-  ghc-options: -Wincomplete-patterns
+  ghc-options: -Wincomplete-patterns -Wincomplete-uni-patterns -Wunused-imports -Wunused-top-binds
 
 # pico ml Info flow
 

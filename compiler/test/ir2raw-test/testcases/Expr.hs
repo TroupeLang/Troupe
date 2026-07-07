@@ -58,7 +58,7 @@ notimplBinops :: [BinOp]
 notimplBinops =  [And, Or, BinAnd, BinOr, BinXor, BinShiftLeft, BinShiftRight, BinZeroShiftRight, FlowsTo, LatticeJoin, LatticeMeet]
 
 notimplUnops :: [UnaryOp]
-notimplUnops = [Fst, Snd, LevelOf]
+notimplUnops = [LevelOf]
 
 implBinops = filter (`notElem` notimplBinops) binops
 

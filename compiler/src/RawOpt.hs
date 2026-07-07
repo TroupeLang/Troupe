@@ -266,8 +266,6 @@ guessType = \case
     Basics.IsRecord -> Just RawBoolean
     Basics.Not -> Just RawBoolean
     -- Revision 2023-08: Added missing cases
-    Basics.Fst -> Nothing
-    Basics.Snd -> Nothing
     Basics.Head -> Nothing
     Basics.Tail -> Nothing
     Basics.LevelOf -> Just RawLevel

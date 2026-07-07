@@ -177,8 +177,6 @@ canFailOrHasEffects expr = case expr of
         -- List/tuple operations can fail
         Basics.Head -> True
         Basics.Tail -> True
-        Basics.Fst -> True
-        Basics.Snd -> True
         -- Arithmetic
         Basics.UnMinus -> True
         -- Length operations can fail 

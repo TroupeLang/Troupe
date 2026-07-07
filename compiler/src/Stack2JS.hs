@@ -500,8 +500,6 @@ unaryOpToJS = \case
     UnMinus -> "-"
     Not -> "!"
     -- Not yet implemented in IR2Raw
-    Fst -> error "Not yet implemented: Fst"
-    Snd -> error "Not yet implemented: Snd"
     LevelOf -> error "Not yet implemented: LevelOf" -- (implemented in levelops.ts: "rt.levelOf")
 
 {-- INSTRUCTIONS --}

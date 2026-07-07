@@ -57,10 +57,6 @@ compiler/src/Parser.hs
 compiler/src/Parser.info
 
 ##################################################
-# TypeScript incremental build cache
-*.tsbuildinfo
-
-##################################################
 # Editors
 
 ## Visual Studio Code
@@ -78,6 +74,15 @@ compiler/src/Parser.info
 
 ## MacOS
 *.DS_Store
+
+##################################################
+# Runtime logs
+multinode_debug.log
+
+##################################################
+# Generated JavaScript in the test tree
+tests/**/*.js
+tests/**/*.js.map
 
 ##################################################
 # Dev and Claude Code planning files

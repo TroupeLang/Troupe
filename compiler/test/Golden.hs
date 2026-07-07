@@ -246,7 +246,7 @@ main = do
 
 goldenTests :: TestConfig -> IO TestTree
 goldenTests tc = do
-    let extensions =  [".trp", ".pico", ".atto", ".picox", ".femto"] 
+    let extensions = [".trp"]
     negativeTestsForCompiler <- findByExtension extensions "tests/cmp"
     positiveTestsForRuntime  <- findByExtension extensions "tests/rt/pos"
     negativeTestsForRuntime  <- findByExtension extensions "tests/rt/neg"

@@ -121,9 +121,8 @@ The user guide currently uses the V1 label syntax `` `{alice}` ``, which the pre
 
 ## File extensions
 
-| Extension                            | Meaning                    |
-|--------------------------------------|----------------------------|
-| `.trp`                               | Troupe source files        |
-| `.picox`, `.pico`, `.femto`, `.atto` | Test file variants         |
-| `.golden`                            | Expected test outputs      |
-| `.exports`                           | Library export definitions |
+| Extension  | Meaning                     |
+|------------|-----------------------------|
+| `.trp`     | Troupe source files         |
+| `.golden`  | Expected test outputs       |
+| `.exports` | Library export definitions  |

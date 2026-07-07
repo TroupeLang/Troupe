@@ -368,15 +368,17 @@ export class Thread {
     }
 
 
+    // Diagnostic stack dump; writes to stderr so it does not corrupt
+    // program stdout.
     showStack ()  {
-        console.log ("======== SHOW STACK ========= ")
-        console.log (`sp = ${this._sp} sparseSlot = ${this.sparseSlot}`)
+        console.error ("======== SHOW STACK ========= ")
+        console.error (`sp = ${this._sp} sparseSlot = ${this.sparseSlot}`)
         let j = this._sp - 1
         let stack = this.callStack
         while ( j > 0) {
-            console.log (`-${j.toString().padStart(5,'-')} branch bit: ${stack[j--]}`)
+            console.error (`-${j.toString().padStart(5,'-')} branch bit: ${stack[j--]}`)
             let mclear = stack[j]
-            console.log (` ${j.toString().padStart(5,' ')} mclear    : ${mclear?.stringRep()}`)
+            console.error (` ${j.toString().padStart(5,' ')} mclear    : ${mclear?.stringRep()}`)
             j --
             let ret = stack [j]
             let ret_string = ret?.debugname
@@ -384,12 +386,12 @@ export class Thread {
                 ret_string = ret?.toString ()
             }
 
-            console.log (` ${j.toString().padStart(5,' ')} ret       : ${ret_string}`)
+            console.error (` ${j.toString().padStart(5,' ')} ret       : ${ret_string}`)
             j --
-            console.log (` ${j.toString().padStart(5,' ')} pc_ret    : ${stack[j]?.stringRep()}`)
+            console.error (` ${j.toString().padStart(5,' ')} pc_ret    : ${stack[j]?.stringRep()}`)
             j --
-            console.log     (` ${j.toString().padStart(5,' ')} sp_prev   : ${stack[j]}`)
-            console.log (` ${(j-1).toString().padStart(5,' ')} sparse    : ${stack[j-1]}`)
+            console.error (` ${j.toString().padStart(5,' ')} sp_prev   : ${stack[j]}`)
+            console.error (` ${(j-1).toString().padStart(5,' ')} sparse    : ${stack[j-1]}`)
             let sp_prev = stack[j];
             j = sp_prev - 1 ;
         }

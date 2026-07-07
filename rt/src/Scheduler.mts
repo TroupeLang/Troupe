@@ -304,9 +304,9 @@ export class Scheduler implements SchedulerInterface {
             if (e instanceof TroupeError) {
                 e.handleError(this);
             } else {
-                console.log ("--- Schedule module caught an internal exception ---")
-                console.log ("--- The following output may help identify a bug in the runtime ---")
-                console.log ("Destination function\n" , dest)
+                console.error ("--- Schedule module caught an internal exception ---")
+                console.error ("--- The following output may help identify a bug in the runtime ---")
+                console.error ("Destination function\n" , dest)
                 this.__currentThread.showStack()
                 throw e;
             }

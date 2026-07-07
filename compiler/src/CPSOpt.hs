@@ -272,9 +272,7 @@ instance Simplifiable KLambda where
 look :: VarName -> Opt Term
 look x = do
   m <- __env_of_state <$> get
-  return $ Map.findWithDefault Unknown
-              -- (error $ "cannot find binding for name" ++ (show x))
-              x m
+  return $ Map.findWithDefault Unknown x m
 
 -- | Look up a Located VarName (extracts VarName from Located wrapper)
 lookL :: LVarName -> Opt Term
@@ -428,12 +426,6 @@ simplifySimpleTerm t =
   ValSimpleTerm (KAbs klam) -> do
         klam' <- withResetRetState $ simpl klam
         _ret $ ValSimpleTerm (KAbs klam')
-{--
-  List _ -> _nochange
-  ListCons _ _ -> _nochange
-  Base _ -> _nochange
-  Lib _ _ -> _nochange
-        --}
   _ -> _nochange
 
   where

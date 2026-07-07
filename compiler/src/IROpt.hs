@@ -312,7 +312,6 @@ irExprPeval e =
                             Basics.Ge ->    bb ( >= )
                             Basics.Gt ->    bb ( > )
                             _ -> def_
-                            -- _  -> fail "Type error discovered at compliation time"
 
             _ -> do
               markUsedL' x

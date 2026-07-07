@@ -69,8 +69,9 @@ export async function sendSocketMessage(msg: SocketMessage): Promise<void> {
     if (!client || client.destroyed || client.writableEnded) return;
     try {
         await writeMessage(msg);
-    } catch (err: any) {
-        console.error(`Warning: failed to write to result socket: ${err.message}`);
+    } catch (err) {
+        const m = err instanceof Error ? err.message : String(err);
+        console.error(`Warning: failed to write to result socket: ${m}`);
     }
 }
 
@@ -82,8 +83,9 @@ export async function sendSocketMessageAndClose(msg: SocketMessage): Promise<voi
     if (!client || client.destroyed || client.writableEnded) return;
     try {
         await writeMessage(msg);
-    } catch (err: any) {
-        console.error(`Warning: failed to write to result socket: ${err.message}`);
+    } catch (err) {
+        const m = err instanceof Error ? err.message : String(err);
+        console.error(`Warning: failed to write to result socket: ${m}`);
     }
     return new Promise<void>((resolve) => {
         if (!client || client.destroyed || client.writableEnded) {

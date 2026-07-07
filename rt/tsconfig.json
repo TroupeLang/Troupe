@@ -15,5 +15,5 @@
     "include": [
         "src/**/*"
     ],
-    "exclude": ["../../trp-rt/**", "src/dev/*"]
+    "exclude": ["../../trp-rt/**", "src/dev/*", "src/_experiments/*"]
 }

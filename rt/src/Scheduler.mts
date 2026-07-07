@@ -17,7 +17,6 @@ import { sendSocketMessage, isResultSocketEnabled } from './resultSocket.mjs';
 import {SYSTEM_PROCESS_STRING} from './Constants.mjs'
 const argv = getCliArgs();
 
-const showStack = argv[TroupeCliArg.ShowStack]
 import { mkLogger } from './logger.mjs'
 const logger = mkLogger('scheduler');
 const info = x => logger.info(x)
@@ -59,26 +58,18 @@ export class Scheduler implements SchedulerInterface {
 
 
     resetScheduler() {
-        // console.log (`The current length of __funloop is ${this.__funloop.length}`)
-        // console.log (`The number of active threads is ${Object.keys(this.__alive).length}`)
-        for (let x in this.__alive) {            
-            if (this.currentThreadId.val.toString() == x) {
-                // console.log (x, "ACTIVE")
-            } else {
-                // console.log (x, "KILLING");
+        for (let x in this.__alive) {
+            if (this.currentThreadId.val.toString() != x) {
                 delete this.__alive[x]
             }
         }
         this.__blocked = []
-        this.__funloop = [] 
-        // console.log (`The number of active threads is ${Object.keys(this.__alive).length}`)
-        // console.log (`The number of blocked threads is ${this.__blocked.length}`)
+        this.__funloop = []
     }
 
-    done  ()  {            
+    done  ()  {
         this.notifyMonitors();
-        // console.log (this.__currentThread.processDebuggingName, this.currentThreadId.val.toString(), "done")
-        delete this.__alive [this.currentThreadId.val.toString()];              
+        delete this.__alive [this.currentThreadId.val.toString()];
     }
 
 
@@ -281,15 +272,6 @@ export class Scheduler implements SchedulerInterface {
                 dest = _curThread.next 
                 let ttl = 1000;  // magic constant; 2021-04-29
                 while (dest && ttl -- ) {
-                    // if (showStack) { // 2021-04-24; AA; TODO: profile the addition of this conditional in this tight loop
-                    //     this.__currentThread.showStack()
-                    // }
-                    // console.log (">>>>>>>>>>")
-                    // console.log (dest.toString())
-                    // console.log ("<<<<<<<<<<")
-                    // if (dest.debugname ) {
-                    //     console.log (" -- ", dest.debugname)
-                    // }
                     dest = dest ()
                 }
 
@@ -304,9 +286,9 @@ export class Scheduler implements SchedulerInterface {
             if (e instanceof TroupeError) {
                 e.handleError(this);
             } else {
-                console.log ("--- Schedule module caught an internal exception ---")
-                console.log ("--- The following output may help identify a bug in the runtime ---")
-                console.log ("Destination function\n" , dest)
+                console.error ("--- Schedule module caught an internal exception ---")
+                console.error ("--- The following output may help identify a bug in the runtime ---")
+                console.error ("Destination function\n" , dest)
                 this.__currentThread.showStack()
                 throw e;
             }

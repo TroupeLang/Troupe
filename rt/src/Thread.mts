@@ -200,9 +200,11 @@ export class Thread {
     }
     public set r0_lev(value: any) {
         if (!value?.isLevel ) {
-            console.log ("RO-LEV debugging")
-            console.log ( (new Error().stack) )
-            this.showStack()
+            debug ("RO-LEV debugging")
+            debug (new Error().stack)
+            if (argv[TroupeCliArg.Debug]) {
+                this.showStack()
+            }
         }
         this._r0_lev = value;
     }
@@ -368,15 +370,17 @@ export class Thread {
     }
 
 
+    // Diagnostic stack dump; writes to stderr so it does not corrupt
+    // program stdout.
     showStack ()  {
-        console.log ("======== SHOW STACK ========= ")
-        console.log (`sp = ${this._sp} sparseSlot = ${this.sparseSlot}`)
+        console.error ("======== SHOW STACK ========= ")
+        console.error (`sp = ${this._sp} sparseSlot = ${this.sparseSlot}`)
         let j = this._sp - 1
         let stack = this.callStack
         while ( j > 0) {
-            console.log (`-${j.toString().padStart(5,'-')} branch bit: ${stack[j--]}`)
+            console.error (`-${j.toString().padStart(5,'-')} branch bit: ${stack[j--]}`)
             let mclear = stack[j]
-            console.log (` ${j.toString().padStart(5,' ')} mclear    : ${mclear?.stringRep()}`)
+            console.error (` ${j.toString().padStart(5,' ')} mclear    : ${mclear?.stringRep()}`)
             j --
             let ret = stack [j]
             let ret_string = ret?.debugname
@@ -384,12 +388,12 @@ export class Thread {
                 ret_string = ret?.toString ()
             }
 
-            console.log (` ${j.toString().padStart(5,' ')} ret       : ${ret_string}`)
+            console.error (` ${j.toString().padStart(5,' ')} ret       : ${ret_string}`)
             j --
-            console.log (` ${j.toString().padStart(5,' ')} pc_ret    : ${stack[j]?.stringRep()}`)
+            console.error (` ${j.toString().padStart(5,' ')} pc_ret    : ${stack[j]?.stringRep()}`)
             j --
-            console.log     (` ${j.toString().padStart(5,' ')} sp_prev   : ${stack[j]}`)
-            console.log (` ${(j-1).toString().padStart(5,' ')} sparse    : ${stack[j-1]}`)
+            console.error (` ${j.toString().padStart(5,' ')} sp_prev   : ${stack[j]}`)
+            console.error (` ${(j-1).toString().padStart(5,' ')} sparse    : ${stack[j-1]}`)
             let sp_prev = stack[j];
             j = sp_prev - 1 ;
         }
@@ -662,8 +666,7 @@ export class Thread {
     }
 
     pushFrame (cb, framesize=0) {
-        // console.log ("CALL", this._sp, this.r0_val, framesize )
-        let _prev_sp = this._sp 
+        let _prev_sp = this._sp
         this._sp = this._sp + framesize + CALLSIZE
         this.callStack[this._sp - SPOFFSET] = _prev_sp
         this.callStack[this._sp - PCOFFSET] = this.pc 
@@ -683,8 +686,7 @@ export class Thread {
         this.callStack[this._sp - BRANCHFLAGOFFSET] = BRANCH_FLAG_ON
     }
     
-    returnSuspended (arg) {       
-        // console.log("RET", this._sp)
+    returnSuspended (arg) {
         let rv = new LValCopyAt (arg, this.pc);
         this.next = () => {            
             return this.returnImmediateLValue (rv);

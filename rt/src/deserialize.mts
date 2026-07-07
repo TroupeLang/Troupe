@@ -26,11 +26,14 @@ import {
     classifyForIngress,
     IngressClassification
 } from './Ingress.mjs';
+import { TroupeError } from './TroupeError.mjs';
+import { SchedulerInterface } from './SchedulerInterface.mjs';
 
 const argv = getCliArgs();
 const logLevel = argv[TroupeCliArg.DebugQuarantine] ? 'debug' : 'info';
 const logger = mkLogger('QRN', logLevel);
 const qdebug = (x: string) => logger.debug(x);
+const dlogger = mkLogger('deserialize');
 
 // Ingress check result types for quarantine protocol
 export enum IngressResult {
@@ -59,6 +62,7 @@ let __rtObj = null;
 // obs: these are global...
 let __isCurrentlyUsingCompiler = false; // simple flag to make sure we handle one deserialization at a time
 let __currentCallback = null;           // a callback for synchronizing with the caller
+let __currentErrback = null;            // rejects the pending deserialization on failure
 let __currentDeserializedJson = null;
 let __trustLevel = null;
 
@@ -166,14 +170,36 @@ function unindent() {
 
 
 
-function deserializationError() {
-    console.log("DESERIALIZATION ERROR HANDLING IS NOT IMPLEMENTED")
-    process.exit(1);
+// Error raised when an inbound serialized value cannot be reconstructed.
+// `deserialize` rejects its promise with this error; callers surface it as a
+// thread-level error, which the scheduler's TroupeError path handles. If it
+// ever propagates into the scheduler directly, it is logged there as well.
+export class DeserializationError extends TroupeError {
+    handleError(sched: SchedulerInterface): void {
+        dlogger.error(this.message);
+    }
 }
 
-function constructCurrent(compilerOutput: string) {
-    // debuglog (deserializationObject)
+function asDeserializationError(cause: unknown): DeserializationError {
+    if (cause instanceof DeserializationError) {
+        return cause;
+    }
+    const details = cause instanceof Error ? cause.message : String(cause);
+    return new DeserializationError(`cannot deserialize inbound value: ${details}`);
+}
 
+// Wrapper around the reconstruction logic: any failure to reconstruct an
+// inbound value is reported through the current errback (rejecting the
+// promise returned by `deserialize`) instead of crashing the node.
+function constructCurrent(compilerOutput: string) {
+    try {
+        constructCurrentUnchecked(compilerOutput);
+    } catch (e) {
+        __currentErrback(asDeserializationError(e));
+    }
+}
+
+function constructCurrentUnchecked(compilerOutput: string) {
     __isCurrentlyUsingCompiler = false;
     let serobj = __currentDeserializedJson;
     let desercb = __currentCallback;
@@ -197,22 +223,11 @@ function constructCurrent(compilerOutput: string) {
         // Collect source maps from all snippets in this namespace
         let namespaceMappings: any[] = []
 
-        // nsFun += "this.libSet = new Set () \n"
-        // nsFun += "this.libs = [] \n"
-        // nsFun += "this.addLib = function (lib, decl) " +
-        //     " { if (!this.libSet.has (lib +'.'+decl)) { " +
-        //     " this.libSet.add (lib +'.'+decl); " +
-        //     " this.libs.push ({lib:lib, decl:decl})} } \n"
-        // nsFun += "this.loadlibs = function (cb) { rt.linkLibs (this.libs, this, cb) } \n"
-
-
         for (let j = 0; j < ns.length; j++) {
             if (j > 0) {
                 nsFun += "\n\n" // looks neater this way
             }
             let snippetJson = JSON.parse(snippets[k++]);
-            // console.log (snippetJson.libs);
-            // console.log (snippetJson.fname);
             nsFun += snippetJson.code;
 
             for (let atom of snippetJson.atoms) {
@@ -222,7 +237,6 @@ function constructCurrent(compilerOutput: string) {
             if (snippetJson.sourceMap) {
                 namespaceMappings.push(snippetJson.sourceMap)
             }
-            // console.log (snippetJson.atoms)
         }
         let argNames = Array.from(atomSet);
         let argValues = argNames.map( argName => {return new Atom(argName)})
@@ -239,7 +253,6 @@ function constructCurrent(compilerOutput: string) {
         // We now construct an instance of the newly constructed object
         // that takes the runtime object + atoms as its arguments
 
-        // console.log (NS.toString()); // debugging
         argValues.unshift(__rtObj)
         ctxt.namespaces[i] = Reflect.construct (NS, argValues)
         // Mark namespace as restored code for error reporting
@@ -516,36 +529,44 @@ function constructCurrent(compilerOutput: string) {
 
 let __senderNodeId: string | undefined = undefined;
 
-function deserializeCb(lev: Level, jsonObj: any, senderNodeId: string | undefined, cb: (result: DeserializeResult) => void) {
+function deserializeCb(lev: Level, jsonObj: any, senderNodeId: string | undefined,
+                       cb: (result: DeserializeResult) => void,
+                       errb: (err: DeserializationError) => void) {
     if (__isCurrentlyUsingCompiler) {
-        setImmediate(deserializeCb, lev, jsonObj, senderNodeId, cb) // postpone; 2018-03-04;aa
+        setImmediate(deserializeCb, lev, jsonObj, senderNodeId, cb, errb) // postpone; 2018-03-04;aa
     } else {
         __senderNodeId = senderNodeId;
-        __isCurrentlyUsingCompiler = true // prevent parallel deserialization attempts; important! -- leads to nasty 
+        __isCurrentlyUsingCompiler = true // prevent parallel deserialization attempts; important! -- leads to nasty
         // race conditions otherwise; 2018-11-30; AA
         __trustLevel = lev;
-        __currentCallback = cb;      // obs: this is a global for this module; 
+        __currentCallback = cb;      // obs: this is a global for this module;
         // the access to it should be carefully controlled
+        __currentErrback = errb;
 
         // we need to share this object with the callbacks
 
         __currentDeserializedJson = jsonObj; // obs: another global that we must be careful with
 
-        if (jsonObj.namespaces.length > 0) {
-            for (let i = 0; i < jsonObj.namespaces.length; i++) {
-                let ns = jsonObj.namespaces[i];
-                for (let j = 0; j < ns.length; j++) {
-                    // debuglog("*s deserialize", ns[j]);          
-                    __compilerOsProcess.stdin.write(ns[j][1]);
-                    __compilerOsProcess.stdin.write("\n")
-                    // debuglog ("data out")
+        try {
+            if (jsonObj.namespaces.length > 0) {
+                for (let i = 0; i < jsonObj.namespaces.length; i++) {
+                    let ns = jsonObj.namespaces[i];
+                    for (let j = 0; j < ns.length; j++) {
+                        // debuglog("*s deserialize", ns[j]);
+                        __compilerOsProcess.stdin.write(ns[j][1]);
+                        __compilerOsProcess.stdin.write("\n")
+                        // debuglog ("data out")
+                    }
                 }
+                __compilerOsProcess.stdin.write("!ECHO /*-----*/\n")
+            } else {
+                // shortcutting the unnecessary interaction with the compiler
+                // 2018-09-20: AA
+                constructCurrent("");
             }
-            __compilerOsProcess.stdin.write("!ECHO /*-----*/\n")
-        } else {
-            // shortcutting the unnecessary interaction with the compiler
-            // 2018-09-20: AA
-            constructCurrent("");
+        } catch (e) {
+            __isCurrentlyUsingCompiler = false;
+            errb(asDeserializationError(e));
         }
     }
 }
@@ -563,6 +584,6 @@ export function deserialize(lev: Level, jsonObj: any, senderNodeId?: string): Pr
     return new Promise((resolve, reject) => {
         deserializeCb(lev, jsonObj, senderNodeId, (result: DeserializeResult) => {
             resolve(result)
-        })
+        }, reject)
     });
 }

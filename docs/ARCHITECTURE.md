@@ -57,8 +57,8 @@ Key components:
 Troupe implements dynamic information flow control:
 
 - **Security levels** — values carry labels drawn from a lattice. Concrete lattice implementations
-  live in `rt/src/levels/`: DC labels (`DCLabels/`), a two-point high/low lattice (`lohi.js`), a
-  singleton lattice (`singleton.mts`), and tag sets (`tagsets.mts`).
+  live in `rt/src/levels/`: DC labels (`DCLabels/`), a singleton lattice (`singleton.mts`), and
+  tag sets (`tagsets.mts`).
 - **PC (program-counter) label** — tracks implicit flows through control flow.
 - **Blocking label** — a per-thread label maintained alongside the PC (see the pini stack below).
 - **Sandboxing** — isolated execution under label constraints (tests under

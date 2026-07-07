@@ -60,6 +60,8 @@ test/local:
 
 test/prop-compiler:
 	cd compiler && stack test :dclabels-prop-test $(STACK_OPTS)
+test/prop-caseelim:
+	cd compiler && stack test :caseelim-prop-test $(STACK_OPTS)
 test/multinode:
 	./scripts/run-multinode-tests.sh
 test/libp2p-migration:

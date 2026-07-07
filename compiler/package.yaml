@@ -141,3 +141,14 @@ tests:
     - Troupe-compiler
     - QuickCheck
     - tasty-quickcheck
+  caseelim-prop-test:
+    main: CaseElimProps.hs
+    source-dirs: test/prop-caseelim
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - Troupe-compiler
+    - QuickCheck
+    - tasty-quickcheck

@@ -20,6 +20,9 @@ COMPILER=./bin/troupec
 compiler:
 	cd compiler; $(MAKE) all
 
+compiler/format:
+	cd compiler; $(MAKE) format
+
 p2p-tools:
 	cd p2p-tools; tsc
 	cd p2p-tools/relay; tsc

@@ -1,0 +1,21 @@
+name: fourmolu
+
+on:
+  push:
+    branches: [ master, dev ]
+    paths: [ '**.hs' ]
+  pull_request_target:
+    branches: [ master, dev ]
+    paths: [ '**.hs' ]
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: haskell-actions/run-fourmolu@v11
+        with:
+          version: "0.17.0.0"
+          follow-symbolic-links: false
+          working-directory: "./compiler"

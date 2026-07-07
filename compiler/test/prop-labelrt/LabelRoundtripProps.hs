@@ -31,21 +31,19 @@
 --      pool).  This is the main deliverable and passes at 1000 cases.
 --
 --   2. prop_roundtrip_const -- over DCLabelExp that include a ConstComponent
---      (LabelTrue/LabelFalse).  The pretty-printer renders these as `#true` /
---      `#false` (via `show` on LabelConst), but the grammar accepts no such
---      tokens: ConfLabelExp/IntLabelExp admit only the empty spelling,
---      `#root-{confidentiality,integrity}`, and `#null-{confidentiality,
---      integrity}`.  So every const-containing label fails to parse.  This is a
---      real pretty-print / parse asymmetry, recorded here with `expectFailure`
---      (the property is EXPECTED to fail; the test passes when it does).  Do NOT
---      "fix" it by weakening -- it documents a genuine finding for the
---      maintainer.  The parseable spellings for a constant component are the
---      empty string / `#root-*` / `#null-*`, never `#true` / `#false`.
---
---      Minimal witness: `` `<#true ; #false>` `` (i.e.
---      DCLabelExp (ConstComponent LabelTrue, ConstComponent LabelFalse)); the
---      parser rejects the leading `#true`. prop_const_witness pins that exact
---      case.
+--      (LabelTrue/LabelFalse).  `ppDCLabelExp` renders constant components with
+--      the dimension-specific spellings the grammar accepts (`ppDCLabelExp` in
+--      DCLabels.hs; ConfLabelExp/IntLabelExp in Parser.y):
+--        confidentiality: LabelTrue -> #null-confidentiality,
+--                         LabelFalse -> #root-confidentiality
+--        integrity:       LabelTrue -> #null-integrity,
+--                         LabelFalse -> #root-integrity
+--      so const-containing labels round-trip too.  (Earlier the printer emitted
+--      `show`'s display-only `#true`/`#false`, which the grammar rejected; that
+--      asymmetry was fixed alongside this suite.)  prop_const_witness pins the
+--      previously-broken case `DCLabelExp (ConstComponent LabelTrue,
+--      ConstComponent LabelFalse)`, now round-tripping as
+--      `` `<#null-confidentiality ; #root-integrity>` ``.
 
 module Main (main) where
 
@@ -172,16 +170,16 @@ shrinkDC (DCLabelExp (c, i)) =
 prop_roundtrip_expr :: Property
 prop_roundtrip_expr = forAllShrink genExprDCLabel shrinkDC roundtrip
 
--- Documented asymmetry: const-containing labels do NOT round-trip, because the
--- pretty-printer emits `#true`/`#false` tokens the grammar does not accept.
--- EXPECTED to fail; the test passes when it does.
+-- Const-containing labels also round-trip: the printer emits the grammar's
+-- #null-*/#root-* spellings for constant components.
 prop_roundtrip_const :: Property
-prop_roundtrip_const = expectFailure $ forAllShrink genConstDCLabel shrinkDC roundtrip
+prop_roundtrip_const = forAllShrink genConstDCLabel shrinkDC roundtrip
 
--- Pin the minimal witness of the asymmetry: `<#true ; #false>` fails to parse.
+-- Pin the previously-broken witness: `<#null-confidentiality ; #root-integrity>`
+-- (rendered from LabelTrue/LabelFalse) now round-trips.
 prop_const_witness :: Property
 prop_const_witness =
-  once $ expectFailure $
+  once $
     roundtrip (DCLabelExp (ConstComponent LabelTrue, ConstComponent LabelFalse))
 
 -- ---------------------------------------------------------------------------
@@ -192,8 +190,8 @@ main :: IO ()
 main = defaultMain $ localOption (QuickCheckTests 1000) $
   testGroup "Label pretty-print / parse round-trip"
     [ testProperty "expr-component labels round-trip (dcLabelEq)" prop_roundtrip_expr
-    , testProperty "const-component labels do NOT round-trip (#true/#false unparseable)"
+    , testProperty "const-component labels round-trip (#null-*/#root-* spellings)"
         prop_roundtrip_const
-    , testProperty "minimal const witness `<#true;#false>` fails to parse"
+    , testProperty "const witness `<#null-confidentiality;#root-integrity>` round-trips"
         prop_const_witness
     ]

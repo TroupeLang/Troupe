@@ -146,7 +146,7 @@ data FunDef = FunDef
 
 -- An IR program is just a collection of atoms declarations
 -- and function definitions (wrapped with Located for position tracking)
-data IRProgram = IRProgram C.Atoms [LFunDef] deriving (Generic)
+data IRProgram = IRProgram C.Atoms [LFunDef] deriving (Generic, Eq)
 
 -----------------------------------------------------------
 -- Dependency calculation

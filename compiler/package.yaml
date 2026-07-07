@@ -117,3 +117,18 @@ tests:
     - -with-rtsopts=-N
     dependencies:
     - Troupe-compiler
+  ir-sexp-test:
+    main: IRSexpTest.hs
+    source-dirs:
+    - test/ir-sexp-test
+    - test/ir2raw-test/testcases
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - Troupe-compiler
+    - tasty
+    - tasty-hunit
+    - tasty-quickcheck
+    - QuickCheck

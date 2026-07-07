@@ -1,0 +1,31 @@
+import Unit
+import Map
+
+let fun lt a b = a < b
+
+    val empty    = Map.empty lt
+    val fromList = Map.fromList lt
+
+    val tests = Unit.group "Map.findOrDefault" [
+            let val m = empty
+            in Unit.group "empty" [
+                    Unit.it "returns '?' for findOrDefault 0 '?'" (Unit.isEq "?"  (Map.findOrDefault m 0 "?"))
+                  , Unit.it "returns -1 for findOrDefault 1 -1"   (Unit.isEq (-1) (Map.findOrDefault m 1 (-1)))
+                ]
+            end,
+            let val m = fromList [(0,42)]
+            in Unit.group "fromList [(0,42)]" [
+                    Unit.it "returns 42 for findOrDefault 0 '!'"  (Unit.isEq 42  (Map.findOrDefault m 0 "!"))
+                  , Unit.it "returns '@' for findOrDefault 1 '@'" (Unit.isEq "@" (Map.findOrDefault m 1 "@"))
+                ]
+            end,
+            let val m = fromList [(1,"a"), (0,42), (2,3)]
+            in Unit.group "fromList [(1,'a'), (0,42), (2,3)]" [
+                    Unit.it "returns 42 for findOrDefault 0 '@'"  (Unit.isEq 42  (Map.findOrDefault m 0 "@"))
+                  , Unit.it "returns 'a' for findOrDefault 1 ''"  (Unit.isEq "a" (Map.findOrDefault m 1 ""))
+                  , Unit.it "returns 3 for findOrDefault 2 -1"    (Unit.isEq 3   (Map.findOrDefault m 2 (-1)))
+                  , Unit.it "returns '?' for findOrDefault 3 '?'" (Unit.isEq "?" (Map.findOrDefault m 3 "?"))
+                ]
+            end
+        ]
+in Unit.run authority tests end

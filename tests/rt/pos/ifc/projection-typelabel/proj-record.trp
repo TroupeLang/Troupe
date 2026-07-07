@@ -1,0 +1,11 @@
+(* Record field projection (IR.ProjField) raises the extracted component's TYPE
+ * label by the record's data label. The record shape is secret-chosen, so field
+ * `b`'s runtime type depends on the secret. After the fix, `y`'s type label reads
+ * <alice;#root-integrity> (was {}). *)
+let val secret = true raisedTo `<alice;#root-integrity>`
+    val r = if secret then {a = 0, b = 42} else {a = 0, b = ()}
+    val {b = y, ..} = r
+    val _ = printWithLabels y
+    val _ = printWithLabels (getType y)
+in ()
+end

@@ -1,0 +1,12 @@
+(* Tuple projection (IR.ProjIdx) raises the extracted component's TYPE label by
+ * the tuple's data label. The tuple's runtime shape is chosen by a secret, so the
+ * component's runtime type (number vs unit) genuinely depends on that secret.
+ * After the soundness fix, `b`'s type label reads <alice;#root-integrity> (was {}).
+ * printWithLabels prints value@dataLabel%typeLabel. *)
+let val secret = true raisedTo `<alice;#root-integrity>`
+    val t = if secret then (0, 42) else (0, ())
+    val (a, b) = t
+    val _ = printWithLabels b
+    val _ = printWithLabels (getType b)
+in ()
+end

@@ -1,0 +1,16 @@
+(* Progress-leak reproduction (report Fragility 1), list head projection.
+ *
+ * `l` is a secret-chosen list; `h` is its head (cons pattern h::_). After `blockdecl`
+ * releases the blocking label (debugpc shows BL:{}), the residual block that had
+ * confined `h + 1` is gone. Post-fix, `h`'s own TYPE label carries the list's data
+ * label, so `h + 1` re-raises the blocking label to <alice;#root-integrity> and the
+ * public sink `adv` is blocked. The leak is closed by the value's own type label. *)
+let val secret = true raisedTo `<alice;#root-integrity>`
+    val l = if secret then [42] else [()]
+    val h :: _ = l
+    val alice = attenuate (authority, `<alice;#root-integrity>`)
+    val _ = blockdecl alice
+    val _ = debugpc ()
+    val c = h + 1
+in adv 100
+end

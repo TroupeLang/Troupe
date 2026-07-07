@@ -1,0 +1,14 @@
+(* List tail (Basics.Tail, reached via the cons pattern _::t) — pins DELIBERATE
+ * behavior: tail's result TYPE label is intentionally NOT raised by the list's
+ * data label (contrast with proj-head). tail's runtime type is always `list`,
+ * so its result carries no secret-dependent type; the type label stays at PC
+ * as a precision choice (maintainer decision 2026-07-07, plan Q1). Only the
+ * DATA label carries the list's label. Expected: `t` prints as
+ * [...]@<alice;#root-integrity>%{} -- raised data label, unraised type label. *)
+let val secret = true raisedTo `<alice;#root-integrity>`
+    val l = if secret then [1, 42] else [1, 2, 3]
+    val _ :: t = l
+    val _ = printWithLabels t
+    val _ = printWithLabels (getType t)
+in ()
+end

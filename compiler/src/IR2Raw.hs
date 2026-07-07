@@ -522,7 +522,11 @@ expr2rawComp = \case
     return ComplexRawComp
       { ccVal = RUn lv $ \r -> ProjField r field
       , ccValLbl = \resValLbl -> Join PC (ValLbl lv) [resValLbl]
-      , ccTyLbl = \resTyLbl -> Join PC resTyLbl []
+      -- Soundness fix: join the record's data label into the extracted
+      -- component's *type* label as well. When the aggregate's runtime shape
+      -- was chosen by a secret, the component's runtime type depends on that
+      -- secret; its type label must reflect this (mirrors the data-label line).
+      , ccTyLbl = \resTyLbl -> Join PC resTyLbl [ValLbl lv]
       }
   -- Revision 2023-08: 'ProjIdx' is the new indexing operation for tuples replacing
   -- the previous 'Index'. The difference is that the index is a constant to the operation
@@ -535,7 +539,12 @@ expr2rawComp = \case
     return ComplexRawComp
       { ccVal = RUn lv $ \r -> ProjIdx r idx
       , ccValLbl = \resValLbl -> Join PC (ValLbl lv) [resValLbl]
-      , ccTyLbl = \resTyLbl -> Join PC resTyLbl []
+      -- Soundness fix: join the tuple's data label into the extracted
+      -- component's *type* label as well. Complements the 2023-08 precision
+      -- revision (which dropped the tuple's *type* label TyLbl lv): this adds
+      -- the tuple's *data* label ValLbl lv, so a secret-chosen tuple shape
+      -- raises the component's type label.
+      , ccTyLbl = \resTyLbl -> Join PC resTyLbl [ValLbl lv]
       }
 
   -- Revision 2023-08: Changed the RT operation to return an unlabelled value,
@@ -680,6 +689,11 @@ expr2rawComp = \case
         assertTypeAndRaise lv RawRecord
         basicUnOpComp
       -- Revision 2023-08: Equivalent.
+      -- Note: unlike ProjIdx/ProjField/Head, 'tail' does NOT join the list's data
+      -- label into its result type label. tail's runtime type is always 'list', so
+      -- its result carries no secret-dependent type; the type label deliberately
+      -- stays at PC (precision choice, maintainer decision 2026-07-07, plan Q1).
+      -- The Lean model's uniform stamping at .tail is to be relaxed to match.
       Basics.Tail -> do
         assertTypeAndRaise lv RawList
         basicUnOpComp
@@ -689,7 +703,10 @@ expr2rawComp = \case
         return ComplexRawComp
           { ccVal = RUn lv $ Un op
           , ccValLbl = \resValLbl -> Join PC (ValLbl lv) [resValLbl]
-          , ccTyLbl = \resTyLbl -> Join PC resTyLbl []
+          -- Soundness fix: join the list's data label into the head element's
+          -- *type* label as well (mirrors the data-label line). A secret-chosen
+          -- list shape makes the head's runtime type secret-dependent.
+          , ccTyLbl = \resTyLbl -> Join PC resTyLbl [ValLbl lv]
           }
       -- Revision 2023-08: Now setting type label to PC instead of joining original type label (as the type is asserted).
       Basics.UnMinus -> do

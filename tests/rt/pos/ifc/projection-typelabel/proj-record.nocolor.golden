@@ -1,0 +1,4 @@
+2026-07-07T11:48:07.330Z [RTM] info: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+42@<alice;#root-integrity>%<alice;#root-integrity>
+"number"@<alice;#root-integrity>%{}
+>>> Main thread finished with value: ()@<alice;#root-integrity>%<alice;#root-integrity>

@@ -1,0 +1,16 @@
+(* Progress-leak reproduction (report Fragility 1), record field projection.
+ *
+ * `r` is a secret-chosen record; `y` is field `b`. After `blockdecl` releases the
+ * blocking label (debugpc shows BL:{}), the residual block that had confined `y + 1`
+ * is gone. Post-fix, `y`'s own TYPE label carries the record's data label, so `y + 1`
+ * re-raises the blocking label to <alice;#root-integrity> and the public sink `adv`
+ * is blocked. The leak is closed by the value's own type label. *)
+let val secret = true raisedTo `<alice;#root-integrity>`
+    val r = if secret then {a = 0, b = 42} else {a = 0, b = ()}
+    val {b = y, ..} = r
+    val alice = attenuate (authority, `<alice;#root-integrity>`)
+    val _ = blockdecl alice
+    val _ = debugpc ()
+    val c = y + 1
+in adv 100
+end

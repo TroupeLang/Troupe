@@ -1,0 +1,22 @@
+(* Progress-leak reproduction (report Fragility 1), tuple projection.
+ *
+ * `t` is a secret-chosen tuple; `b` is projected out of it. `blockdecl` legitimately
+ * releases the accumulated blocking label (debugpc below shows BL:{} afterwards),
+ * clearing the residual block that had been confining a later type-dependent use of
+ * `b`. Pre-fix, `b`'s type label was public, so `b + 1` did not re-raise the block,
+ * and the public sink `adv` distinguished secret=true (thread finished) from
+ * secret=false (crash) -- a leak.
+ *
+ * Post-fix, `b` carries the tuple's data label in its own TYPE label, so `b + 1`
+ * re-raises the blocking label to <alice;#root-integrity>, and `adv` (which fires
+ * only at a public blocking label) is blocked. The leak is closed by the value's
+ * own type label rather than the residual progress-channel block. *)
+let val secret = true raisedTo `<alice;#root-integrity>`
+    val t = if secret then (0, 42) else (0, ())
+    val (a, b) = t
+    val alice = attenuate (authority, `<alice;#root-integrity>`)
+    val _ = blockdecl alice
+    val _ = debugpc ()
+    val c = b + 1
+in adv 100
+end

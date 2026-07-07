@@ -1,0 +1,11 @@
+(* List head (Basics.Head, reached via the cons pattern h::_) raises the head
+ * element's TYPE label by the list's data label. The list shape is secret-chosen,
+ * so the head's runtime type depends on the secret. After the fix, `h`'s type
+ * label reads <alice;#root-integrity> (was {}). *)
+let val secret = true raisedTo `<alice;#root-integrity>`
+    val l = if secret then [42] else [()]
+    val h :: _ = l
+    val _ = printWithLabels h
+    val _ = printWithLabels (getType h)
+in ()
+end

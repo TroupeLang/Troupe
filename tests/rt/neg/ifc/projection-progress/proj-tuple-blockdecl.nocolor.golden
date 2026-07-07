@@ -1,0 +1,12 @@
+2026-07-07T11:48:07.374Z [RTM] info: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+PID:e2925dcb-f0cc-4ee7-a3d1-6e33d30bb919@{}%{}     PC:{}                BL:{}                HNNORMAL             
+Runtime error in thread e2925dcb-f0cc-4ee7-a3d1-6e33d30bb919@{}%{}
+
+  21 | in adv 100
+     |    ^
+
+>> Illegal flow in adv function:
+ |    pc: {}
+ | block: <alice;#root-integrity>
+ | value: 100@{}%{}
+>> at tests/rt/neg/ifc/projection-progress/proj-tuple-blockdecl.trp:21:4

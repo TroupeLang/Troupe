@@ -6,6 +6,7 @@
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE RankNTypes #-}
 
 module IR where
 
@@ -24,9 +25,13 @@ import           Control.Monad.State
 import           Control.Monad.Writer
 import Control.Monad (when)
 import           Data.List
+import           Data.Word                 (Word8)
 import qualified Data.ByteString           as BS
+import qualified Data.ByteString.Lazy      as BSL
 import           Data.Serialize            (Serialize)
 import qualified Data.Serialize            as Serialize
+import qualified Codec.Compression.GZip    as GZip
+import qualified Codec.Compression.Zlib.Internal as ZlibI
 import           GHC.Generics              (Generic)
 
 import           Text.PrettyPrint.HughesPJ (hsep, nest, text, vcat, ($$), (<+>))
@@ -224,26 +229,87 @@ data SerializationUnit
 instance Serialize SerializationUnit
 
 
+-- Blob wire format (v1): 4-byte magic "TRPI", then a Word8 format version, then
+-- the payload. For v1 the payload is a gzip stream of the cereal-encoded
+-- SerializationUnit. See _dev_planning/ir-blob-compression.md.
+irBlobMagic :: BS.ByteString
+irBlobMagic = BS.pack [0x54, 0x52, 0x50, 0x49]  -- "TRPI"
+
+irBlobVersion :: Word8
+irBlobVersion = 1
+
+-- Upper bound on decompressed blob size, enforced during decompression to
+-- defend against decompression bombs arriving from remote nodes. The largest
+-- observed real blob is ~10 KB.
+maxDecompressedBytes :: Int
+maxDecompressedBytes = 64 * 1024 * 1024
+
+encodeBlob :: SerializationUnit -> BS.ByteString
+encodeBlob su =
+  let cereal = Serialize.runPut (Serialize.put su)
+      gz     = BSL.toStrict (GZip.compress (BSL.fromStrict cereal))
+  in irBlobMagic `BS.append` BS.singleton irBlobVersion `BS.append` gz
+
 serializeFunDef :: FunDef -> BS.ByteString
-serializeFunDef fdef = Serialize.runPut ( Serialize.put (FunSerialization fdef) )
+serializeFunDef fdef = encodeBlob (FunSerialization fdef)
 
 serializeAtoms :: C.Atoms -> BS.ByteString
-serializeAtoms atoms = Serialize.runPut (Serialize.put (AtomsSerialization atoms))
+serializeAtoms atoms = encodeBlob (AtomsSerialization atoms)
 
 deserializeAtoms :: BS.ByteString -> Either String C.Atoms
 deserializeAtoms bs = Serialize.runGet (Serialize.get) bs
 
+-- Gzip-decompress with a hard output cap, using the incremental zlib API so
+-- that corrupt input becomes a Left (rather than an imprecise DecompressError
+-- thrown from a lazy thunk) and an over-cap stream is aborted with a Left. The
+-- fold accumulator threads the remaining byte budget.
+decompressGzipCapped :: Int -> BS.ByteString -> Either String BS.ByteString
+decompressGzipCapped cap input =
+  BSL.toStrict <$>
+    ZlibI.foldDecompressStreamWithInput
+      onChunk onEnd onError
+      (ZlibI.decompressST ZlibI.gzipFormat ZlibI.defaultDecompressParams)
+      (BSL.fromStrict input)
+      cap
+  where
+    onChunk :: BS.ByteString -> (Int -> Either String BSL.ByteString)
+                             -> (Int -> Either String BSL.ByteString)
+    onChunk c k remaining =
+      let n = BS.length c
+      in if n > remaining
+         then Left ("decompressed IR blob exceeds "
+                     ++ show cap ++ "-byte cap")
+         else (BSL.fromStrict c <>) <$> k (remaining - n)
+    onEnd :: BSL.ByteString -> (Int -> Either String BSL.ByteString)
+    onEnd _leftover _ = Right BSL.empty
+    onError :: ZlibI.DecompressError -> (Int -> Either String BSL.ByteString)
+    onError e _ = Left (show e)
+
 deserialize :: BS.ByteString -> Either String SerializationUnit
 deserialize bs =
-  case Serialize.runGet (Serialize.get) bs of
-    Left s -> Left s
-    Right x@(FunSerialization fdecl) ->
-      case runExcept (wfFun fdecl) of 
-        Right  _ -> Right x 
-        Left s -> Left  "ir not well-formed"
-      -- if wfFun fdecl then (Right x)
-      -- else Left "ir not well-formed"
-    Right x -> Right x
+  -- Dispatch on the 4-byte magic. A legacy (pre-magic) blob is raw cereal, whose
+  -- first byte is the SerializationUnit constructor tag, always 0, 1, or 2 and
+  -- therefore never 0x54 ('T'); so a blob beginning with "TRPI" is unambiguously
+  -- the new framed format. This invariant holds while SerializationUnit has <= 84
+  -- constructors.
+  if irBlobMagic `BS.isPrefixOf` bs
+  then case BS.uncons (BS.drop 4 bs) of
+         Just (v, payload)
+           | v == irBlobVersion -> decompressGzipCapped maxDecompressedBytes payload
+                                      >>= decodeUnit
+           | otherwise -> Left ("unsupported IR blob format version "
+                                 ++ show v ++ " (compiler too old?)")
+         Nothing -> Left "truncated IR blob header"
+  else decodeUnit bs
+  where
+    decodeUnit b =
+      case Serialize.runGet (Serialize.get) b of
+        Left s -> Left s
+        Right x@(FunSerialization fdecl) ->
+          case runExcept (wfFun fdecl) of
+            Right _ -> Right x
+            Left _  -> Left "ir not well-formed"
+        Right x -> Right x
 
 -----------------------------------------------------------
 -- Well-formedness

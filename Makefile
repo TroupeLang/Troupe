@@ -57,6 +57,9 @@ test/docker: ci-test-golden-no-color test/multinode test/result-socket
 test/local:
 	mkdir -p out
 	cd compiler && $(MAKE) test
+
+test/prop-compiler:
+	cd compiler && stack test :dclabels-prop-test $(STACK_OPTS)
 test/multinode:
 	./scripts/run-multinode-tests.sh
 test/libp2p-migration:

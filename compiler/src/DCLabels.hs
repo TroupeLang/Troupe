@@ -22,7 +22,10 @@ module DCLabels
   , cnfEq
   , cnfImplies
   , v1LabelEq
-  , v1LabelToDCLabelExp) where
+  , v1LabelToDCLabelExp
+  , CNF(..)
+  , DisjTags(..)
+  , DCLabel(..)) where
 import GHC.Generics(Generic)
 import Data.Serialize (Serialize)
 import Data.List (sort, nub, dropWhileEnd)

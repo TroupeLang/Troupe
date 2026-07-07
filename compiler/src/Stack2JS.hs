@@ -481,9 +481,6 @@ binOpToJS op (Raw.UseNativeBinop isNative) = case op of
     LatticeJoin -> "rt.raw_join"
     -- No RT operations (should be moved to a different datatype)
     RaisedTo -> error "Not a runtime operation"
-    -- Not yet implemented in IR2Raw
-    FlowsTo -> error "Not yet implemented: FlowsTo" -- (implemented in tagsets.ts: "rt.flowsTo")
-    LatticeMeet -> error "Not yet implemented: LatticeMeet"
 
 unaryOpToJS :: UnaryOp -> String
 unaryOpToJS = \case
@@ -879,8 +876,6 @@ isInfixBinop op (Raw.UseNativeBinop use_native) = case op of
   Neq -> use_native 
   -- Not infix
   RaisedTo -> False
-  FlowsTo -> False
   IntDiv -> False
   HasField -> False
   LatticeJoin -> False
-  LatticeMeet -> False

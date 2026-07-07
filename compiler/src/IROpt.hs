@@ -167,9 +167,7 @@ canFailOrHasEffects expr = case expr of
         Basics.Eq -> False
         Basics.Neq -> False
         -- Level operations might be safe but conservative
-        Basics.FlowsTo -> True
         Basics.LatticeJoin -> True
-        Basics.LatticeMeet -> True
         Basics.RaisedTo -> True
     
     -- Unary operations

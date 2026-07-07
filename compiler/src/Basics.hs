@@ -13,7 +13,7 @@ type AtomName = String
 type FieldName = String
 
 -- | Eq and Neq: deep equality check on the two parameters, including the types (any type inequality results in false being returned).
-data BinOp = Plus | Minus | Mult | Div | Mod |  Eq | Neq | Le | Lt | Ge | Gt | And | Or | RaisedTo | FlowsTo | Concat| IntDiv | BinAnd | BinOr | BinXor | BinShiftLeft | BinShiftRight | BinZeroShiftRight | HasField | LatticeJoin | LatticeMeet
+data BinOp = Plus | Minus | Mult | Div | Mod |  Eq | Neq | Le | Lt | Ge | Gt | And | Or | RaisedTo | Concat| IntDiv | BinAnd | BinOr | BinXor | BinShiftLeft | BinShiftRight | BinZeroShiftRight | HasField | LatticeJoin
   deriving (Eq,Generic, Ord)
 instance Serialize BinOp
 data UnaryOp = IsList | IsTuple | IsRecord | Head | Tail | ListLength | TupleLength | RecordSize | LevelOf | UnMinus | Not
@@ -36,7 +36,6 @@ instance Show BinOp where
   show And   = "&&"
   show Or    = "||"
   show RaisedTo = "raisedTo"
-  show FlowsTo  = "flowsTo"
   show Concat   = "^"
   show BinAnd = "andb" 
   show BinOr =  "orb" 
@@ -46,7 +45,6 @@ instance Show BinOp where
   show BinZeroShiftRight = "~>>"
   show HasField = "hasField"
   show LatticeJoin = "join"
-  show LatticeMeet = "meet"
 
 instance Show UnaryOp where
   show IsList = "is-list"
@@ -67,7 +65,6 @@ type Precedence = Integer
 opPrec :: BinOp -> Precedence
 
 opPrec LatticeJoin = 300
-opPrec LatticeMeet = 300
 
 opPrec Mult   = 200
 opPrec IntDiv = 200
@@ -94,7 +91,6 @@ opPrec Ge    = 50
 opPrec Gt    = 50
 opPrec And   = 50
 opPrec Or    = 50
-opPrec FlowsTo    = 50
 opPrec RaisedTo   = 50
 opPrec HasField   = 50
 

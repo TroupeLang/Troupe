@@ -251,9 +251,7 @@ guessType = \case
     -- Revision 2023-08: Added missing cases
     Basics.IntDiv -> Just RawNumber
     Basics.BinOr -> Just RawNumber
-    Basics.FlowsTo -> Just RawBoolean
     Basics.LatticeJoin -> Just RawLevel
-    Basics.LatticeMeet -> Just RawLevel
     Basics.RaisedTo -> Nothing -- depends on operand type
 
   Un op x -> case op of

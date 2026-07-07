@@ -3,9 +3,6 @@ COMPILER=../bin/troupec
 build:
 	mkdir -p out
 
-  # Transition hack; 2025-12-14; AA
-	$(COMPILER) ./Missing.trp -l
-
   # No dependencies
 	$(COMPILER) ./Number.trp -l
 	$(COMPILER) ./List.trp -l

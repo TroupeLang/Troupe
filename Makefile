@@ -84,6 +84,11 @@ test/result-socket-node:
 test/prop-rt: rt
 	node --test 'rt/built/proptests/**/*.test.mjs'
 
+# Differential Haskell<->TypeScript lattice harness. Not part of the aggregate
+# `test:` target. Requires the `dclabels` executable and the runtime built.
+test/prop-differential:
+	./scripts/run-differential-lattice.sh
+
 test/ci-relay: p2p-tools
 	@echo "Running CI relay test..."
 	./tests/ci-relay-test.sh

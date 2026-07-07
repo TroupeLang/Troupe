@@ -1,16 +1,21 @@
 #!/usr/bin/env bash
 #
-# Differential Haskell<->TypeScript lattice harness (Step 3).
+# Differential Haskell<->TypeScript lattice harness (Steps 3 + 4c).
 #
-# Generates a fixed-seed corpus of CNF pairs, prepends the committed
-# boundary/regression cases, then runs both the Haskell judge (compiler
-# `dclabels --judge`) and the TypeScript judge
-# (rt/built/proptests/tools/judge.mjs) over it and diffs their verdict streams.
+# Generates a fixed-seed corpus, prepends the committed boundary/regression
+# cases, then runs both the Haskell judge (compiler `dclabels --judge`) and the
+# TypeScript judge (rt/built/proptests/tools/judge.mjs) over it and diffs their
+# verdict streams. Two case kinds share the corpus:
 #
-# A divergence means the compiler's `cnfImplies`/`cnfEq` and the runtime's
-# `implies`/`equals` disagree about permitted flows -- a soundness bug by
-# construction. On any mismatch the script prints the first differing case
-# (line number + content) and exits nonzero.
+#   * cnf: `{"x":[[..]],"y":[[..]]}` -- compares `cnfImplies`/`cnfEq` (Haskell)
+#     against `implies`/`equals` (TS). A divergence means the compiler and
+#     runtime disagree about permitted flows -- a soundness bug by construction.
+#   * v1:  `{"kind":"v1","raw":..,"canon":..}` -- both judges answer whether the
+#     two V1 label strings denote the same label (Haskell `v1LabelEq`, TS
+#     `fromV1String(..).equals(..)`). A divergence is a V1-parsing soundness bug.
+#
+# On any mismatch the script prints the first differing case (line number +
+# content) and exits nonzero.
 #
 # Corpus and verdict files live in a `mktemp -d` dir, never in the repo.
 set -euo pipefail
@@ -49,7 +54,9 @@ TS_OUT="$TMP/ts-verdicts.txt"
 # additional regression anchors gated by the same diff).
 node "$GEN_JS" > "$CORPUS"
 cat "$KNOWN" "$CORPUS" > "$ALL"
-CORPUS_N="$(wc -l < "$CORPUS" | tr -d ' ')"
+TOTAL_N="$(grep -c . "$ALL" | tr -d ' ')"
+V1_N="$(grep -c '"kind":"v1"' "$ALL" | tr -d ' ' || true)"
+CNF_N="$((TOTAL_N - V1_N))"
 
 node "$TS_JUDGE" < "$ALL" > "$TS_OUT"
 "$HS_JUDGE" --judge < "$ALL" > "$HS_OUT"
@@ -66,4 +73,4 @@ if ! diff -q "$HS_OUT" "$TS_OUT" > /dev/null; then
     exit 1
 fi
 
-echo "$CORPUS_N/$CORPUS_N agree"
+echo "$TOTAL_N/$TOTAL_N agree (cnf=$CNF_N, v1=$V1_N)"

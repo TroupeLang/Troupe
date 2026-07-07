@@ -129,6 +129,10 @@ jobs:
           }
       - name: run all tests
         run: make test
+      - name: run runtime lattice property tests
+        run: make test/prop-rt
+      - name: run differential lattice harness
+        run: make test/prop-differential
       - name: Upload test logs on failure
         if: failure()
         uses: actions/upload-artifact@v4

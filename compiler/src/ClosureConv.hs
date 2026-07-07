@@ -5,6 +5,7 @@
 
 module ClosureConv where 
 
+import InternalError (internalError)
 import qualified Basics
 import RetCPS(VarName(..))
 import qualified RetCPS as CPS
@@ -103,7 +104,7 @@ transVar v@(VN vname) = do
         Nothing ->
           if vname `elem` atms
             then return $ VarLocal v
-            else error $ "undeclared variable: " ++ (show v)
+            else internalError $ "undeclared variable: " ++ (show v)
 
 -- | Translate a Located VarName (LVarName) to Located VarAccess (LVarAccess)
 -- Preserves the source position from the input
@@ -136,7 +137,7 @@ transFunDec f@(VN fname) (CPS.Unary (Loc varPos var) lkt) pos = do
   tell ([Loc pos (FunDef (HFN fname) (Loc varPos var) consts bb)], [], [])
   return (nub frees)
 
-transFunDec (VN _) (CPS.Nullary _) _ = error "not implemented"
+transFunDec (VN _) (CPS.Nullary _) _ = internalError "transFunDec: not implemented for nullary functions"
 
 -- state accessors
 

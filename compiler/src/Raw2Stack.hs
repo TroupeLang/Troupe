@@ -7,12 +7,13 @@
 module Raw2Stack (rawProg2Stack, rawFun2Stack, raw2Stack)
 where
 
+import InternalError (internalError)
 import IR (SerializationUnit(..), HFN(..)
           , ppId, ppFunCall, ppArgs, Fields (..), Ident
           , serializeFunDef
           , serializeAtoms )
-import qualified IR           
-import qualified Raw 
+import qualified IR
+import qualified Raw
 import qualified Stack 
 import qualified Data.Maybe as Maybe
 import Data.Map.Lazy (Map,(!))
@@ -111,7 +112,7 @@ trInsts ii = work [] [] ii  where
         filteredUsesOf f x =
           let x' = Raw.AssignableRaw x
               loc_def = case Map.lookup x' __defs of
-                            Nothing-> error $ "cannot find " ++ (show x')
+                            Nothing-> internalError $ "cannot find " ++ (show x')
                             Just w -> w
               x_uses_set = Map.findWithDefault Set.empty x' __uses
           in Set.filter (f loc_def) x_uses_set
@@ -145,7 +146,7 @@ trInsts ii = work [] [] ii  where
                        , isBlockEscaping x
                        , let x' = Raw.AssignableRaw x
                        , let j = case Map.lookup x' __offsets of
-                                          Nothing -> error $ "epilogue: cannot find " ++ (show x')
+                                          Nothing -> internalError $ "epilogue: cannot find " ++ (show x')
                                           Just w -> w
                    ]
 
@@ -158,7 +159,7 @@ trInsts ii = work [] [] ii  where
                                                    else Stack.AssignConst
                       in Loc pos (Stack.AssignRaw t x y)
                   Raw.SetState cmp x -> Loc pos (Stack.SetState cmp x)
-                  _ -> error "impossible case/bug: only label instructions must be passed to this translation function"
+                  _ -> internalError "impossible case/bug: only label instructions must be passed to this translation function"
 
         -- Get position for the group (use first instruction's position)
         -- Note: linsts is non-empty here due to the guard at translateGroup []
@@ -218,7 +219,7 @@ trTr ltr = do
        consts <- __consts <$> ask
        let filterConsts (Raw.AssignableRaw x) = Map.notMember x consts
            filterConsts _ = True
-       let loads = [ Loc pos (Stack.FetchStack x (rel (Map.findWithDefault (error (show x)) x offsets)))
+       let loads = [ Loc pos (Stack.FetchStack x (rel (Map.findWithDefault (internalError ("no stack offset for " ++ show x)) x offsets)))
                         | x <-  filter filterConsts (Set.elems varsToLoad) ]
        bb2'@(Stack.BB inst_2 tr_2) <- trBB bb2
 

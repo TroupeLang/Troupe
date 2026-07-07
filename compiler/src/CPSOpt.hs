@@ -12,6 +12,7 @@ module CPSOpt (rewrite) where
 -- todo: consider renaming this to CPSRewrite
 
 import Debug.Trace
+import InternalError (internalError)
 import qualified Basics
 import RetCPS as CPS
 import qualified Core as C
@@ -434,7 +435,7 @@ simplifySimpleTerm t =
     isLit _ = False
     litVal (St (ValSimpleTerm (Lit (C.LNumeric n)))) = (C.LNumeric n)
     litVal (St (ValSimpleTerm (Lit x))) = x
-    litVal _ = error "incorrect application of litVal"
+    litVal _ = internalError "incorrect application of litVal"
     __trueLit = lit (C.LBool True)
     __falseLit = lit (C.LBool False)
 

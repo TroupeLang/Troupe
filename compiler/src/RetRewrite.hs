@@ -13,6 +13,7 @@ module RetRewrite(rewrite) where
 -- todo: consider renaming this to CPSRewrite
 
 
+import InternalError (internalError)
 import qualified Basics
 import RetCPS as CPS
 import qualified Core as C
@@ -306,7 +307,7 @@ betaCont lkt@(Loc p (LetRet cdef@(Cont xn lktBody) lkt')) =
                           else Loc p $ LetRet cdef' lkt''
                   _ -> Loc p $ LetRet cdef'  (walk betaContPred betaCont lkt')
 
-betaCont _ = error "should not be called here"
+betaCont _ = internalError "betaCont: should not be called here"
 
 --------------------------------------------------
 -- Dead-Cont
@@ -367,7 +368,7 @@ betaFun lkt@(Loc p2 (LetSimple fn (Loc p1 (ValSimpleTerm (KAbs klam@(Unary (Loc 
 
 
 
-betaFun _ = error "this should not be called"
+betaFun _ = internalError "betaFun: this should not be called"
 
 
 --------------------------------------------------

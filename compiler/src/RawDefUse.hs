@@ -12,6 +12,7 @@ module RawDefUse (offsetMap
                  , iDefUse
                  ) where
 
+import InternalError (internalError)
 import Raw
 import IR (SerializationUnit(..), HFN(..)
           , ppId, ppFunCall, ppArgs, Fields (..), Ident
@@ -111,9 +112,9 @@ __insertUsePure x state =
         escUse = escapingUses defsUses 
         block@(c_use,_) = locInfo state
         (c_def, _) = 
-          case Map.lookup x defMap of 
-                 Nothing -> error $ "insert use: cannot find " ++ (show x)
-                 Just w -> w 
+          case Map.lookup x defMap of
+                 Nothing -> internalError $ "insert use: cannot find " ++ (show x)
+                 Just w -> w
         currentUses = Map.findWithDefault (Set.empty) x useMap
         currentEsc = Map.findWithDefault (Set.empty) (fst block) escUse
         newUse = Set.insert block currentUses
@@ -132,8 +133,8 @@ __insertDefPure x state =
       defMap = defs defsUses
       block = locInfo state
   in
-    if Map.member x defMap 
-      then error $ "Duplicate bindings for " ++ (show x)
+    if Map.member x defMap
+      then internalError $ "Duplicate bindings for " ++ (show x)
       else  state { 
                   defUseMaps = 
                     defsUses {

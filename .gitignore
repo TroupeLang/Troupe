@@ -57,10 +57,6 @@ compiler/src/Parser.hs
 compiler/src/Parser.info
 
 ##################################################
-# TypeScript incremental build cache
-*.tsbuildinfo
-
-##################################################
 # Editors
 
 ## Visual Studio Code

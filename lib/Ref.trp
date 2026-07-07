@@ -1,0 +1,53 @@
+datatype Atoms = GET | SET | FREE
+
+let (** Initialises a new shared mutable variable with value `init` that accepts changes up to
+     *  the given `level`.
+     *
+     *  This is implemented by means of messages to/from a separate tail-recursive thread that
+     *  updates its state. To mitigate an update cannot be sent due to the blocking label, the
+     *  mailbox clearance needs to be raised to `lvl` by means of the given authority, `auth`.
+     *)
+    fun make auth (init, level) =
+        let fun make' _ =
+                let val c = raisembox(level)
+                    fun loop x =
+                        rcv (`{}`, level,
+                              [ hn (GET, origin) => send(origin, (GET, x)); loop x
+                              , hn (SET, x')     => loop x'
+                              , hn (FREE)        => ()
+                              ])
+                    val _ = loop init
+                    val _ = lowermbox(c, auth)
+                in () end
+        in (spawn make', level) end
+
+    (** Deinitialises the shared variable in reference `r`. After this, all calls to `get` will be
+     *  blocking. *)
+    fun free _ (r, _) = send(r, FREE)
+
+    (** Get the value stored in `r`. This value is blocking, if `r` has been destroyed. *)
+    fun get auth (r, level) =
+        let val c = raisembox(level)
+            val _ = send(r, (GET, self()))
+            val x = rcv (`{}`, level, [ hn (GET, x) => x ])
+            val _ = lowermbox(c, auth)
+        in x end
+
+    (** Set the value in `r` to its new value `x'`. *)
+    fun set _ (r, _) x' = send(r, (SET, x'))
+
+    (** Swap values in `r1` and `r2`. *)
+    fun swap auth r1 r2 =
+        let val x1 = get auth r1
+            val x2 = get auth r2
+            val _  = set r1 x2
+            val _  = set r2 x1
+        in () end
+
+in [ ("make", make)
+   , ("free", free)
+   , ("get", get)
+   , ("set", set)
+   , ("swap", swap)
+   ]
+end

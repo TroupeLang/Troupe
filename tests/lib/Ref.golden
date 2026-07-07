@@ -1,0 +1,55 @@
+2026-03-30T10:19:55.469Z [RTM] [32minfo[39m: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+"-------------------------------------------"
+"r = Ref.make authority (42@{}, `{alice}`)"
+PID:6d5edc0a-702a-47ad-b79f-39d7ccbda413@{}%{}     PC:{}                BL:{}                HNNORMAL             
+"-------------------------------------------"
+"Ref.get r"
+42@{alice}%{alice}
+PID:6d5edc0a-702a-47ad-b79f-39d7ccbda413@{}%{}     PC:{}                BL:{alice}           HNNORMAL             
+"-------------------------------------------"
+"Ref.set r 'a'@{}"
+()@{}%{}
+PID:6d5edc0a-702a-47ad-b79f-39d7ccbda413@{}%{}     PC:{}                BL:{}                HNNORMAL             
+"Ref.get r"
+"a"@{alice}%{alice}
+PID:6d5edc0a-702a-47ad-b79f-39d7ccbda413@{}%{}     PC:{}                BL:{alice}           HNNORMAL             
+"-------------------------------------------"
+"Ref.set r 1865@{alice}"
+()@{}%{}
+PID:6d5edc0a-702a-47ad-b79f-39d7ccbda413@{}%{}     PC:{}                BL:{}                HNNORMAL             
+"Ref.get r"
+1865@{alice}%{alice}
+PID:6d5edc0a-702a-47ad-b79f-39d7ccbda413@{}%{}     PC:{}                BL:{alice}           HNNORMAL             
+"-------------------------------------------"
+"Ref.set r 42@{alice}"
+()@{}%{}
+PID:6d5edc0a-702a-47ad-b79f-39d7ccbda413@{}%{}     PC:{}                BL:{}                HNNORMAL             
+"Ref.get r"
+42@{alice}%{alice}
+PID:6d5edc0a-702a-47ad-b79f-39d7ccbda413@{}%{}     PC:{}                BL:{alice}           HNNORMAL             
+"-------------------------------------------"
+"if true@{alice} then Ref.set r 0@{} else ()"
+()@{}%{}
+PID:6d5edc0a-702a-47ad-b79f-39d7ccbda413@{}%{}     PC:{}                BL:{alice}           HNNORMAL             
+"Ref.get r"
+0@{alice}%{alice}
+PID:6d5edc0a-702a-47ad-b79f-39d7ccbda413@{}%{}     PC:{}                BL:{alice}           HNNORMAL             
+"-------------------------------------------"
+"if true@{bob} then Ref.set r 1@{} else ()"
+()@{}%{}
+PID:6d5edc0a-702a-47ad-b79f-39d7ccbda413@{}%{}     PC:{}                BL:{bob}             HNNORMAL             
+"Ref.get r"
+0@{alice}%{alice}
+PID:6d5edc0a-702a-47ad-b79f-39d7ccbda413@{}%{}     PC:{}                BL:{alice}           HNNORMAL             
+"-------------------------------------------"
+"Ref.set r 0@{}"
+()@{}%{}
+PID:6d5edc0a-702a-47ad-b79f-39d7ccbda413@{}%{}     PC:{}                BL:{}                HNNORMAL             
+"Ref.get r"
+0@{alice}%{alice}
+PID:6d5edc0a-702a-47ad-b79f-39d7ccbda413@{}%{}     PC:{}                BL:{alice}           HNNORMAL             
+"-------------------------------------------"
+"Ref.free r"
+()@{}%{}
+PID:6d5edc0a-702a-47ad-b79f-39d7ccbda413@{}%{}     PC:{}                BL:{}                HNNORMAL             
+>>> Main thread finished with value: ()@{}%{}

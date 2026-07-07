@@ -1,0 +1,84 @@
+import Ref
+
+let val _ = print "-------------------------------------------"
+    val _ = print "r = Ref.make authority (42@{}, `{alice}`)"
+    val r = Ref.make authority (42, `{alice}`)
+    val _ = debugpc ()
+    val _ = blockdown authority
+
+    val _ = print "-------------------------------------------"
+    val _ = print "Ref.get r"
+    val _ = printWithLabels (Ref.get authority r)
+    val _ = debugpc ()
+    val _ = blockdown authority
+
+    val _ = print "-------------------------------------------"
+    val _ = print "Ref.set r 'a'@{}"
+    val _ = printWithLabels (Ref.set authority r "a")
+    val _ = debugpc ()
+    val _ = blockdown authority
+    val _ = print "Ref.get r"
+    val _ = printWithLabels (Ref.get authority r)
+    val _ = debugpc ()
+    val _ = blockdown authority
+
+    val _ = print "-------------------------------------------"
+    val _ = print "Ref.set r 1865@{alice}"
+    val _ = printWithLabels (Ref.set authority r (1865 raisedTo `{alice}`))
+    val _ = debugpc ()
+    val _ = blockdown authority
+    val _ = print "Ref.get r"
+    val _ = printWithLabels (Ref.get authority r)
+    val _ = debugpc ()
+    val _ = blockdown authority
+
+    val _ = print "-------------------------------------------"
+    val _ = print "Ref.set r 42@{alice}"
+    val _ = printWithLabels (Ref.set authority r 42)
+    val _ = debugpc ()
+    val _ = blockdown authority
+    val _ = print "Ref.get r"
+    val _ = printWithLabels (Ref.get authority r)
+    val _ = debugpc ()
+    val _ = blockdown authority
+
+    val _ = print "-------------------------------------------"
+    val _ = print "if true@{alice} then Ref.set r 0@{} else ()"
+    val _ = printWithLabels (if (true raisedTo `{alice}`)
+                             then Ref.set authority r 0
+                             else ())
+    val _ = debugpc()
+    val _ = blockdown authority
+    val _ = print "Ref.get r"
+    val _ = printWithLabels (Ref.get authority r)
+    val _ = debugpc ()
+    val _ = blockdown authority
+
+    val _ = print "-------------------------------------------"
+    val _ = print "if true@{bob} then Ref.set r 1@{} else ()"
+    val _ = printWithLabels (if (true raisedTo `{bob}`)
+                             then Ref.set authority r 1
+                             else ())
+    val _ = debugpc()
+    val _ = blockdown authority
+    val _ = print "Ref.get r"
+    val _ = printWithLabels (Ref.get authority r)
+    val _ = debugpc ()
+    val _ = blockdown authority
+
+    val _ = print "-------------------------------------------"
+    val _ = print "Ref.set r 0@{}"
+    val _ = printWithLabels (Ref.set authority r 0)
+    val _ = debugpc ()
+    val _ = blockdown authority
+    val _ = print "Ref.get r"
+    val _ = printWithLabels (Ref.get authority r)
+    val _ = debugpc ()
+    val _ = blockdown authority
+
+    val _ = print "-------------------------------------------"
+    val _ = print "Ref.free r"
+    val _ = printWithLabels (Ref.free authority r)
+    val _ = debugpc ()
+    val _ = blockdown authority
+in () end

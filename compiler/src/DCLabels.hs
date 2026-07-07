@@ -235,7 +235,7 @@ v1LabelEq l1 l2 = normalizeV1Label l1 == normalizeV1Label l2
 -- Parses comma-separated principal names, normalizes them
 -- (lowercase, trimmed, sorted, deduplicated)
 normalizeV1Label :: String -> [String]
-normalizeV1Label s = snub $ map (lowerString . trim) $ split "," (stripBraces s)
+normalizeV1Label s = snub $ filter (not . null) $ map (lowerString . trim) $ split "," (stripBraces s)
   where
     trim = dropWhileEnd isSpace . dropWhile isSpace
     stripBraces = dropWhileEnd (== '}') . dropWhile (== '{')

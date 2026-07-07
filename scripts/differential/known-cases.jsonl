@@ -21,3 +21,9 @@
 {"kind":"v1","raw":"{alice,bob}","canon":"alice"}
 {"kind":"v1","raw":"alice , bob","canon":"alice,charlie"}
 {"kind":"v1","raw":"{ EVE , dorothy,Charlie, BOB , alice }","canon":"alice,bob,charlie,dorothy,eve"}
+{"kind":"v1","raw":"{ }","canon":"{}"}
+{"kind":"v1","raw":"{  }","canon":"{}"}
+{"kind":"v1","raw":"{alice,,bob}","canon":"{alice,bob}"}
+{"kind":"v1","raw":"{alice,}","canon":"{alice}"}
+{"kind":"v1","raw":"{,alice}","canon":"{alice}"}
+{"kind":"v1","raw":"{ , }","canon":"{}"}

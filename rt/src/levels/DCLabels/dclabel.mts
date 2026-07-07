@@ -494,8 +494,11 @@ export class DCLevelSystem extends AbstractLevelSystem<DCLabel> {
             return IFC_TOP;
         }
 
-        let s = new Set ();
-        const tags = str.split(',');
+        // Drop empty/whitespace-only segments (e.g. "{alice,,bob}", "{ , }") so a
+        // stray or trailing comma does not produce an empty principal. This mirrors
+        // the compiler's normalizeV1Label (DCLabels.hs), keeping the two parsers in
+        // agreement; an all-empty body reduces to IFC_BOT via lub of no categories.
+        const tags = str.split(',').map(t => t.trim()).filter(t => t.length > 0)
         const dcs = tags.map (t => DCLabel.fromSingleTag(t))
         return this.lub (...dcs)
     }

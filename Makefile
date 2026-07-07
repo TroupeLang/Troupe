@@ -76,6 +76,11 @@ test/result-socket-socat:
 test/result-socket-node:
 	node tests/rt/result-socket/test-result-socket.mjs
 
+# Runtime lattice property tests (fast-check + node:test). Not part of the
+# aggregate `test:` target.
+test/prop-rt: rt
+	node --test 'rt/built/proptests/**/*.test.mjs'
+
 test/ci-relay: p2p-tools
 	@echo "Running CI relay test..."
 	./tests/ci-relay-test.sh

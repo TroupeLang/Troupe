@@ -41,9 +41,9 @@ let (* -- ListPair Generation -- *)
      *  Tail-recursive. *)
     (* HACK (#53): Use option type instead of list. *)
     fun findOpt []     _   = []
-      | find (x,v)::xs key = if x = key
-                             then [v]
-                             else findOpt xs key
+      | findOpt (x,v)::xs key = if x = key
+                                then [v]
+                                else findOpt xs key
 
     (** Returns the first value associated with the `key`. *)
     fun find xs key = case findOpt xs key of [v] => v

@@ -6,18 +6,25 @@ reviewed rigorously rather than depend on the monitor.
 
 ## Modules
 
-- `DeclassifyUtil` : Helper functions for declassification.
-- `Hash`           : Hash functions for values of all types.
-- `HashMap`        : Map from keys to values via their hash.
-- `HashSet`        : Set of elements via their hash.
-- `List`           : Operations for lists, i.e. `[]` and `x::xs`.
-- `ListPair`       : Operations for list of pairs, i.e. `(x,y)::xs`.
-- `Number`         : Operations for numbers, i.e. integer and floats.
-- `StdIO`          : Standard input and output.
-- `StencilVector`  : Memory-efficient implementation of small (sparse) arrays.
-- `String`         : Operations for strings
-- `ThreadUtil`     : Additional functions for thread management.
-- `Unit`           : Unit testing.
+- `Duration`      : Time spans, represented in milliseconds.
+- `Hash`          : Hash functions for values of all types.
+- `HashMap`       : Map from keys to values via their hash.
+- `HashSet`       : Set of elements via their hash.
+- `Html`          : Combinator-based HTML generation with escaping.
+- `IfcUtil`       : Lattice-level constants and helper functions for downgrading
+                    (declassification and endorsement).
+- `List`          : Operations for lists, i.e. `[]` and `x::xs`.
+- `ListPair`      : Operations for list of pairs, i.e. `(x,y)::xs`.
+- `Map`           : Map from keys to values via a comparator function.
+- `Number`        : Operations for numbers, i.e. integer and floats.
+- `Result`        : Success-or-failure values, encoded as tagged records.
+- `Set`           : Set of elements via a comparator function.
+- `StencilVector` : Memory-efficient implementation of small (sparse) arrays.
+- `String`        : Operations for strings
+- `ThreadUtil`    : Additional functions for thread management.
+- `Time`          : Date and time manipulation.
+- `timeout`       : Timers that send a message or exit the program after a duration.
+- `Unit`          : Unit testing.
 
 ## How to add a new file
 
@@ -33,6 +40,10 @@ target of the *makefile*.
   `ListPair.findOpt` can be used in the same file.
 - Each function that is exported has to be documented (`(** <text> *)`). In the long run, we will
   auto-generate documentation for the Standard Library.
+- Avoid changing signatures and names of existing functions. It breaks backwards compatibility
+  with existing code, i.e., in the user guide, assignments, etc. New library functions are okay to
+  introduce, including those that happen to duplicate functionality. We should then go through the
+  discussion of deprecation of existing libraries.
 
 ### Other notes
 

@@ -40,6 +40,10 @@ let (* TODO: The map is implemented as an unbalanced binary search tree. This op
     (** Returns the value associated with the `key`. *)
     fun find m key = case findOpt m key of [v] => v
 
+    (** Returns the value associated with the `key`; otherwise `default`. *)
+    fun findOrDefault m key default = case findOpt m key of [v] => v
+                                                          | []  => default
+
     (** Returns `true` if the given key is associated with a value. *)
     fun mem m key = case findOpt m key of [] => false
                                         | _  => true
@@ -169,6 +173,7 @@ in [ ("empty", empty)
    , ("depth", depth)
    , ("findOpt", findOpt)
    , ("find", find)
+   , ("findOrDefault", findOrDefault)
    , ("mem", mem)
    , ("minOpt", minOpt)
    , ("min", min)

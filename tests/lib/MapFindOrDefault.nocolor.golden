@@ -1,0 +1,21 @@
+2026-07-07T12:13:30.708Z [RTM] info: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+[34mbegin [0mMap.findOrDefault
+  [34mbegin [0mempty
+      [33m[ TEST ][0m it returns '?' for findOrDefault 0 '?'      [32m[ PASS ][0m it returns '?' for findOrDefault 0 '?'
+      [33m[ TEST ][0m it returns -1 for findOrDefault 1 -1      [32m[ PASS ][0m it returns -1 for findOrDefault 1 -1
+  [34mend [0m
+  [34mbegin [0mfromList [(0,42)]
+      [33m[ TEST ][0m it returns 42 for findOrDefault 0 '!'      [32m[ PASS ][0m it returns 42 for findOrDefault 0 '!'
+      [33m[ TEST ][0m it returns '@' for findOrDefault 1 '@'      [32m[ PASS ][0m it returns '@' for findOrDefault 1 '@'
+  [34mend [0m
+  [34mbegin [0mfromList [(1,'a'), (0,42), (2,3)]
+      [33m[ TEST ][0m it returns 42 for findOrDefault 0 '@'      [32m[ PASS ][0m it returns 42 for findOrDefault 0 '@'
+      [33m[ TEST ][0m it returns 'a' for findOrDefault 1 ''      [32m[ PASS ][0m it returns 'a' for findOrDefault 1 ''
+      [33m[ TEST ][0m it returns 3 for findOrDefault 2 -1      [32m[ PASS ][0m it returns 3 for findOrDefault 2 -1
+      [33m[ TEST ][0m it returns '?' for findOrDefault 3 '?'      [32m[ PASS ][0m it returns '?' for findOrDefault 3 '?'
+  [34mend [0m
+[34mend [0m
+
+Total:  8
+Passes: 8
+>>> Main thread finished with value: true@{}%{}

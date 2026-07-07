@@ -4,7 +4,7 @@
 _TROUPE_CALLER_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$_TROUPE_CALLER_DIR/scripts/troupe-common.sh"
 
-tmp=`mktemp`
+tmp=`mktemp`.js
 
 # Parse arguments (sets TROUPE_COMPILER_ARGS, TROUPE_RUNTIME_ARGS, TROUPE_PROGRAM_ARGS)
 troupe_parse_args "$@"

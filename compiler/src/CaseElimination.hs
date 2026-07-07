@@ -11,13 +11,12 @@ import qualified Direct as S
 import Direct (RecordPatternMode(..))
 import DirectWOPats as T
 import CompileMode
-import TroupePositionInfo (Located(..), getLoc, unLoc, PosInf(..), GetPosInfo(..))
+import TroupePositionInfo (Located(..), getLoc, unLoc, PosInf(..))
 
 import Control.Monad.Reader
 import Control.Monad.Except
 import Control.Monad (foldM)
 import Data.List (nub, (\\))
-import Debug.Trace (trace)
 
 type Trans = Except String
 
@@ -49,10 +48,6 @@ transLit (S.LUnit)     = T.LUnit
 transLit (S.LBool b)   = T.LBool b
 transLit (S.LAtom a)   = T.LAtom a
 
-
--- | Unwrap LDeclPattern and get its position
-unLPat :: S.LDeclPattern -> (S.DeclPattern, PosInf)
-unLPat (Loc p pat) = (pat, p)
 
 transLambda_aux :: S.Lambda -> ReaderT T.LTerm Trans Lambda
 transLambda_aux (S.Lambda pats body) = do

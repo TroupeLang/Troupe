@@ -3,17 +3,11 @@
 
 module RetFreeVars where
 
-import qualified Basics
 import RetCPS as CPS
 import qualified Core as C
-import Data.List
-import Data.Map.Lazy(Map)
-import qualified Data.Map.Lazy as Map
-import Control.Monad.Trans.Maybe
-import Control.Monad.Identity
 import Data.Set (Set)
 import qualified Data.Set as Set
-import TroupePositionInfo (Located(..), getLoc, unLoc)
+import TroupePositionInfo (Located(..), unLoc)
 
 newtype FreeVars = FreeVars (Set VarName)
 

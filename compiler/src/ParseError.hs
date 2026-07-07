@@ -284,14 +284,6 @@ isTokenFun :: Token -> Bool
 isTokenFun TokenFun = True
 isTokenFun _ = False
 
-isTokenEnd :: Token -> Bool
-isTokenEnd TokenEnd = True
-isTokenEnd _ = False
-
-isIdentifier :: Token -> Bool
-isIdentifier (TokenSym _) = True
-isIdentifier _ = False
-
 isExpressionStart :: Token -> Bool
 isExpressionStart (TokenNum _)    = True
 isExpressionStart (TokenFloat _)  = True

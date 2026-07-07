@@ -44,7 +44,7 @@ import Raw
 import RetCPS(VarName(..))
 import Control.Monad
 import Control.Monad.Trans.RWS(RWS, evalRWS, ask, get, put, tell, censor, listen, local)
-import TroupePositionInfo (Located(..), getLoc, unLoc, noLoc, PosInf(..))
+import TroupePositionInfo (Located(..), PosInf(..))
 
 -- ===== Monad definition =====
 

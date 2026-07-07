@@ -8,33 +8,22 @@ module Stack
 where
 
 
-import qualified Basics
 import           RetCPS (VarName (..))
 import           IR ( Identifier(..)
-                    , VarAccess(..), HFN (..), Ident
+                    , HFN (..)
                     , LVarAccess
-                    , ppId,ppFunCall,ppArgs
+                    , ppId,ppFunCall
                     )
 import qualified IR (FunDef (..))
-import Raw (RawExpr (..), RawType(..), RawVar (..), MonComponent(..),
+import Raw (RawExpr (..), RawVar (..), MonComponent(..),
             ppRawExpr, Assignable (..), Consts, ppConsts, RTAssertion(..), ppRTAssertion)
 
 import qualified Core                      as C
-import qualified RetCPS                    as CPS
 
-
-import           Control.Monad.Except
-import           Control.Monad.Reader
-import           Control.Monad.RWS
-import           Control.Monad.State
-import           Control.Monad.Writer
-import           Data.List
-import qualified Data.ByteString           as BS
-
-import           Text.PrettyPrint.HughesPJ (hsep, nest, text, vcat, ($$), (<+>))
+import           Text.PrettyPrint.HughesPJ (nest, text, vcat, ($$), (<+>))
 import qualified Text.PrettyPrint.HughesPJ as PP
-import           TroupePositionInfo (Located(..), getLoc, unLoc, noLoc, PosInf(..), GetPosInfo(..))
-import           PrettyPrint (PP, PPConfig, runPP, runPPDefault, ppLocated, (<+>>), ($$>), vcatMapPP, ShowDebug(..))
+import           TroupePositionInfo (Located(..))
+import           PrettyPrint (PP, runPP, runPPDefault, ppLocated, vcatMapPP, ShowDebug(..))
 
 -- Located type aliases
 type LStackInst = Located StackInst

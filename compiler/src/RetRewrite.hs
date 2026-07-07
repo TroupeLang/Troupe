@@ -14,22 +14,12 @@ module RetRewrite(rewrite) where
 
 
 import InternalError (internalError)
-import qualified Basics
 import RetCPS as CPS
-import qualified Core as C
-import Control.Monad.RWS
-import Control.Monad.State
-import Control.Monad.Writer
-import Control.Monad.Reader
-import Data.List
 import Data.Map.Lazy(Map)
 import qualified Data.Map.Lazy as Map
-import Control.Monad.Trans.Maybe
-import Control.Monad.Identity
-import Data.Set (Set)
 import qualified Data.Set as Set
 import RetFreeVars as FreeVars
-import TroupePositionInfo (Located(..), getLoc, unLoc, noLoc, atLoc, PosInf(..))
+import TroupePositionInfo (Located(..), unLoc, noLoc, PosInf(..))
 
 
 -- substitution is a collection of both variable substitutions and
@@ -41,10 +31,6 @@ newtype Subst = Subst (Map VarName VarName)
 
 class Substitutable a where
   apply :: Subst -> a -> a
-
-idSubst :: Subst
-idSubst = Subst (Map.empty)
-
 
 instance Substitutable KLambda where
   apply subst@(Subst (varmap)) kl =
@@ -308,21 +294,6 @@ betaCont lkt@(Loc p (LetRet cdef@(Cont xn lktBody) lkt')) =
                   _ -> Loc p $ LetRet cdef'  (walk betaContPred betaCont lkt')
 
 betaCont _ = internalError "betaCont: should not be called here"
-
---------------------------------------------------
--- Dead-Cont
---------------------------------------------------
-
--- deadContPred (LetRet _ _) = True
-deadContPred _ = False
-
--- deadCont (LetRet cdef@(Cont _ kt) kt') =
---     let FreeVars (_, freeKs) = freeVars kt'
---     in if not (Set.member kn freeKs) then (walk deadContPred deadCont kt')
---        else
---            let cdef' = walk deadContPred deadCont cdef
---            in LetRet cdef' (walk deadContPred deadCont kt')
-
 
 --------------------------------------------------
 -- β-Fun (-Lin)

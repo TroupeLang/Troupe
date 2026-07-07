@@ -19,8 +19,8 @@ import Text.PrettyPrint.HughesPJ (
     (<+>), ($$), text, hsep, vcat, nest)
 import ShowIndent
 import DCLabels
-import TroupePositionInfo (Located(..), getLoc, unLoc, noLoc, PosInf(..), GetPosInfo(..))
-import PrettyPrint (PP, PPConfig, runPP, runPPDefault, ppLocated, ShowDebug(..))
+import TroupePositionInfo (Located(..), unLoc, PosInf(..))
+import PrettyPrint (PP, runPP, runPPDefault, ppLocated, ShowDebug(..))
 
 -- | Located type aliases - all terms are wrapped in Located
 type LTerm = Located Term

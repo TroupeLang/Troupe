@@ -6,26 +6,19 @@
 module ClosureConv where 
 
 import InternalError (internalError)
-import qualified Basics
 import RetCPS(VarName(..))
 import qualified RetCPS as CPS
 import qualified Core as C
 import Control.Monad.RWS
 import Data.Map.Lazy(Map)
 import qualified Data.Map.Lazy as Map
-import Data.Serialize(Serialize)
-import GHC.Generics
-import Control.Monad.State
-import Control.Monad.Writer
-import Control.Monad.Reader
 import Data.List
 import CompileMode
 
 import           Control.Monad.Except
 import IR as CCIR
 
-import Control.Monad.Identity
-import TroupePositionInfo (Located(..), getLoc, unLoc, PosInf(..), GetPosInfo(..))
+import TroupePositionInfo (Located(..), PosInf(..))
 
 data VarLevel = VarNested Integer
                 deriving (Eq, Ord, Show)

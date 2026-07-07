@@ -27,7 +27,7 @@ import DCLabels
 import Text.PrettyPrint.HughesPJ (
     (<+>), ($$), text, hsep, vcat, nest)
 import           ShowIndent
-import           TroupePositionInfo (Located(..), getLoc, unLoc, noLoc, atLoc, PosInf(..), GetPosInfo(..))
+import           TroupePositionInfo (Located(..))
 
 
 data PrimType

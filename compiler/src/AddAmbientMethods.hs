@@ -22,10 +22,9 @@
 
 module AddAmbientMethods(addAmbientMethods) where
 
-import Basics
 import Direct
 
-import TroupePositionInfo (Located(..), PosInf(..), noLoc)
+import TroupePositionInfo (Located(..), PosInf(..))
 
 -- Helper to create Located values at NoPos
 lp :: a -> Located a

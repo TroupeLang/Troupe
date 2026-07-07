@@ -16,15 +16,15 @@ TODO
 module Stack2JS where
 -- import qualified IR2JS 
 
-import IR (SerializationUnit(..), HFN(..)
-          , ppFunCall, ppArgs, Fields (..), Ident
+import IR (HFN(..)
+          , ppFunCall, ppArgs
           , serializeFunDef
           , serializeAtoms )
 import qualified Data.ByteString.Lazy.Char8 as BL
 import qualified IR
 import qualified Raw
 
-import Raw (RawExpr (..), RawType(..), RawVar (..), MonComponent(..), RTAssertion(..),
+import Raw (RawExpr (..), RawVar (..), MonComponent(..),
             ppRawExpr, ppRTAssertionCode)
 
 import Stack
@@ -34,16 +34,12 @@ import           Basics(BinOp(..), UnaryOp(..))
 import qualified Core as C
 import           Core (ppLit)
 import           RetCPS(VarName(..))
-import qualified RetCPS as CPS
 import           Control.Monad.RWS
-import           Control.Monad.State
-import           Control.Monad.Writer
-import           Control.Monad.Reader
 import           Data.List
 import qualified Data.Text as T
 import           Data.Text.Encoding
 import           Data.ByteString.Lazy (ByteString)
-import           Data.ByteString.Base64 (encode,decode)
+import           Data.ByteString.Base64 (encode)
 import           CompileMode
 import           TroupePositionInfo
 import qualified Data.Aeson as Aeson
@@ -55,7 +51,6 @@ import Text.PrettyPrint.HughesPJ (
     (<+>), ($$), text, hsep, vcat, nest)
 import Data.Aeson (ToJSON(toJSON), Value)
 import DCLabels (dcLabelExpToDCLabel)
-import Debug.Trace (trace, traceShow)
 import SourceMap.Types (Mapping(..))
 import TroupeSourceMap (collectMapping, buildSourceMap)
 

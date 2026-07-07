@@ -8,42 +8,14 @@ module Raw2Stack (rawProg2Stack, rawFun2Stack, raw2Stack)
 where
 
 import InternalError (internalError)
-import IR (SerializationUnit(..), HFN(..)
-          , ppId, ppFunCall, ppArgs, Fields (..), Ident
-          , serializeFunDef
-          , serializeAtoms )
-import qualified IR
 import qualified Raw
-import qualified Stack 
-import qualified Data.Maybe as Maybe
-import Data.Map.Lazy (Map,(!))
-import qualified Data.Map.Lazy as Map 
+import qualified Stack
+import qualified Data.Map.Lazy as Map
 
-import Data.Set(Set)
-import qualified Data.Set as Set 
+import qualified Data.Set as Set
 
-import qualified Basics
-import qualified Core as C
-import RetCPS(VarName(..))
-import qualified RetCPS as CPS
 import Control.Monad.RWS
-import Control.Monad.State
-import Control.Monad.Writer
-import Control.Monad.Reader
-import Data.List
-import qualified Data.Text as T
-import Data.Text.Encoding
-import Data.ByteString.Lazy (ByteString)
-import Data.ByteString.Base64 (encode,decode)
-import TroupePositionInfo (Located(..), getLoc, unLoc, noLoc, PosInf(..))
-import qualified Data.Aeson as Aeson
-import GHC.Generics (Generic)
-import           RetCPS (VarName (..))
-
-import           IR ( Identifier(..)
-                    , VarAccess(..), HFN (..), Fields (..), Ident
-                    , ppId,ppFunCall,ppArgs
-                    )
+import TroupePositionInfo (Located(..), getLoc, unLoc, PosInf(..))
 
 import RawDefUse
 

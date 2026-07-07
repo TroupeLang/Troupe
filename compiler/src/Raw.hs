@@ -9,32 +9,21 @@ module Raw where
 import qualified Basics
 import           RetCPS (VarName (..))
 import           IR ( Identifier(..)
-                    , VarAccess(..), HFN (..), Ident
+                    , HFN (..), Ident
                     , LVarAccess
-                    , ppId,ppFunCall,ppArgs
+                    , ppId,ppFunCall
                     )
 import qualified IR (FunDef (..))
 
 
 import qualified Core                      as C
 import           Core (ppLit)
-import qualified RetCPS                    as CPS
-import Data.Map.Lazy (Map, (!))
-import qualified Data.Map.Lazy as Map 
-
-
-import           Control.Monad.Except
-import           Control.Monad.Reader
-import           Control.Monad.RWS
-import           Control.Monad.State
-import           Control.Monad.Writer
-import           Data.List
-import qualified Data.ByteString           as BS
+import Data.Map.Lazy (Map)
 
 import           Text.PrettyPrint.HughesPJ (hsep, nest, text, vcat, ($$), (<+>))
 import qualified Text.PrettyPrint.HughesPJ as PP
-import           TroupePositionInfo (Located(..), getLoc, unLoc, noLoc, atLoc, PosInf(..), GetPosInfo(..))
-import           PrettyPrint (PP, PPConfig, runPP, runPPDefault, ppLocated, vcatMapPP, ShowDebug(..))
+import           TroupePositionInfo (Located(..))
+import           PrettyPrint (PP, runPP, runPPDefault, ppLocated, vcatMapPP, ShowDebug(..))
 
 
 -- | Variable names used for plain (unlabelled) values.

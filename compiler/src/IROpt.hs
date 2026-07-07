@@ -9,7 +9,7 @@ import qualified Data.Set as Set
 import qualified Basics
 import qualified Core                      as C
 import Core (Numeric(..))
-import           TroupePositionInfo (Located(..), getLoc, unLoc, noLoc, atLoc, PosInf(..), GetPosInfo(..))
+import           TroupePositionInfo (Located(..), unLoc)
 
 import qualified Data.Map.Lazy as Map 
 import           RetCPS                    (VarName (..))
@@ -22,10 +22,6 @@ newtype Subst = Subst (Map VarName VarAccess)
 
 class Substitutable a where
   apply :: Subst -> a -> a
-
-idSubst :: Subst
-idSubst = Subst (Map.empty)
-
 
 instance Substitutable VarAccess where 
     apply _ x@(VarEnv _) = x 
@@ -87,7 +83,6 @@ instance Substitutable IRBBTree where
 -- | Partial value.
 data PValue = Unknown
             | TupleVal [LVarAccess]
-            | ListVal
             | NumericConst Numeric
             | BoolConst Bool
             | StringConst String

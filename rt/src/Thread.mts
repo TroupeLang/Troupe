@@ -150,15 +150,18 @@ class  MboxClearance {
 // The payload a ranged-receive capability carries: the enable-time clearance record
 // (restored by object identity at the matching disable, so a balanced enable/disable
 // inside a branch leaves the mailbox record identical and passes the branch-balance
-// check), the pc at the enable (the disable's occurrence floor), and the validity
-// bit (an uncertified region mints an invalid capability that no disable accepts).
+// check), the pc at the enable and the region's floor lo (the disable's two occurrence
+// floors), and the validity bit (an uncertified region mints an invalid capability
+// that no disable accepts).
 class RangedReceiveCap {
   mclearSnapshot: MboxClearance | null;
   pc_enable: any;
+  lo: any;
   valid: boolean;
-  constructor (snapshot: MboxClearance | null, pc_enable:any, valid:boolean) {
+  constructor (snapshot: MboxClearance | null, pc_enable:any, lo:any, valid:boolean) {
     this.mclearSnapshot = snapshot;
     this.pc_enable = pc_enable;
+    this.lo = lo;
     this.valid = valid;
   }
 }
@@ -1286,7 +1289,7 @@ export class Thread {
             // Push the region: chain the capability, join the active folds; the capability
             // snapshots the pre-enable record so the disable restores it by identity.
             const uid = uuidv4();
-            capObj = new Capability (uid, new RangedReceiveCap (mc, this.pc, true), this.mailbox.caps, capLabel);
+            capObj = new Capability (uid, new RangedReceiveCap (mc, this.pc, lo.val, true), this.mailbox.caps, capLabel);
             this.mailbox.caps = uid;
             this.mailbox.mclear = mc.copyWith ({ folds: {
                 delta:    lub (mc.delta,    hi.val),
@@ -1299,7 +1302,7 @@ export class Thread {
             // ceiling/floor and their labels fold irreversibly into the permanent sinks.
             // The capability is invalid, so no disable will ever accept it.
             const uid = uuidv4();
-            capObj = new Capability (uid, new RangedReceiveCap (null, this.pc, false), null, capLabel);
+            capObj = new Capability (uid, new RangedReceiveCap (null, this.pc, lo.val, false), null, capLabel);
             this.mailbox.mclear = mc.copyWith ({ folds: {
                 delta0:    lub (mc.delta0,    hi.val),
                 phi0:      lub (mc.phi0,      lo.val),
@@ -1320,15 +1323,25 @@ export class Thread {
         const cap: Capability<RangedReceiveCap> = cap_lval.val;
         const data = cap.data;
 
-        // (a) Occurrence — hard: pc ⊔ ld(cap) ⊑ pc_enable; bl absorbs ld(cap) BEFORE any
-        // branching on the capability, so a secret-selected capability cannot make the
-        // disable's outcome observable below the secret.
+        // (a) Occurrence — hard: pc ⊔ ld(cap) ⊑ pc_enable AND pc ⊔ ld(cap) ⊑ lo; bl absorbs
+        // ld(cap) BEFORE any branching on the capability, so a secret-selected capability
+        // cannot make the disable's outcome observable below the secret.
         this.raiseBlockingThreadLev (cap_lval.lev);
         if (!levels.flowsTo (lub (this.pc, cap_lval.lev), data.pc_enable)) {
             this.threadError ("Ranged-receive disable occurrence check failed: the capability's context is more sensitive than the pc at the enable\n" +
                               `| pc level               : ${this.pc.stringRep()}\n` +
                               `| capability label        : ${cap_lval.lev.stringRep()}\n` +
                               `| pc level at the enable  : ${data.pc_enable.stringRep()}`, false, null, ErrorKind.IFCCheck);
+        }
+        // The release level: the close's observable restoration lands at the region's
+        // floor lo, so its occurrence must not depend on anything above lo — a region
+        // enabled at a high pc with a low floor must not close inside the high context
+        // (every emitting step must have pc below the event level).
+        if (!levels.flowsTo (lub (this.pc, cap_lval.lev), data.lo)) {
+            this.threadError ("Ranged-receive disable occurrence check failed: the capability's context is more sensitive than the region's floor\n" +
+                              `| pc level               : ${this.pc.stringRep()}\n` +
+                              `| capability label        : ${cap_lval.lev.stringRep()}\n` +
+                              `| region floor (lo)       : ${data.lo.stringRep()}`, false, null, ErrorKind.IFCCheck);
         }
 
         // (b) Validity — an invalid (uncertified) capability has no close and fails.

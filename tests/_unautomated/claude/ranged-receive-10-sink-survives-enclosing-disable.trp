@@ -1,0 +1,41 @@
+(* Ranged-receive v2 witness 10: the permanent sink survives an enclosing disable.
+
+   All at stable pc. A certified region A (root authority, ceiling alice) is open when an
+   UNCERTIFIED enable (null-confidentiality authority, ceiling bob) folds bob irreversibly
+   into the permanent sink delta0 — no push, invalid capability. A consume with l2 = bob is
+   admitted through the widened Delta = alice (active) join bob (sink), its result tainted
+   with the full Delta. Then region A is disabled. Permanence is thread-scoped: the sink
+   must SURVIVE the enclosing pop (the disable detects the moved sinks and carries them
+   forward onto the restored record), so a second consume with l2 = bob is STILL admitted —
+   now through delta0 alone (the active fold is empty) — and its taint still carries the
+   sink's bob term. If the pop had restored the enable-time record verbatim, the second
+   consume would be refused (bob does not flow to public with Delta = bot).
+
+   Expected verdict: okA = true; okU = false; v1 tainted <alice&bob;#root-integrity>
+   (active join sink); disable A succeeds; v2 admitted and tainted <bob;#root-integrity>
+   (sink only); program completes.
+*)
+
+let val me = self ()
+    val _ = send (me, 1)
+    val _ = send (me, 2)
+    val (okA, capA) = enableRangedReceive (`<;#root-integrity>`, `<alice;#root-integrity>`, authority)
+    val _ = printWithLabels okA
+    val nullConfAuth = attenuate (authority, `<;#root-integrity>`)
+    val (okU, capU) = enableRangedReceive (`<;#root-integrity>`, `<bob;#root-integrity>`, nullConfAuth)
+    val _ = printWithLabels okU
+    (* admitted through Delta = alice (active) join bob (sink) *)
+    val v1 = consume (0, `<;#root-integrity>`, `<bob;#root-integrity>`)
+    val _ = printWithLabels v1
+    (* the enclosing certified close: the moved sinks must be carried forward *)
+    val _ = disableRangedReceive capA
+    (* still admitted, through delta0 alone; taint still carries bob *)
+    val v2 = consume (0, `<;#root-integrity>`, `<bob;#root-integrity>`)
+    val _ = printWithLabels v2
+in ()
+end
+
+(* Actual (./local.sh): okA = true@{}%{}; okU = false@{}%{};
+   v1 = (1-payload)@<alice&bob;#root-integrity>%<alice&bob;#root-integrity>;
+   disable A succeeds; v2 = (2-payload)@<bob;#root-integrity>%<bob;#root-integrity>;
+   finishes with ()@<bob;#root-integrity>. Matches expected — the sink survived the pop. *)

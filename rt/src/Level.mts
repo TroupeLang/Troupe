@@ -12,6 +12,7 @@ export function glb(a,b)  { return levels.glb (a,b)  }
 export function coalesce(a:Level, b:Level): Level { return a.coalesce(b) }
 export function flowsTo (a:Level,b:Level) { return levels.flowsTo (a,b) }
 export function actsFor (a:Level, b:Level, options?: QuarantineOptions) { return levels.actsFor(a, b, options) }
+export function privFlowsTo (auth:Level, x:Level, y:Level): boolean { return levels.privFlowsTo(auth, x, y) }
 export function okToDowngrade (kind: DowngradeKind, dimension: DowngradeDimension) {
     return levels.okToDowngrade(kind, dimension);
 }

@@ -91,19 +91,17 @@ class  MboxClearance {
 
   // Ranged-receive region folds (enable/disable). These live inside the same record
   // that the branch-balance discipline (returnImmediate) snapshots and compares by
-  // object identity, so every mutation allocates a fresh record.
-  //
-  // Active folds — reverted when the matching disable restores the enable-time record:
-  delta: any;      // join of the active regions' ceilings hi        (base BOT)
-  phi: any;        // join of the active regions' floors  lo         (base BOT)
-  deltaLab: any;   // join of the active regions' ld(hi)             (base BOT)
-  phiLab: any;     // join of the active regions' ld(lo)             (base BOT)
-  // Permanent sinks — an uncertified (ok_to_dg = false) region is never pushed; its
-  // ceiling/floor and their data labels fold irreversibly here:
-  delta0: any;
-  phi0: any;
-  delta0Lab: any;
-  phi0Lab: any;
+  // object identity, so every mutation allocates a fresh record. The folds are over
+  // ALL open regions, certified or not — an uncertified (ok_to_dg = false) region is
+  // an ordinary region that never closes: its own disable fails on validity, and the
+  // LIFO chain-head check blocks every enclosing close while it stays open (exactly
+  // like a legacy raise that no authority can lower). Δ = delta is what admission may
+  // draw on; Φ = phi is the floor every consume must respect; every reader of delta
+  // is tainted with deltaLab, every reader of phi with phiLab.
+  delta: any;      // join of the open regions' ceilings hi          (base BOT)
+  phi: any;        // join of the open regions' floors  lo           (base BOT)
+  deltaLab: any;   // join of the open regions' ld(hi)               (base BOT)
+  phiLab: any;     // join of the open regions' ld(lo)               (base BOT)
 
   constructor (lclear:any, pc:any, folds:any = null) {
     this.boost_level = lclear;
@@ -113,27 +111,14 @@ class  MboxClearance {
     this.phi       = folds?.phi       ?? B;
     this.deltaLab  = folds?.deltaLab  ?? B;
     this.phiLab    = folds?.phiLab    ?? B;
-    this.delta0    = folds?.delta0    ?? B;
-    this.phi0      = folds?.phi0      ?? B;
-    this.delta0Lab = folds?.delta0Lab ?? B;
-    this.phi0Lab   = folds?.phi0Lab   ?? B;
   }
-
-  // Ambient reads: Δ = delta ⊔ delta0 (what admission may draw on), Φ = phi ⊔ phi0
-  // (the floor every consume must respect), with their companion label folds. Every
-  // reader of Δ is tainted with Δlab, every reader of Φ with Φlab.
-  get Delta ()    { return levels.lub (this.delta, this.delta0); }
-  get Phi ()      { return levels.lub (this.phi, this.phi0); }
-  get DeltaLab () { return levels.lub (this.deltaLab, this.delta0Lab); }
-  get PhiLab ()   { return levels.lub (this.phiLab, this.phi0Lab); }
 
   // Allocate a fresh record, preserving every field unless overridden. `overrides`
   // may carry `boost_level`, `pc_at_creation`, and a `folds` object with any subset
-  // of the eight fold fields.
+  // of the four fold fields.
   copyWith (overrides:any) {
     const f = {
       delta: this.delta, phi: this.phi, deltaLab: this.deltaLab, phiLab: this.phiLab,
-      delta0: this.delta0, phi0: this.phi0, delta0Lab: this.delta0Lab, phi0Lab: this.phi0Lab,
       ...(overrides.folds ?? {})
     };
     return new MboxClearance (
@@ -148,18 +133,17 @@ class  MboxClearance {
 }
 
 // The payload a ranged-receive capability carries: the enable-time clearance record
-// (restored by object identity at the matching disable whenever the permanent sinks
-// are unmoved — so a balanced enable/disable inside a branch leaves the mailbox record
-// identical and passes the branch-balance check; see the restore in
-// disableRangedReceive for the sinks-moved case), the pc at the enable and the
-// region's floor lo (the disable's two occurrence floors), and the validity bit (an
-// uncertified region mints an invalid capability that no disable accepts).
+// (restored by object identity at the matching disable, so a balanced enable/disable
+// inside a branch leaves the mailbox record identical and passes the branch-balance
+// check), the pc at the enable and the region's floor lo (the disable's two occurrence
+// floors), and the validity bit (an uncertified region's capability is invalid: no
+// disable accepts it, so the region never closes).
 class RangedReceiveCap {
-  mclearSnapshot: MboxClearance | null;
+  mclearSnapshot: MboxClearance;
   pc_enable: any;
   lo: any;
   valid: boolean;
-  constructor (snapshot: MboxClearance | null, pc_enable:any, lo:any, valid:boolean) {
+  constructor (snapshot: MboxClearance, pc_enable:any, lo:any, valid:boolean) {
     this.mclearSnapshot = snapshot;
     this.pc_enable = pc_enable;
     this.lo = lo;
@@ -1268,11 +1252,13 @@ export class Thread {
     // Ranged-receive: open a clearance region ⟨lo, hi⟩ whose close is certified up front
     // by the shown authority. Never refuses (beyond the builtin's type checks). Returns
     // the pair (ok_to_dg, cap); when the shown authority does not cover restoring the
-    // mailbox view from hi down to lo, ok_to_dg is false, the capability is invalid, and
-    // the region is folded into the permanent sinks rather than pushed.
+    // mailbox view from hi down to lo, ok_to_dg is false and the capability is invalid —
+    // the region is pushed all the same, as an ordinary region that never closes (its
+    // disable fails on validity, and the LIFO chain-head check blocks every enclosing
+    // close while it is open — exactly like a legacy raise no authority can lower).
     enableRangedReceive (lo:any, hi:any, auth:any) {
         const mc = this.mailbox.mclear;
-        const Delta = mc.Delta;                     // the ambient fold BEFORE this enable
+        const Delta = mc.delta;                     // the ambient fold BEFORE this enable
         const authLevel = auth.val.authorityLevel;
 
         // Certification, evaluated at the open: privFlowsTo(auth, hi ⊔ Δ, lo ⊔ Δ). Sound
@@ -1283,34 +1269,20 @@ export class Thread {
         // Both returned components are labelled pc ⊔ ld(lo) ⊔ ld(hi) ⊔ ld(auth) ⊔ Δlab.
         // The Δlab term is necessary: the certification bit consults Δ, whose value comes
         // from the enclosing enables' operands, so it must carry their labels.
-        const capLabel = lub (this.pc, lo.lev, hi.lev, auth.lev, mc.DeltaLab);
+        const capLabel = lub (this.pc, lo.lev, hi.lev, auth.lev, mc.deltaLab);
 
-        let capObj: Capability<RangedReceiveCap>;
-        if (okToDg) {
-            // Push the region: chain the capability, join the active folds; the capability
-            // snapshots the pre-enable record so the disable restores it by identity.
-            const uid = uuidv4();
-            capObj = new Capability (uid, new RangedReceiveCap (mc, this.pc, lo.val, true), this.mailbox.caps, capLabel);
-            this.mailbox.caps = uid;
-            this.mailbox.mclear = mc.copyWith ({ folds: {
-                delta:    lub (mc.delta,    hi.val),
-                phi:      lub (mc.phi,      lo.val),
-                deltaLab: lub (mc.deltaLab, hi.lev),
-                phiLab:   lub (mc.phiLab,   lo.lev),
-            }});
-        } else {
-            // Uncertified region: not pushed (the capability chain is left untouched); the
-            // ceiling/floor and their labels fold irreversibly into the permanent sinks.
-            // The capability is invalid, so no disable will ever accept it.
-            const uid = uuidv4();
-            capObj = new Capability (uid, new RangedReceiveCap (null, this.pc, lo.val, false), null, capLabel);
-            this.mailbox.mclear = mc.copyWith ({ folds: {
-                delta0:    lub (mc.delta0,    hi.val),
-                phi0:      lub (mc.phi0,      lo.val),
-                delta0Lab: lub (mc.delta0Lab, hi.lev),
-                phi0Lab:   lub (mc.phi0Lab,   lo.lev),
-            }});
-        }
+        // One uniform push path, certified or not: chain the capability, join the folds;
+        // the capability snapshots the pre-enable record so a (valid) disable restores it
+        // by identity. The only difference for an uncertified region is valid = false.
+        const uid = uuidv4();
+        const capObj = new Capability (uid, new RangedReceiveCap (mc, this.pc, lo.val, okToDg), this.mailbox.caps, capLabel);
+        this.mailbox.caps = uid;
+        this.mailbox.mclear = mc.copyWith ({ folds: {
+            delta:    lub (mc.delta,    hi.val),
+            phi:      lub (mc.phi,      lo.val),
+            deltaLab: lub (mc.deltaLab, hi.lev),
+            phiLab:   lub (mc.phiLab,   lo.lev),
+        }});
 
         const okLval  = new LVal (okToDg, capLabel, capLabel);
         const capLval = new LVal (capObj, capLabel, capLabel);
@@ -1361,31 +1333,12 @@ export class Thread {
         }
 
         // (d) No authority check — the downgrade was certified at the enable. Pop: restore
-        // the enable-time record and the previous capability-chain head. The permanent
-        // sinks are MONOTONE across the pop — an uncertified region folds into them
-        // irreversibly (thread-scoped permanence), so they must survive every enclosing
-        // disable. The sink fields only ever change when an uncertified enable allocates
-        // a fresh join, and every certified enable/disable carries them by reference, so
-        // a field-identity comparison detects exactly "an uncertified enable happened
-        // inside this region's window":
-        //   - sinks unmoved (the common case): restore the IDENTICAL snapshot object, so
-        //     the branch-balance identity check in returnImmediate is unaffected;
-        //   - sinks moved: allocate the snapshot with the current (larger) sinks carried
-        //     forward. This path never interferes with the branch discipline: it arises
-        //     only after an uncertified enable inside the window, and an uncertified
-        //     enable inside a BRANCH already breaks the balance check at the join by
-        //     itself (it allocates a fresh record that no pop restores), so the merged
-        //     path is reachable only at stable pc, where no identity comparison runs.
-        const snap = data.mclearSnapshot;
-        const cur = this.mailbox.mclear;
-        const sinksUnmoved =
-            cur.delta0 === snap.delta0 && cur.phi0 === snap.phi0 &&
-            cur.delta0Lab === snap.delta0Lab && cur.phi0Lab === snap.phi0Lab;
-        this.mailbox.mclear = sinksUnmoved
-            ? snap
-            : snap.copyWith ({ folds: {
-                delta0: cur.delta0, phi0: cur.phi0,
-                delta0Lab: cur.delta0Lab, phi0Lab: cur.phi0Lab } });
+        // the enable-time record by identity and the previous capability-chain head. The
+        // verbatim restore is right under the uniform LIFO discipline: every region,
+        // certified or not, sits on the chain, so a pop only happens with everything
+        // above it closed — an uncertified region above would have failed this disable
+        // at the chain-head check.
+        this.mailbox.mclear = data.mclearSnapshot;
         this.mailbox.caps = cap.prev;
         return this.returnImmediateLValue (__unit);
     }

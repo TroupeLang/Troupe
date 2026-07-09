@@ -91,7 +91,7 @@ export function BuiltinReceive<TBase extends Constructor<UserRuntimeZero>>(Base:
           // which v2 extends with the ambient region fold Δ and its label fold Δlab.
           return this.runtime.__mbox.peek (
               lub (this.runtime.$t.pc, i.lev, lowb.lev, highb.lev, highb.val,
-                   mclear.boost_level, mclear.Delta, mclear.DeltaLab),
+                   mclear.boost_level, mclear.delta, mclear.deltaLab),
               i.val, lowb.val, highb.val )
         })
 
@@ -119,12 +119,12 @@ export function BuiltinReceive<TBase extends Constructor<UserRuntimeZero>>(Base:
             theThread.threadError (errorMessage);
           }
 
-          // Premise 2 — floor: the consume may not read below any active region floor. Φ ⊑ l1.
-          if (!flowsTo (mclear.Phi, lowb.val)) {
+          // Premise 2 — floor: the consume may not read below any open region floor. Φ ⊑ l1.
+          if (!flowsTo (mclear.phi, lowb.val)) {
             let errorMessage =
               "Ranged-receive consume floor check failed: the consume reads below an active region floor\n" +
               ` | receive lower bound (floor): ${lowb.val.stringRep()}\n` +
-              ` | active floor (Phi)         : ${mclear.Phi.stringRep()}`
+              ` | active floor (Phi)         : ${mclear.phi.stringRep()}`
             theThread.threadError (errorMessage);
           }
 
@@ -132,14 +132,14 @@ export function BuiltinReceive<TBase extends Constructor<UserRuntimeZero>>(Base:
           // (boost_level) is kept in the target alongside Δ so legacy raisembox programs
           // still admit.
           let is_admitted =
-            flowsTo (lub (i.lev, highb.val), lub (lowb.val, mclear.Delta, mclear.boost_level))
+            flowsTo (lub (i.lev, highb.val), lub (lowb.val, mclear.delta, mclear.boost_level))
           if (!is_admitted) {
             let errorMessage =
               "Not enough mailbox clearance for this receive\n" +
               ` | receive lower bound: ${lowb.val.stringRep()}\n` +
               ` | receive upper bound: ${highb.val.stringRep()}\n` +
               ` | index label        : ${i.lev.stringRep()}\n` +
-              ` | region fold (Delta): ${mclear.Delta.stringRep()}\n` +
+              ` | region fold (Delta): ${mclear.delta.stringRep()}\n` +
               ` | mailbox clearance  : ${mclear.boost_level.stringRep()}`
             theThread.threadError (errorMessage);
           }
@@ -163,7 +163,7 @@ export function BuiltinReceive<TBase extends Constructor<UserRuntimeZero>>(Base:
           // Result taint: v.data ⊔ pc ⊔ lev(i) ⊔ l2 ⊔ Δ ⊔ Δlab ⊔ Φlab, plus the ld(l1)/ld(l2)
           // operand terms; v.data is joined inside __mbox.consume. boost_level kept (legacy).
           let consume_l = lub (theThread.pc, i.lev, lowb.lev, highb.lev, highb.val,
-                               mclear.boost_level, mclear.Delta, mclear.DeltaLab, mclear.PhiLab)
+                               mclear.boost_level, mclear.delta, mclear.deltaLab, mclear.phiLab)
           return this.runtime.__mbox.consume ( consume_l, i.val, lowb.val, highb.val )
         })
 

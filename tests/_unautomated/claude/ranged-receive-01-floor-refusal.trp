@@ -1,0 +1,26 @@
+(* Ranged-receive v2 witness 1: the Phi (floor) refusal.
+
+   An active region opened with floor `<alice;#root-integrity>` sets Phi = alice.
+   A consume whose own floor l1 is `<;#root-integrity>` (public, below alice) is
+   refused by the floor premise Phi ⊑ l1, which no authority or Delta can cover.
+   This refusal is unreachable with the legacy unary raise/lower pair (which has no
+   first-class floor parameter).
+
+   Expected verdict: REFUSE — "Ranged-receive consume floor check failed".
+*)
+
+let val me = self ()
+    val _ = send (me, 42)
+    (* root authority certifies, so the region is pushed and its floor is active *)
+    val (ok, cap) = enableRangedReceive (`<alice;#root-integrity>`, `<alice & bob;#root-integrity>`, authority)
+    val _ = printWithLabels ok
+    (* consume at floor public: Phi = alice ⋤ public  ==>  refused *)
+    val v = consume (0, `<;#root-integrity>`, `<alice & bob;#root-integrity>`)
+    val _ = printWithLabels v
+    val _ = disableRangedReceive cap
+in ()
+end
+
+(* Actual (./local.sh): ok = true@{}%{}; then thread error
+   "Ranged-receive consume floor check failed ... active floor (Phi): <alice;#root-integrity>".
+   Matches expected (REFUSE). *)

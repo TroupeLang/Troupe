@@ -1,0 +1,27 @@
+(* Ranged-receive v2 witness 6: the occurrence negative — a low-floor consume in a
+   high branch, refused by the HARD occurrence premise regardless of Delta.
+
+   A region is opened at stable pc with ceiling `<alice;#root-integrity>`, so Delta = alice
+   would cover admission for a public-floored consume. Inside a branch raised to
+   `<secret;#root-integrity>` the pc is high. The consume at floor l1 = `<;#root-integrity>`
+   (public) is refused by premise 1: pc ⊔ ld(...) ⊑ l1 fails (secret ⋤ public), and this is
+   NEVER covered by Delta or any authority. That a removal fires must not reveal the branch
+   secret. This pins the lclear-implicit-receive question for v2 (the removal must not fire
+   invisibly in a high context under a low floor).
+
+   Expected verdict: enable ok = true; then REFUSE at the consume — "occurrence check failed".
+*)
+
+let val me = self ()
+    val _ = send (me, 42)
+    val (ok, cap) = enableRangedReceive (`<;#root-integrity>`, `<alice;#root-integrity>`, authority)
+    val _ = printWithLabels ok
+in
+    if (true raisedTo `<secret;#root-integrity>`)
+        (* Delta = alice would admit, but the hard occurrence premise refuses on the high pc *)
+        then consume (0, `<;#root-integrity>`, `<alice;#root-integrity>`)
+        else 0
+end
+
+(* Actual (./local.sh): ok = true@{}%{}; then thread error
+   "occurrence check failed ... occurrence level (occ): <secret;#root-integrity>". Matches expected. *)

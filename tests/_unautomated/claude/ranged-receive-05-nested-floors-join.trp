@@ -1,0 +1,29 @@
+(* Ranged-receive v2 witness 5: nested regions with distinct floors — Phi is a
+   genuine join, and the floors are per-layer.
+
+   Region A opens with floor `<alice;#root-integrity>`; nested region B opens with floor
+   `<bob;#root-integrity>`. The active floor is now Phi = alice ⊔ bob = <alice & bob>.
+   A consume at floor l1 = `<alice;#root-integrity>` — which region A ALONE would admit —
+   is refused, because B's bob floor has joined into Phi. This pins Phi as a genuine join
+   over the nested layers (a single alice-floored region would not refuse this consume).
+
+   Expected verdict: both enables ok = true; then REFUSE at the consume — the floor check
+   reports Phi = <alice & bob;#root-integrity>.
+*)
+
+let val me = self ()
+    val _ = send (me, 42)
+    val (okA, capA) = enableRangedReceive (`<alice;#root-integrity>`, `<alice & bob & carol;#root-integrity>`, authority)
+    val _ = printWithLabels okA
+    val (okB, capB) = enableRangedReceive (`<bob;#root-integrity>`, `<alice & bob & carol;#root-integrity>`, authority)
+    val _ = printWithLabels okB
+    (* consume at floor alice: Phi = alice ⊔ bob ⋤ alice  ==>  refused (B's floor is in the join) *)
+    val v = consume (0, `<alice;#root-integrity>`, `<alice & bob & carol;#root-integrity>`)
+    val _ = printWithLabels v
+    val _ = disableRangedReceive capB
+    val _ = disableRangedReceive capA
+in ()
+end
+
+(* Actual (./local.sh): okA = okB = true@{}%{}; then thread error
+   "floor check failed ... active floor (Phi): <alice&bob;#root-integrity>". Matches expected. *)

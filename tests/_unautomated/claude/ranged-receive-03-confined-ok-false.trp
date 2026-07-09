@@ -1,0 +1,29 @@
+(* Ranged-receive v2 witness 3: the ok = false confined path.
+
+   The shown authority has no confidentiality power (attenuated to `<;#root-integrity>`),
+   so it cannot certify restoring the mailbox view from `<alice;...>` down to public.
+   The enable still SUCCEEDS: ok = false, the capability is invalid, and the region is
+   folded into the permanent sink Delta0 rather than pushed. The consume is still admitted
+   (drawing on Delta = Delta0 = alice) and its result is permanently alice-tainted. The
+   disable is REFUSED on the invalid capability (an uncertified region has no close).
+
+   Expected verdict: ok = false; v tainted `<alice;#root-integrity>`; then REFUSE at the
+   disable — "invalid capability ... has no close".
+*)
+
+let val me = self ()
+    val _ = send (me, 42)
+    val nullConfAuth = attenuate (authority, `<;#root-integrity>`)
+    val (ok, cap) = enableRangedReceive (`<;#root-integrity>`, `<alice;#root-integrity>`, nullConfAuth)
+    val _ = printWithLabels ok
+    (* admitted via Delta = Delta0 = alice; v is confined (permanently alice-tainted) *)
+    val v = consume (0, `<;#root-integrity>`, `<alice;#root-integrity>`)
+    val _ = printWithLabels v
+    (* the capability is invalid: no close *)
+    val _ = disableRangedReceive cap
+in ()
+end
+
+(* Actual (./local.sh): ok = false@{}%{}; v = (99-payload)@<alice;#root-integrity>%<alice;#root-integrity>
+   (confined); then thread error "disable on an invalid capability ... has no close".
+   Matches expected. *)

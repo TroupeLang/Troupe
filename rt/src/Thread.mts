@@ -22,6 +22,7 @@ import { TroupeType } from './TroupeTypes.mjs'
 import { RuntimeInterface } from './RuntimeInterface.mjs';
 import { __unit } from './UnitVal.mjs';
 import { Level } from './Level.mjs';
+import { mkTuple } from './ValuesUtil.mjs';
 import { SchedulerInterface } from './SchedulerInterface.mjs';
 import { getRuntimeObject } from './SysState.mjs';
 import { HnState } from './SandboxStatus.mjs';
@@ -83,18 +84,83 @@ export class Capability<T> {
 }
 
 class  MboxClearance {
-  boost_level: any; 
-  pc_at_creation: any; 
-  constructor (lclear:any, pc:any) {
+  // Legacy raise/lower machinery (raisembox/lowermbox); untouched by the ranged
+  // receive protocol below.
+  boost_level: any;
+  pc_at_creation: any;
+
+  // Ranged-receive region folds (enable/disable). These live inside the same record
+  // that the branch-balance discipline (returnImmediate) snapshots and compares by
+  // object identity, so every mutation allocates a fresh record.
+  //
+  // Active folds — reverted when the matching disable restores the enable-time record:
+  delta: any;      // join of the active regions' ceilings hi        (base BOT)
+  phi: any;        // join of the active regions' floors  lo         (base BOT)
+  deltaLab: any;   // join of the active regions' ld(hi)             (base BOT)
+  phiLab: any;     // join of the active regions' ld(lo)             (base BOT)
+  // Permanent sinks — an uncertified (ok_to_dg = false) region is never pushed; its
+  // ceiling/floor and their data labels fold irreversibly here:
+  delta0: any;
+  phi0: any;
+  delta0Lab: any;
+  phi0Lab: any;
+
+  constructor (lclear:any, pc:any, folds:any = null) {
     this.boost_level = lclear;
     this.pc_at_creation = pc;
+    const B = levels.BOT;
+    this.delta     = folds?.delta     ?? B;
+    this.phi       = folds?.phi       ?? B;
+    this.deltaLab  = folds?.deltaLab  ?? B;
+    this.phiLab    = folds?.phiLab    ?? B;
+    this.delta0    = folds?.delta0    ?? B;
+    this.phi0      = folds?.phi0      ?? B;
+    this.delta0Lab = folds?.delta0Lab ?? B;
+    this.phi0Lab   = folds?.phi0Lab   ?? B;
+  }
+
+  // Ambient reads: Δ = delta ⊔ delta0 (what admission may draw on), Φ = phi ⊔ phi0
+  // (the floor every consume must respect), with their companion label folds. Every
+  // reader of Δ is tainted with Δlab, every reader of Φ with Φlab.
+  get Delta ()    { return levels.lub (this.delta, this.delta0); }
+  get Phi ()      { return levels.lub (this.phi, this.phi0); }
+  get DeltaLab () { return levels.lub (this.deltaLab, this.delta0Lab); }
+  get PhiLab ()   { return levels.lub (this.phiLab, this.phi0Lab); }
+
+  // Allocate a fresh record, preserving every field unless overridden. `overrides`
+  // may carry `boost_level`, `pc_at_creation`, and a `folds` object with any subset
+  // of the eight fold fields.
+  copyWith (overrides:any) {
+    const f = {
+      delta: this.delta, phi: this.phi, deltaLab: this.deltaLab, phiLab: this.phiLab,
+      delta0: this.delta0, phi0: this.phi0, delta0Lab: this.delta0Lab, phi0Lab: this.phi0Lab,
+      ...(overrides.folds ?? {})
+    };
+    return new MboxClearance (
+      overrides.boost_level ?? this.boost_level,
+      overrides.pc_at_creation ?? this.pc_at_creation,
+      f);
   }
 
   stringRep () {
     return this.boost_level.stringRep ()
   }
+}
 
-  
+// The payload a ranged-receive capability carries: the enable-time clearance record
+// (restored by object identity at the matching disable, so a balanced enable/disable
+// inside a branch leaves the mailbox record identical and passes the branch-balance
+// check), the pc at the enable (the disable's occurrence floor), and the validity
+// bit (an uncertified region mints an invalid capability that no disable accepts).
+class RangedReceiveCap {
+  mclearSnapshot: MboxClearance | null;
+  pc_enable: any;
+  valid: boolean;
+  constructor (snapshot: MboxClearance | null, pc_enable:any, valid:boolean) {
+    this.mclearSnapshot = snapshot;
+    this.pc_enable = pc_enable;
+    this.valid = valid;
+  }
 }
 
 
@@ -1137,9 +1203,11 @@ export class Thread {
         } */
 
         let uid = uuidv4() ;
-        let cap = this.mkVal (new Capability(uid, this.mailbox.mclear, this.mailbox.caps, this.pc)) 
+        let cap = this.mkVal (new Capability(uid, this.mailbox.mclear, this.mailbox.caps, this.pc))
         this.mailbox.caps = uid;
-        this.mailbox.mclear = new MboxClearance(lub (new_lclear.val, this.mailbox.mclear.boost_level), this.pc);
+        this.mailbox.mclear = this.mailbox.mclear.copyWith(
+            { boost_level: lub (new_lclear.val, this.mailbox.mclear.boost_level)
+            , pc_at_creation: this.pc });
 
         // this.returnSuspended( cap ); 
         // this.sched.stepThread();         
@@ -1191,6 +1259,98 @@ export class Thread {
         this.mailbox.caps = cap.prev;
 
         return this.returnImmediateLValue(__unit);
+    }
+
+    // Ranged-receive: open a clearance region ⟨lo, hi⟩ whose close is certified up front
+    // by the shown authority. Never refuses (beyond the builtin's type checks). Returns
+    // the pair (ok_to_dg, cap); when the shown authority does not cover restoring the
+    // mailbox view from hi down to lo, ok_to_dg is false, the capability is invalid, and
+    // the region is folded into the permanent sinks rather than pushed.
+    enableRangedReceive (lo:any, hi:any, auth:any) {
+        const mc = this.mailbox.mclear;
+        const Delta = mc.Delta;                     // the ambient fold BEFORE this enable
+        const authLevel = auth.val.authorityLevel;
+
+        // Certification, evaluated at the open: privFlowsTo(auth, hi ⊔ Δ, lo ⊔ Δ). Sound
+        // here because the LIFO discipline makes the ambient fold at the matching disable
+        // exactly this Δ, so the check decided now is the check that would be decided then.
+        const okToDg = levels.privFlowsTo (authLevel, lub (hi.val, Delta), lub (lo.val, Delta));
+
+        // Both returned components are labelled pc ⊔ ld(lo) ⊔ ld(hi) ⊔ ld(auth) ⊔ Δlab.
+        // The Δlab term is necessary: the certification bit consults Δ, whose value comes
+        // from the enclosing enables' operands, so it must carry their labels.
+        const capLabel = lub (this.pc, lo.lev, hi.lev, auth.lev, mc.DeltaLab);
+
+        let capObj: Capability<RangedReceiveCap>;
+        if (okToDg) {
+            // Push the region: chain the capability, join the active folds; the capability
+            // snapshots the pre-enable record so the disable restores it by identity.
+            const uid = uuidv4();
+            capObj = new Capability (uid, new RangedReceiveCap (mc, this.pc, true), this.mailbox.caps, capLabel);
+            this.mailbox.caps = uid;
+            this.mailbox.mclear = mc.copyWith ({ folds: {
+                delta:    lub (mc.delta,    hi.val),
+                phi:      lub (mc.phi,      lo.val),
+                deltaLab: lub (mc.deltaLab, hi.lev),
+                phiLab:   lub (mc.phiLab,   lo.lev),
+            }});
+        } else {
+            // Uncertified region: not pushed (the capability chain is left untouched); the
+            // ceiling/floor and their labels fold irreversibly into the permanent sinks.
+            // The capability is invalid, so no disable will ever accept it.
+            const uid = uuidv4();
+            capObj = new Capability (uid, new RangedReceiveCap (null, this.pc, false), null, capLabel);
+            this.mailbox.mclear = mc.copyWith ({ folds: {
+                delta0:    lub (mc.delta0,    hi.val),
+                phi0:      lub (mc.phi0,      lo.val),
+                delta0Lab: lub (mc.delta0Lab, hi.lev),
+                phi0Lab:   lub (mc.phi0Lab,   lo.lev),
+            }});
+        }
+
+        const okLval  = new LVal (okToDg, capLabel, capLabel);
+        const capLval = new LVal (capObj, capLabel, capLabel);
+        const tuple   = mkTuple ([okLval, capLval]);
+        return this.returnImmediateLValue (new LVal (tuple, capLabel, capLabel));
+    }
+
+    // Ranged-receive: close a region opened by enableRangedReceive. Authority-free — the
+    // capability is the certificate. Order of attribution: occurrence, validity, LIFO.
+    disableRangedReceive (cap_lval:any) {
+        const cap: Capability<RangedReceiveCap> = cap_lval.val;
+        const data = cap.data;
+
+        // (a) Occurrence — hard: pc ⊔ ld(cap) ⊑ pc_enable; bl absorbs ld(cap) BEFORE any
+        // branching on the capability, so a secret-selected capability cannot make the
+        // disable's outcome observable below the secret.
+        this.raiseBlockingThreadLev (cap_lval.lev);
+        if (!levels.flowsTo (lub (this.pc, cap_lval.lev), data.pc_enable)) {
+            this.threadError ("Ranged-receive disable occurrence check failed: the capability's context is more sensitive than the pc at the enable\n" +
+                              `| pc level               : ${this.pc.stringRep()}\n` +
+                              `| capability label        : ${cap_lval.lev.stringRep()}\n` +
+                              `| pc level at the enable  : ${data.pc_enable.stringRep()}`, false, null, ErrorKind.IFCCheck);
+        }
+
+        // (b) Validity — an invalid (uncertified) capability has no close and fails.
+        if (!data.valid) {
+            this.threadError ("Ranged-receive disable on an invalid capability: the region was uncertified (ok_to_dg = false) and has no close", false, null, ErrorKind.IFCCheck);
+        }
+
+        // (c) LIFO scoping — the capability must be the head of the chain.
+        if (this.mailbox.caps == null) {
+            this.threadError ("unmatched ranged-receive disable", false, null, ErrorKind.IFCCheck);
+        }
+        if (this.mailbox.caps != cap.uid) {
+            this.threadError ("Ill-scoped enable/disable of ranged receive:\n" +
+                              `expected cap: ${this.mailbox.caps}\n` +
+                              `provided cap: ${cap.uid}`, false, null, ErrorKind.IFCCheck);
+        }
+
+        // (d) No authority check — the downgrade was certified at the enable. Pop: restore
+        // the enable-time record (by identity) and the previous capability-chain head.
+        this.mailbox.mclear = data.mclearSnapshot;
+        this.mailbox.caps = cap.prev;
+        return this.returnImmediateLValue (__unit);
     }
 }
 

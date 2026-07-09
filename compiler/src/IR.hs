@@ -307,9 +307,11 @@ instance WellFormedIRCheck IRExpr where
                      , "debugValue"
                      , "declassify"
                      , "declassifyType"
+                     , "disableRangedReceive"
                      , "downgrade"
                      , "downgradeType"
                      , "exit"
+                     , "enableRangedReceive"
                      , "endorse"
                      -- SimpleFileIO whole-file primitives (ROOT-authority; see builtins/simplefileio.mts)
                      , "appendFile"

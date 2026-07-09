@@ -148,11 +148,12 @@ class  MboxClearance {
 }
 
 // The payload a ranged-receive capability carries: the enable-time clearance record
-// (restored by object identity at the matching disable, so a balanced enable/disable
-// inside a branch leaves the mailbox record identical and passes the branch-balance
-// check), the pc at the enable and the region's floor lo (the disable's two occurrence
-// floors), and the validity bit (an uncertified region mints an invalid capability
-// that no disable accepts).
+// (restored by object identity at the matching disable whenever the permanent sinks
+// are unmoved — so a balanced enable/disable inside a branch leaves the mailbox record
+// identical and passes the branch-balance check; see the restore in
+// disableRangedReceive for the sinks-moved case), the pc at the enable and the
+// region's floor lo (the disable's two occurrence floors), and the validity bit (an
+// uncertified region mints an invalid capability that no disable accepts).
 class RangedReceiveCap {
   mclearSnapshot: MboxClearance | null;
   pc_enable: any;
@@ -1360,8 +1361,31 @@ export class Thread {
         }
 
         // (d) No authority check — the downgrade was certified at the enable. Pop: restore
-        // the enable-time record (by identity) and the previous capability-chain head.
-        this.mailbox.mclear = data.mclearSnapshot;
+        // the enable-time record and the previous capability-chain head. The permanent
+        // sinks are MONOTONE across the pop — an uncertified region folds into them
+        // irreversibly (thread-scoped permanence), so they must survive every enclosing
+        // disable. The sink fields only ever change when an uncertified enable allocates
+        // a fresh join, and every certified enable/disable carries them by reference, so
+        // a field-identity comparison detects exactly "an uncertified enable happened
+        // inside this region's window":
+        //   - sinks unmoved (the common case): restore the IDENTICAL snapshot object, so
+        //     the branch-balance identity check in returnImmediate is unaffected;
+        //   - sinks moved: allocate the snapshot with the current (larger) sinks carried
+        //     forward. This path never interferes with the branch discipline: it arises
+        //     only after an uncertified enable inside the window, and an uncertified
+        //     enable inside a BRANCH already breaks the balance check at the join by
+        //     itself (it allocates a fresh record that no pop restores), so the merged
+        //     path is reachable only at stable pc, where no identity comparison runs.
+        const snap = data.mclearSnapshot;
+        const cur = this.mailbox.mclear;
+        const sinksUnmoved =
+            cur.delta0 === snap.delta0 && cur.phi0 === snap.phi0 &&
+            cur.delta0Lab === snap.delta0Lab && cur.phi0Lab === snap.phi0Lab;
+        this.mailbox.mclear = sinksUnmoved
+            ? snap
+            : snap.copyWith ({ folds: {
+                delta0: cur.delta0, phi0: cur.phi0,
+                delta0Lab: cur.delta0Lab, phi0Lab: cur.phi0Lab } });
         this.mailbox.caps = cap.prev;
         return this.returnImmediateLValue (__unit);
     }

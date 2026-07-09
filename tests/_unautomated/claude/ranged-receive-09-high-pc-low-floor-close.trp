@@ -1,0 +1,32 @@
+(* Ranged-receive v2 witness 9: the high-pc, low-floor close negative.
+
+   A region is enabled INSIDE a secret-raised branch with a public floor. The enable is
+   free (it never refuses) and certification passes under the root authority. But the
+   close's observable effect is the restoration of the mailbox view at the floor lo, so
+   the disable carries a hard occurrence check at the release level: pc ⊔ ld(cap) ⊑ lo.
+   Here pc = <secret;...> and lo = public, so the disable inside the branch is REFUSED —
+   otherwise the restoration observable at lo would leak the branch (the confinement
+   invariant: every emitting step has pc below the event level). Note the disable's other
+   occurrence check pc ⊔ ld(cap) ⊑ pc_enable PASSES (the enable happened at the same high
+   pc), so this witness isolates the release-level check.
+
+   Expected verdict: ok = true (printed at the secret level); then REFUSE at the disable —
+   "the capability's context is more sensitive than the region's floor".
+*)
+
+let val me = self ()
+    val _ = send (me, 42)
+in
+    if (true raisedTo `<secret;#root-integrity>`)
+        then let val (ok, cap) = enableRangedReceive (`<;#root-integrity>`, `<secret & alice;#root-integrity>`, authority)
+                 val _ = printWithLabels ok
+                 (* pc = secret, lo = public: the close would restore observation at lo
+                    inside the secret branch — refused by the release-level occurrence check *)
+                 val _ = disableRangedReceive cap
+             in 1 end
+        else 0
+end
+
+(* Actual (./local.sh): ok = true@<secret;#root-integrity>%<secret;#root-integrity>; then thread error
+   "disable occurrence check failed: the capability's context is more sensitive than the region's floor
+    | pc level: <secret;#root-integrity> | region floor (lo): {}". Matches expected. *)

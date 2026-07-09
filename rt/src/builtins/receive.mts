@@ -86,8 +86,12 @@ export function BuiltinReceive<TBase extends Constructor<UserRuntimeZero>>(Base:
           let lowb = arg.val[1]
           let highb = arg.val[2]
           let mclear = this.runtime.$t.mailbox.mclear
+          // peek is CHECK-FREE (it removes nothing, so it carries neither the occurrence
+          // nor the floor premise); its whole disclosure is confined by the read taint,
+          // which v2 extends with the ambient region fold Δ and its label fold Δlab.
           return this.runtime.__mbox.peek (
-              lub (this.runtime.$t.pc, i.lev, lowb.lev, highb.lev, highb.val, mclear.boost_level), 
+              lub (this.runtime.$t.pc, i.lev, lowb.lev, highb.lev, highb.val,
+                   mclear.boost_level, mclear.Delta, mclear.DeltaLab),
               i.val, lowb.val, highb.val )
         })
 
@@ -100,36 +104,66 @@ export function BuiltinReceive<TBase extends Constructor<UserRuntimeZero>>(Base:
           let lowb = arg.val[1]
           let highb = arg.val[2]
 
-          let $r = this.runtime
-          let mclear = $r.$t.mailbox.mclear
-          let is_sufficient_clearance = 
-            flowsTo( lub (highb.val, $r.$t.pc)
-                  ,  lub (lowb.val, mclear.boost_level ))
-      
-          if (!is_sufficient_clearance)  {  
-            let errorMessage = 
-              "Not enough mailbox clearance for this receive\n" +
-              ` | receive lower bound: ${lowb.val.stringRep()}\n` + 
-              ` | receive upper bound: ${highb.val.stringRep()}\n` +
-              ` | pc level           : ${$r.$t.pc.stringRep()}\n` +
-              ` | mailbox clearance  : ${mclear.boost_level.stringRep()}` 
-            $r.$t.threadError (errorMessage);
-          }    
-        
-          let is_clearance_a_leak = 
-            flowsTo( mclear.pc_at_creation 
-                   , glb ($r.$t.pc, lowb.val))
-      
-          if (!is_clearance_a_leak)  {
-            let errorMessage = 
-              "PC level at the time of raising the mailbox clearance is too sensitive for this receive\n" +
-              ` | receive lower bound: ${lowb.val.stringRep()}\n` + 
-              ` | pc level at the time of receive: ${$r.$t.pc.stringRep()}\n` +        
-              ` | pc level at the time of raise: ${mclear.pc_at_creation.stringRep()}`  // we need better terminology for these       
-            $r.$t.threadError (errorMessage)
+          let theThread = this.runtime.$t
+          let mclear = theThread.mailbox.mclear
+
+          // Premise 1 — occurrence, HARD (never authority- or Δ-covered): that a consume at
+          // floor l1 happens must not reveal anything above l1. pc ⊔ ld(i) ⊔ ld(l1) ⊔ ld(l2) ⊑ l1.
+          let occ = lub (theThread.pc, i.lev, lowb.lev, highb.lev)
+          if (!flowsTo (occ, lowb.val)) {
+            let errorMessage =
+              "Ranged-receive consume occurrence check failed: whether the removal fires depends on data above the floor\n" +
+              ` | receive lower bound (floor): ${lowb.val.stringRep()}\n` +
+              ` | occurrence level (occ)     : ${occ.stringRep()}\n` +
+              ` | pc level                   : ${theThread.pc.stringRep()}`
+            theThread.threadError (errorMessage);
           }
-     
-          let consume_l = lub (this.runtime.$t.pc, i.lev, lowb.lev, highb.lev, highb.val, mclear.boost_level)
+
+          // Premise 2 — floor: the consume may not read below any active region floor. Φ ⊑ l1.
+          if (!flowsTo (mclear.Phi, lowb.val)) {
+            let errorMessage =
+              "Ranged-receive consume floor check failed: the consume reads below an active region floor\n" +
+              ` | receive lower bound (floor): ${lowb.val.stringRep()}\n` +
+              ` | active floor (Phi)         : ${mclear.Phi.stringRep()}`
+            theThread.threadError (errorMessage);
+          }
+
+          // Premise 3 — admission: lev(i) ⊔ l2 ⊑ l1 ⊔ Δ. The legacy standing clearance
+          // (boost_level) is kept in the target alongside Δ so legacy raisembox programs
+          // still admit.
+          let is_admitted =
+            flowsTo (lub (i.lev, highb.val), lub (lowb.val, mclear.Delta, mclear.boost_level))
+          if (!is_admitted) {
+            let errorMessage =
+              "Not enough mailbox clearance for this receive\n" +
+              ` | receive lower bound: ${lowb.val.stringRep()}\n` +
+              ` | receive upper bound: ${highb.val.stringRep()}\n` +
+              ` | index label        : ${i.lev.stringRep()}\n` +
+              ` | region fold (Delta): ${mclear.Delta.stringRep()}\n` +
+              ` | mailbox clearance  : ${mclear.boost_level.stringRep()}`
+            theThread.threadError (errorMessage);
+          }
+
+          // Legacy protection (retained; vacuous without raisembox, since pc_at_creation
+          // stays ⊥): the pc at the time of raising the standing clearance must not itself
+          // be a leak for this receive.
+          if (!flowsTo (mclear.pc_at_creation, glb (theThread.pc, lowb.val))) {
+            let errorMessage =
+              "PC level at the time of raising the mailbox clearance is too sensitive for this receive\n" +
+              ` | receive lower bound: ${lowb.val.stringRep()}\n` +
+              ` | pc level at the time of receive: ${theThread.pc.stringRep()}\n` +
+              ` | pc level at the time of raise: ${mclear.pc_at_creation.stringRep()}`
+            theThread.threadError (errorMessage)
+          }
+
+          // Blocking label absorbs ld(l1) ⊔ ld(l2) ⊔ lev(i) ⊔ l2 (the __mbox.consume path
+          // additionally raises bl by l2 ⊔ boost_level).
+          theThread.raiseBlockingThreadLev (lub (lowb.lev, highb.lev, i.lev, highb.val))
+
+          // Result taint: v.data ⊔ pc ⊔ lev(i) ⊔ l2 ⊔ Δ ⊔ Δlab ⊔ Φlab, plus the ld(l1)/ld(l2)
+          // operand terms; v.data is joined inside __mbox.consume. boost_level kept (legacy).
+          let consume_l = lub (theThread.pc, i.lev, lowb.lev, highb.lev, highb.val,
+                               mclear.boost_level, mclear.Delta, mclear.DeltaLab, mclear.PhiLab)
           return this.runtime.__mbox.consume ( consume_l, i.val, lowb.val, highb.val )
         })
 

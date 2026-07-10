@@ -1,0 +1,32 @@
+(* Ranged-receive v2 witness 11: the certification inherits the NMIFC discipline.
+
+   The enable's certification runs through the runtime's shared downgrade-decision
+   function (okToDowngrade, mailbox kind, cross-dimensional target) — the same decision
+   every other downgrade runs — so with NMIFC on it carries the robust-declassification
+   check by construction. This witness separates the two relations. The ceiling is
+   `<alice;>` = <alice;#null-integrity>: an alice secret with UNTRUSTED integrity. The
+   shown authority is alice.
+
+   - Plain privilege relation (NMIFC off): S-side (S_to and S_auth) => S_from is
+     alice => alice, and the I-side is vacuous against the untrusted target. PASSES.
+   - Robust declassification (NMIFC on): (S_auth or I_from or I_pc) and S_to => S_from
+     degenerates through the untrusted I_from = #null-integrity (the True formula) to
+     True => alice, which fails: untrusted data could have influenced what is being
+     released. ROBUSTNESS_VIOLATION — the certification refuses, and the enable
+     DEGRADES to ok = false (never throws; the region is pushed and never closes).
+
+   Expected verdict:
+   - default run (NMIFC on):  ok = false, then the disable REFUSES (invalid capability);
+   - with --no-nmifc:         ok = true, the disable succeeds, program completes.
+*)
+
+let val aliceAuth = attenuate (authority, `<alice;#root-integrity>`)
+    val (ok, cap) = enableRangedReceive (`<;>`, `<alice;>`, aliceAuth)
+    val _ = printWithLabels ok
+    val _ = disableRangedReceive cap
+in ()
+end
+
+(* Actual: default run — ok = false@{}%{}, then thread error "disable on an invalid
+   capability ... has no close"; with --no-nmifc — ok = true@{}%{}, disable succeeds,
+   finishes with ()@{}%{}. Matches expected on both. *)

@@ -87,16 +87,17 @@ export function BuiltinReceive<TBase extends Constructor<UserRuntimeZero>>(Base:
           let highb = arg.val[2]
           let mclear = this.runtime.$t.mailbox.mclear
           // peek is CHECK-FREE (it removes nothing, so it carries neither the occurrence
-          // nor the floor premise); its whole disclosure is confined by the read taint
-          // over its OWN interval arguments. The region folds do NOT taint the peek:
-          // peek has no admission premise (the one mechanism that reads Δ), and its
-          // selection is bounded by its interval arguments alone, so the fold terms
-          // would be pure over-taint — machine-checked on the Lean side
-          // (ranged_receive_peek_ignores_region_state.lean). The consume keeps its
-          // fold terms: it reads Δ via its admission.
+          // nor the floor premise); its whole disclosure is confined by the read taint,
+          // which carries the region folds Δ ⊔ Δlab. Under the REGION-COVERED consume
+          // occurrence premise the fold terms are necessary: a secret-driven in-region
+          // consume — admissible under the coverage — perturbs the residual low
+          // sub-stream, and a fold-free peek would hand that perturbation to a low
+          // observer before the close pays for it. Machine-checked on the Lean side
+          // (ranged_receive_peek_needs_region_fold_under_covered_occurrence.lean); the
+          // earlier fold-free verdict was correct only under the hard occurrence premise.
           return this.runtime.__mbox.peek (
               lub (this.runtime.$t.pc, i.lev, lowb.lev, highb.lev, highb.val,
-                   mclear.boost_level),
+                   mclear.boost_level, mclear.delta, mclear.deltaLab),
               i.val, lowb.val, highb.val )
         })
 

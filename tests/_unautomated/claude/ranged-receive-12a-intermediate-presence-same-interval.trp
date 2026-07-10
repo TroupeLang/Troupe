@@ -1,0 +1,45 @@
+(* Ranged-receive v2 witness 12a: the same-interval loop removes an intermediate
+   presence — the library receive-loop idiom under the region-covered occurrence.
+
+   Library-shape decision input, half 1 (half 2 is 12b, the tier-scan alternative). One
+   message at presence `<alice;#root-integrity>` — strictly between the window bounds
+   public and `<alice & bob;#root-integrity>` — placed by a spawned sender whose send
+   sits under a raisedTo branch.
+
+   The same-interval loop: under the region [public, alice&bob], peek over the full
+   window sees the message (peeked value tainted at the window ceiling, by peek's own
+   upper bound); branching on it takes pc to the ceiling; then the consume over the SAME
+   full interval [public, alice&bob] fires — the region-covered occurrence premise
+   pc ⊔ ld(·) ⊑ l1 ⊔ Δ holds with pc = Δ = the ceiling — and the interval CONTAINS the
+   intermediate presence alice, so the message is REMOVED. This is the shape the earlier
+   hard-premise round could not run (the only permitted floor was the ceiling point
+   interval, which missed the message); under the covered premise the same-interval loop
+   is THE idiom, and it is complete for intermediate presences. The consumed value is
+   confined at the standing taint (the consume taint joins Δ).
+
+   Expected verdict: ok = true; the peeked payload prints at
+   `<alice&bob;#root-integrity>`; the consumed value prints at
+   `<alice&bob;#root-integrity>`; the region closes; the program completes.
+*)
+
+let val main = self ()
+    val _ = spawn (fn () => if (true raisedTo `<alice;#root-integrity>`) then send (main, 42) else ())
+    val (ok, cap) = enableRangedReceive (`<;#root-integrity>`, `<alice & bob;#root-integrity>`, authority)
+    val _ = printWithLabels ok
+    val p = peek (0, `<;#root-integrity>`, `<alice & bob;#root-integrity>`)
+    val (m, meta) = p
+    val _ = printWithLabels m
+    val v = if m = 42
+            then consume (0, `<;#root-integrity>`, `<alice & bob;#root-integrity>`)
+            else consume (0, `<;#root-integrity>`, `<alice & bob;#root-integrity>`)
+    val _ = printWithLabels v
+    val _ = disableRangedReceive cap
+in ()
+end
+
+(* Actual (./local.sh): ok = true@{}%{};
+   m = 42@<alice&bob;#root-integrity>%<alice&bob;#root-integrity> (window-top taint);
+   v = (42-payload)@<alice&bob;#root-integrity>%<alice&bob;#root-integrity> — the
+   same-interval consume fired under the region coverage and REMOVED the
+   intermediate-presence message; disable succeeds; completes. Matches expected —
+   the shape that blocked under the hard premise now completes. *)

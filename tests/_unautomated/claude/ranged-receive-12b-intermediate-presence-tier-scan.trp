@@ -1,32 +1,33 @@
-(* Ranged-receive v2 witness 12b: the tier scan as a value-label-precision alternative.
+(* Ranged-receive v2 witness 12b: per-tier regions as the route to tier-precision labels.
 
    Library-shape decision input, half 2. The same-interval loop (12a) is THE idiom under
    the region-covered occurrence premise: it removes intermediate-presence messages
-   directly. The tier scan is NOT needed for removal — its remaining value is label
-   precision: reading, branching, and (with per-tier regions) consuming at the message's
-   tier instead of the window ceiling. Setup: two messages at presence
+   directly, with everything confined at the standing taint. This witness pins down what
+   label precision remains available and where. Setup: two messages at presence
    `<alice;#root-integrity>` — strictly between public and `<alice & bob;#root-integrity>`
    — placed by a spawned sender whose sends sit under a raisedTo branch.
 
-   Part (i) — tier reads within ONE wide region: peek's taint is over its own interval
-   arguments only (the region folds do not taint the peek: peek has no admission premise,
-   the one mechanism that reads Delta — machine-checked,
-   ranged_receive_peek_ignores_region_state.lean). So under the wide [public, alice&bob]
-   region the narrow peek(0, `<alice;...>`, `<alice;...>`) returns at the TIER label
-   alice and the branch takes pc only to alice — where 12a's full-window peek takes it to
-   the ceiling. The tier consume then removes the message; the CONSUMED value still
-   carries the region ceiling (consume's taint keeps its Delta term by design — the
-   consume reads Delta via its admission), so v1 prints at alice&bob.
+   Part (i) — inside a wide region there is NO tier precision, by design: every in-window
+   mailbox observation is confined at the standing taint. peek's result carries the
+   region fold Delta ⊔ Deltalab — necessary under the covered occurrence premise, where a
+   secret-driven in-region consume is admissible and would otherwise show in the residual
+   low sub-stream through a fold-free peek (machine-checked:
+   ranged_receive_peek_needs_region_fold_under_covered_occurrence.lean). So even the
+   narrow peek(0, `<alice;...>`, `<alice;...>`) under the [public, alice&bob] region
+   returns at the CEILING alice&bob; the branch goes to the ceiling; the tier consume
+   still fires (its occurrence is region-covered) and removes the message, the value at
+   the ceiling. The tier scan inside a wide region narrows nothing.
 
-   Part (ii) — per-tier regions narrow the consumed value too: a [public, alice] region
-   makes Delta = alice, so the consumed value prints at the tier. The full precision
-   ladder, at one enable/disable per tier: 12a's idiom taints pc and value at the
-   ceiling; part (i) keeps the pc at the tier; part (ii) keeps pc AND value at the tier.
+   Part (ii) — per-tier REGIONS are the only route to tier-precision labels: a
+   [public, alice] region makes the standing taint itself the tier (Delta = alice), so
+   both the peeked and the consumed value print at alice — each region's observations
+   pay that region's own Delta, and narrowing the region is the only way to narrow the
+   labels, at one enable/disable per tier.
 
-   Expected verdict: okW = true; part (i) peek prints 42 at `<alice;#root-integrity>`,
-   consumed v1 prints at `<alice&bob;#root-integrity>`, wide region closes; okT = true;
-   part (ii) peek prints 43 at `<alice;#root-integrity>`, consumed v2 prints at
-   `<alice;#root-integrity>`, tier region closes; program completes.
+   Expected verdict: okW = true; part (i) peek prints 42 at
+   `<alice&bob;#root-integrity>` (ceiling), consumed v1 at `<alice&bob;#root-integrity>`,
+   wide region closes; okT = true; part (ii) peek prints 43 at `<alice;#root-integrity>`,
+   consumed v2 at `<alice;#root-integrity>`, tier region closes; program completes.
 *)
 
 let val main = self ()
@@ -34,7 +35,7 @@ let val main = self ()
                             then (send (main, 42); send (main, 43))
                             else ())
 
-    (* Part (i): the tier scan inside the ONE wide region *)
+    (* Part (i): the narrow peek/consume inside the ONE wide region — no tier precision *)
     val (okW, capW) = enableRangedReceive (`<;#root-integrity>`, `<alice & bob;#root-integrity>`, authority)
     val _ = printWithLabels okW
     val p1 = peek (0, `<alice;#root-integrity>`, `<alice;#root-integrity>`)
@@ -46,7 +47,7 @@ let val main = self ()
     val _ = printWithLabels v1
     val _ = disableRangedReceive capW
 
-    (* Part (ii): the per-tier region — narrows the consumed value's taint to the tier *)
+    (* Part (ii): the per-tier region — the standing taint IS the tier *)
     val (okT, capT) = enableRangedReceive (`<;#root-integrity>`, `<alice;#root-integrity>`, authority)
     val _ = printWithLabels okT
     val p2 = peek (0, `<alice;#root-integrity>`, `<alice;#root-integrity>`)
@@ -61,12 +62,12 @@ in ()
 end
 
 (* Actual (./local.sh): okW = true@{}%{};
-   part (i)  m1 = 42@<alice;#root-integrity>%<alice;#root-integrity> — the narrow peek
-             returns at the TIER inside the wide region;
+   part (i)  m1 = 42@<alice&bob;#root-integrity>%<alice&bob;#root-integrity> — the
+             narrow peek returns at the CEILING inside the wide region (fold-confined);
              v1 = (42-payload)@<alice&bob;#root-integrity>%<alice&bob;#root-integrity> —
-             removed at the tier, consumed value carries the region ceiling (Delta);
+             the tier consume fired under the coverage, removed, value at the ceiling;
    okT = true@{}%{};
    part (ii) m2 = 43@<alice;#root-integrity>%<alice;#root-integrity>;
              v2 = (43-payload)@<alice;#root-integrity>%<alice;#root-integrity> — the
-             per-tier region narrows the consumed value's taint to the tier;
+             per-tier region's standing taint is the tier;
    both disables succeed; program completes. Matches expected. *)

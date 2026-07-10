@@ -7,8 +7,9 @@
    sits under a raisedTo branch.
 
    The same-interval loop: under the region [public, alice&bob], peek over the full
-   window sees the message (peeked value tainted at the window ceiling, by peek's own
-   upper bound); branching on it takes pc to the ceiling; then the consume over the SAME
+   window sees the message, confined at the standing taint (peek's own upper bound and
+   the region fold agree at the ceiling); branching on it takes pc to the ceiling; then
+   the consume over the SAME
    full interval [public, alice&bob] fires — the region-covered occurrence premise
    pc ⊔ ld(·) ⊑ l1 ⊔ Δ holds with pc = Δ = the ceiling — and the interval CONTAINS the
    intermediate presence alice, so the message is REMOVED. This is the shape the earlier

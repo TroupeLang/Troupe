@@ -112,15 +112,24 @@ export function BuiltinReceive<TBase extends Constructor<UserRuntimeZero>>(Base:
           let theThread = this.runtime.$t
           let mclear = theThread.mailbox.mclear
 
-          // Premise 1 — occurrence, HARD (never authority- or Δ-covered): that a consume at
-          // floor l1 happens must not reveal anything above l1. pc ⊔ ld(i) ⊔ ld(l1) ⊔ ld(l2) ⊑ l1.
+          // Premise 1 — occurrence, REGION-COVERED: the region is the declassification
+          // boundary for ALL mailbox observations, removals included, so an in-region
+          // consume's occurrence is covered by the ambient fold:
+          // pc ⊔ ld(i) ⊔ ld(l1) ⊔ ld(l2) ⊑ l1 ⊔ Δ. During coexistence the coverage side
+          // also carries the legacy standing clearance, exactly as the admission does —
+          // this restores the shape of the original combined check
+          // pc ⊔ highb ⊑ lowb ⊔ clearance, whose pc was clearance-covered all along.
+          // Outside any region (Δ = ⊥, clearance = ⊥) the premise degenerates to the
+          // hard pc ⊔ ld(·) ⊑ l1.
           let occ = lub (theThread.pc, i.lev, lowb.lev, highb.lev)
-          if (!flowsTo (occ, lowb.val)) {
+          let occCover = lub (lowb.val, mclear.delta, mclear.boost_level)
+          if (!flowsTo (occ, occCover)) {
             let errorMessage =
-              "Ranged-receive consume occurrence check failed: whether the removal fires depends on data above the floor\n" +
-              ` | receive lower bound (floor): ${lowb.val.stringRep()}\n` +
-              ` | occurrence level (occ)     : ${occ.stringRep()}\n` +
-              ` | pc level                   : ${theThread.pc.stringRep()}`
+              "Ranged-receive consume occurrence check failed: whether the removal fires depends on data above the region's coverage\n" +
+              ` | receive lower bound (floor)        : ${lowb.val.stringRep()}\n` +
+              ` | coverage (floor, region, clearance): ${occCover.stringRep()}\n` +
+              ` | occurrence level (occ)             : ${occ.stringRep()}\n` +
+              ` | pc level                           : ${theThread.pc.stringRep()}`
             theThread.threadError (errorMessage);
           }
 

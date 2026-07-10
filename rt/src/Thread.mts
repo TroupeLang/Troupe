@@ -1261,10 +1261,21 @@ export class Thread {
         const Delta = mc.delta;                     // the ambient fold BEFORE this enable
         const authLevel = auth.val.authorityLevel;
 
-        // Certification, evaluated at the open: privFlowsTo(auth, hi ⊔ Δ, lo ⊔ Δ). Sound
-        // here because the LIFO discipline makes the ambient fold at the matching disable
-        // exactly this Δ, so the check decided now is the check that would be decided then.
-        const okToDg = levels.privFlowsTo (authLevel, lub (hi.val, Delta), lub (lo.val, Delta));
+        // Certification, evaluated at the open: may (hi ⊔ Δ) flow to (lo ⊔ Δ) under the
+        // shown authority? Sound to decide here because the LIFO discipline makes the
+        // ambient fold at the matching disable exactly this Δ, so the check decided now
+        // is the check that would be decided then. The decision goes through the SAME
+        // pure downgrade-decision function every other downgrade runs (okToDowngrade with
+        // the mailbox kind and the cross-dimensional target, exactly as the legacy
+        // lowermbox's _validateDowngradeOrThrow does) — so with NMIFC on the certification
+        // inherits the robust-declassification / transparent-endorsement discipline by
+        // construction; with NMIFC off it is the plain privilege relation (privFlowsTo).
+        // Unlike the legacy path the enable never throws: an unfavourable decision
+        // degrades to ok_to_dg = false (an ordinary region that never closes).
+        const dgDecision: DowngradeResult =
+            levels.okToDowngrade (DowngradeKind.MAILBOX, DowngradeDimension.BOTH)
+                  (lub (hi.val, Delta), lub (lo.val, Delta), authLevel, this.bl, this.isNmifcMode, this.pc);
+        const okToDg = dgDecision.kind === "SUCCESS";
 
         // Both returned components are labelled pc ⊔ ld(lo) ⊔ ld(hi) ⊔ ld(auth) ⊔ Δlab.
         // The Δlab term is necessary: the certification bit consults Δ, whose value comes

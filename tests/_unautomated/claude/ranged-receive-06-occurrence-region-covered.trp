@@ -1,0 +1,49 @@
+(* Ranged-receive v2 witness 6: the region-covered occurrence premise.
+
+   The region is the declassification boundary for all mailbox observations, removals
+   included: an in-region consume's occurrence premise is pc ⊔ ld(·) ⊑ l1 ⊔ Δ (plus the
+   legacy clearance during coexistence), no longer hard.
+
+   Positive half — the idiom: region [public, alice]; the pc is raised INSIDE the window
+   (a raisedTo-alice branch); the consume at the window floor public is ADMITTED — the
+   region's Delta covers the occurrence — and the value is confined at the standing
+   taint (the consume taint joins Delta = alice).
+
+   Negative twin — OUTSIDE any region: the same high-branch, low-floor consume with no
+   enable in sight. Delta and the legacy clearance are both bottom, the premise
+   degenerates to the hard pc ⊔ ld(·) ⊑ l1, and the consume is REFUSED.
+
+   (Also confirmed this session, not runnable here past the error: an in-region consume
+   whose pc raise is OUTSIDE the window — a secret branch under an alice-ceiling region —
+   stays refused: the coverage reaches only up to the region's own ceiling.)
+
+   Expected verdict: ok = true; v prints at `<alice;#root-integrity>` (admitted,
+   confined); region closes; then REFUSE at the out-of-region consume — occurrence check,
+   coverage = the bare floor.
+*)
+
+let val me = self ()
+    val _ = send (me, 42)
+    val _ = send (me, 43)
+
+    (* Positive: in-window pc raise, consume at the window floor — covered by Delta *)
+    val (ok, cap) = enableRangedReceive (`<;#root-integrity>`, `<alice;#root-integrity>`, authority)
+    val _ = printWithLabels ok
+    val v = if (true raisedTo `<alice;#root-integrity>`)
+            then consume (0, `<;#root-integrity>`, `<alice;#root-integrity>`)
+            else 0
+    val _ = printWithLabels v
+    val _ = disableRangedReceive cap
+
+    (* Negative twin: no region — the premise is hard again *)
+    val _ = if (true raisedTo `<alice;#root-integrity>`)
+            then consume (0, `<;#root-integrity>`, `<alice;#root-integrity>`)
+            else 0
+in ()
+end
+
+(* Actual (./local.sh): ok = true@{}%{};
+   v = (42-payload)@<alice;#root-integrity>%<alice;#root-integrity> — admitted in the
+   high branch at the window floor, confined at the standing taint; disable succeeds;
+   then thread error at the out-of-region twin: "occurrence check failed ... coverage
+   (floor, region, clearance): {}" with occ = <alice;#root-integrity>. Matches expected. *)

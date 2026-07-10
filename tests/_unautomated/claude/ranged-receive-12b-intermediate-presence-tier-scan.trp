@@ -1,0 +1,59 @@
+(* Ranged-receive v2 witness 12b: intermediate presence vs the tier-scan loop shape.
+
+   Library-shape decision input, half 2 (half 1 is 12a, the ceiling-consume shape, which
+   blocks). Same setup: one message at presence `<alice;#root-integrity>`, strictly
+   between public and `<alice & bob;#root-integrity>`.
+
+   Part (i) — why the tier scan cannot run inside the WIDE region: the v2 peek taint
+   joins the ambient region fold Delta, so even the narrow peek
+   peek(0, `<alice;...>`, `<alice;...>`) under the [public, alice&bob] region returns at
+   the CEILING label alice&bob, not at alice. Branching on that value would take pc to
+   the ceiling and the tier consume's occurrence premise pc ⊑ alice would refuse — the
+   narrow bounds do not narrow the taint while the wide region is open. The printed
+   label is the machine-checked evidence.
+
+   Part (ii) — the tier-scan shape that works: close the wide region and open a
+   PER-TIER region [public, alice]. Now the narrow peek returns at alice (Delta = alice),
+   the branch takes pc to alice, and consume(0, `<alice;...>`, `<alice;...>`) passes its
+   occurrence premise (alice ⊑ alice), selects the message, and removes it; the program
+   completes with the value at the tier taint. The tier-scan loop must therefore be
+   region-per-tier, not narrow-bounds-inside-one-wide-region.
+
+   Expected verdict: okW = true; part (i) peek prints the payload at
+   `<alice&bob;#root-integrity>`; wide region closes; okT = true; part (ii) peek prints
+   at `<alice;#root-integrity>`; the consumed value prints at `<alice;#root-integrity>`;
+   the tier region closes; program completes.
+*)
+
+let val main = self ()
+    val _ = spawn (fn () => if (true raisedTo `<alice;#root-integrity>`) then send (main, 42) else ())
+
+    (* Part (i): the wide region makes even the narrow peek ceiling-tainted *)
+    val (okW, capW) = enableRangedReceive (`<;#root-integrity>`, `<alice & bob;#root-integrity>`, authority)
+    val _ = printWithLabels okW
+    val pW = peek (0, `<alice;#root-integrity>`, `<alice;#root-integrity>`)
+    val (mW, metaW) = pW
+    val _ = printWithLabels mW
+    val _ = disableRangedReceive capW
+
+    (* Part (ii): the per-tier region — the tier scan proper *)
+    val (okT, capT) = enableRangedReceive (`<;#root-integrity>`, `<alice;#root-integrity>`, authority)
+    val _ = printWithLabels okT
+    val pT = peek (0, `<alice;#root-integrity>`, `<alice;#root-integrity>`)
+    val (mT, metaT) = pT
+    val _ = printWithLabels mT
+    val v = if mT = 42
+            then consume (0, `<alice;#root-integrity>`, `<alice;#root-integrity>`)
+            else consume (0, `<alice;#root-integrity>`, `<alice;#root-integrity>`)
+    val _ = printWithLabels v
+    val _ = disableRangedReceive capT
+in ()
+end
+
+(* Actual (./local.sh): okW = true@{}%{};
+   part (i)  mW = 42@<alice&bob;#root-integrity>%<alice&bob;#root-integrity> — the narrow
+             peek IS ceiling-tainted inside the wide region (Delta joins the peek taint);
+   okT = true@{}%{};
+   part (ii) mT = 42@<alice;#root-integrity>%<alice;#root-integrity>;
+             v  = (42-payload)@<alice;#root-integrity>%<alice;#root-integrity> — removed
+             at the tier; both disables succeed; program completes. Matches expected. *)

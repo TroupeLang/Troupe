@@ -8,8 +8,9 @@
 
    The ceiling-consume shape (the current library loop pattern): under a region
    [public, alice&bob], peek over the full window SEES the message, but the peeked value
-   is tainted at the ceiling (the peek taint joins the window top and the region fold
-   Delta = alice&bob). Branching on it takes pc to the ceiling, after which the consume
+   is tainted at the ceiling — by the peek's OWN upper bound l2 = alice&bob (peek's taint
+   is over its interval arguments; the region folds do not taint it, see 12b).
+   Branching on it takes pc to the ceiling, after which the consume
    occurrence premise pc ⊑ l1 admits only l1 = ceiling — and the point interval
    [alice&bob, alice&bob] does not contain the message's presence alice, so the consume
    selects NOTHING and blocks. An intermediate-presence message is matchable but not

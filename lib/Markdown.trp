@@ -1,0 +1,548 @@
+(* Markdown.trp - Markdown -> safe HTML for Troupe
+ *
+ * Pipeline:  source string -> Markdown AST -> Html.node list -> Html.render
+ *
+ * This library NEVER builds HTML strings by concatenation. Every piece of
+ * output is produced as an Html.node and rendered through Html.render, so all
+ * escaping, </-injection defense, and dangerous-URL blocking are inherited from
+ * Html.trp.
+ *
+ * SECURITY NOTES:
+ * - No raw HTML passthrough. Literal HTML in the source becomes escaped Text.
+ * - Link/image URLs are checked with Html.isDangerousUrl. A blocked link is
+ *   rendered as an anchor with no href (link text preserved, inert). A blocked
+ *   image is rendered as its escaped alt text. This is the graceful degradation.
+ * - The join of the labels of the source characters flows automatically into the
+ *   produced nodes and the rendered string. No downgrading happens here.
+ *
+ * AST (tagged records):
+ *   Block:  {tag="Heading", level, inline}
+ *           {tag="Paragraph", inline}
+ *           {tag="CodeBlock", lang, code}
+ *           {tag="BlockQuote", blocks}
+ *           {tag="ListBlock", ordered, items}   -- each item = {blocks}
+ *           {tag="ThematicBreak"}
+ *   Inline: {tag="Text", content}
+ *           {tag="Emph", inline}
+ *           {tag="Strong", inline}
+ *           {tag="Code", content}
+ *           {tag="Link", url, inline}
+ *           {tag="Image", url, alt}
+ *           {tag="SoftBreak"}
+ *           {tag="HardBreak"}
+ *)
+
+import List
+import String
+import Html
+
+let (* =================================================================== *)
+    (*  String / character utilities                                       *)
+    (* =================================================================== *)
+
+    fun dropWhileSpace c::cs = if c = " " then dropWhileSpace cs else c::cs
+      | dropWhileSpace []    = []
+
+    (* Remove leading spaces. *)
+    fun trimLeft s = String.implode (dropWhileSpace (String.explode s))
+
+    (* Remove trailing spaces. *)
+    fun trimRight s =
+        String.implode (List.reverse (dropWhileSpace (List.reverse (String.explode s))))
+
+    (* Remove leading and trailing spaces. *)
+    fun trim s = trimRight (trimLeft s)
+
+    (* Number of leading space characters of a line. *)
+    fun leadingSpaces s =
+        let fun go i = if String.sub (s, i) = " " then go (i + 1) else i
+        in go 0 end
+
+    (* Number of leading characters equal to `ch`. *)
+    fun countLeading ch s =
+        let fun go i = if String.sub (s, i) = ch then go (i + 1) else i
+        in go 0 end
+
+    (* Number of trailing characters equal to `ch`. *)
+    fun countTrailing ch s =
+        let fun go i acc = if i < 0 then acc
+                           else if String.sub (s, i) = ch then go (i - 1) (acc + 1)
+                           else acc
+        in go (String.size s - 1) 0 end
+
+    (* Substring of `s` starting at `i` to the end. *)
+    fun fromIndex s i = String.substring (s, i, String.size s)
+
+    (* The prefix of `s` up to (but not including) the first space. *)
+    fun firstWord s =
+        let fun go i = let val c = String.sub (s, i)
+                       in if c = "" orelse c = " " then i else go (i + 1) end
+        in String.substring (s, 0, go 0) end
+
+    fun isBlank s = trim s = ""
+
+    fun isDigitChar c = let val n = String.subCode (c, 0) in n >= 48 andalso n <= 57 end
+
+    fun isWordChar c =
+        let val n = String.subCode (c, 0)
+        in (n >= 48 andalso n <= 57) orelse
+           (n >= 65 andalso n <= 90) orelse
+           (n >= 97 andalso n <= 122)
+        end
+
+    (* ASCII punctuation, for backslash escapes. The double-quote character is
+     * omitted: the Troupe lexer cannot represent a literal '"' in a string, so a
+     * backslash before '"' is left as-is rather than being stripped. *)
+    val punctChars =
+        [ "!", "#", "$", "%", "&", "'", "(", ")", "*", "+", ",", "-", ".",
+          "/", ":", ";", "<", "=", ">", "?", "@", "[", "\\", "]", "^", "_", "`",
+          "{", "|", "}", "~" ]
+    fun isPunct c = List.elem c punctChars
+
+    (* Split a source string into lines on "\n", stripping a trailing "\r". *)
+    fun splitLines s =
+        let fun stripCR t =
+                let val n = String.size t
+                in if n > 0 andalso String.sub (t, n - 1) = "\r"
+                   then String.substring (t, 0, n - 1) else t
+                end
+            fun finish rev = stripCR (String.implode (List.reverse rev))
+            fun go []       cur acc = List.reverse ((finish cur) :: acc)
+              | go c::cs cur acc =
+                  if c = "\n" then go cs [] ((finish cur) :: acc)
+                  else go cs (c :: cur) acc
+        in go (String.explode s) [] [] end
+
+    (* =================================================================== *)
+    (*  Block classification                                               *)
+    (* =================================================================== *)
+
+    (* A thematic break: >= 3 of the same char among -, *, _ (spaces ignored). *)
+    fun isThematicBreak line =
+        let val cs = String.explode (trim line)
+            val noSpace = List.filter (fn c => c <> " ") cs
+        in if List.length noSpace < 3 then false
+           else let val c0 = List.head noSpace
+                in (c0 = "-" orelse c0 = "*" orelse c0 = "_")
+                   andalso List.forall (fn c => c = c0) noSpace
+                end
+        end
+
+    (* An ATX heading line -> [ {level, text} ] or []. *)
+    fun stripTrailingHashes s =
+        let val s1 = trimRight s
+            val n  = countTrailing "#" s1
+        in if n = 0 then s1
+           else let val before = String.substring (s1, 0, String.size s1 - n)
+                in if before = "" then ""
+                   else if String.sub (before, String.size before - 1) = " "
+                        then trimRight before
+                        else s1
+                end
+        end
+
+    fun parseHeadingLine line =
+        let val t = trimLeft line
+            val n = countLeading "#" t
+        in if n >= 1 andalso n <= 6 andalso
+              (let val c = String.sub (t, n) in c = " " orelse c = "" end)
+           then [ {level = n, text = stripTrailingHashes (trim (fromIndex t n))} ]
+           else []
+        end
+
+    (* A fenced code opener: <=3 leading spaces then >=3 backticks or tildes. *)
+    fun isFence line =
+        let val ind = leadingSpaces line
+        in if ind >= 4 then false
+           else let val r = fromIndex line ind
+                    val c = String.sub (r, 0)
+                in (c = "`" orelse c = "~") andalso countLeading c r >= 3 end
+        end
+
+    (* A blockquote line: <=3 leading spaces then '>'. *)
+    fun isBlockquote line =
+        let val ind = leadingSpaces line
+        in ind <= 3 andalso String.sub (line, ind) = ">" end
+
+    (* A list-item marker -> [ {ordered, indent, content} ] or [].
+     * `indent` is the column where the item content begins (used to de-indent
+     * continuation lines). *)
+    fun spanDigits s =
+        let fun go i = let val c = String.sub (s, i)
+                       in if c <> "" andalso isDigitChar c then go (i + 1) else i end
+        in go 0 end
+
+    fun matchMarker line =
+        let val ind = leadingSpaces line
+        in if ind >= 4 then []
+           else let val rest = fromIndex line ind
+                    val c0   = String.sub (rest, 0)
+                in if (c0 = "-" orelse c0 = "+" orelse c0 = "*") andalso
+                      (let val c1 = String.sub (rest, 1) in c1 = " " orelse c1 = "" end)
+                   then [ {ordered = false, indent = ind + 2, content = fromIndex rest 2} ]
+                   else let val nd = spanDigits rest
+                        in if nd > 0 andalso nd <= 9 andalso
+                              (let val d = String.sub (rest, nd) in d = "." orelse d = ")" end) andalso
+                              (let val sp = String.sub (rest, nd + 1) in sp = " " orelse sp = "" end)
+                           then [ {ordered = true, indent = ind + nd + 2, content = fromIndex rest (nd + 2)} ]
+                           else []
+                        end
+                end
+        end
+
+    (* Fenced code block: consume from the opener to a matching closer (or EOF).
+     * Returns ({tag="CodeBlock", ...}, remainingLines). Content is literal. *)
+    fun parseFence lines =
+        let val first     = List.head lines
+            val ind       = leadingSpaces first
+            val rest0     = fromIndex first ind
+            val fenceChar = String.sub (rest0, 0)
+            val fenceLen  = countLeading fenceChar rest0
+            val lang      = firstWord (trim (fromIndex rest0 fenceLen))
+            fun isClose l =
+                let val i  = leadingSpaces l
+                    val r  = fromIndex l i
+                    val cl = countLeading fenceChar r
+                in cl >= fenceLen andalso trim (fromIndex r cl) = "" end
+            fun collect []       acc = (List.reverse acc, [])
+              | collect l::ls acc =
+                  if isClose l then (List.reverse acc, ls)
+                  else collect ls (l :: acc)
+            val (codeLines, rest) = collect (List.tail lines) []
+            val code = String.concat (List.map (fn l => l ^ "\n") codeLines)
+        in ({tag = "CodeBlock", lang = lang, code = code}, rest) end
+
+    (* =================================================================== *)
+    (*  Inline parsing                                                     *)
+    (* =================================================================== *)
+
+    fun dropN 0 xs      = xs
+      | dropN _ []      = []
+      | dropN n _::xs = dropN (n - 1) xs
+
+    fun addChars 0 _  buf = buf
+      | addChars n ch buf = addChars (n - 1) ch (ch :: buf)
+
+    fun countLeadingList ch x::xs = if x = ch then 1 + countLeadingList ch xs else 0
+      | countLeadingList _  []      = 0
+
+    fun dropLeadingSpacesL x::xs = if x = " " then dropLeadingSpacesL xs else x :: xs
+      | dropLeadingSpacesL []      = []
+
+    fun countLeadingSpacesL x::xs = if x = " " then 1 + countLeadingSpacesL xs else 0
+      | countLeadingSpacesL []      = 0
+
+    (* Does the char list `cs` start with the char list `delim`? *)
+    fun matchesAt []      _        = true
+      | matchesAt _::_ []       = false
+      | matchesAt d::ds c::cs = if d = c then matchesAt ds cs else false
+
+    (* Find the first occurrence of `delim` that is preceded by a non-space,
+     * non-empty run. Returns [ (before, after) ] or []. Used for emphasis. *)
+    fun splitAtDelim delim cs =
+        let val dlen = List.length delim
+            fun go before []            = []
+              | go before (c::cs') =
+                  if matchesAt delim (c :: cs')
+                  then if (not (List.null before)) andalso ((List.head before) <> " ")
+                       then [ (List.reverse before, dropN dlen (c :: cs')) ]
+                       else go (c :: before) cs'
+                  else go (c :: before) cs'
+        in go [] cs end
+
+    (* Content between brackets, honoring nesting. `cs` is after the opening '['.
+     * Returns [ (contentChars, restAfterCloseBracket) ] or []. *)
+    fun parseBracket cs =
+        let fun go _     _      []          = []
+              | go depth before (c::cs') =
+                  if c = "]" then (if depth = 0 then [ (List.reverse before, cs') ]
+                                   else go (depth - 1) (c :: before) cs')
+                  else if c = "[" then go (depth + 1) (c :: before) cs'
+                  else go depth (c :: before) cs'
+        in go 0 [] cs end
+
+    (* Content between parentheses, honoring nesting. `cs` is after the opening
+     * '('. Returns [ (insideChars, restAfterCloseParen) ] or []. *)
+    fun findParen _     _      []          = []
+      | findParen depth before (c::cs') =
+          if c = ")" then (if depth = 0 then [ (List.reverse before, cs') ]
+                           else findParen (depth - 1) (c :: before) cs')
+          else if c = "(" then findParen (depth + 1) (c :: before) cs'
+          else findParen depth (c :: before) cs'
+
+    (* Extract a URL from the parenthesized part of a link/image: strip an
+     * optional <...>, then take up to the first space (dropping any title). *)
+    fun extractUrl s =
+        let val t  = trim s
+            val n  = String.size t
+            val t2 = if n >= 2 andalso String.sub (t, 0) = "<" andalso String.sub (t, n - 1) = ">"
+                     then String.substring (t, 1, n - 1) else t
+            fun cut i = let val ch = String.sub (t2, i)
+                        in if ch = "" orelse ch = " " then i else cut (i + 1) end
+        in String.substring (t2, 0, cut 0) end
+
+    fun parseParenUrl []         = []
+      | parseParenUrl (p::cs') =
+          if p = "(" then (case findParen 0 [] cs' of
+                                (inside, rest)::_ => [ (extractUrl (String.implode inside), rest) ]
+                              | [] => [])
+          else []
+
+    (* Find a closing backtick run of exactly length `n`. Backtick runs of a
+     * different length are treated as literal content. *)
+    fun findCodeClose n cs =
+        let fun go before []          = []
+              | go before (c::cs') =
+                  if c = "`"
+                  then let val rl = 1 + countLeadingList "`" cs'
+                       in if rl = n then [ (List.reverse before, dropN (rl - 1) cs') ]
+                          else go (addChars rl "`" before) (dropN (rl - 1) cs')
+                       end
+                  else go (c :: before) cs'
+        in go [] cs end
+
+    (* Normalize inline-code content: line endings become spaces; a single
+     * enclosing space pair is stripped when the content is not all spaces. *)
+    fun normalizeCode s =
+        let val cs = List.map (fn c => if c = "\n" then " " else c) (String.explode s)
+            val n  = List.length cs
+        in if n >= 2 andalso (List.head cs) = " " andalso (List.nth cs (n - 1)) = " "
+              andalso not (List.forall (fn c => c = " ") cs)
+           then String.implode (List.sublist 1 (n - 1) cs)
+           else String.implode cs
+        end
+
+    (* Parse a char list into an inline-node list. *)
+    fun parseInlineChars cs =
+        let fun mkText content = {tag = "Text", content = content}
+            fun flushBuf buf nodes =
+                if List.null buf then nodes
+                else (mkText (String.implode (List.reverse buf))) :: nodes
+
+            fun go []          buf nodes = List.reverse (flushBuf buf nodes)
+              | go (c::cs) buf nodes =
+                  if c = "\\" then
+                      (case cs of
+                           [] => go [] ("\\" :: buf) nodes
+                         | n::cs' =>
+                             if n = "\n"
+                             then go (dropLeadingSpacesL cs') [] ({tag = "HardBreak"} :: flushBuf buf nodes)
+                             else if isPunct n then go cs' (n :: buf) nodes
+                             else go cs ("\\" :: buf) nodes)
+                  else if c = "\n" then
+                      let val trailing = countLeadingSpacesL buf
+                          val buf'     = dropLeadingSpacesL buf
+                          val brk      = if trailing >= 2 then {tag = "HardBreak"} else {tag = "SoftBreak"}
+                      in go (dropLeadingSpacesL cs) [] (brk :: flushBuf buf' nodes) end
+                  else if c = "`" then
+                      let val extra     = countLeadingList "`" cs
+                          val runLen    = 1 + extra
+                          val afterOpen = dropN extra cs
+                      in (case findCodeClose runLen afterOpen of
+                              [] => go afterOpen (addChars runLen "`" buf) nodes
+                            | (content, rest)::_ =>
+                                go rest [] ({tag = "Code", content = normalizeCode (String.implode content)}
+                                            :: flushBuf buf nodes))
+                      end
+                  else if c = "!" then
+                      (case cs of
+                           b::cs' =>
+                             if b = "[" then
+                                 (case parseBracket cs' of
+                                      (altChars, afterBr)::_ =>
+                                        (case parseParenUrl afterBr of
+                                             (url, afterUrl)::_ =>
+                                               go afterUrl []
+                                                  ({tag = "Image", url = url, alt = String.implode altChars}
+                                                   :: flushBuf buf nodes)
+                                           | [] => go cs ("!" :: buf) nodes)
+                                    | [] => go cs ("!" :: buf) nodes)
+                             else go cs ("!" :: buf) nodes
+                         | [] => go [] ("!" :: buf) nodes)
+                  else if c = "[" then
+                      (case parseBracket cs of
+                           (textChars, afterBr)::_ =>
+                             (case parseParenUrl afterBr of
+                                  (url, afterUrl)::_ =>
+                                    go afterUrl []
+                                       ({tag = "Link", url = url, inline = parseInlineChars textChars}
+                                        :: flushBuf buf nodes)
+                                | [] => go cs ("[" :: buf) nodes)
+                         | [] => go cs ("[" :: buf) nodes)
+                  else if (c = "*" orelse c = "_") then
+                      let val prevCh   = (case buf of p::_ => p | [] => "")
+                          val isU      = (c = "_")
+                          val isDouble = (case cs of x::_ => x = c | [] => false)
+                      in if isU andalso isWordChar prevCh then go cs (c :: buf) nodes
+                         else if isDouble then
+                             let val afterDelim = dropN 1 cs
+                                 val nextCh     = (case afterDelim of x::_ => x | [] => "")
+                             in if nextCh = "" orelse nextCh = " " orelse nextCh = "\n"
+                                then go cs (c :: buf) nodes
+                                else (case splitAtDelim [c, c] afterDelim of
+                                          (inner, rest)::_ =>
+                                            go rest [] ({tag = "Strong", inline = parseInlineChars inner}
+                                                        :: flushBuf buf nodes)
+                                        | [] => go cs (c :: buf) nodes)
+                             end
+                         else
+                             let val nextCh = (case cs of x::_ => x | [] => "")
+                             in if nextCh = "" orelse nextCh = " " orelse nextCh = "\n"
+                                then go cs (c :: buf) nodes
+                                else (case splitAtDelim [c] cs of
+                                          (inner, rest)::_ =>
+                                            go rest [] ({tag = "Emph", inline = parseInlineChars inner}
+                                                        :: flushBuf buf nodes)
+                                        | [] => go cs (c :: buf) nodes)
+                             end
+                      end
+                  else go cs (c :: buf) nodes
+        in go cs [] [] end
+
+    fun parseInline s = parseInlineChars (String.explode s)
+
+    (* =================================================================== *)
+    (*  Block parsing (mutually recursive)                                 *)
+    (* =================================================================== *)
+
+    fun deindent n l = fromIndex l n
+
+    and parseBlocks []             = []
+      | parseBlocks (line::rest) =
+          if isBlank line then parseBlocks rest
+          else if isThematicBreak line then {tag = "ThematicBreak"} :: parseBlocks rest
+          else (case parseHeadingLine line of
+                    hd::_ =>
+                      {tag = "Heading", level = hd.level, inline = parseInline hd.text} :: parseBlocks rest
+                  | [] =>
+                      if isFence line
+                      then let val (blk, rest') = parseFence (line :: rest) in blk :: parseBlocks rest' end
+                      else if isBlockquote line
+                      then let val (blk, rest') = parseBlockquote (line :: rest) in blk :: parseBlocks rest' end
+                      else if matchMarker line <> []
+                      then let val (blk, rest') = parseListBlock (line :: rest) in blk :: parseBlocks rest' end
+                      else let val (blk, rest') = parseParagraph (line :: rest) in blk :: parseBlocks rest' end)
+
+    and parseParagraph lines =
+        let fun stops l =
+                isBlank l orelse isThematicBreak l orelse (parseHeadingLine l <> [])
+                orelse isFence l orelse isBlockquote l orelse (matchMarker l <> [])
+            fun collect []       acc = (List.reverse acc, [])
+              | collect l::ls acc =
+                  if stops l then (List.reverse acc, l :: ls)
+                  else collect ls ((trimLeft l) :: acc)
+            val (plines, rest) = collect lines []
+            val text = String.concatWith "\n" plines
+        in ({tag = "Paragraph", inline = parseInline text}, rest) end
+
+    and parseBlockquote lines =
+        let fun strip l =
+                let val ind      = leadingSpaces l
+                    val afterGt  = fromIndex l (ind + 1)
+                in if String.sub (afterGt, 0) = " " then fromIndex afterGt 1 else afterGt end
+            fun collect []       acc = (List.reverse acc, [])
+              | collect l::ls acc =
+                  if isBlockquote l then collect ls ((strip l) :: acc)
+                  else (List.reverse acc, l :: ls)
+            val (inner, rest) = collect lines []
+        in ({tag = "BlockQuote", blocks = parseBlocks inner}, rest) end
+
+    and parseListBlock lines =
+        let val ordered0 = (List.head (matchMarker (List.head lines))).ordered
+            fun collectItem _      []       acc = (List.reverse acc, [])
+              | collectItem indent l::ls acc =
+                  if isBlank l then collectItem indent ls ("" :: acc)
+                  else if leadingSpaces l >= indent
+                       then collectItem indent ls ((deindent indent l) :: acc)
+                       else (List.reverse acc, l :: ls)
+            fun loop []          items = (List.reverse items, [])
+              | loop (l::rest) items =
+                  (case matchMarker l of
+                       [] => (List.reverse items, l :: rest)
+                     | mk::_ =>
+                         if mk.ordered <> ordered0 then (List.reverse items, l :: rest)
+                         else let val (contLines, rest') = collectItem (mk.indent) rest []
+                                  val itemBlocks = parseBlocks ((mk.content) :: contLines)
+                              in loop rest' ({blocks = itemBlocks} :: items) end)
+            val (items, remaining) = loop lines []
+        in ({tag = "ListBlock", ordered = ordered0, items = items}, remaining) end
+
+    (* =================================================================== *)
+    (*  AST -> Html nodes                                                  *)
+    (* =================================================================== *)
+
+    (* Left-to-right flatten of a list of lists (order preserving). *)
+    fun flatten xss = List.foldl (fn (xs, acc) => List.append acc xs) [] xss
+
+    fun headingNode level children =
+        if level = 1 then Html.h1 {} children
+        else if level = 2 then Html.h2 {} children
+        else if level = 3 then Html.h3 {} children
+        else if level = 4 then Html.h4 {} children
+        else if level = 5 then Html.h5 {} children
+        else Html.h6 {} children
+
+    fun codeBlockNode lang code =
+        let val codeChild = Html.text code
+            val codeElem  = if lang = "" then Html.code {} [codeChild]
+                            else Html.code {class = "language-" ^ lang} [codeChild]
+        in Html.pre {} [codeElem] end
+
+    (* One inline node -> one Html node. *)
+    fun inlineToNode n =
+        (case n.tag of
+             "Text"      => Html.text n.content
+           | "Emph"      => Html.em     {} (List.map inlineToNode n.inline)
+           | "Strong"    => Html.strong {} (List.map inlineToNode n.inline)
+           | "Code"      => Html.code   {} [Html.text n.content]
+           | "Link"      => if Html.isDangerousUrl n.url
+                            then Html.a {} (List.map inlineToNode n.inline)
+                            else Html.a {href = n.url} (List.map inlineToNode n.inline)
+           | "Image"     => if Html.isDangerousUrl n.url
+                            then Html.text n.alt
+                            else Html.img {src = n.url, alt = n.alt}
+           | "SoftBreak" => Html.text "\n"
+           | "HardBreak" => Html.br {}
+           | _           => Html.text "")
+
+    fun inlineToNodes ns = List.map inlineToNode ns
+
+    (* One block -> a list of Html nodes. In `tight` mode a Paragraph emits its
+     * inline nodes directly (no <p>), which produces tight-list rendering. *)
+    fun blockToNodes tight b =
+        (case b.tag of
+             "Heading"       => [ headingNode b.level (inlineToNodes b.inline) ]
+           | "Paragraph"     => if tight then inlineToNodes b.inline
+                                else [ Html.p {} (inlineToNodes b.inline) ]
+           | "CodeBlock"     => [ codeBlockNode b.lang b.code ]
+           | "BlockQuote"    => [ Html.blockquote {} (blocksToNodes false b.blocks) ]
+           | "ThematicBreak" => [ Html.hr {} ]
+           | "ListBlock"     => [ listNode b.ordered b.items ]
+           | _               => [])
+
+    and blocksToNodes tight bs = flatten (List.map (blockToNodes tight) bs)
+
+    and listNode ordered items =
+        let val liNodes = List.map (fn item => Html.li {} (blocksToNodes true item.blocks)) items
+        in if ordered then Html.ol {} liNodes else Html.ul {} liNodes end
+
+    (* =================================================================== *)
+    (*  Exported API                                                       *)
+    (* =================================================================== *)
+
+    (** Parse a Markdown source string into the block AST (for testing or
+     *  further processing). *)
+    fun parse s = parseBlocks (splitLines s)
+
+    (** Convert a Markdown source string into a list of Html nodes. *)
+    fun toHtmlNodes s = blocksToNodes false (parse s)
+
+    (** Convert a Markdown source string into an HTML string: `toHtmlNodes`
+     *  followed by `Html.render` on each node, concatenated. *)
+    fun toHtml s = Html.renderAll (toHtmlNodes s)
+
+in [ ("parse", parse)
+   , ("toHtmlNodes", toHtmlNodes)
+   , ("toHtml", toHtml)
+   ]
+end

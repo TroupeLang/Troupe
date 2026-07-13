@@ -389,6 +389,11 @@ instance WellFormedIRCheck IRExpr where
                      , "downgradeType"
                      , "exit"
                      , "endorse"
+                     -- SimpleFileIO whole-file primitives (ROOT-authority; see builtins/simplefileio.mts)
+                     , "appendFile"
+                     , "fileExists"
+                     , "readFile"
+                     , "writeFile"
                      , "endorseType"
                      , "floor"
                      , "flowsTo"                     

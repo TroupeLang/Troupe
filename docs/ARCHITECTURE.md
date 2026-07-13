@@ -52,6 +52,35 @@ Key components:
 | `p2p/p2p.mts`          | P2P networking layer                 |
 | `builtins/`            | Language built-ins                   |
 
+## External resource access
+
+Every runtime operation that reaches outside the program — standard streams, persistence, the
+network registry, and file I/O — is gated on authority rather than on ordinary label flow. With the
+exception of `send` (governed by wire label/trust checks), these operations require **full (ROOT)
+authority**: `stdio` defaults its level to ROOT, and `persist`, `cliargs`, `exit`, and `register`
+call `assertIsRootAuthority`.
+
+### File I/O (`SimpleFileIO`)
+
+Whole-file read/write lives in `rt/src/builtins/simplefileio.mts`. It is a **placeholder** — a
+deliberately small surface (`readFile`, `writeFile`, `appendFile`, `fileExists`) that exists to
+support document-processing programs and is expected to be superseded by a labelled-path model.
+
+- **Authority.** Every operation requires ROOT authority (mirrors `persist`). Untrusted code cannot
+  reach the filesystem at all, so per-write confidentiality checks and per-path levels are deferred
+  rather than half-answered.
+- **Labeling.** Read content is labeled at ROOT ("we trust our own files"), exactly as `persist`
+  labels restored data. Each primitive returns a `Result` (`{tag="Ok",…}` / `{tag="Err",{reason,
+  path}}`), so a missing file or rejected path never crashes the thread.
+- **Sandbox.** `--io-root <dir>` (`rt/src/TroupeCliArgs.mts`) bounds path reachability, orthogonal
+  to authority: `..`, absolute-outside, and symlink escapes are rejected before any filesystem
+  access, so even a bug in ROOT code cannot write outside the subtree. When unset, a per-invocation
+  scratch directory is used, keeping observable output hermetic without a runtime flag. Error
+  payloads carry the caller-supplied (io-root-relative) path, never the resolved absolute path.
+- **Deferred to the revision:** non-ROOT/parameterized I/O levels, per-path label manifests,
+  write-confidentiality checks, bounded-integrity read content, quarantine integration, and
+  streaming/handle-based access.
+
 ## Information flow control
 
 Troupe implements dynamic information flow control:

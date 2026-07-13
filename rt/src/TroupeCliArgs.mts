@@ -38,6 +38,7 @@ export enum TroupeCliArg {
     Id = 'id',
     LocalOnly = 'localonly',
     Persist = 'persist',
+    IoRoot = 'io-root',
     Aliases = 'aliases',
     Stdiolev = 'stdiolev',
     Port = 'port',
@@ -71,6 +72,7 @@ export interface ParsedArgs {
     [TroupeCliArg.Id]?: string;
     [TroupeCliArg.LocalOnly]?: boolean;
     [TroupeCliArg.Persist]?: boolean;
+    [TroupeCliArg.IoRoot]?: string;
     [TroupeCliArg.Aliases]?: string;
     [TroupeCliArg.Stdiolev]?: string;
     [TroupeCliArg.Port]?: number;
@@ -109,6 +111,7 @@ export function getCliArgs(): ParsedArgs {
             .option(TroupeCliArg.Id, { alias: 'i', type: 'string', describe: 'Path to the node ID file' })
             .option(TroupeCliArg.LocalOnly, { alias: 'l', type: 'boolean', default: false, describe: 'Run in local-only mode, skipping network creation' })
             .option(TroupeCliArg.Persist, { alias: 'P', type: 'boolean', default: false, describe: 'Enable persistence mode' })
+            .option(TroupeCliArg.IoRoot, { type: 'string', describe: 'Directory subtree SimpleFileIO may access; paths resolve relative to it and cannot escape it. Defaults to a per-invocation scratch dir when unset.' })
             .option(TroupeCliArg.Aliases, { alias: 'a', type: 'string', describe: 'Path to the aliases JSON file' })
             .option(TroupeCliArg.Stdiolev, { type: 'string', describe: 'Security level for stdio operations' })
             .option(TroupeCliArg.Port, { type: 'number', describe: 'Network port for P2P communication' })

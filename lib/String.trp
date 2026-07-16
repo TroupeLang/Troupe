@@ -47,13 +47,17 @@ let
      * if it a string of length 1. *)
     fun str c = c
 
-    (* TODO: `strCode` where 'c' is a charCode that is converted. *)
+    (** The one-character string for the given Unicode code point `c` (0..0x10FFFF); the inverse of
+     *  `subCode`. Code points beyond the basic plane produce the corresponding surrogate pair. *)
+    fun strCode c = charFromCode c
 
     (** Returns the string containing the characters in the list `xs`. This is equivalent to
      *  `concat (List.map str xs)`. *)
     val implode = concat
 
-    (* TODO: `implodeCode` to create a string from a list of charCodes (with or without NULL). *)
+    (** Returns the string built from the list of code points `xs`, i.e. `concat (List.map strCode
+     *  xs)`. *)
+    fun implodeCode xs = concat (List.map strCode xs)
 
     (** Returns the list of characters in the string `s`. *)
     fun explode s = let fun go 0 acc = acc
@@ -100,7 +104,9 @@ in [ ("maxSize", maxSize)
    , ("concat", concat)
    , ("concatWith", concatWith)
    , ("str", str)
+   , ("strCode", strCode)
    , ("implode", implode)
+   , ("implodeCode", implodeCode)
    , ("explode", explode)
    , ("map", map)
    , ("translate", translate)

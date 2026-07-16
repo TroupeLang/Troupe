@@ -377,6 +377,7 @@ instance WellFormedIRCheck IRExpr where
                      , "blockendorseto"
                      , "cert"
                      , "charCodeAtWithDefault"
+                     , "charFromCode"
                      , "coalesce"
                      , "consume"
                      , "_debug"

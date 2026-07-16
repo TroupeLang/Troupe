@@ -1,0 +1,124 @@
+2026-07-16T23:15:21.531Z [RTM] info: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+[34mbegin [0mJson
+  [34mbegin [0mparse literals
+      [33m[ TEST ][0m it true      [32m[ PASS ][0m it true
+      [33m[ TEST ][0m it false      [32m[ PASS ][0m it false
+      [33m[ TEST ][0m it null is unit      [32m[ PASS ][0m it null is unit
+      [33m[ TEST ][0m it leading/trailing whitespace      [32m[ PASS ][0m it leading/trailing whitespace
+      [33m[ TEST ][0m it kindOf null      [32m[ PASS ][0m it kindOf null
+      [33m[ TEST ][0m it kindOf bool      [32m[ PASS ][0m it kindOf bool
+      [33m[ TEST ][0m it kindOf number      [32m[ PASS ][0m it kindOf number
+      [33m[ TEST ][0m it kindOf string      [32m[ PASS ][0m it kindOf string
+      [33m[ TEST ][0m it kindOf array      [32m[ PASS ][0m it kindOf array
+      [33m[ TEST ][0m it kindOf object      [32m[ PASS ][0m it kindOf object
+  [34mend [0m
+  [34mbegin [0mparse numbers
+      [33m[ TEST ][0m it zero      [32m[ PASS ][0m it zero
+      [33m[ TEST ][0m it positive integer      [32m[ PASS ][0m it positive integer
+      [33m[ TEST ][0m it negative integer      [32m[ PASS ][0m it negative integer
+      [33m[ TEST ][0m it fraction      [32m[ PASS ][0m it fraction
+      [33m[ TEST ][0m it exponent      [32m[ PASS ][0m it exponent
+      [33m[ TEST ][0m it signed exponent      [32m[ PASS ][0m it signed exponent
+      [33m[ TEST ][0m it negative fraction      [32m[ PASS ][0m it negative fraction
+      [33m[ TEST ][0m it capital exponent      [32m[ PASS ][0m it capital exponent
+  [34mend [0m
+  [34mbegin [0mparse strings and escapes
+      [33m[ TEST ][0m it plain      [32m[ PASS ][0m it plain
+      [33m[ TEST ][0m it empty      [32m[ PASS ][0m it empty
+      [33m[ TEST ][0m it escaped quote      [32m[ PASS ][0m it escaped quote
+      [33m[ TEST ][0m it escaped backslash      [32m[ PASS ][0m it escaped backslash
+      [33m[ TEST ][0m it escaped slash      [32m[ PASS ][0m it escaped slash
+      [33m[ TEST ][0m it escaped newline      [32m[ PASS ][0m it escaped newline
+      [33m[ TEST ][0m it escaped tab      [32m[ PASS ][0m it escaped tab
+      [33m[ TEST ][0m it escaped cr      [32m[ PASS ][0m it escaped cr
+      [33m[ TEST ][0m it escaped backspace      [32m[ PASS ][0m it escaped backspace
+      [33m[ TEST ][0m it escaped formfeed      [32m[ PASS ][0m it escaped formfeed
+      [33m[ TEST ][0m it u escape ASCII 'A'      [32m[ PASS ][0m it u escape ASCII 'A'
+      [33m[ TEST ][0m it u escape ASCII tab      [32m[ PASS ][0m it u escape ASCII tab
+      [33m[ TEST ][0m it u escape non-ASCII BMP      [32m[ PASS ][0m it u escape non-ASCII BMP
+      [33m[ TEST ][0m it u escape surrogate pair      [32m[ PASS ][0m it u escape surrogate pair
+      [33m[ TEST ][0m it literal UTF-8 passes through      [32m[ PASS ][0m it literal UTF-8 passes through
+      [33m[ TEST ][0m it mixed runs and escapes      [32m[ PASS ][0m it mixed runs and escapes
+  [34mend [0m
+  [34mbegin [0mparse arrays and objects
+      [33m[ TEST ][0m it empty array      [32m[ PASS ][0m it empty array
+      [33m[ TEST ][0m it number array      [32m[ PASS ][0m it number array
+      [33m[ TEST ][0m it mixed array      [32m[ PASS ][0m it mixed array
+      [33m[ TEST ][0m it nested array      [32m[ PASS ][0m it nested array
+      [33m[ TEST ][0m it whitespace in array      [32m[ PASS ][0m it whitespace in array
+      [33m[ TEST ][0m it empty object      [32m[ PASS ][0m it empty object
+      [33m[ TEST ][0m it object field access      [32m[ PASS ][0m it object field access
+      [33m[ TEST ][0m it object second field      [32m[ PASS ][0m it object second field
+      [33m[ TEST ][0m it missing field is Err      [32m[ PASS ][0m it missing field is Err
+      [33m[ TEST ][0m it field on non-object is Err      [32m[ PASS ][0m it field on non-object is Err
+      [33m[ TEST ][0m it index into array      [32m[ PASS ][0m it index into array
+      [33m[ TEST ][0m it index out of range is Err      [32m[ PASS ][0m it index out of range is Err
+      [33m[ TEST ][0m it nested field then index      [32m[ PASS ][0m it nested field then index
+  [34mend [0m
+  [34mbegin [0maccessors
+      [33m[ TEST ][0m it asBool ok      [32m[ PASS ][0m it asBool ok
+      [33m[ TEST ][0m it asNumber ok      [32m[ PASS ][0m it asNumber ok
+      [33m[ TEST ][0m it asString ok      [32m[ PASS ][0m it asString ok
+      [33m[ TEST ][0m it asArray ok      [32m[ PASS ][0m it asArray ok
+      [33m[ TEST ][0m it asBool on number is Err      [32m[ PASS ][0m it asBool on number is Err
+      [33m[ TEST ][0m it asObject pairs      [32m[ PASS ][0m it asObject pairs
+  [34mend [0m
+  [34mbegin [0mstringify
+      [33m[ TEST ][0m it null      [32m[ PASS ][0m it null
+      [33m[ TEST ][0m it true      [32m[ PASS ][0m it true
+      [33m[ TEST ][0m it number integral      [32m[ PASS ][0m it number integral
+      [33m[ TEST ][0m it number fraction      [32m[ PASS ][0m it number fraction
+      [33m[ TEST ][0m it string      [32m[ PASS ][0m it string
+      [33m[ TEST ][0m it array      [32m[ PASS ][0m it array
+      [33m[ TEST ][0m it empty array      [32m[ PASS ][0m it empty array
+      [33m[ TEST ][0m it escape quote      [32m[ PASS ][0m it escape quote
+      [33m[ TEST ][0m it escape backslash      [32m[ PASS ][0m it escape backslash
+      [33m[ TEST ][0m it escape newline      [32m[ PASS ][0m it escape newline
+      [33m[ TEST ][0m it escape tab      [32m[ PASS ][0m it escape tab
+      [33m[ TEST ][0m it escape control      [32m[ PASS ][0m it escape control
+      [33m[ TEST ][0m it non-ASCII stays literal      [32m[ PASS ][0m it non-ASCII stays literal
+  [34mend [0m
+  [34mbegin [0mround-trip (canonical compact)
+      [33m[ TEST ][0m it true      [32m[ PASS ][0m it true
+      [33m[ TEST ][0m it null      [32m[ PASS ][0m it null
+      [33m[ TEST ][0m it 0      [32m[ PASS ][0m it 0
+      [33m[ TEST ][0m it -5      [32m[ PASS ][0m it -5
+      [33m[ TEST ][0m it 3.14      [32m[ PASS ][0m it 3.14
+      [33m[ TEST ][0m it [1,2,3]      [32m[ PASS ][0m it [1,2,3]
+      [33m[ TEST ][0m it [true,false,null]      [32m[ PASS ][0m it [true,false,null]
+      [33m[ TEST ][0m it [[1],[2,[3,4]]]      [32m[ PASS ][0m it [[1],[2,[3,4]]]
+      [33m[ TEST ][0m it "hello"      [32m[ PASS ][0m it "hello"
+      [33m[ TEST ][0m it {"a":1}      [32m[ PASS ][0m it {"a":1}
+      [33m[ TEST ][0m it {"k":[1,2,"x"]}      [32m[ PASS ][0m it {"k":[1,2,"x"]}
+  [34mend [0m
+  [34mbegin [0mprettyPrint
+      [33m[ TEST ][0m it empty array      [32m[ PASS ][0m it empty array
+      [33m[ TEST ][0m it empty object      [32m[ PASS ][0m it empty object
+      [33m[ TEST ][0m it scalar      [32m[ PASS ][0m it scalar
+      [33m[ TEST ][0m it array indented      [32m[ PASS ][0m it array indented
+      [33m[ TEST ][0m it object indented      [32m[ PASS ][0m it object indented
+      [33m[ TEST ][0m it pretty re-parses to same value      [32m[ PASS ][0m it pretty re-parses to same value
+  [34mend [0m
+  [34mbegin [0mmalformed input yields Err with offset
+      [33m[ TEST ][0m it empty input      [32m[ PASS ][0m it empty input
+      [33m[ TEST ][0m it bare bad token      [32m[ PASS ][0m it bare bad token
+      [33m[ TEST ][0m it trailing garbage      [32m[ PASS ][0m it trailing garbage
+      [33m[ TEST ][0m it leading zero digits      [32m[ PASS ][0m it leading zero digits
+      [33m[ TEST ][0m it number no frac digit      [32m[ PASS ][0m it number no frac digit
+      [33m[ TEST ][0m it number no exp digit      [32m[ PASS ][0m it number no exp digit
+      [33m[ TEST ][0m it unterminated array      [32m[ PASS ][0m it unterminated array
+      [33m[ TEST ][0m it trailing comma array      [32m[ PASS ][0m it trailing comma array
+      [33m[ TEST ][0m it unterminated string      [32m[ PASS ][0m it unterminated string
+      [33m[ TEST ][0m it unescaped control      [32m[ PASS ][0m it unescaped control
+      [33m[ TEST ][0m it object missing colon      [32m[ PASS ][0m it object missing colon
+      [33m[ TEST ][0m it object missing value      [32m[ PASS ][0m it object missing value
+      [33m[ TEST ][0m it lone high surrogate      [32m[ PASS ][0m it lone high surrogate
+      [33m[ TEST ][0m it high surrogate no low      [32m[ PASS ][0m it high surrogate no low
+      [33m[ TEST ][0m it bad hex in u escape      [32m[ PASS ][0m it bad hex in u escape
+      [33m[ TEST ][0m it bare comma      [32m[ PASS ][0m it bare comma
+  [34mend [0m
+[34mend [0m
+
+Total:  99
+Passes: 99
+>>> Main thread finished with value: true@{}%{}

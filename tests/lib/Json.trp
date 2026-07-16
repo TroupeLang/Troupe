@@ -1,0 +1,170 @@
+import Unit
+import Result
+import Json
+import List
+import String
+
+let val q  = "\x22"   (* double quote *)
+    val bs = "\x5c"   (* backslash *)
+
+    (* Parse helpers *)
+    fun okv s     = Result.unwrap (Json.parse s)
+    fun isErr s   = Result.isErr (Json.parse s)
+    fun errOff s  = (Result.unwrapErr (Json.parse s)).offset
+
+    (* A quoted JSON string literal from raw content. *)
+    fun quoted content = q ^ content ^ q
+
+    (* Round-trip on documents already in canonical compact form. *)
+    fun roundtrips s = Unit.it s (Unit.isEq s (Json.stringify (okv s)))
+
+    val tests = Unit.group "Json" [
+
+        Unit.group "parse literals" [
+            Unit.it "true"          (Unit.isEq true  (okv "true"))
+          , Unit.it "false"         (Unit.isEq false (okv "false"))
+          , Unit.it "null is unit"  (Unit.isEq ()    (okv "null"))
+          , Unit.it "leading/trailing whitespace" (Unit.isEq true (okv "  \n\t true \r "))
+          , Unit.it "kindOf null"   (Unit.isEq "null"   (Json.kindOf (okv "null")))
+          , Unit.it "kindOf bool"   (Unit.isEq "bool"   (Json.kindOf (okv "true")))
+          , Unit.it "kindOf number" (Unit.isEq "number" (Json.kindOf (okv "42")))
+          , Unit.it "kindOf string" (Unit.isEq "string" (Json.kindOf (okv (quoted "x"))))
+          , Unit.it "kindOf array"  (Unit.isEq "array"  (Json.kindOf (okv "[]")))
+          , Unit.it "kindOf object" (Unit.isEq "object" (Json.kindOf (okv "{}")))
+        ],
+
+        Unit.group "parse numbers" [
+            Unit.it "zero"              (Unit.isEq 0      (okv "0"))
+          , Unit.it "positive integer"  (Unit.isEq 123    (okv "123"))
+          , Unit.it "negative integer"  (Unit.isEq (0-5)  (okv "-5"))
+          , Unit.it "fraction"          (Unit.isEq 3.14   (okv "3.14"))
+          , Unit.it "exponent"          (Unit.isEq 1000   (okv "1e3"))
+          , Unit.it "signed exponent"   (Unit.isEq 0.025  (okv "2.5e-2"))
+          , Unit.it "negative fraction" (Unit.isEq (0.0-0.5) (okv "-0.5"))
+          , Unit.it "capital exponent"  (Unit.isEq 150    (okv "1.5E2"))
+        ],
+
+        Unit.group "parse strings and escapes" [
+            Unit.it "plain"            (Unit.isEq "hello" (okv (quoted "hello")))
+          , Unit.it "empty"           (Unit.isEq "" (okv (quoted "")))
+          , Unit.it "escaped quote"    (Unit.isEq q  (okv (quoted (bs ^ q))))
+          , Unit.it "escaped backslash" (Unit.isEq bs (okv (quoted (bs ^ bs))))
+          , Unit.it "escaped slash"    (Unit.isEq "/" (okv (quoted (bs ^ "/"))))
+          , Unit.it "escaped newline"  (Unit.isEq "\x0a" (okv (quoted (bs ^ "n"))))
+          , Unit.it "escaped tab"      (Unit.isEq "\x09" (okv (quoted (bs ^ "t"))))
+          , Unit.it "escaped cr"       (Unit.isEq "\x0d" (okv (quoted (bs ^ "r"))))
+          , Unit.it "escaped backspace" (Unit.isEq "\x08" (okv (quoted (bs ^ "b"))))
+          , Unit.it "escaped formfeed" (Unit.isEq "\x0c" (okv (quoted (bs ^ "f"))))
+          , Unit.it "u escape ASCII 'A'" (Unit.isEq "A" (okv (quoted (bs ^ "u0041"))))
+          , Unit.it "u escape ASCII tab" (Unit.isEq "\x09" (okv (quoted (bs ^ "u0009"))))
+          , Unit.it "u escape non-ASCII BMP" (Unit.isEq "\xe9" (okv (quoted (bs ^ "u00e9"))))
+          , Unit.it "u escape surrogate pair" (Unit.isEq (String.strCode 128512)
+                                                        (okv (quoted (bs ^ "ud83d" ^ bs ^ "ude00"))))
+          , Unit.it "literal UTF-8 passes through" (Unit.isEq "cafe\xc3\xa9" (okv (quoted "cafe\xc3\xa9")))
+          , Unit.it "mixed runs and escapes" (Unit.isEq ("a" ^ q ^ "b" ^ bs ^ "c")
+                                                        (okv (quoted ("a" ^ bs ^ q ^ "b" ^ bs ^ bs ^ "c"))))
+        ],
+
+        Unit.group "parse arrays and objects" [
+            Unit.it "empty array"   (Unit.isEq [] (okv "[]"))
+          , Unit.it "number array"  (Unit.isEq [1,2,3] (okv "[1,2,3]"))
+          , Unit.it "mixed array"   (Unit.isEq [true, (), 5] (okv "[true,null,5]"))
+          , Unit.it "nested array"  (Unit.isEq [[1],[2,3]] (okv "[[1],[2,3]]"))
+          , Unit.it "whitespace in array" (Unit.isEq [1,2] (okv "[ 1 , 2 ]"))
+          , Unit.it "empty object"  (Unit.isEq {} (okv "{}"))
+          , Unit.it "object field access"
+                    (Unit.isEq 1 (Result.unwrap (Json.field "a" (okv ("{" ^ quoted "a" ^ ":1,"
+                                                                             ^ quoted "b" ^ ":2}")))))
+          , Unit.it "object second field"
+                    (Unit.isEq 2 (Result.unwrap (Json.field "b" (okv ("{" ^ quoted "a" ^ ":1,"
+                                                                             ^ quoted "b" ^ ":2}")))))
+          , Unit.it "missing field is Err"
+                    (Unit.isTrue (Result.isErr (Json.field "z" (okv ("{" ^ quoted "a" ^ ":1}")))))
+          , Unit.it "field on non-object is Err"
+                    (Unit.isTrue (Result.isErr (Json.field "a" (okv "[1,2]"))))
+          , Unit.it "index into array"
+                    (Unit.isEq 30 (Result.unwrap (Json.index 2 (okv "[10,20,30]"))))
+          , Unit.it "index out of range is Err"
+                    (Unit.isTrue (Result.isErr (Json.index 9 (okv "[10,20,30]"))))
+          , Unit.it "nested field then index"
+                    (Unit.isEq 7 (Result.unwrap
+                                     (Json.index 1
+                                        (Result.unwrap
+                                           (Json.field "xs"
+                                              (okv ("{" ^ quoted "xs" ^ ":[6,7,8]}")))))))
+        ],
+
+        Unit.group "accessors" [
+            Unit.it "asBool ok"    (Unit.isEq true  (Result.unwrap (Json.asBool (okv "true"))))
+          , Unit.it "asNumber ok"  (Unit.isEq 3.5   (Result.unwrap (Json.asNumber (okv "3.5"))))
+          , Unit.it "asString ok"  (Unit.isEq "hi"  (Result.unwrap (Json.asString (okv (quoted "hi")))))
+          , Unit.it "asArray ok"   (Unit.isEq [1,2] (Result.unwrap (Json.asArray (okv "[1,2]"))))
+          , Unit.it "asBool on number is Err" (Unit.isTrue (Result.isErr (Json.asBool (okv "1"))))
+          , Unit.it "asObject pairs"
+                    (Unit.isEq [("a",1)] (Result.unwrap (Json.asObject (okv ("{" ^ quoted "a" ^ ":1}")))))
+        ],
+
+        Unit.group "stringify" [
+            Unit.it "null"    (Unit.isEq "null"  (Json.stringify ()))
+          , Unit.it "true"    (Unit.isEq "true"  (Json.stringify true))
+          , Unit.it "number integral" (Unit.isEq "5"   (Json.stringify 5))
+          , Unit.it "number fraction" (Unit.isEq "1.5" (Json.stringify 1.5))
+          , Unit.it "string"  (Unit.isEq (quoted "hi") (Json.stringify "hi"))
+          , Unit.it "array"   (Unit.isEq "[1,2,3]" (Json.stringify [1,2,3]))
+          , Unit.it "empty array" (Unit.isEq "[]" (Json.stringify []))
+          , Unit.it "escape quote"   (Unit.isEq (quoted (bs ^ q)) (Json.stringify q))
+          , Unit.it "escape backslash" (Unit.isEq (quoted (bs ^ bs)) (Json.stringify bs))
+          , Unit.it "escape newline" (Unit.isEq (quoted (bs ^ "n")) (Json.stringify "\x0a"))
+          , Unit.it "escape tab"     (Unit.isEq (quoted (bs ^ "t")) (Json.stringify "\x09"))
+          , Unit.it "escape control" (Unit.isEq (quoted (bs ^ "u0001")) (Json.stringify "\x01"))
+          , Unit.it "non-ASCII stays literal" (Unit.isEq (quoted "\xc3\xa9") (Json.stringify "\xc3\xa9"))
+        ],
+
+        Unit.group "round-trip (canonical compact)" [
+            roundtrips "true"
+          , roundtrips "null"
+          , roundtrips "0"
+          , roundtrips "-5"
+          , roundtrips "3.14"
+          , roundtrips "[1,2,3]"
+          , roundtrips "[true,false,null]"
+          , roundtrips "[[1],[2,[3,4]]]"
+          , roundtrips (quoted "hello")
+          , roundtrips ("{" ^ quoted "a" ^ ":1}")
+          , roundtrips ("{" ^ quoted "k" ^ ":[1,2," ^ quoted "x" ^ "]}")
+        ],
+
+        Unit.group "prettyPrint" [
+            Unit.it "empty array"  (Unit.isEq "[]" (Json.prettyPrint 2 []))
+          , Unit.it "empty object" (Unit.isEq "{}" (Json.prettyPrint 2 {}))
+          , Unit.it "scalar"       (Unit.isEq "42" (Json.prettyPrint 2 42))
+          , Unit.it "array indented"
+                    (Unit.isEq ("[\n  1,\n  2\n]") (Json.prettyPrint 2 [1,2]))
+          , Unit.it "object indented"
+                    (Unit.isEq ("{\n  " ^ quoted "a" ^ ": 1\n}")
+                               (Json.prettyPrint 2 (okv ("{" ^ quoted "a" ^ ":1}"))))
+          , Unit.it "pretty re-parses to same value"
+                    (Unit.isEq [1,[2,3]] (okv (Json.prettyPrint 4 [1,[2,3]])))
+        ],
+
+        Unit.group "malformed input yields Err with offset" [
+            Unit.it "empty input"          [ Unit.isTrue (isErr ""),          Unit.isEq 0 (errOff "") ]
+          , Unit.it "bare bad token"       [ Unit.isTrue (isErr "truX"),      Unit.isEq 0 (errOff "truX") ]
+          , Unit.it "trailing garbage"     [ Unit.isTrue (isErr "123abc"),    Unit.isEq 3 (errOff "123abc") ]
+          , Unit.it "leading zero digits"  [ Unit.isTrue (isErr "01"),        Unit.isEq 1 (errOff "01") ]
+          , Unit.it "number no frac digit" [ Unit.isTrue (isErr "1."),        Unit.isEq 1 (errOff "1.") ]
+          , Unit.it "number no exp digit"  [ Unit.isTrue (isErr "1e"),        Unit.isEq 1 (errOff "1e") ]
+          , Unit.it "unterminated array"   [ Unit.isTrue (isErr "[1,2"),      Unit.isEq 4 (errOff "[1,2") ]
+          , Unit.it "trailing comma array" [ Unit.isTrue (isErr "[1,]"),      Unit.isEq 3 (errOff "[1,]") ]
+          , Unit.it "unterminated string"  (Unit.isTrue (isErr (q ^ "abc")))
+          , Unit.it "unescaped control"    [ Unit.isTrue (isErr (quoted "\x01")), Unit.isEq 1 (errOff (quoted "\x01")) ]
+          , Unit.it "object missing colon" (Unit.isTrue (isErr ("{" ^ quoted "a" ^ " 1}")))
+          , Unit.it "object missing value" (Unit.isTrue (isErr ("{" ^ quoted "a" ^ ":}")))
+          , Unit.it "lone high surrogate"  (Unit.isTrue (isErr (quoted (bs ^ "ud83d"))))
+          , Unit.it "high surrogate no low" (Unit.isTrue (isErr (quoted (bs ^ "ud83dX"))))
+          , Unit.it "bad hex in u escape"  (Unit.isTrue (isErr (quoted (bs ^ "u00zz"))))
+          , Unit.it "bare comma"           (Unit.isTrue (isErr ","))
+        ]
+    ]
+
+in Unit.run authority tests end

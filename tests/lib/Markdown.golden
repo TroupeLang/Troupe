@@ -1,0 +1,74 @@
+2026-07-16T23:15:15.528Z [RTM] [32minfo[39m: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+[34mbegin [0mMarkdown
+  [34mbegin [0mheadings
+      [33m[ TEST ][0m it h1      [32m[ PASS ][0m it h1
+      [33m[ TEST ][0m it h2      [32m[ PASS ][0m it h2
+      [33m[ TEST ][0m it h6      [32m[ PASS ][0m it h6
+      [33m[ TEST ][0m it closing hashes stripped      [32m[ PASS ][0m it closing hashes stripped
+      [33m[ TEST ][0m it seven hashes is not a heading      [32m[ PASS ][0m it seven hashes is not a heading
+  [34mend [0m
+  [34mbegin [0mspec contract
+      [33m[ TEST ][0m it heading then emphasised paragraph      [32m[ PASS ][0m it heading then emphasised paragraph
+  [34mend [0m
+  [34mbegin [0mparagraphs and inline
+      [33m[ TEST ][0m it blank-separated paragraphs      [32m[ PASS ][0m it blank-separated paragraphs
+      [33m[ TEST ][0m it soft break inside a paragraph      [32m[ PASS ][0m it soft break inside a paragraph
+  [34mend [0m
+  [34mbegin [0memphasis
+      [33m[ TEST ][0m it star emphasis      [32m[ PASS ][0m it star emphasis
+      [33m[ TEST ][0m it underscore emphasis      [32m[ PASS ][0m it underscore emphasis
+      [33m[ TEST ][0m it star strong      [32m[ PASS ][0m it star strong
+      [33m[ TEST ][0m it underscore strong      [32m[ PASS ][0m it underscore strong
+      [33m[ TEST ][0m it mixed      [32m[ PASS ][0m it mixed
+  [34mend [0m
+  [34mbegin [0minline code
+      [33m[ TEST ][0m it code span      [32m[ PASS ][0m it code span
+      [33m[ TEST ][0m it code is not interpreted      [32m[ PASS ][0m it code is not interpreted
+  [34mend [0m
+  [34mbegin [0mfenced code
+      [33m[ TEST ][0m it with info string as language      [32m[ PASS ][0m it with info string as language
+      [33m[ TEST ][0m it without language      [32m[ PASS ][0m it without language
+      [33m[ TEST ][0m it content is escaped, never interpreted      [32m[ PASS ][0m it content is escaped, never interpreted
+  [34mend [0m
+  [34mbegin [0mlists
+      [33m[ TEST ][0m it unordered dash      [32m[ PASS ][0m it unordered dash
+      [33m[ TEST ][0m it unordered star      [32m[ PASS ][0m it unordered star
+      [33m[ TEST ][0m it unordered plus      [32m[ PASS ][0m it unordered plus
+      [33m[ TEST ][0m it ordered      [32m[ PASS ][0m it ordered
+      [33m[ TEST ][0m it nested      [32m[ PASS ][0m it nested
+  [34mend [0m
+  [34mbegin [0mblockquotes
+      [33m[ TEST ][0m it simple      [32m[ PASS ][0m it simple
+      [33m[ TEST ][0m it nested      [32m[ PASS ][0m it nested
+  [34mend [0m
+  [34mbegin [0mthematic breaks
+      [33m[ TEST ][0m it dashes      [32m[ PASS ][0m it dashes
+      [33m[ TEST ][0m it stars      [32m[ PASS ][0m it stars
+      [33m[ TEST ][0m it underscores      [32m[ PASS ][0m it underscores
+  [34mend [0m
+  [34mbegin [0mlinks and images
+      [33m[ TEST ][0m it safe link      [32m[ PASS ][0m it safe link
+      [33m[ TEST ][0m it image      [32m[ PASS ][0m it image
+  [34mend [0m
+  [34mbegin [0mhard breaks
+      [33m[ TEST ][0m it two trailing spaces      [32m[ PASS ][0m it two trailing spaces
+      [33m[ TEST ][0m it backslash newline      [32m[ PASS ][0m it backslash newline
+  [34mend [0m
+  [34mbegin [0mbackslash escapes
+      [33m[ TEST ][0m it escaped star is literal      [32m[ PASS ][0m it escaped star is literal
+  [34mend [0m
+  [34mbegin [0msecurity
+      [33m[ TEST ][0m it literal HTML is escaped, never markup      [32m[ PASS ][0m it literal HTML is escaped, never markup
+      [33m[ TEST ][0m it ampersand and angle brackets escaped      [32m[ PASS ][0m it ampersand and angle brackets escaped
+      [33m[ TEST ][0m it javascript: link is neutralised (anchor without href)      [32m[ PASS ][0m it javascript: link is neutralised (anchor without href)
+      [33m[ TEST ][0m it javascript: image degrades to its alt text      [32m[ PASS ][0m it javascript: image degrades to its alt text
+  [34mend [0m
+  [34mbegin [0mAST and node exports
+      [33m[ TEST ][0m it parse produces the block AST      [32m[ PASS ][0m it parse produces the block AST
+      [33m[ TEST ][0m it toHtmlNodes render to the same HTML as toHtml      [32m[ PASS ][0m it toHtmlNodes render to the same HTML as toHtml
+  [34mend [0m
+[34mend [0m
+
+Total:  39
+Passes: 39
+>>> Main thread finished with value: true@{}%{}

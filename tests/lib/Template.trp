@@ -1,0 +1,162 @@
+(* Unit tests for the Template library.
+ *
+ * Run: ./local.sh tests/_unautomated/claude/template-tests.trp --localonly
+ *
+ * Covers interpolation and dotted access, conditionals and loops (including the
+ * empty-else branch), every filter, autoescape vs safe, comments, error cases,
+ * and the information-flow showcase (output label reflects a labeled context
+ * value; record-structure taint propagates through a secret record).
+ *)
+
+import Unit
+import Result
+import Template
+
+let
+    (* Render, unwrapping the Ok value. Used only where a successful render is
+     * expected. *)
+    fun ren t c = Result.unwrap (Template.render t c)
+
+    (* The double-quote character (Troupe source cannot spell it as a literal). *)
+    val dq = substring (toString "", 0, 1)
+
+    val tests = Unit.group "Template" [
+
+        Unit.group "interpolation and dotted access" [
+            Unit.it "interpolates a top-level field"
+                    (Unit.isEq "Hi Ann" (ren "Hi {{ name }}" {name = "Ann"}))
+          , Unit.it "interpolates a dotted path"
+                    (Unit.isEq "Bob" (ren "{{ user.name }}" {user = {name = "Bob"}}))
+          , Unit.it "interpolates a deep dotted path"
+                    (Unit.isEq "z" (ren "{{ a.b.c }}" {a = {b = {c = "z"}}}))
+          , Unit.it "stringifies a number"
+                    (Unit.isEq "42" (ren "{{ n }}" {n = 42}))
+          , Unit.it "stringifies a boolean"
+                    (Unit.isEq "true" (ren "{{ b }}" {b = true}))
+          , Unit.it "keeps surrounding text"
+                    (Unit.isEq "[a]" (ren "[{{ x }}]" {x = "a"}))
+        ],
+
+        Unit.group "autoescape and safe" [
+            Unit.it "HTML-escapes by default"
+                    (Unit.isEq "&lt;b&gt;&amp;" (ren "{{ x }}" {x = "<b>&"}))
+          , Unit.it "safe filter disables escaping"
+                    (Unit.isEq "<b>" (ren "{{ x | safe }}" {x = "<b>"}))
+          , Unit.it "safe after another filter still skips escaping"
+                    (Unit.isEq "<B>" (ren "{{ x | upper | safe }}" {x = "<b>"}))
+        ],
+
+        Unit.group "filters" [
+            Unit.it "upper"
+                    (Unit.isEq "ABC" (ren "{{ x | upper }}" {x = "abc"}))
+          , Unit.it "lower"
+                    (Unit.isEq "abc" (ren "{{ x | lower }}" {x = "ABC"}))
+          , Unit.it "length of a string"
+                    (Unit.isEq "4" (ren "{{ x | length }}" {x = "abcd"}))
+          , Unit.it "length of a list"
+                    (Unit.isEq "3" (ren "{{ xs | length }}" {xs = [1, 2, 3]}))
+          , Unit.it "default supplies a fallback for a missing variable"
+                    (Unit.isEq "0" (ren "{{ missing | default(0) }}" {}))
+          , Unit.it "default is ignored when the variable is present"
+                    (Unit.isEq "5" (ren "{{ n | default(0) }}" {n = 5}))
+          , Unit.it "default fallback can be another variable"
+                    (Unit.isEq "hi" (ren "{{ missing | default(fallback) }}" {fallback = "hi"}))
+        ],
+
+        Unit.group "conditionals" [
+            Unit.it "if true branch"
+                    (Unit.isEq "yes" (ren "{% if ok %}yes{% else %}no{% endif %}" {ok = true}))
+          , Unit.it "if false branch"
+                    (Unit.isEq "no" (ren "{% if ok %}yes{% else %}no{% endif %}" {ok = false}))
+          , Unit.it "elif chain"
+                    (Unit.isEq "two" (ren "{% if n == 1 %}one{% elif n == 2 %}two{% else %}many{% endif %}" {n = 2}))
+          , Unit.it "empty string is falsy"
+                    (Unit.isEq "N" (ren "{% if s %}Y{% else %}N{% endif %}" {s = ""}))
+          , Unit.it "and"
+                    (Unit.isEq "N" (ren "{% if a and b %}Y{% else %}N{% endif %}" {a = true, b = false}))
+          , Unit.it "or"
+                    (Unit.isEq "Y" (ren "{% if a or b %}Y{% else %}N{% endif %}" {a = true, b = false}))
+          , Unit.it "not"
+                    (Unit.isEq "Y" (ren "{% if not a %}Y{% else %}N{% endif %}" {a = false}))
+          , Unit.it "numeric comparison"
+                    (Unit.isEq "big" (ren "{% if n > 3 %}big{% else %}small{% endif %}" {n = 5}))
+          , Unit.it "string-literal comparison"
+                    (Unit.isEq "Y" (ren ("{% if s == " ^ dq ^ "hi" ^ dq ^ " %}Y{% else %}N{% endif %}") {s = "hi"}))
+        ],
+
+        Unit.group "loops" [
+            Unit.it "iterates a list"
+                    (Unit.isEq "a,b,c," (ren "{% for x in xs %}{{ x }},{% endfor %}" {xs = ["a", "b", "c"]}))
+          , Unit.it "else renders on an empty collection"
+                    (Unit.isEq "empty" (ren "{% for x in xs %}{{ x }}{% else %}empty{% endfor %}" {xs = []}))
+          , Unit.it "loop variable shadows the outer scope and is restored after"
+                    (Unit.isEq "ABout" (ren "{% for x in xs %}{{ x }}{% endfor %}{{ x }}" {x = "out", xs = ["A", "B"]}))
+          , Unit.it "dotted access on the loop variable"
+                    (Unit.isEq "ab" (ren "{% for u in users %}{{ u.name }}{% endfor %}"
+                                          {users = [{name = "a"}, {name = "b"}]}))
+        ],
+
+        Unit.group "comments" [
+            Unit.it "removes a comment"
+                    (Unit.isEq "ab" (ren "a{# this is dropped #}b" {}))
+          , Unit.it "comment between tags"
+                    (Unit.isEq "x" (ren "{# c #}{{ v }}" {v = "x"}))
+        ],
+
+        Unit.group "error cases" [
+            Unit.it "unclosed interpolation is an error"
+                    (Unit.isTrue (Result.isErr (Template.render "{{ x " {x = "a"})))
+          , Unit.it "unclosed tag is an error"
+                    (Unit.isTrue (Result.isErr (Template.render "{% if x %}hi" {x = true})))
+          , Unit.it "unknown filter is an error"
+                    (Unit.isTrue (Result.isErr (Template.render "{{ x | bogus }}" {x = "a"})))
+          , Unit.it "malformed expression is an error"
+                    (Unit.isTrue (Result.isErr (Template.render "{{ | }}" {})))
+          , Unit.it "missing variable is an error"
+                    (Unit.isTrue (Result.isErr (Template.render "{{ z }}" {})))
+          , Unit.it "missing-variable error names the path"
+                    (Unit.isEq "z" ((Result.unwrapErr (Template.render "{{ z }}" {})).path))
+          , Unit.it "missing dotted path names the full path"
+                    (Unit.isEq "a.b" ((Result.unwrapErr (Template.render "{{ a.b }}" {a = {}})).path))
+        ],
+
+        Unit.group "compile once, render many" [
+            let val t = Template.compile "{{ x }}!"
+            in Unit.it "renders a compiled template against two contexts" [
+                    Unit.isTrue (Result.isOk t)
+                  , Unit.isEq "a!" (Result.unwrap (Template.renderCompiled (Result.unwrap t) {x = "a"}))
+                  , Unit.isEq "b!" (Result.unwrap (Template.renderCompiled (Result.unwrap t) {x = "b"}))
+                ]
+            end
+        ],
+
+        (* --- Information-flow showcase ---
+         * Unit.isEq checks BOTH structural equality and label equality, so these
+         * assertions fail if the rendered string's label does not match the
+         * expected label exactly. *)
+        Unit.group "information flow" [
+            (* A public context value produces a public output. *)
+            Unit.it "public context value yields public output"
+                    (Unit.isEq "Hello world" (ren "Hello {{ name }}" {name = "world"}))
+
+            (* A secret context value taints the whole rendered string: the output
+             * carries the label of the interpolated value. *)
+          , let val secret = "s3cr3t" raisedTo `{alice}`
+                val out = ren "Hello {{ name }}" {name = secret}
+            in Unit.it "labeled context value taints the output"
+                    (Unit.isEq ("Hello s3cr3t" raisedTo `{alice}`) out)
+            end
+
+            (* Record-structure taint: descending through a secret-labeled record
+             * taints even a leaf that was itself public. The field "name" holds a
+             * public string, but the enclosing record is labeled {alice}, so the
+             * resolved value is labeled {alice}. *)
+          , let val secretUser = {name = "publicleaf"} raisedTo `{alice}`
+                val out = ren "{{ user.name }}" {user = secretUser}
+            in Unit.it "record-structure taint propagates through a secret record"
+                    (Unit.isEq ("publicleaf" raisedTo `{alice}`) out)
+            end
+        ]
+    ]
+
+in Unit.run authority tests end

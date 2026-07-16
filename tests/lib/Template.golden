@@ -1,0 +1,67 @@
+2026-07-16T23:15:17.784Z [RTM] [32minfo[39m: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+[34mbegin [0mTemplate
+  [34mbegin [0minterpolation and dotted access
+      [33m[ TEST ][0m it interpolates a top-level field      [32m[ PASS ][0m it interpolates a top-level field
+      [33m[ TEST ][0m it interpolates a dotted path      [32m[ PASS ][0m it interpolates a dotted path
+      [33m[ TEST ][0m it interpolates a deep dotted path      [32m[ PASS ][0m it interpolates a deep dotted path
+      [33m[ TEST ][0m it stringifies a number      [32m[ PASS ][0m it stringifies a number
+      [33m[ TEST ][0m it stringifies a boolean      [32m[ PASS ][0m it stringifies a boolean
+      [33m[ TEST ][0m it keeps surrounding text      [32m[ PASS ][0m it keeps surrounding text
+  [34mend [0m
+  [34mbegin [0mautoescape and safe
+      [33m[ TEST ][0m it HTML-escapes by default      [32m[ PASS ][0m it HTML-escapes by default
+      [33m[ TEST ][0m it safe filter disables escaping      [32m[ PASS ][0m it safe filter disables escaping
+      [33m[ TEST ][0m it safe after another filter still skips escaping      [32m[ PASS ][0m it safe after another filter still skips escaping
+  [34mend [0m
+  [34mbegin [0mfilters
+      [33m[ TEST ][0m it upper      [32m[ PASS ][0m it upper
+      [33m[ TEST ][0m it lower      [32m[ PASS ][0m it lower
+      [33m[ TEST ][0m it length of a string      [32m[ PASS ][0m it length of a string
+      [33m[ TEST ][0m it length of a list      [32m[ PASS ][0m it length of a list
+      [33m[ TEST ][0m it default supplies a fallback for a missing variable      [32m[ PASS ][0m it default supplies a fallback for a missing variable
+      [33m[ TEST ][0m it default is ignored when the variable is present      [32m[ PASS ][0m it default is ignored when the variable is present
+      [33m[ TEST ][0m it default fallback can be another variable      [32m[ PASS ][0m it default fallback can be another variable
+  [34mend [0m
+  [34mbegin [0mconditionals
+      [33m[ TEST ][0m it if true branch      [32m[ PASS ][0m it if true branch
+      [33m[ TEST ][0m it if false branch      [32m[ PASS ][0m it if false branch
+      [33m[ TEST ][0m it elif chain      [32m[ PASS ][0m it elif chain
+      [33m[ TEST ][0m it empty string is falsy      [32m[ PASS ][0m it empty string is falsy
+      [33m[ TEST ][0m it and      [32m[ PASS ][0m it and
+      [33m[ TEST ][0m it or      [32m[ PASS ][0m it or
+      [33m[ TEST ][0m it not      [32m[ PASS ][0m it not
+      [33m[ TEST ][0m it numeric comparison      [32m[ PASS ][0m it numeric comparison
+      [33m[ TEST ][0m it string-literal comparison      [32m[ PASS ][0m it string-literal comparison
+  [34mend [0m
+  [34mbegin [0mloops
+      [33m[ TEST ][0m it iterates a list      [32m[ PASS ][0m it iterates a list
+      [33m[ TEST ][0m it else renders on an empty collection      [32m[ PASS ][0m it else renders on an empty collection
+      [33m[ TEST ][0m it loop variable shadows the outer scope and is restored after      [32m[ PASS ][0m it loop variable shadows the outer scope and is restored after
+      [33m[ TEST ][0m it dotted access on the loop variable      [32m[ PASS ][0m it dotted access on the loop variable
+  [34mend [0m
+  [34mbegin [0mcomments
+      [33m[ TEST ][0m it removes a comment      [32m[ PASS ][0m it removes a comment
+      [33m[ TEST ][0m it comment between tags      [32m[ PASS ][0m it comment between tags
+  [34mend [0m
+  [34mbegin [0merror cases
+      [33m[ TEST ][0m it unclosed interpolation is an error      [32m[ PASS ][0m it unclosed interpolation is an error
+      [33m[ TEST ][0m it unclosed tag is an error      [32m[ PASS ][0m it unclosed tag is an error
+      [33m[ TEST ][0m it unknown filter is an error      [32m[ PASS ][0m it unknown filter is an error
+      [33m[ TEST ][0m it malformed expression is an error      [32m[ PASS ][0m it malformed expression is an error
+      [33m[ TEST ][0m it missing variable is an error      [32m[ PASS ][0m it missing variable is an error
+      [33m[ TEST ][0m it missing-variable error names the path      [32m[ PASS ][0m it missing-variable error names the path
+      [33m[ TEST ][0m it missing dotted path names the full path      [32m[ PASS ][0m it missing dotted path names the full path
+  [34mend [0m
+  [34mbegin [0mcompile once, render many
+      [33m[ TEST ][0m it renders a compiled template against two contexts      [32m[ PASS ][0m it renders a compiled template against two contexts
+  [34mend [0m
+  [34mbegin [0minformation flow
+      [33m[ TEST ][0m it public context value yields public output      [32m[ PASS ][0m it public context value yields public output
+      [33m[ TEST ][0m it labeled context value taints the output      [32m[ PASS ][0m it labeled context value taints the output
+      [33m[ TEST ][0m it record-structure taint propagates through a secret record      [32m[ PASS ][0m it record-structure taint propagates through a secret record
+  [34mend [0m
+[34mend [0m
+
+Total:  42
+Passes: 42
+>>> Main thread finished with value: true@{alice}%{alice}

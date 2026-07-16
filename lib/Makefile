@@ -30,6 +30,9 @@ build:
   # Dependency on `List`, `String`, and `Result`
 	$(COMPILER) ./Html.trp -l
 
+  # Dependency on `Html`, `String`, `List`, and `Result`
+	$(COMPILER) ./Template.trp -l
+
   # Dependency on `Number`, `String`, `List`, `Result`, and `Duration`
 	$(COMPILER) ./Time.trp -l
 

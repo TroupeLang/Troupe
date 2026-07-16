@@ -29,6 +29,7 @@ build:
 
   # Dependency on `List`, `String`, and `Result`
 	$(COMPILER) ./Html.trp -l
+	$(COMPILER) ./Json.trp -l
 
   # Dependency on `Number`, `String`, `List`, `Result`, and `Duration`
 	$(COMPILER) ./Time.trp -l

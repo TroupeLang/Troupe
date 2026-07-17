@@ -30,7 +30,7 @@ const { flowsTo, actsFor, lub, glb } = levels
 import { getCliArgs, TroupeCliArg } from './TroupeCliArgs.mjs';
 import { connectResultSocket, sendSocketMessageAndClose } from './resultSocket.mjs';
 import { configureColors, isColorEnabled } from './colorConfig.mjs';
-import { mkLogger } from './logger.mjs'
+import { mkLogger, mkDebugTag } from './logger.mjs'
 import { getTroupeRoot } from './troupeRoot.mjs'
 import { Record } from './Record.mjs';
 import { level } from 'winston';
@@ -49,13 +49,13 @@ let logLevel = argv[TroupeCliArg.Debug] ? 'debug': 'info'
 const logger = mkLogger('RTM', logLevel);
 
 const info = x => logger.info(x)
-const debug = x => logger.debug(x)
+const debug = mkDebugTag(logger)
 const error = x => logger.error(x)
 
 // Quarantine-specific logger
 const qrnLogLevel = argv[TroupeCliArg.DebugQuarantine] ? 'debug' : 'info';
 const qrnLogger = mkLogger('QRN', qrnLogLevel);
-const qdebug = (x: string) => qrnLogger.debug(x);
+const qdebug = mkDebugTag(qrnLogger);
 
 let __p2pRunning = false;
 
@@ -222,7 +222,7 @@ async function receiveFromRemote(pid, jsonObj, fromNode) {
   }
 
   const data = result.value!;
-  debug(`* rt receiveFromremote *  ${fromNode} ${data.stringRep()}`);
+  debug `* rt receiveFromremote *  ${fromNode} ${data}`;
 
   let toPid = new LVal(new ProcessID(rt_uuid, pid, __nodeManager.getLocalNode()), data.lev);
 
@@ -230,7 +230,7 @@ async function receiveFromRemote(pid, jsonObj, fromNode) {
   const quarantineAuth = extractQuarantineAuth(result);
 
   if (quarantineAuth !== null) {
-    qdebug(`QUARANTINE: message from ${fromNode} quarantined with auth ${quarantineAuth.stringRep()}`);
+    qdebug `QUARANTINE: message from ${fromNode} quarantined with auth ${quarantineAuth}`;
   }
 
   // Pass raw fromNode; addMessage will construct the labeled value using

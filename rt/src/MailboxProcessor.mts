@@ -8,14 +8,16 @@ import { getCliArgs, TroupeCliArg } from './TroupeCliArgs.mjs';
 const argv = getCliArgs();
 let logLevel = argv[TroupeCliArg.DebugMailbox] ? 'debug': 'info'
 
-import { mkLogger } from './logger.mjs'
+import { mkLogger, mkDebugTag } from './logger.mjs'
 const logger = mkLogger('MBX', logLevel);
-const debug = x => logger.debug(x);
+// Tagged template: `debug `...${v}...`` builds the string (and stringReps
+// its values) only when debug logging is on — these run per message.
+const debug = mkDebugTag(logger);
 
 // Quarantine-specific logger
 const qrnLogLevel = argv[TroupeCliArg.DebugQuarantine] ? 'debug' : 'info';
 const qrnLogger = mkLogger('QRN', qrnLogLevel);
-const qdebug = (x: string) => qrnLogger.debug(x);
+const qdebug = mkDebugTag(qrnLogger);
 import  { HandlerState as SandboxStatus }  from  './SandboxStatus.mjs' ;
 import {lub,flowsTo} from './Level.mjs'
 import * as levels from './Level.mjs'
@@ -61,7 +63,7 @@ export class MailboxProcessor implements MailboxInterface {
 
     addMessage(fromNode: string, toPid, message, pc, quarantineAuth: Level | null = null) {
 
-        debug (`addMessage ${message.stringRep()} ${pc.stringRep()}`)
+        debug `addMessage ${message} ${pc}`
         let __sched = this.sched;
 
         // check whether the recipient is alive
@@ -82,7 +84,7 @@ export class MailboxProcessor implements MailboxInterface {
         let quarantineAuthLVal = wrapQuarantineAuth(quarantineAuth, metadataLev);
 
         if (quarantineAuthLVal !== null) {
-            qdebug(`MAILBOX: delivering quarantined message to pid=${toPid.val.pid} auth=${quarantineAuth!.stringRep()}`);
+            qdebug `MAILBOX: delivering quarantined message to pid=${toPid.val.pid} auth=${quarantineAuth}`;
         }
 
         // create the message with optional quarantine authority
@@ -98,27 +100,28 @@ export class MailboxProcessor implements MailboxInterface {
     findFrom (theThread: Thread, i : number, j:number, index:number, lowb: Level, highb: Level, kont ) {
         let mb = theThread.mailbox;
         let _peekF = (i : number, j: number) => {
+            if (i < mb.head) { i = mb.head }
             for (; i < mb.length; i ++ ) {
                 let msg_i = mb[i]
-                debug (`mailbox iteration ${i} ${j} ${msg_i.stringRep()}`)
-                let presenceLev = msg_i.lev 
-                debug (`presence level is ${presenceLev.stringRep()}`)
+                debug `mailbox iteration ${i} ${j} ${msg_i}`
+                let presenceLev = msg_i.lev
+                debug `presence level is ${presenceLev}`
                 if (!(flowsTo(lowb, presenceLev)) || !(flowsTo(presenceLev, highb))) {
-                    debug("* skipping message because it is outside of the interval bounds");
-                    continue; 
-                } else {        
-                    debug (`* message is within the interval ${j} ${index}`) 
-                    if ( j == index ) {     
-                        debug (`* find match; returning`)
+                    debug `* skipping message because it is outside of the interval bounds`
+                    continue;
+                } else {
+                    debug `* message is within the interval ${j} ${index}`
+                    if ( j == index ) {
+                        debug `* find match; returning`
                         return kont (i)
                     } else {
                         j++
                     }
                 }
-            }                
-            debug (`* blocking `)
+            }
+            debug `* blocking `
             theThread.block (() => {
-                    debug (` * unblocking *`)
+                    debug ` * unblocking *`
                     return _peekF (i,j)
                 })
                 
@@ -132,16 +135,16 @@ export class MailboxProcessor implements MailboxInterface {
     peek(lev: Level, index: number, lowb: Level, highb: Level) {        
         let theThread = this.sched.__currentThread
         let mb = theThread.mailbox;
-        debug (`peek index: ${index}`)        
-        debug (`peek interval: [${lowb.stringRep()}, ${highb.stringRep()}]`)
-        let lclear = mb.mclear 
+        debug `peek index: ${index}`
+        debug `peek interval: [${lowb}, ${highb}]`
+        let lclear = mb.mclear
         theThread.raiseBlockingThreadLev (lub (highb, lclear.boost_level))
         theThread.invalidateSparseBit()
-        let _i = 0, _j = 0
+        let _i = mb.head, _j = 0
 
-        if (mb.peek_cache_index < index && mb.peek_cache_lowb == lowb 
+        if (mb.peek_cache_index < index && mb.peek_cache_lowb == lowb
                                         && mb.peek_cache_highb == highb) {
-                debug (`* peek cache hit`)
+                debug `* peek cache hit`
             _i = mb.peek_cache_position + 1
             _j = mb.peek_cache_index + 1 
         }
@@ -153,7 +156,7 @@ export class MailboxProcessor implements MailboxInterface {
                                     mb.peek_cache_lowb = lowb
                                     mb.peek_cache_highb = highb 
                                     let newLev =        lub (mb[i].lev, lev)
-                                    debug (`* peek returns value at level ${newLev.stringRep()}`)
+                                    debug `* peek returns value at level ${newLev}`
                                     return theThread.returnImmediateLValue (
                                         new LVal (mb[i].val,
                                                     newLev,
@@ -165,30 +168,30 @@ export class MailboxProcessor implements MailboxInterface {
     consume(lev: Level, index: number, lowb: Level, highb: Level) {
         let theThread = this.sched.__currentThread
         let mb = theThread.mailbox;
-        debug (`consume index: ${index}`)        
-        debug (`consume interval: [${lowb.stringRep()} to ${highb.stringRep()}]`)
-        let lclear = mb.mclear 
+        debug `consume index: ${index}`
+        debug `consume interval: [${lowb} to ${highb}]`
+        let lclear = mb.mclear
         theThread.raiseBlockingThreadLev (lub (highb, lclear.boost_level))
         theThread.invalidateSparseBit()
         let kontFound = (i:number) => {
             mb.resetPeekCache ();
             let foundValue = mb[i]
-            mb.splice (i, 1)
+            mb.consumeAt (i)
             return theThread.returnImmediateLValue (
                 new LVal (foundValue.val, lub (foundValue.lev, lev)))
         }
 
-        if (mb.peek_cache_index == index && mb.peek_cache_lowb == lowb 
+        if (mb.peek_cache_index == index && mb.peek_cache_lowb == lowb
                                          && mb.peek_cache_highb == highb) {
-            debug (`* consume exact cache hit`)
+            debug `* consume exact cache hit`
             return kontFound (mb.peek_cache_position)
         }
 
-        let _i = 0, _j = 0
+        let _i = mb.head, _j = 0
 
-        if (mb.peek_cache_index < index && mb.peek_cache_lowb == lowb 
+        if (mb.peek_cache_index < index && mb.peek_cache_lowb == lowb
             && mb.peek_cache_highb == highb) {
-                debug (`* consume next cache hit`)
+                debug `* consume next cache hit`
                 _i = mb.peek_cache_position + 1
                 _j = mb.peek_cache_index + 1 
         }

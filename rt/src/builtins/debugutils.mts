@@ -71,14 +71,14 @@ export function BuiltinDebugUtils <TBase extends Constructor<UserRuntimeZero>> (
             metaTable.push(
                 [{ colSpan: 2, content: 'MAILBOX DEBUG INFO', hAlign: 'center' }],
                 ['Thread ID', thread.tidErrorStringRep()],
-                ['Total messages', String(mailbox.length)],
+                ['Total messages', String(mailbox.logicalSize)],
                 ['Mbox clearance', mclear.stringRep()]
             );
 
             console.log("");
             console.log(metaTable.toString());
 
-            if (mailbox.length === 0) {
+            if (mailbox.logicalSize === 0) {
                 const emptyTable = new Table({
                     chars: boxChars,
                     style: { head: [], border: [] },
@@ -92,10 +92,10 @@ export function BuiltinDebugUtils <TBase extends Constructor<UserRuntimeZero>> (
             }
 
             // Show the last N messages (most recent)
-            const startIdx = Math.max(0, mailbox.length - maxMessages);
+            const startIdx = Math.max(mailbox.head, mailbox.length - maxMessages);
 
-            if (startIdx > 0) {
-                console.log(`(showing last ${maxMessages} of ${mailbox.length} messages)`);
+            if (startIdx > mailbox.head) {
+                console.log(`(showing last ${maxMessages} of ${mailbox.logicalSize} messages)`);
             }
 
             // Display each message in vertical layout

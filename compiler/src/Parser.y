@@ -62,6 +62,7 @@ import Data.List (group, sort, intercalate)
     andalso { L _ TokenAndAlso }
     orelse  { L _ TokenOrElse }
     NUM   { L _ (TokenNum _) }
+    BIGNUM { L _ (TokenBigInt _) }
     FLOAT { L _ (TokenFloat _) }
     STRING{ L _ (TokenString _)}
     VAR   { L _  (TokenSym _) }
@@ -261,6 +262,9 @@ Lit:   NUM                        {% atPos $1 (LNumeric (NumInt (numTok $1))) }
 -- Atom uses Located Lit to preserve source positions
 Atom : '(' Expr ')'                { $2 }
      | Lit                         { let Loc p l = $1 in Loc p (Lit l) }
+     -- A bigint literal desugars to constructing the bigint from its digit
+     -- string; bigFromLiteral is total (the lexer guarantees valid digits).
+     | BIGNUM                      {% atPos $1 (App (noLoc (Var "bigFromLiteral")) [noLoc (Lit (LString (bigTok $1)))]) }
      | VAR                         {% atPos $1 (Var (varTok $1)) }
      | '(' ')'                     {% atPos $1 (Lit LUnit) }
      | '(' CSExpr Expr ')'         {% atPos $1 (Tuple (reverse ($3:$2))) }
@@ -542,6 +546,7 @@ cleanExpectedToken "div" = "'div'"
 cleanExpectedToken "mod" = "'mod'"
 cleanExpectedToken "VAR" = "identifier"
 cleanExpectedToken "NUM" = "number"
+cleanExpectedToken "BIGNUM" = "bigint literal"
 cleanExpectedToken "FLOAT" = "float"
 cleanExpectedToken "STRING" = "string"
 cleanExpectedToken "LABEL" = "label"
@@ -604,6 +609,7 @@ parseProg filename input = runExcept $ do
 
 
 numTok (L _ (TokenNum x))    = x
+bigTok (L _ (TokenBigInt x)) = x
 floatTok (L _ (TokenFloat x)) = x
 strTok (L _ (TokenString x)) = x
 varTok (L _ (TokenSym x ))   = x

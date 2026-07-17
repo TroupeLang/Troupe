@@ -9,6 +9,7 @@ import { mkTuple, mkList } from './ValuesUtil.mjs';
 import { ProcessID } from './process.mjs';
 import { Authority } from './Authority.mjs';
 import { Atom } from './Atom.mjs';
+import { TroupeBigInt } from './TroupeBigInt.mjs';
 import { __unitbase }from './UnitBase.mjs'
 import { mkLevel } from './Level.mjs';
 import { RuntimeInterface } from './RuntimeInterface.mjs';
@@ -430,6 +431,9 @@ function constructCurrentUnchecked(compilerOutput: string) {
                         return this.mkValue(obj);
                     case Ty.TroupeType.ATOM:
                         return new Atom(obj.atom, obj.creation_uuid);
+                    case Ty.TroupeType.BIGINT:
+                        // wire form is the decimal string (see serialize.mts)
+                        return new TroupeBigInt(BigInt(obj));
                     case Ty.TroupeType.UNIT:
                         return __unitbase;
                     default:

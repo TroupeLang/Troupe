@@ -39,6 +39,7 @@ $graphic    = $printable # $white
 @octlit     = 0[oO]$octdigit[\_$octdigit]*
 @hexlit     = 0[xX]$hexdigit[\_$hexdigit]*
 @floatlit   = $digit[\_$digit]* \. $digit[\_$digit]* ([eE][\+\-]? $digit[\_$digit]*)?
+@biglit     = $digit[\_$digit]* n
 
 tokens:-
 -- Whitespace insensitive
@@ -127,6 +128,7 @@ tokens:-
 <0>   @binlit                        { mkLs (\s -> TokenNum (fst (head (readBin (filter (/='_') (drop 2 s)))))) }
 <0>   @octlit                        { mkLs (\s -> TokenNum (fst (head (readOct (filter (/='_') (drop 2 s)))))) }
 <0>   @hexlit                        { mkLs (\s -> TokenNum (fst (head (readHex (filter (/='_') (drop 2 s)))))) }
+<0>   @biglit                        { mkLs (\s -> TokenBigInt (filter (/='_') (init s))) }
 <0>   (@declit|@binlit|@octlit|@hexlit)@sym { \(_, _, _, s) _ -> lexerError ("Invalid literal " ++ s) }
 <0>   [\<][\<]                       { mkL TokenBinShiftLeft }
 <0>   [\>][\>]                       { mkL TokenBinShiftRight }
@@ -222,6 +224,7 @@ data Token
   | TokenFn
   | TokenHn
   | TokenNum Integer
+  | TokenBigInt String
   | TokenFloat Double
   | TokenSym String
   | TokenString String
@@ -421,6 +424,7 @@ showToken TokenOrElse = "'orelse'"
 showToken TokenIntDiv = "'div'"
 showToken TokenMod = "'mod'"
 showToken (TokenNum n) = "number " ++ show n
+showToken (TokenBigInt s) = "bigint " ++ s ++ "n"
 showToken (TokenFloat f) = "float " ++ show f
 showToken (TokenSym s) = "identifier '" ++ s ++ "'"
 showToken (TokenString s) = "string \"" ++ s ++ "\""

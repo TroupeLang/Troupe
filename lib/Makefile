@@ -4,6 +4,7 @@ build:
 	mkdir -p out
 
   # No dependencies
+	$(COMPILER) ./BigInt.trp -l
 	$(COMPILER) ./Number.trp -l
 	$(COMPILER) ./List.trp -l
 	$(COMPILER) ./ThreadUtil.trp -l

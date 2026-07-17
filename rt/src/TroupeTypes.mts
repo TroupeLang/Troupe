@@ -7,8 +7,9 @@ export const enum TroupeType {
   LEVEL=5,
   AUTHORITY=6,
   CAPABILITY=7,
-  ATOM=8,  
-  /* up until this point only base types */  
+  ATOM=8,
+  BIGINT=9,
+  /* up until this point only base types */
 
   /* aggregate types */
   CLOSURE=100,

@@ -1,6 +1,7 @@
 import { UserRuntimeZero } from './builtins/UserRuntimeZero.mjs'
 import { BuiltinStdIo } from './builtins/stdio.mjs'
 import { BuiltinMath } from './builtins/math.mjs'
+import { BuiltinBigInt } from './builtins/bigint.mjs'
 import { BuiltinDebugUtils } from './builtins/debugutils.mjs'
 import { BuiltinDebugValue } from './builtins/debugValue.mjs'
 import { BuiltinPini } from './builtins/pini.mjs'
@@ -71,8 +72,9 @@ export const UserRuntime =
     BuiltinDebugValue(
     BuiltinDebugUtils(
     BuiltinMath(
+    BuiltinBigInt(
     BuiltinRecordToList(
     BuiltinRecordReflection(
     BuiltinTypeInformation(
     BuiltinStdIo(UserRuntimeZero)
-    ))))))))))))))))))))))))))))))))))
+    )))))))))))))))))))))))))))))))))))

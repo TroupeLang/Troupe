@@ -254,6 +254,10 @@ export function serialize(w:LVal, pclev:Level, targetNodeId?: string) {
             case Ty.TroupeType.ATOM:
                 jsonObj = { atom: x.atom, creation_uuid: x.creation_uuid };
                 break;
+            case Ty.TroupeType.BIGINT:
+                // bigints are not JSON-representable; decimal string form
+                jsonObj = x.value.toString();
+                break;
             case Ty.TroupeType.LOCALOBJECT: 
                 throw new UnserializableObjectError (lval)
             default:

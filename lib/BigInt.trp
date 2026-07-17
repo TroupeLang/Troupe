@@ -1,0 +1,80 @@
+(* BigInt — arbitrary-precision integers.
+ *
+ * Values are constructed with the `123n` literal syntax or with the
+ * functions below, and are a distinct type from numbers: `getType`
+ * reports "bigint", equality between a number and a bigint is false, and
+ * the ordinary arithmetic operators do not apply — all bigint arithmetic
+ * goes through this module (or the underlying built-ins). Labels
+ * propagate through every operation as the join of the operand labels.
+ *
+ * Fallible conversions return `Result`-shaped records: `fromString` fails
+ * on unparsable input; `toInt` fails for values outside the range that a
+ * number can represent exactly (beyond 2^53 - 1 in magnitude).
+ *)
+
+let (** Sum of two bigints. *)
+    fun add (a, b) = bigAdd (a, b)
+
+    (** Difference of two bigints. *)
+    fun sub (a, b) = bigSub (a, b)
+
+    (** Product of two bigints. *)
+    fun mul (a, b) = bigMul (a, b)
+
+    (** Integer division, truncating toward zero (SML Basis `quot`).
+     *  Division by zero is a runtime error. *)
+    fun quot (a, b) = bigDiv (a, b)
+
+    (** Remainder of truncating division; the sign follows the dividend
+     *  (SML Basis `rem`). Division by zero is a runtime error. *)
+    fun rem (a, b) = bigMod (a, b)
+
+    (** Negation. *)
+    fun neg a = bigNeg a
+
+    (** Three-way comparison: -1, 0, or 1 (a number). *)
+    fun cmp (a, b) = bigCmp (a, b)
+
+    (** Comparison predicates. *)
+    fun lt (a, b) = bigCmp (a, b) < 0
+    fun le (a, b) = bigCmp (a, b) <= 0
+    fun gt (a, b) = bigCmp (a, b) > 0
+    fun ge (a, b) = bigCmp (a, b) >= 0
+    fun eq (a, b) = bigCmp (a, b) = 0
+
+    (** Bigint from a number. The number must be an exactly-representable
+     *  integer; anything else is a runtime error. *)
+    fun fromInt n = bigFromInt n
+
+    (** Number from a bigint. Returns `Result`: `Err` outside exact double
+     *  range. *)
+    fun toInt a = bigToInt a
+
+    (** Bigint from a decimal string. Returns `Result`. *)
+    fun fromString s = bigFromString s
+
+    (** Decimal string form of a bigint.
+     *
+     *  Named `show` rather than `toString`: imports bring exported names
+     *  into scope unqualified, and exporting `toString` would shadow the
+     *  built-in of that name that the ambient `print` depends on. *)
+    fun show a = bigToString a
+
+in [ ("add", add)
+   , ("sub", sub)
+   , ("mul", mul)
+   , ("quot", quot)
+   , ("rem", rem)
+   , ("neg", neg)
+   , ("cmp", cmp)
+   , ("lt", lt)
+   , ("le", le)
+   , ("gt", gt)
+   , ("ge", ge)
+   , ("eq", eq)
+   , ("fromInt", fromInt)
+   , ("toInt", toInt)
+   , ("fromString", fromString)
+   , ("show", show)
+   ]
+end

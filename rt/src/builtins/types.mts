@@ -23,8 +23,11 @@ export function BuiltinTypeInformation<TBase extends Constructor<UserRuntimeZero
 			_t = "number";
 			break;
 				
-		case TroupeType.STRING: 
+		case TroupeType.STRING:
 			_t = "string";
+			break;
+		case TroupeType.BIGINT:
+			_t = "bigint";
 			break;
 		case TroupeType.PROCESS_ID: 
 			_t = "process_id";

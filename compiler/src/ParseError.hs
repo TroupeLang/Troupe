@@ -72,7 +72,7 @@ expressionStartTokens =
   [ "keyword 'let'", "keyword 'if'", "keyword 'case'"
   , "keyword 'fn'", "keyword 'hn'"
   , "'true'", "'false'"
-  , "number", "float", "string", "identifier", "label"
+  , "number", "bigint literal", "float", "string", "identifier", "label"
   , "'('", "'['", "'{'"
   , "'-'"
   , "'`<' (DC label)"

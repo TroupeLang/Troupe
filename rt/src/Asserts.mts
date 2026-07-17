@@ -70,6 +70,13 @@ export function assertIsAtom (x: any, source: AssertionSource = AssertionSource.
     }
 }
 
+export function assertIsBigInt (x: any, source: AssertionSource = AssertionSource.AssertInBuiltIn) {
+    _thread().raiseBlockingThreadLev(x.tlev)
+    if (x.val._troupeType != TroupeType.BIGINT ) {
+        err ("value " + __stringRep(x) + " is not a bigint", source)
+    }
+}
+
 export function rawAssertIsNumber (x, source: AssertionSource = AssertionSource.AssertInBuiltIn) {
     if (typeof x != 'number') {
         err("value " + __stringRep(x) + " is not a number", source)

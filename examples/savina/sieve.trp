@@ -1,0 +1,65 @@
+(* Savina benchmark: Sieve of Eratosthenes (parallelism group).
+ *
+ * A dynamically growing pipeline of prime-filter actors: each actor holds
+ * one prime and forwards candidates not divisible by it; a candidate that
+ * survives the whole chain is a new prime and becomes a new filter at the
+ * end of the chain. The main process streams odd candidates up to n (the
+ * size parameter) into the chain, then sends a stop marker that flushes
+ * through behind them. Measures pipeline messaging with dynamic actor
+ * creation (one actor per prime found).
+ *
+ *   ./local.sh examples/savina/sieve.trp                # default sizes
+ *   ./local.sh examples/savina/sieve.trp -- 2000 5000   # explicit sizes
+ *
+ * Result: number of primes found; ok iff it equals the number of primes
+ * up to n. Reference counts are built in for the supported sizes; a size
+ * without a reference reports ok=false rather than claiming an unverified
+ * result.
+ *)
+
+import List
+import Bench
+
+datatype Atoms = CAND | PRIME | STOPCHAIN | CHAINDONE
+
+let (* number of primes up to n, for the sizes this benchmark supports *)
+    val primeCounts = [ (1000, 168), (2000, 303), (5000, 669), (10000, 1229) ]
+
+    fun filterActor (p, counter) =
+        let fun loop next =
+                receive
+                  [ hn (CAND, c) =>
+                      if c mod p = 0 then loop next
+                      else (case next of
+                              [] =>
+                                let val _ = send (counter, PRIME)
+                                    val nf = spawn (fn () => filterActor (c, counter))
+                                in loop [nf] end
+                            | nf :: _ => (send (nf, (CAND, c)); loop next))
+                  , hn STOPCHAIN =>
+                      (case next of
+                         []      => send (counter, CHAINDONE)
+                       | nf :: _ => send (nf, STOPCHAIN)) ]
+        in loop [] end
+
+    fun bench n =
+        let val main = self ()
+            val first = spawn (fn () => filterActor (2, main))
+            fun stream c =
+                if c > n then send (first, STOPCHAIN)
+                else (send (first, (CAND, c)); stream (c + 2))
+            val _ = stream 3
+            fun collect primes =
+                receive [ hn PRIME     => collect (primes + 1)
+                        , hn CHAINDONE => primes ]
+        in 1 + collect 0   (* the first filter's prime, 2, is not counted via PRIME *)
+        end
+
+    fun check n found =
+        case List.filter (fn (m, _) => m = n) primeCounts of
+          [(_, expected)] => found = expected
+        | _               => false   (* no reference for this size: refuse to claim ok *)
+
+    val sizes = Bench.sizesFromArgs (getCliArgs authority) [1000, 2000, 5000]
+in Bench.run authority "sieve" sizes 3 bench check
+end

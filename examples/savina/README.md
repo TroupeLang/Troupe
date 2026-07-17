@@ -30,6 +30,8 @@ scaling behavior.
 
 ## Benchmarks (tranche 1 — spanning subset)
 
+Ported first to establish the conventions and surface runtime gaps.
+
 | File                | Savina benchmark          | Group          | Size parameter        | Check                              |
 |---------------------|---------------------------|----------------|-----------------------|-------------------------------------|
 | `pingpong.trp`      | Ping Pong                 | microbenchmark | round trips           | pong count = n                     |
@@ -44,6 +46,20 @@ scaling behavior.
 Deviations from the originals are documented in each file's header comment
 (e.g. `trapezoid.trp` substitutes an integrand computable with Troupe's
 math built-ins).
+
+## Benchmarks (tranche 2 — portable messaging)
+
+| File            | Savina benchmark               | Group          | Size parameter               | Check |
+|-----------------|--------------------------------|----------------|------------------------------|-------|
+| `fjthrput.trp`  | Fork Join (throughput)         | microbenchmark | messages per worker (8 workers) | counts sum to 8n          |
+| `fjcreate.trp`  | Fork Join (actor creation)     | microbenchmark | actors spawned               | replies sum to n              |
+| `chameneos.trp` | Chameneos                      | microbenchmark | meetings (10 creatures)      | meeting counts sum to 2n      |
+| `cigsmok.trp`   | Cigarette Smokers              | concurrency    | rounds (3 smokers)           | smoke counts sum to n         |
+| `barber.trp`    | Sleeping Barber                | concurrency    | customers (room capacity 4)  | served = n                    |
+| `concdict.trp`  | Concurrent Dictionary          | concurrency    | ops per worker (10 workers)  | read-after-write per worker; server op count |
+| `concsll.trp`   | Concurrent Sorted Linked List  | concurrency    | ops per worker (8 workers)   | snapshot sorted; length = novel inserts |
+| `sieve.trp`     | Sieve of Eratosthenes          | parallelism    | candidate limit              | prime count = reference table |
+| `quicksort.trp` | Quicksort                      | parallelism    | list length                  | sorted, length and sum preserved |
 
 ## Labeled variants (IFC dimension)
 

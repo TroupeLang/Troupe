@@ -1,0 +1,72 @@
+(* Savina benchmark: Concurrent Dictionary (concurrency group).
+ *
+ * A dictionary server actor (backed by lib/Map) serves 10 worker actors.
+ * Each worker performs n operations — every 10th a write to its own key,
+ * the rest reads of random keys — waiting for the reply each time, then
+ * finishes by writing a sentinel to its own key and reading it back. The
+ * server is the serialization point; this measures request/reply
+ * contention on shared state modeled as an actor.
+ *
+ *   ./local.sh examples/savina/concdict.trp                # default sizes
+ *   ./local.sh examples/savina/concdict.trp -- 1000 4000   # explicit sizes
+ *
+ * Result: (workers whose read-back was correct, server op count); ok iff
+ * all 10 workers verified and the server processed 10n + 20 operations.
+ *)
+
+import List
+import Map
+import Bench
+
+datatype Atoms = WRITE | WROTE | READ | VAL | COUNT | GETCOUNT | WORKERDONE
+
+let val numWorkers = 10
+    val keyRange = 100
+
+    fun server dict =
+        let fun loop (d, ops) =
+                receive
+                  [ hn (WRITE, k, v, p) =>
+                      (send (p, WROTE); loop (Map.insert d k v, ops + 1))
+                  , hn (READ, k, p) =>
+                      (send (p, (VAL, Map.findOrDefault d k 0)); loop (d, ops + 1))
+                  , hn (GETCOUNT, p) => send (p, (COUNT, ops)) ]
+        in loop (dict, 0) end
+
+    fun worker (srv, main, i, n) =
+        let val me = self ()
+            val myKey = keyRange + i   (* private key, outside the shared range *)
+            fun doOp j =
+                if j = n then ()
+                else if j mod 10 = 0
+                then (send (srv, (WRITE, myKey, j, me));
+                      receive [ hn WROTE => doOp (j + 1) ])
+                else (send (srv, (READ, floor (random () * keyRange), me));
+                      receive [ hn (VAL, _) => doOp (j + 1) ])
+            val _ = doOp 0
+            val _ = send (srv, (WRITE, myKey, 4242 + i, me))
+            val _ = receive [ hn WROTE => () ]
+            val _ = send (srv, (READ, myKey, me))
+            val readBack = receive [ hn (VAL, v) => v ]
+        in send (main, (WORKERDONE, if readBack = 4242 + i then 1 else 0))
+        end
+
+    fun bench n =
+        let val main = self ()
+            val srv = spawn (fn () => server (Map.empty (fn a => fn b => a < b)))
+            val _ = List.map
+                      (fn i => spawn (fn () => worker (srv, main, i, n)))
+                      (List.range numWorkers)
+            fun collect (k, okCount) =
+                if k = 0
+                then let val _ = send (srv, (GETCOUNT, main))
+                     in receive [ hn (COUNT, c) => (okCount, c) ] end
+                else receive [ hn (WORKERDONE, w) => collect (k - 1, okCount + w) ]
+        in collect (numWorkers, 0)
+        end
+
+    val sizes = Bench.sizesFromArgs (getCliArgs authority) [1000, 4000, 10000]
+in Bench.run authority "concdict" sizes 3 bench
+     (fn n => fn (okCount, ops) =>
+        okCount = numWorkers andalso ops = numWorkers * n + 2 * numWorkers)
+end

@@ -1,0 +1,37 @@
+(* Savina benchmark: Fork Join, actor-creation variant (microbenchmark
+ * group).
+ *
+ * The main process spawns n short-lived actors; each receives one message,
+ * replies, and terminates. Measures process creation and teardown
+ * throughput.
+ *
+ *   ./local.sh examples/savina/fjcreate.trp                  # default sizes
+ *   ./local.sh examples/savina/fjcreate.trp -- 20000 50000   # explicit sizes
+ *
+ * Result: sum of the replies (1 per actor); ok iff it equals n.
+ *)
+
+import List
+import Bench
+
+datatype Atoms = COMPUTE | DONE
+
+let fun shortLived main =
+        receive [ hn (COMPUTE, x) => send (main, (DONE, x)) ]
+
+    fun bench n =
+        let val main = self ()
+            fun spawnAll i =
+                if i = n then ()
+                else (send (spawn (fn () => shortLived main), (COMPUTE, 1));
+                      spawnAll (i + 1))
+            val _ = spawnAll 0
+            fun collect (k, acc) =
+                if k = 0 then acc
+                else receive [ hn (DONE, x) => collect (k - 1, acc + x) ]
+        in collect (n, 0)
+        end
+
+    val sizes = Bench.sizesFromArgs (getCliArgs authority) [20000, 50000, 100000]
+in Bench.run authority "fjcreate" sizes 3 bench (fn n => fn r => r = n)
+end

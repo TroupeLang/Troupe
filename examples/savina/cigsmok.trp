@@ -1,0 +1,52 @@
+(* Savina benchmark: Cigarette Smokers (concurrency group).
+ *
+ * An arbiter repeatedly picks one of three smoker actors at random and
+ * gives it the ingredients to smoke; the smoker acknowledges and the
+ * arbiter waits for the acknowledgment before the next round (the classic
+ * problem's mutual exclusion, actor-style). After n rounds the arbiter
+ * dismisses the smokers, which report how often they smoked.
+ *
+ *   ./local.sh examples/savina/cigsmok.trp                 # default sizes
+ *   ./local.sh examples/savina/cigsmok.trp -- 2000 10000   # explicit sizes
+ *
+ * Result: sum of per-smoker smoke counts; ok iff it equals n.
+ *)
+
+import List
+import Bench
+
+datatype Atoms = SMOKE | STARTED | EXIT | DONE | INITARB
+
+let val numSmokers = 3
+
+    fun smoker arb =
+        let fun loop c =
+                receive [ hn SMOKE        => (send (arb, STARTED); loop (c + 1))
+                        , hn (EXIT, main) => send (main, (DONE, c)) ]
+        in loop 0 end
+
+    fun arbiter (smokers, main, n) =
+        if n = 0
+        then (List.map (fn s => send (s, (EXIT, main))) smokers; ())
+        else let val pick = List.nth smokers (floor (random () * numSmokers))
+                 val _ = send (pick, SMOKE)
+             in receive [ hn STARTED => arbiter (smokers, main, n - 1) ]
+             end
+
+    fun bench n =
+        let val main = self ()
+            (* smokers and arbiter reference each other; wire in two phases *)
+            val smokers = List.map (fn _ => spawn (fn () =>
+                              receive [ hn (INITARB, arb) => smoker arb ]))
+                            (List.range numSmokers)
+            val arb = spawn (fn () => arbiter (smokers, main, n))
+            val _ = List.map (fn s => send (s, (INITARB, arb))) smokers
+            fun collect (k, total) =
+                if k = 0 then total
+                else receive [ hn (DONE, c) => collect (k - 1, total + c) ]
+        in collect (numSmokers, 0)
+        end
+
+    val sizes = Bench.sizesFromArgs (getCliArgs authority) [2000, 10000, 30000]
+in Bench.run authority "cigsmok" sizes 3 bench (fn n => fn t => t = n)
+end

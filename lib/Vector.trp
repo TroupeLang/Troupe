@@ -11,7 +11,6 @@
  *)
 
 import List
-import Number
 
 let val branch = 16
 
@@ -33,7 +32,7 @@ let val branch = 16
 
     fun build (xs, cap) =
         if cap <= branch then xs
-        else let val sub = Number.intDiv cap branch
+        else let val sub = (cap div branch)
              in List.map (fn c => build (c, sub)) (chunk (xs, sub)) end
 
     (** Vector of the elements of a list. *)
@@ -55,8 +54,8 @@ let val branch = 16
     fun sub ((n, cap, tree), i) =
         let fun go (tree, cap, i) =
                 if cap <= branch then List.nth tree i
-                else let val s = Number.intDiv cap branch
-                     in go (List.nth tree (Number.intDiv i s), s, i mod s) end
+                else let val s = (cap div branch)
+                     in go (List.nth tree ((i div s)), s, i mod s) end
         in go (tree, cap, i) end
 
     (** Vector with element `i` replaced by `x`. *)
@@ -65,8 +64,8 @@ let val branch = 16
                 List.mapi (fn (k, old) => if k = j then y else old) ys
             fun go (tree, cap, i) =
                 if cap <= branch then setNth (tree, i, x)
-                else let val s = Number.intDiv cap branch
-                         val c = Number.intDiv i s
+                else let val s = (cap div branch)
+                         val c = (i div s)
                      in setNth (tree, c, go (List.nth tree c, s, i mod s)) end
         in (n, cap, go (tree, cap, i)) end
 
@@ -74,7 +73,7 @@ let val branch = 16
     fun toList (n, cap, tree) =
         let fun go (tree, cap) =
                 if cap <= branch then tree
-                else let val s = Number.intDiv cap branch
+                else let val s = (cap div branch)
                          fun cat ([], acc)      = acc
                            | cat (t :: ts, acc) = List.append (go (t, s)) (cat (ts, acc))
                      in cat (tree, []) end

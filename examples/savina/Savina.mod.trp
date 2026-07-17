@@ -14,7 +14,6 @@ import BigInt
 import List
 import ListPair
 import Map
-import Number
 import Vector
 import SimpleModule
 
@@ -327,7 +326,7 @@ let
     fun bench n =
         let val main = self ()
             val h = 1.0 / n
-            val chunk = Number.intDiv n numWorkers
+            val chunk = (n div numWorkers)
             fun assign i =
                 let val count = if i = numWorkers - 1
                                 then n - chunk * (numWorkers - 1)
@@ -749,7 +748,7 @@ let
         let fun loop buffered =
                 receive
                   [ hn (VALUE, v) =>
-                      if (Number.intDiv v divisor) mod 2 = 0
+                      if ((v div divisor)) mod 2 = 0
                       then (send (next, (VALUE, v)); loop buffered)
                       else loop (v :: buffered)
                   , hn FLUSH =>
@@ -769,7 +768,7 @@ let
     (* build the chain back to front: entry actor handles bit 0 *)
     fun buildChain (bit, divisor, next) =
         if bit < 0 then next
-        else buildChain (bit - 1, Number.intDiv divisor 2,
+        else buildChain (bit - 1, (divisor div 2),
                          spawn (fn () => bitActor (divisor, next)))
 
     fun bench n =
@@ -891,7 +890,7 @@ let
         receive [ hn (MERGE, xs, up, tag, parent) =>
             let val len = List.length xs
             in if len <= 1 then send (parent, (MERGED, tag, xs))
-               else let val half = Number.intDiv len 2
+               else let val half = (len div 2)
                         val (lo, hi) = pairMinMax (takeN (half, xs), dropN (half, xs))
                         val (first, second) = if up then (lo, hi) else (hi, lo)
                         val me = self ()
@@ -907,7 +906,7 @@ let
         receive [ hn (BSORT, xs, up, tag, parent) =>
             let val len = List.length xs
             in if len <= 1 then send (parent, (BSORTED, tag, xs))
-               else let val half = Number.intDiv len 2
+               else let val half = (len div 2)
                         val me = self ()
                         val _ = send (spawn bsorter,
                                       (BSORT, takeN (half, xs), true, 0, me))
@@ -1157,7 +1156,7 @@ let
      * workers and the sequential reference *)
     fun expand (w, id) =
         let val x = id mod w
-            val y = Number.intDiv id w
+            val y = (id div w)
             fun consider (nx, ny, acc) =
                 if nx < 0 orelse nx >= w orelse ny < 0 orelse ny >= w then acc
                 else (ny * w + nx, cellCost (nx, ny)) :: acc
@@ -1344,7 +1343,7 @@ let
         receive [ hn (MULT, r0, r1, tag, parent) =>
             if r1 - r0 <= cutoff
             then send (parent, (RESULT, tag, rows (a, b, n, r0, r1)))
-            else let val mid = r0 + Number.intDiv (r1 - r0) 2
+            else let val mid = r0 + ((r1 - r0) div 2)
                      val me = self ()
                      val _ = send (spawn (fn () => multiplier (a, b, n)),
                                    (MULT, r0, mid, 0, me))
@@ -1407,7 +1406,7 @@ let
     fun bench n =
         let val main = self ()
             val workers = List.map (fn _ => spawn worker) (List.range numWorkers)
-            val chunkSize = Number.intDiv (n + numWorkers - 1) numWorkers
+            val chunkSize = ((n + numWorkers - 1) div numWorkers)
             fun bounds w = (w * chunkSize,
                             let val hi = (w + 1) * chunkSize
                             in if hi > n then n else hi end)
@@ -1503,7 +1502,7 @@ let
 
     fun reference g =
         let val grid0 = Vector.tabulate (g * g) (fn id =>
-                            initial (id mod g, Number.intDiv id g))
+                            initial (id mod g, (id div g)))
             fun nb (grid, x, y) =
                 if x < 0 orelse x >= g orelse y < 0 orelse y >= g then 0.0
                 else Vector.sub (grid, y * g + x)
@@ -1513,7 +1512,7 @@ let
             fun step grid =
                 Vector.tabulate (g * g) (fn id =>
                     let val x = id mod g
-                        val y = Number.intDiv id g
+                        val y = (id div g)
                         val sum = (nb (grid, x, y - 1) + nb (grid, x, y + 1))
                                   + (nb (grid, x - 1, y) + nb (grid, x + 1, y))
                     in (Vector.sub (grid, id) + sum) / (1.0 + deg (x, y)) end)
@@ -1530,7 +1529,7 @@ let
             val _ = List.mapi
                       (fn (id, p) =>
                          let val x = id mod g
-                             val y = Number.intDiv id g
+                             val y = (id div g)
                          in send (p, (WIRE, id, initial (x, y),
                                       pidAt (x, y - 1), pidAt (x, y + 1),
                                       pidAt (x - 1, y), pidAt (x + 1, y)))
@@ -1643,8 +1642,5 @@ let
               , piprecision ]
 
 in (SimpleModule.publish (authority, "Savina", {all = all});
-    (* fwrite, not print: this program imports Number, whose toString
-     * export shadows the built-in that the ambient print depends on *)
-    fwrite (stdout authority, "published Savina module ("
-            ^ intToString (List.length all) ^ " benchmarks)\n"))
+    print ("published Savina module:", List.length all, "benchmarks"))
 end

@@ -1,0 +1,73 @@
+(* Savina benchmark: Radix Sort (parallelism group).
+ *
+ * A pipeline of 16 bit-actors sorts n random 16-bit integers by least
+ * significant digit: each actor forwards values whose bit is 0
+ * immediately and buffers values whose bit is 1 until the flush marker,
+ * then emits them behind the zeros. A sink actor validates order,
+ * count, and checksum as values arrive. Measures pipeline streaming with
+ * per-stage buffering.
+ *
+ *   ./local.sh examples/savina/radixsort.trp                # default sizes
+ *   ./local.sh examples/savina/radixsort.trp -- 2000 8000   # explicit sizes
+ *
+ * Result: (count, sum, sorted) from the sink; ok iff count = n, the sum
+ * matches the input's, and the values arrived in non-decreasing order.
+ *)
+
+import List
+import Number
+import Bench
+
+datatype Atoms = VALUE | FLUSH | RESULT
+
+let val numBits = 16
+    val valueRange = 65536   (* 2^numBits *)
+
+    fun bitActor (divisor, next) =
+        let fun loop buffered =
+                receive
+                  [ hn (VALUE, v) =>
+                      if (Number.intDiv v divisor) mod 2 = 0
+                      then (send (next, (VALUE, v)); loop buffered)
+                      else loop (v :: buffered)
+                  , hn FLUSH =>
+                      (List.map (fn v => send (next, (VALUE, v)))
+                                (List.reverse buffered);
+                       send (next, FLUSH)) ]
+        in loop [] end
+
+    fun sink main =
+        let fun loop (prev, count, total, sorted) =
+                receive
+                  [ hn (VALUE, v) =>
+                      loop (v, count + 1, total + v, sorted andalso prev <= v)
+                  , hn FLUSH => send (main, (RESULT, count, total, sorted)) ]
+        in loop (0 - 1, 0, 0, true) end
+
+    (* build the chain back to front: entry actor handles bit 0 *)
+    fun buildChain (bit, divisor, next) =
+        if bit < 0 then next
+        else buildChain (bit - 1, Number.intDiv divisor 2,
+                         spawn (fn () => bitActor (divisor, next)))
+
+    fun bench n =
+        let val main = self ()
+            val input = List.map (fn _ => floor (random () * valueRange))
+                                 (List.range n)
+            val inputSum = List.foldl (fn (x, acc) => x + acc) 0 input
+            val sinkPid = spawn (fn () => sink main)
+            val topDivisor =
+                let fun pow (0, acc) = acc | pow (k, acc) = pow (k - 1, acc * 2)
+                in pow (numBits - 1, 1) end
+            val entry = buildChain (numBits - 1, topDivisor, sinkPid)
+            val _ = List.map (fn v => send (entry, (VALUE, v))) input
+            val _ = send (entry, FLUSH)
+        in receive [ hn (RESULT, count, total, sorted) =>
+                       (count, total, sorted, inputSum) ]
+        end
+
+    val sizes = Bench.sizesFromArgs (getCliArgs authority) [2000, 8000, 20000]
+in Bench.run authority "radixsort" sizes 3 bench
+     (fn n => fn (count, total, sorted, inputSum) =>
+        count = n andalso sorted andalso total = inputSum)
+end

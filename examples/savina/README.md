@@ -61,6 +61,16 @@ math built-ins).
 | `sieve.trp`     | Sieve of Eratosthenes          | parallelism    | candidate limit              | prime count = reference table |
 | `quicksort.trp` | Quicksort                      | parallelism    | list length                  | sorted, length and sum preserved |
 
+## Benchmarks (tranche 3 — pipelines and master/worker)
+
+| File              | Savina benchmark           | Group       | Size parameter            | Check |
+|-------------------|----------------------------|-------------|---------------------------|-------|
+| `radixsort.trp`   | Radix Sort                 | parallelism | values (16 bit-actors)    | sink: sorted, count, checksum |
+| `filterbank.trp`  | Filter Bank                | parallelism | samples (4 FIR branches)  | total matches sequential reference |
+| `bitonicsort.trp` | Bitonic Sort               | parallelism | list length (power of 2)  | equals List.sort element-wise |
+| `facloc.trp`      | Online Facility Location   | parallelism | points streamed           | counts conserve; all points covered by a facility |
+| `nqueenk.trp`     | N-Queens (all solutions)   | parallelism | board size                | total = known solution count |
+
 ## Labeled variants (IFC dimension)
 
 Three benchmarks have information-flow variants with no counterpart in the

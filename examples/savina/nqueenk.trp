@@ -1,0 +1,64 @@
+(* Savina benchmark: N-Queens (parallelism group).
+ *
+ * Master/worker search: the main process spawns one worker per placement
+ * of the first-row queen; each worker counts all solutions in its subtree
+ * by sequential backtracking and reports the count; the main process sums
+ * them. (Savina counts the first K solutions; this port counts all of
+ * them — the K = infinity case — so the total is checkable against the
+ * known solution counts.) Measures fork/join work distribution with
+ * uneven subtree sizes.
+ *
+ *   ./local.sh examples/savina/nqueenk.trp            # default sizes
+ *   ./local.sh examples/savina/nqueenk.trp -- 8 9     # explicit sizes
+ *
+ * Result: total number of solutions; ok iff it equals the known count
+ * for board size n. Sizes without a built-in reference report ok=false.
+ *)
+
+import List
+import Bench
+
+datatype Atoms = COUNT
+
+let (* number of n-queens solutions, for the sizes this benchmark supports *)
+    val solutionCounts = [ (6, 4), (7, 40), (8, 92), (9, 352), (10, 724) ]
+
+    (* queens holds the columns of already-placed rows, nearest row first *)
+    fun safe (queens, col) =
+        let fun go ([], dist)      = true
+              | go (q :: qs, dist) =
+                  q <> col andalso q <> col + dist andalso q <> col - dist
+                  andalso go (qs, dist + 1)
+        in go (queens, 1) end
+
+    fun countFrom (queens, depth, n) =
+        if depth = n then 1
+        else let fun tryCol (c, acc) =
+                     if c = n then acc
+                     else tryCol (c + 1,
+                                  acc + (if safe (queens, c)
+                                         then countFrom (c :: queens, depth + 1, n)
+                                         else 0))
+             in tryCol (0, 0) end
+
+    fun worker (main, firstCol, n) =
+        send (main, (COUNT, countFrom ([firstCol], 1, n)))
+
+    fun bench n =
+        let val main = self ()
+            val _ = List.map (fn c => spawn (fn () => worker (main, c, n)))
+                             (List.range n)
+            fun collect (k, total) =
+                if k = 0 then total
+                else receive [ hn (COUNT, c) => collect (k - 1, total + c) ]
+        in collect (n, 0)
+        end
+
+    fun check n found =
+        case List.filter (fn (m, _) => m = n) solutionCounts of
+          [(_, expected)] => found = expected
+        | _               => false
+
+    val sizes = Bench.sizesFromArgs (getCliArgs authority) [8, 9, 10]
+in Bench.run authority "nqueenk" sizes 3 bench check
+end

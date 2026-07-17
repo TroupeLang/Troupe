@@ -1,0 +1,66 @@
+(* Savina benchmark: Big (concurrency group).
+ *
+ * w workers exchange ping/pong messages all-to-all: each worker sends 100
+ * pings one at a time to randomly chosen peers, answering incoming pings
+ * while it waits for its own pong. A sink collects per-worker pong counts,
+ * then broadcasts EXIT. Measures many-to-many messaging and contention.
+ *
+ * The size parameter is the number of workers w (message volume is
+ * proportional to w).
+ *
+ *   ./local.sh examples/savina/big.trp              # default sizes
+ *   ./local.sh examples/savina/big.trp -- 10 40     # explicit sizes
+ *
+ * Result: total pongs collected by the sink; ok iff it equals w * 100.
+ *)
+
+import List
+import Bench
+
+datatype Atoms = INIT | PING | PONG | DONE | EXIT | TOTAL
+
+let val pingsPerWorker = 100
+
+    fun worker () =
+        receive [ hn (INIT, peers, myIdx, sink, p) =>
+            let val w = List.length peers
+                fun pickPeer () =
+                    let val j0 = floor (random () * (w - 1))
+                        val j  = if j0 >= myIdx then j0 + 1 else j0
+                    in List.nth peers j end
+                fun await () =
+                    receive [ hn (PING, q) => (send (q, PONG); await ())
+                            , hn PONG      => () ]
+                fun pinger (k, acc) =
+                    if k = 0 then acc
+                    else (send (pickPeer (), (PING, self ()));
+                          await ();
+                          pinger (k - 1, acc + 1))
+                val got = pinger (p, 0)
+                val _ = send (sink, (DONE, got))
+                fun idle () =
+                    receive [ hn (PING, q) => (send (q, PONG); idle ())
+                            , hn EXIT      => () ]
+            in idle () end ]
+
+    fun sink main workers =
+        let fun collect (k, total) =
+                if k = 0
+                then (List.map (fn p => send (p, EXIT)) workers;
+                      send (main, (TOTAL, total)))
+                else receive [ hn (DONE, c) => collect (k - 1, total + c) ]
+        in collect (List.length workers, 0) end
+
+    fun bench w =
+        let val main = self ()
+            val workers = List.map (fn _ => spawn worker) (List.range w)
+            val snk = spawn (fn () => sink main workers)
+            val _ = List.mapi
+                      (fn (i, p) => send (p, (INIT, workers, i, snk, pingsPerWorker)))
+                      workers
+        in receive [ hn (TOTAL, t) => t ]
+        end
+
+    val sizes = Bench.sizesFromArgs (getCliArgs authority) [10, 20, 40]
+in Bench.run authority "big" sizes 3 bench (fn w => fn t => t = w * pingsPerWorker)
+end

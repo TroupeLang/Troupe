@@ -1,0 +1,63 @@
+(* Savina benchmark: Trapezoidal Approximation (parallelism group).
+ *
+ * A master partitions the numeric integration of f over [0,1] into n
+ * trapezoids (the size parameter) split across 8 workers; workers compute
+ * partial sums and the master reduces them. Measures work distribution and
+ * per-actor compute throughput.
+ *
+ * The Savina original integrates (1/(1+x)) * sqrt(1+e^(sqrt(2x))) * sin(x^3-1);
+ * Troupe's math built-ins are limited to sqrt/floor/random, so this port
+ * integrates f(x) = 4/(1+x^2), whose exact value over [0,1] is pi — making
+ * the result self-checkable.
+ *
+ *   ./local.sh examples/savina/trapezoid.trp                  # default sizes
+ *   ./local.sh examples/savina/trapezoid.trp -- 50000 200000  # explicit sizes
+ *
+ * Result: the integral estimate; ok iff it is within 1e-6 of pi.
+ *)
+
+import List
+import Number
+import Bench
+
+datatype Atoms = WORK | PARTIAL
+
+let val numWorkers = 8
+    val pi = 3.14159265358979
+
+    fun f x = 4.0 / (1.0 + x * x)
+
+    fun worker () =
+        receive [ hn (WORK, lo, h, count, master) =>
+            let fun go (i, acc) =
+                    if i = count then acc
+                    else let val x = lo + i * h
+                         in go (i + 1, acc + (f x + f (x + h)) * h / 2.0)
+                         end
+            in send (master, (PARTIAL, go (0, 0.0)))
+            end ]
+
+    fun bench n =
+        let val main = self ()
+            val h = 1.0 / n
+            val chunk = Number.intDiv n numWorkers
+            fun assign i =
+                let val count = if i = numWorkers - 1
+                                then n - chunk * (numWorkers - 1)
+                                else chunk
+                    val lo = i * chunk * h
+                in send (spawn worker, (WORK, lo, h, count, main))
+                end
+            val _ = List.map assign (List.range numWorkers)
+            fun collect (k, acc) =
+                if k = 0 then acc
+                else receive [ hn (PARTIAL, s) => collect (k - 1, acc + s) ]
+        in collect (numWorkers, 0.0)
+        end
+
+    fun abs x = if x < 0.0 then 0.0 - x else x
+
+    val sizes = Bench.sizesFromArgs (getCliArgs authority) [50000, 200000, 800000]
+in Bench.run authority "trapezoid" sizes 3 bench
+     (fn n => fn r => abs (r - pi) < 0.000001)
+end

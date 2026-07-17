@@ -1,0 +1,58 @@
+(* Savina benchmark: Thread Ring (microbenchmark group).
+ *
+ * R actors form a ring; a token holding a hop countdown is passed around the
+ * ring n times in total. Measures point-to-point message forwarding and
+ * scheduler behavior under many always-ready processes.
+ *
+ * The ring is wired in two phases: actors are spawned first, then each
+ * receives its successor pid and its own index. Termination propagates as a
+ * STOP message with its own countdown so no message is ever sent to a
+ * terminated process.
+ *
+ *   ./local.sh examples/savina/threadring.trp                 # default sizes
+ *   ./local.sh examples/savina/threadring.trp -- 10000 50000  # explicit sizes
+ *
+ * Result: index of the actor holding the token after n hops; ok iff it
+ * equals n mod R (ring size R = 100).
+ *)
+
+import List
+import Bench
+
+datatype Atoms = WIRE | TOKEN | STOP | DONE
+
+let val ringSize = 100
+
+    fun ringActor main =
+        receive [ hn (WIRE, next, idx) =>
+            let fun loop () =
+                    receive [ hn (TOKEN, 0) =>
+                                (send (main, (DONE, idx));
+                                 send (next, (STOP, ringSize - 1)))
+                            , hn (TOKEN, k) =>
+                                (send (next, (TOKEN, k - 1)); loop ())
+                            , hn (STOP, k) =>
+                                if k > 1 then send (next, (STOP, k - 1)) else () ]
+            in loop () end ]
+
+    fun bench n =
+        let val main = self ()
+            val pids = List.map (fn _ => spawn (fn () => ringActor main))
+                                (List.range ringSize)
+            fun wire (i, rest) =
+                case rest of
+                  []        => ()
+                | p :: ps   =>
+                    let val next = if i = ringSize - 1
+                                   then List.nth pids 0
+                                   else List.nth pids (i + 1)
+                        val _ = send (p, (WIRE, next, i))
+                    in wire (i + 1, ps) end
+            val _ = wire (0, pids)
+            val _ = send (List.nth pids 0, (TOKEN, n))
+        in receive [ hn (DONE, idx) => idx ]
+        end
+
+    val sizes = Bench.sizesFromArgs (getCliArgs authority) [10000, 50000, 100000]
+in Bench.run authority "threadring" sizes 3 bench (fn n => fn r => r = n mod ringSize)
+end

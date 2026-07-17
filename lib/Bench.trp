@@ -1,0 +1,50 @@
+(* Bench — timing harness for the Savina benchmark study (examples/savina/).
+ *
+ * Each benchmark defines a function `f : size -> result` and a checker
+ * `check : size -> result -> bool`, and calls `Bench.run`. Timing uses
+ * `getTime` (millisecond precision), so sizes should be chosen to make each
+ * timed run take at least tens of milliseconds. *)
+
+import List
+
+let (** Time a thunk. Returns `(result, elapsed)` with `elapsed` in
+     *  milliseconds. *)
+    fun time f =
+        let val t0 = getTime ()
+            val r  = f ()
+            val t1 = getTime ()
+        in (r, t1 - t0) end
+
+    (** Benchmark sizes from CLI arguments, or `defaults` when none are
+     *  given. Each argument is parsed as one size. *)
+    fun sizesFromArgs args defaults =
+        if List.length args = 0 then defaults
+        else List.map stringToInt args
+
+    (** Run benchmark `name` over `sizes`: per size, one untimed warmup run
+     *  followed by `reps` timed runs of `f`. Each timed run is validated
+     *  with `check size result` and reported on its own line via `auth`
+     *  (needed for stdout access):
+     *
+     *      <name> n=<size> rep=<i> ms=<elapsed> ok=<bool>
+     *)
+    fun run auth name sizes reps f check =
+        let fun say s = fwrite (stdout auth, s ^ "\n")
+            fun oneRep size i =
+                let val (r, ms) = time (fn () => f size)
+                    val ok = check size r
+                in say (name ^ " n=" ^ toString size ^ " rep=" ^ toString i
+                        ^ " ms=" ^ toString ms ^ " ok=" ^ toString ok)
+                end
+            fun oneSize size =
+                let val _ = f size
+                in List.map (oneRep size) (List.range reps)
+                end
+        in List.map oneSize sizes; ()
+        end
+
+in [ ("time", time)
+   , ("sizesFromArgs", sizesFromArgs)
+   , ("run", run)
+   ]
+end

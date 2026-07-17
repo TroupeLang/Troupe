@@ -1,0 +1,32 @@
+(* Savina benchmark: Ping-Pong (microbenchmark group).
+ *
+ * One pinger and one ponger exchange n request/reply message pairs; the
+ * pinger runs in the main process. Measures two-actor round-trip messaging.
+ *
+ *   ./local.sh examples/savina/pingpong.trp               # default sizes
+ *   ./local.sh examples/savina/pingpong.trp -- 5000 20000 # explicit sizes
+ *
+ * Result: number of PONG replies received; ok iff it equals n.
+ *)
+
+import List
+import Bench
+
+datatype Atoms = PING | PONG | STOP
+
+let fun ponger () =
+        receive [ hn (PING, p) => (send (p, PONG); ponger ())
+                , hn STOP      => () ]
+
+    fun bench n =
+        let val pong = spawn ponger
+            fun loop (0, acc) = (send (pong, STOP); acc)
+              | loop (k, acc) =
+                  (send (pong, (PING, self ()));
+                   receive [ hn PONG => loop (k - 1, acc + 1) ])
+        in loop (n, 0)
+        end
+
+    val sizes = Bench.sizesFromArgs (getCliArgs authority) [1000, 5000, 20000]
+in Bench.run authority "pingpong" sizes 3 bench (fn n => fn r => r = n)
+end

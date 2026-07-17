@@ -1,0 +1,85 @@
+(* Savina benchmark: Producer-Consumer with bounded buffer (concurrency
+ * group).
+ *
+ * 4 producers and 4 consumers share a buffer actor with capacity 10. Flow
+ * control is credit-based: a producer sends one item, then waits for CREDIT
+ * before the next; the buffer withholds credit while full. Consumers pull
+ * with GET and block (as queued requests) while the buffer is empty. Each
+ * producer produces n items and each consumer consumes n items (the size
+ * parameter).
+ *
+ * Item values are distinct integers 0 .. 4n-1; consumers checksum what they
+ * consume, so the check proves every item is consumed exactly once.
+ *
+ *   ./local.sh examples/savina/prodcons.trp               # default sizes
+ *   ./local.sh examples/savina/prodcons.trp -- 200 800    # explicit sizes
+ *
+ * Result: sum of consumed values; ok iff it equals 0 + 1 + ... + (4n-1).
+ *)
+
+import List
+import Bench
+
+datatype Atoms = ITEM | CREDIT | GET | DATA | SUM | SHUTDOWN
+
+let val numProd = 4
+    val numCons = 4
+    val capacity = 10
+
+    (* Buffer state: item queue and its length, consumers waiting on an empty
+     * buffer, producers owed credit because the buffer was full. *)
+    fun buffer (q, qLen, waitingCons, owedProd) =
+        receive
+          [ hn (ITEM, v, prod) =>
+              (case waitingCons of
+                 c :: cs =>
+                   (send (c, (DATA, v)); send (prod, CREDIT);
+                    buffer (q, qLen, cs, owedProd))
+               | [] =>
+                   if qLen + 1 < capacity
+                   then (send (prod, CREDIT);
+                         buffer (List.append q [v], qLen + 1, [], owedProd))
+                   else buffer (List.append q [v], qLen + 1, [],
+                                List.append owedProd [prod]))
+          , hn (GET, c) =>
+              (case q of
+                 v :: vs =>
+                   (send (c, (DATA, v));
+                    (case owedProd of
+                       p :: ps => (send (p, CREDIT);
+                                   buffer (vs, qLen - 1, waitingCons, ps))
+                     | []      => buffer (vs, qLen - 1, waitingCons, [])))
+               | [] => buffer ([], 0, List.append waitingCons [c], owedProd))
+          , hn SHUTDOWN => () ]
+
+    fun producer (buf, i, k) =
+        let fun loop j =
+                if j = k then ()
+                else (send (buf, (ITEM, i * k + j, self ()));
+                      receive [ hn CREDIT => loop (j + 1) ])
+        in loop 0 end
+
+    fun consumer (buf, main, k) =
+        let fun loop (j, acc) =
+                if j = k then send (main, (SUM, acc))
+                else (send (buf, (GET, self ()));
+                      receive [ hn (DATA, v) => loop (j + 1, acc + v) ])
+        in loop (0, 0) end
+
+    fun bench n =
+        let val main = self ()
+            val buf = spawn (fn () => buffer ([], 0, [], []))
+            val _ = List.map (fn i => spawn (fn () => producer (buf, i, n)))
+                             (List.range numProd)
+            val _ = List.map (fn _ => spawn (fn () => consumer (buf, main, n)))
+                             (List.range numCons)
+            fun collect (k, total) =
+                if k = 0 then (send (buf, SHUTDOWN); total)
+                else receive [ hn (SUM, s) => collect (k - 1, total + s) ]
+        in collect (numCons, 0)
+        end
+
+    val sizes = Bench.sizesFromArgs (getCliArgs authority) [200, 800, 3200]
+in Bench.run authority "prodcons" sizes 3 bench
+     (fn n => fn t => t = 2 * n * (4 * n - 1))
+end

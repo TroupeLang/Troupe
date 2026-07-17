@@ -1,0 +1,71 @@
+(* Savina benchmark: Dining Philosophers (concurrency group).
+ *
+ * 20 philosophers coordinate fork acquisition through an arbitrator actor.
+ * A hungry philosopher asks the arbitrator for its two forks; the arbitrator
+ * answers EAT when both are free and DENIED otherwise, and a denied
+ * philosopher immediately retries. Each philosopher eats `n` rounds (the
+ * size parameter). Measures coordination through a central arbiter under
+ * contention; the number of DENIED round trips is nondeterministic.
+ *
+ *   ./local.sh examples/savina/philosophers.trp             # default sizes
+ *   ./local.sh examples/savina/philosophers.trp -- 10 50    # explicit sizes
+ *
+ * Result: total rounds eaten across all philosophers; ok iff it equals
+ * 20 * n.
+ *)
+
+import List
+import Bench
+
+datatype Atoms = HUNGRY | EAT | DENIED | DONEEAT | FINISHED | REPORT
+
+let val numPhil = 20
+
+    fun setNth (xs, i, v) = List.mapi (fn (j, x) => if j = i then v else x) xs
+
+    fun arbitrator (forks, finished) =
+        if finished = numPhil then ()
+        else receive
+          [ hn (HUNGRY, p, i) =>
+              let val l = i
+                  val r = (i + 1) mod numPhil
+              in if List.nth forks l andalso List.nth forks r
+                 then (send (p, EAT);
+                       arbitrator (setNth (setNth (forks, l, false), r, false),
+                                   finished))
+                 else (send (p, DENIED); arbitrator (forks, finished))
+              end
+          , hn (DONEEAT, i) =>
+              let val l = i
+                  val r = (i + 1) mod numPhil
+              in arbitrator (setNth (setNth (forks, l, true), r, true), finished)
+              end
+          , hn FINISHED => arbitrator (forks, finished + 1) ]
+
+    fun philosopher (arb, main, i, rounds) =
+        let fun loop (r, eaten, denied) =
+                if r = 0
+                then (send (arb, FINISHED); send (main, (REPORT, eaten, denied)))
+                else (send (arb, (HUNGRY, self (), i));
+                      receive [ hn EAT =>
+                                  (send (arb, (DONEEAT, i));
+                                   loop (r - 1, eaten + 1, denied))
+                              , hn DENIED => loop (r, eaten, denied + 1) ])
+        in loop (rounds, 0, 0) end
+
+    fun bench n =
+        let val main = self ()
+            val forks = List.map (fn _ => true) (List.range numPhil)
+            val arb = spawn (fn () => arbitrator (forks, 0))
+            val _ = List.map
+                      (fn i => spawn (fn () => philosopher (arb, main, i, n)))
+                      (List.range numPhil)
+            fun collect (k, eaten) =
+                if k = 0 then eaten
+                else receive [ hn (REPORT, e, d) => collect (k - 1, eaten + e) ]
+        in collect (numPhil, 0)
+        end
+
+    val sizes = Bench.sizesFromArgs (getCliArgs authority) [10, 20, 50]
+in Bench.run authority "philosophers" sizes 3 bench (fn n => fn r => r = numPhil * n)
+end

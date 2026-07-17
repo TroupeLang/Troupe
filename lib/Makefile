@@ -14,6 +14,7 @@ build:
 	$(COMPILER) ./Duration.trp -l
 
   # Dependency on `List`
+	$(COMPILER) ./Bench.trp -l
 	$(COMPILER) ./ListPair.trp -l
 	$(COMPILER) ./Unit.trp -l
 	$(COMPILER) ./Map.trp -l

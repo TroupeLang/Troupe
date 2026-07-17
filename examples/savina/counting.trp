@@ -8,9 +8,6 @@
  *   ./local.sh examples/savina/counting.trp -- 10000 50000  # explicit sizes
  *
  * Result: the count reported by the actor; ok iff it equals n.
- *
- * Note: per-message cost grows with mailbox depth (superlinear scaling; see
- * the study report), so default sizes stay small enough to complete quickly.
  *)
 
 import List
@@ -31,6 +28,6 @@ let fun counter c =
         in receive [ hn (RESULT, c) => c ]
         end
 
-    val sizes = Bench.sizesFromArgs (getCliArgs authority) [1000, 2000, 4000, 8000]
+    val sizes = Bench.sizesFromArgs (getCliArgs authority) [10000, 50000, 100000]
 in Bench.run authority "counting" sizes 3 bench (fn n => fn r => r = n)
 end

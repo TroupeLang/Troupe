@@ -23,9 +23,10 @@
 
 import List
 import Bench
-import Savina
+import SimpleModule
 
-let val d = Savina.apsp
+let val m = SimpleModule.load "Savina"
+    val d = case List.filter (fn d => d.name = "apsp") m.all of [d] => d
     val sizes = Bench.sizesFromArgs (getCliArgs authority) d.sizes
 in Bench.run authority d.name sizes 3 d.bench d.check
 end

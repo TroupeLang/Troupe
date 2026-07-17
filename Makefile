@@ -33,6 +33,13 @@ trp-rt: check-compiler
 notebook:
 	cd notebook; npm install; npm run build
 
+# Publish the Savina benchmark and report modules as SimpleModule blobs
+# (required by examples/savina/runall.trp and the per-benchmark drivers).
+savina-modules:
+	mkdir -p out
+	./local.sh examples/savina/Savina.mod.trp
+	./local.sh examples/savina/SavinaReport.mod.trp
+
 clean: clean/compiler clean/rt clean/trp-rt clean/p2p-tools clean/lib
 clean/compiler:
 	cd compiler; $(MAKE) clean

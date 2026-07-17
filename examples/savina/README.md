@@ -1,15 +1,20 @@
 # Savina benchmarks ported to Troupe
 
 The complete 30-benchmark Savina actor suite (Imam & Sarkar, AGERE 2014)
-ported to Troupe. The benchmarks live as descriptors in `lib/Savina.trp`
-(name, benchmark function, correctness check, default sizes), built on
-the core actor primitives (`spawn`, `send`, `receive`, `self`); each
-file here is a thin driver for one descriptor, with that benchmark's
-semantics, deviations, and check documented in its header comment.
+ported to Troupe. The benchmarks are defined in `Savina.mod.trp` as
+descriptors (name, benchmark function, correctness check, default
+sizes), built on the core actor primitives (`spawn`, `send`, `receive`,
+`self`), and distributed as a `SimpleModule` blob (a saved value —
+Troupe has no program-relative imports yet, and this keeps the suite
+out of the standard library). Each benchmark file here is a thin driver
+loading one descriptor, with that benchmark's semantics, deviations,
+and check documented in its header comment.
 
 ## Running the whole evaluation
 
 ```bash
+make savina-modules   # publish the benchmark + report modules (once,
+                      # and after changing them or rebuilding the compiler)
 ./local.sh examples/savina/runall.trp --io-root out              # all 30
 ./local.sh examples/savina/runall.trp --io-root out -- sieve uct # a subset
 ```

@@ -50,11 +50,5 @@ build:
 	$(COMPILER) ./HashMap.trp -l
 	$(COMPILER) ./HashSet.trp -l
 
-  # Dependency on `List` and `String`
-	$(COMPILER) ./SavinaReport.trp -l
-
-  # Dependency on `List`, `ListPair`, `Map`, `Number`, `Vector`, and `BigInt`
-	$(COMPILER) ./Savina.trp -l
-
 clean:
 	rm -rf out

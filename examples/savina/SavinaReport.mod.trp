@@ -1,12 +1,14 @@
-(* SavinaReport — turn collected benchmark rows into a markdown summary
- * table and an SVG chart sheet (small multiples of scaling curves).
- * Shared by examples/savina/runall.trp (in-process rows) and
- * examples/savina/analysis/mkreport.trp (rows parsed from a results
- * file). A row is (benchmark name, size, ms, ok).
+(* SavinaReport — markdown and SVG rendering over collected benchmark
+ * rows (a row is (name, size, ms, ok)), published as a SimpleModule
+ * blob for runall.trp and analysis/mkreport.trp to `load
+ * "SavinaReport"`. Re-run after changes:
+ *
+ *   mkdir -p out && ./local.sh examples/savina/SavinaReport.mod.trp
  *)
 
 import List
 import String
+import SimpleModule
 
 let fun uniq xs =
         let fun go ([], acc) = List.reverse acc
@@ -132,9 +134,11 @@ let fun uniq xs =
                ^ " ok=" ^ toString ok)
              rows)
 
-in [ ("summarize", summarize)
-   , ("markdown", markdown)
-   , ("svg", svg)
-   , ("resultLines", resultLines)
-   ]
+in (SimpleModule.publish (authority, "SavinaReport",
+        { summarize = summarize
+        , markdown = markdown
+        , svg = svg
+        , resultLines = resultLines
+        });
+    print "published SavinaReport module")
 end

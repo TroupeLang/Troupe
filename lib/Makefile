@@ -38,6 +38,7 @@ build:
 	$(COMPILER) ./Json.trp -l
 
   # Dependency on `Html`, `String`, and `List`
+	$(COMPILER) ./Svg.trp -l
 	$(COMPILER) ./Markdown.trp -l
 
   # Dependency on `Html`, `String`, `List`, and `Result`

@@ -8,6 +8,7 @@
 
 import List
 import String
+import Svg
 import SimpleModule
 
 let fun uniq xs =
@@ -62,7 +63,7 @@ let fun uniq xs =
              , "|-----------|----------------|----------------|--------|" ]
              (List.map mdRow summaries))
 
-    (* --- SVG small multiples --- *)
+    (* --- SVG small multiples (rendered via lib/Svg) --- *)
     val cellW = 220
     val cellH = 150
     val cols = 5
@@ -70,6 +71,8 @@ let fun uniq xs =
     val padT = 26
     val plotW = cellW - padL - 12
     val plotH = cellH - padT - 26
+
+    val sans = "sans-serif"
 
     fun chart (idx, (name, allOk, meds)) =
         let val ox = (idx mod cols) * cellW
@@ -80,50 +83,49 @@ let fun uniq xs =
             fun px i = ox + padL + (if k <= 1 then plotW / 2
                                     else i * plotW / (k - 1))
             fun py ms = oy + padT + plotH - (ms * plotH / maxMs)
-            val pts = List.mapi (fn (i, (_, ms)) =>
-                          toString (px i) ^ "," ^ toString (py ms)) meds
-            val dots = String.concatWith "\n"
-                         (List.mapi (fn (i, (_, ms)) =>
-                              "<circle cx='" ^ toString (px i) ^ "' cy='"
-                              ^ toString (py ms) ^ "' r='2.5' fill='#036'/>")
-                            meds)
+            val curve = List.mapi (fn (i, (_, ms)) => (px i, py ms)) meds
+            val dots = List.mapi (fn (i, (_, ms)) =>
+                           Svg.circle {cx = px i, cy = py ms, r = 2.5,
+                                       fill = "#036"}) meds
             val (n0, _) = List.nth meds 0
             val (nK, _) = List.nth meds (k - 1)
-        in "<g>"
-           ^ "<text x='" ^ toString (ox + padL) ^ "' y='" ^ toString (oy + 14)
-           ^ "' font-size='11' font-family='sans-serif' font-weight='bold'>"
-           ^ name ^ (if allOk then "" else " (FAILED)") ^ "</text>"
-           ^ "<rect x='" ^ toString (ox + padL) ^ "' y='" ^ toString (oy + padT)
-           ^ "' width='" ^ toString plotW ^ "' height='" ^ toString plotH
-           ^ "' fill='none' stroke='#ccc'/>"
-           ^ "<polyline fill='none' stroke='#036' stroke-width='1.5' points='"
-           ^ String.concatWith " " pts ^ "'/>"
-           ^ dots
-           ^ "<text x='" ^ toString (ox + padL - 2) ^ "' y='" ^ toString (oy + padT + 8)
-           ^ "' font-size='8' font-family='sans-serif' text-anchor='end'>"
-           ^ toString maxMs ^ "</text>"
-           ^ "<text x='" ^ toString (ox + padL) ^ "' y='" ^ toString (oy + cellH - 10)
-           ^ "' font-size='8' font-family='sans-serif'>" ^ toString n0 ^ "</text>"
-           ^ "<text x='" ^ toString (ox + padL + plotW) ^ "' y='" ^ toString (oy + cellH - 10)
-           ^ "' font-size='8' font-family='sans-serif' text-anchor='end'>"
-           ^ toString nK ^ "</text>"
-           ^ "</g>"
+        in Svg.g {}
+             (List.append
+                [ Svg.text {x = ox + padL, y = oy + 14, fontSize = 11,
+                            fontFamily = sans, fontWeight = "bold"}
+                    (name ^ (if allOk then "" else " (FAILED)"))
+                , Svg.rect {x = ox + padL, y = oy + padT, width = plotW,
+                            height = plotH, fill = "none", stroke = "#ccc"}
+                , Svg.polyline {fill = "none", stroke = "#036",
+                                strokeWidth = 1.5, points = Svg.points curve}
+                ]
+                (List.append dots
+                   [ Svg.text {x = ox + padL - 2, y = oy + padT + 8,
+                               fontSize = 8, fontFamily = sans,
+                               textAnchor = "end"} (toString maxMs)
+                   , Svg.text {x = ox + padL, y = oy + cellH - 10,
+                               fontSize = 8, fontFamily = sans} (toString n0)
+                   , Svg.text {x = ox + padL + plotW, y = oy + cellH - 10,
+                               fontSize = 8, fontFamily = sans,
+                               textAnchor = "end"} (toString nK)
+                   ]))
         end
 
     (** SVG chart sheet over summaries. *)
-    fun svg summaries =
+    fun svgSheet summaries =
         let val rows = floor ((List.length summaries + cols - 1) / cols)
             val w = cols * cellW
             val h = rows * cellH + 20
-        in "<svg xmlns='http://www.w3.org/2000/svg' width='" ^ toString w
-           ^ "' height='" ^ toString h ^ "' viewBox='0 0 " ^ toString w ^ " "
-           ^ toString h ^ "'>"
-           ^ "<rect width='100%' height='100%' fill='white'/>"
-           ^ String.concatWith "\n" (List.mapi chart summaries)
-           ^ "<text x='4' y='" ^ toString (h - 6)
-           ^ "' font-size='9' font-family='sans-serif' fill='#666'>"
-           ^ "median ms vs size (y scaled per chart); generated in Troupe</text>"
-           ^ "</svg>"
+        in Svg.render
+             (Svg.svg {width = w, height = h,
+                       viewBox = "0 0 " ^ toString w ^ " " ^ toString h}
+                (List.append
+                   [ Svg.rect {width = "100%", height = "100%", fill = "white"} ]
+                   (List.append (List.mapi chart summaries)
+                      [ Svg.text {x = 4, y = h - 6, fontSize = 9,
+                                  fontFamily = sans, fill = "#666"}
+                          "median ms vs size (y scaled per chart); generated in Troupe"
+                      ])))
         end
 
     (** Rows rendered back in the Bench line format (for a results file). *)
@@ -137,7 +139,7 @@ let fun uniq xs =
 in (SimpleModule.publish (authority, "SavinaReport",
         { summarize = summarize
         , markdown = markdown
-        , svg = svg
+        , svg = svgSheet
         , resultLines = resultLines
         });
     print "published SavinaReport module")

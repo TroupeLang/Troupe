@@ -1,0 +1,100 @@
+(* Savina benchmark: Unbalanced Cobwebbed Tree (parallelism group).
+ *
+ * A tree of actors grows dynamically to n nodes: every node spawns a left
+ * child (indices come from the master, which stops handing them out at
+ * n), and a right child when a hash of its index says so — producing an
+ * unbalanced spine-with-bushes shape. The Savina original relies on
+ * *urgent* messages that jump the mailbox queue; Troupe mailboxes are
+ * FIFO, so this port demonstrates the priority-receive emulation: a node
+ * probes for queued URGENT messages by sending itself a marker and
+ * receiving until the marker arrives (any URGENT already in the mailbox
+ * is served first — the after-0 idiom of pre-priority-message Erlang),
+ * and selective receive answers URGENT while a node waits for the
+ * master's allocation replies. The master probes random known nodes with
+ * URGENT status requests throughout the run.
+ *
+ *   ./local.sh examples/savina/uct.trp                # default sizes
+ *   ./local.sh examples/savina/uct.trp -- 2000 8000   # explicit sizes
+ *
+ * Result: (allocated, completed, probes, acks); ok iff exactly n nodes
+ * were allocated, all n completed, and every urgent probe was answered.
+ *)
+
+import List
+import Bench
+
+datatype Atoms = GROW | ALLOC | IDX | EXHAUSTED | NODEDONE | URGENT
+              | URGENTACK | MARKER | STOP
+
+let fun hash i = (i * 2654435761) mod 4294967296
+
+    fun hasRight i = hash i mod 100 < 45
+
+    (* serve any URGENT messages already queued, without blocking: the
+     * self-sent marker arrives behind them in FIFO order *)
+    fun probeUrgent () =
+        let val _ = send (self (), MARKER)
+            fun drain () =
+                receive [ hn (URGENT, p) => (send (p, URGENTACK); drain ())
+                        , hn MARKER      => () ]
+        in drain () end
+
+    (* request a child index; answer urgent probes while waiting *)
+    fun allocIdx master =
+        (send (master, (ALLOC, self ()));
+         let fun await () =
+                 receive [ hn (IDX, k)     => [k]
+                         , hn EXHAUSTED    => []
+                         , hn (URGENT, p)  => (send (p, URGENTACK); await ()) ]
+         in await () end)
+
+    fun node (i, master) =
+        receive [ hn GROW =>
+            let val _ = probeUrgent ()
+                fun spawnChild [] = ()
+                  | spawnChild [k] =
+                      send (spawn (fn () => node (k, master)), GROW)
+                val _ = spawnChild (allocIdx master)
+                val _ = probeUrgent ()
+                val _ = if hasRight i then spawnChild (allocIdx master) else ()
+                val _ = send (master, (NODEDONE, self ()))
+                fun idle () =
+                    receive [ hn (URGENT, p) => (send (p, URGENTACK); idle ())
+                            , hn STOP        => () ]
+            in idle () end ]
+
+    fun bench n =
+        let val main = self ()
+            val root = spawn (fn () => node (0, main))
+            val _ = send (root, GROW)
+            fun master (next, done, known, knownLen, probes, acks) =
+                if done = next andalso acks = probes
+                then (List.map (fn p => send (p, STOP)) known;
+                      (next, done, probes, acks))
+                else receive
+                  [ hn (ALLOC, p) =>
+                      if next < n
+                      then let val _ = send (p, (IDX, next))
+                               val doProbe = next mod 97 = 0 andalso knownLen > 0
+                               val _ = if doProbe
+                                       then send (List.nth known
+                                                    (floor (random () * knownLen)),
+                                                  (URGENT, main))
+                                       else ()
+                           in master (next + 1, done, known, knownLen,
+                                      (if doProbe then probes + 1 else probes), acks)
+                           end
+                      else (send (p, EXHAUSTED);
+                            master (next, done, known, knownLen, probes, acks))
+                  , hn (NODEDONE, p) =>
+                      master (next, done + 1, p :: known, knownLen + 1, probes, acks)
+                  , hn URGENTACK =>
+                      master (next, done, known, knownLen, probes, acks + 1) ]
+        in master (1, 0, [], 0, 0, 0)
+        end
+
+    val sizes = Bench.sizesFromArgs (getCliArgs authority) [2000, 8000, 20000]
+in Bench.run authority "uct" sizes 3 bench
+     (fn n => fn (allocated, done, probes, acks) =>
+        allocated = n andalso done = n andalso acks = probes)
+end

@@ -71,6 +71,29 @@ math built-ins).
 | `facloc.trp`      | Online Facility Location   | parallelism | points streamed           | counts conserve; all points covered by a facility |
 | `nqueenk.trp`     | N-Queens (all solutions)   | parallelism | board size                | total = known solution count |
 
+## Benchmarks (tranche 4 — synchronous-emulation, priority, and array-shaped)
+
+With tranche 4 the port covers the complete 30-benchmark Savina suite.
+The array-shaped benchmarks use `lib/Vector.trp` (immutable vectors with
+logarithmic indexed access — Troupe has no constant-time arrays; each
+file documents the deviation), and `piprecision.trp` uses `lib/BigInt.trp`.
+
+| File               | Savina benchmark               | Group       | Size parameter          | Check |
+|--------------------|--------------------------------|-------------|-------------------------|-------|
+| `logmap.trp`       | Logistic Map Series            | concurrency | terms (10 series)       | sum equals sequential reference exactly |
+| `banking.trp`      | Bank Transaction               | concurrency | transfers (20 accounts) | money conserved; all transfers complete |
+| `astar.trp`        | A-star Search                  | parallelism | grid width (4 workers)  | distance equals sequential reference |
+| `uct.trp`          | Unbalanced Cobwebbed Tree      | parallelism | tree nodes              | allocation/completion conserve; all urgent probes answered |
+| `recmatmul.trp`    | Recursive Matrix Multiplication | parallelism | matrix dimension       | equals sequential product |
+| `apsp.trp`         | All-Pairs Shortest Path        | parallelism | vertices (6 workers)    | equals sequential Floyd-Warshall |
+| `sor.trp`          | Successive Over-Relaxation     | parallelism | grid width (actor per cell) | exact float equality with sequential Jacobi |
+| `piprecision.trp`  | Precise Pi Computation         | parallelism | decimal digits (max 100) | digits match built-in pi reference |
+
+`uct.trp` demonstrates the priority-receive emulation (a self-sent marker
+behind FIFO delivery serves queued urgent messages without blocking);
+`logmap.trp` and `banking.trp` note that synchronous rendezvous is the
+ordinary ask pattern in Troupe, unlike the Akka originals.
+
 ## Labeled variants (IFC dimension)
 
 Three benchmarks have information-flow variants with no counterpart in the

@@ -380,7 +380,17 @@ constsToJS consts = do
      docs <- mapM toJsConst consts
      return $ vcat docs
   where
-    toJsConst (x, lit) = return $ hsep ["const", ppId x , text "=", lit2JS lit ]
+    -- An atom in the constants table is emitted as a reference to the
+    -- namespace-level atom binding, so the atom must be recorded in this
+    -- unit's atom list — serialized functions are reconstructed with
+    -- exactly the atoms they declare, and a hoisted atom constant would
+    -- otherwise be a free identifier after restore.
+    toJsConst :: (Raw.RawVar, C.Lit) -> W PP.Doc
+    toJsConst (x, lit) = do
+      case lit of
+        C.LAtom atom -> tell ([], [atom], [], [])
+        _            -> return ()
+      return $ hsep ["const", ppId x , text "=", lit2JS lit ]
 
 -- | Helper function for FunDef ToJS with explicit position
 toJSFunDefWithPos :: PosInf -> FunDef -> W PP.Doc

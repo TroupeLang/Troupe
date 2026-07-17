@@ -20,61 +20,9 @@
 
 import List
 import Bench
+import Savina
 
-datatype Atoms = POINT | STOPCHAIN | FACREPORT | CHAINDONE
-
-let val radius2 = 10000.0   (* radius 100, squared *)
-    val range = 1000.0
-
-    fun facility (cx, cy, main) =
-        let fun loop (next, accepted) =
-                receive
-                  [ hn (POINT, x, y) =>
-                      let val dx = x - cx
-                          val dy = y - cy
-                      in if dx * dx + dy * dy <= radius2
-                         then loop (next, accepted + 1)
-                         else case next of
-                                [] => loop ([spawn (fn () => facility (x, y, main))],
-                                            accepted)
-                              | nf :: _ => (send (nf, (POINT, x, y));
-                                            loop (next, accepted))
-                      end
-                  , hn STOPCHAIN =>
-                      (send (main, (FACREPORT, cx, cy, accepted));
-                       case next of
-                         []      => send (main, CHAINDONE)
-                       | nf :: _ => send (nf, STOPCHAIN)) ]
-        in loop ([], 1) end   (* the founding point counts as accepted *)
-
-    fun bench n =
-        let val main = self ()
-            val points = List.map (fn _ => (random () * range, random () * range))
-                                  (List.range n)
-            val (x0, y0) = List.head points
-            val root = spawn (fn () => facility (x0, y0, main))
-            val _ = List.map (fn (x, y) => send (root, (POINT, x, y)))
-                             (List.tail points)
-            val _ = send (root, STOPCHAIN)
-            fun collect (centers, total) =
-                receive
-                  [ hn (FACREPORT, cx, cy, c) =>
-                      collect ((cx, cy) :: centers, total + c)
-                  , hn CHAINDONE => (centers, total) ]
-            val (centers, total) = collect ([], 0)
-            fun covered (x, y) =
-                let fun go [] = false
-                      | go ((cx, cy) :: cs) =
-                          let val dx = x - cx
-                              val dy = y - cy
-                          in dx * dx + dy * dy <= radius2 orelse go cs end
-                in go centers end
-            fun allCovered [] = true
-              | allCovered ((x, y) :: ps) = covered (x, y) andalso allCovered ps
-        in (total, allCovered points)
-        end
-
-    val sizes = Bench.sizesFromArgs (getCliArgs authority) [1000, 4000, 10000]
-in Bench.run authority "facloc" sizes 3 bench
-     (fn n => fn (total, cov) => total = n andalso cov)
+let val d = Savina.facloc
+    val sizes = Bench.sizesFromArgs (getCliArgs authority) d.sizes
+in Bench.run authority d.name sizes 3 d.bench d.check
 end

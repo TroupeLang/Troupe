@@ -1,0 +1,18 @@
+(* Producer for the Savina module blob: publishes the benchmark
+ * descriptor list through SimpleModule so consumers can `load "Savina"`
+ * instead of importing. Run from the repository root (the blob lands in
+ * ./out/):
+ *
+ *   mkdir -p out && ./local.sh examples/savina/Savina.mod.trp
+ *
+ * Re-run after any change to the benchmark definitions or a compiler
+ * rebuild — blobs carry compiled code and have no version stamp.
+ *)
+
+import List
+import Savina
+import SimpleModule
+
+let val _ = SimpleModule.publish (authority, "Savina", {all = Savina.all})
+in print ("published Savina module:", List.length Savina.all, "benchmarks")
+end

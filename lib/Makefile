@@ -4,6 +4,7 @@ build:
 	mkdir -p out
 
   # No dependencies
+	$(COMPILER) ./SimpleModule.trp -l
 	$(COMPILER) ./BigInt.trp -l
 	$(COMPILER) ./Number.trp -l
 	$(COMPILER) ./List.trp -l
@@ -48,6 +49,12 @@ build:
   # Dependency on `List`, `ListPair`, and `StencilVector`
 	$(COMPILER) ./HashMap.trp -l
 	$(COMPILER) ./HashSet.trp -l
+
+  # Dependency on `List` and `String`
+	$(COMPILER) ./SavinaReport.trp -l
+
+  # Dependency on `List`, `ListPair`, `Map`, `Number`, `Vector`, and `BigInt`
+	$(COMPILER) ./Savina.trp -l
 
 clean:
 	rm -rf out

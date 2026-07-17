@@ -1,13 +1,27 @@
 # Savina benchmarks ported to Troupe
 
-Ports of benchmarks from the Savina actor-benchmark suite (Imam & Sarkar,
-AGERE 2014) to Troupe, produced by the Savina port study (see
-`_dev_planning/tier2-libraries/study-savina.md`). Each file is a
-self-contained program built on the core actor primitives (`spawn`, `send`,
-`receive`, `self`) and the `Bench` library (`lib/Bench.trp`) for timing and
-verification.
+The complete 30-benchmark Savina actor suite (Imam & Sarkar, AGERE 2014)
+ported to Troupe. The benchmarks live as descriptors in `lib/Savina.trp`
+(name, benchmark function, correctness check, default sizes), built on
+the core actor primitives (`spawn`, `send`, `receive`, `self`); each
+file here is a thin driver for one descriptor, with that benchmark's
+semantics, deviations, and check documented in its header comment.
 
-## Running
+## Running the whole evaluation
+
+```bash
+./local.sh examples/savina/runall.trp --io-root out              # all 30
+./local.sh examples/savina/runall.trp --io-root out -- sieve uct # a subset
+```
+
+`runall.trp` runs the selected benchmarks, prints measurement lines as
+it goes, and writes `savina-results.txt`, `savina-report.md`, and
+`savina-charts.svg` (small-multiple scaling charts) under the io-root —
+the whole pipeline, including chart rendering, is Troupe
+(`lib/SavinaReport.trp`). `analysis/mkreport.trp` regenerates the report
+and charts from a previously collected results file.
+
+## Running one benchmark
 
 ```bash
 ./local.sh examples/savina/pingpong.trp              # default sizes

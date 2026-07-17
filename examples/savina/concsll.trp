@@ -20,70 +20,9 @@
 
 import List
 import Bench
+import Savina
 
-datatype Atoms = ADD | ADDED | HAS | HASREPLY | SNAPSHOT | SNAP | WORKERDONE
-
-let val numWorkers = 8
-    val valueRange = 500
-
-    (* insert v into sorted list xs; returns (list, wasNovel) *)
-    fun insertSorted ([], v)      = ([v], true)
-      | insertSorted (x :: xs, v) =
-          if v = x then (x :: xs, false)
-          else if v < x then (v :: x :: xs, true)
-          else let val (rest, novel) = insertSorted (xs, v)
-               in (x :: rest, novel) end
-
-    fun member ([], v)      = false
-      | member (x :: xs, v) = if v = x then true
-                              else if v < x then false
-                              else member (xs, v)
-
-    fun server () =
-        let fun loop (xs, inserts) =
-                receive
-                  [ hn (ADD, v, p) =>
-                      let val (xs2, novel) = insertSorted (xs, v)
-                      in send (p, ADDED);
-                         loop (xs2, if novel then inserts + 1 else inserts)
-                      end
-                  , hn (HAS, v, p) =>
-                      (send (p, (HASREPLY, member (xs, v))); loop (xs, inserts))
-                  , hn (SNAPSHOT, p) => send (p, (SNAP, xs, inserts)) ]
-        in loop ([], 0) end
-
-    fun worker (srv, main, n) =
-        let val me = self ()
-            fun doOp j =
-                if j = n then send (main, WORKERDONE)
-                else let val v = floor (random () * valueRange)
-                     in if j mod 2 = 0
-                        then (send (srv, (ADD, v, me));
-                              receive [ hn ADDED => doOp (j + 1) ])
-                        else (send (srv, (HAS, v, me));
-                              receive [ hn (HASREPLY, _) => doOp (j + 1) ])
-                     end
-        in doOp 0 end
-
-    fun isSorted []             = true
-      | isSorted (x :: [])      = true
-      | isSorted (x :: y :: xs) = x < y andalso isSorted (y :: xs)
-
-    fun bench n =
-        let val main = self ()
-            val srv = spawn server
-            val _ = List.map (fn _ => spawn (fn () => worker (srv, main, n)))
-                             (List.range numWorkers)
-            fun collect k =
-                if k = 0
-                then (send (srv, (SNAPSHOT, main));
-                      receive [ hn (SNAP, xs, inserts) =>
-                                  (isSorted xs, List.length xs, inserts) ])
-                else receive [ hn WORKERDONE => collect (k - 1) ]
-        in collect numWorkers
-        end
-
-    val sizes = Bench.sizesFromArgs (getCliArgs authority) [200, 800, 2000]
-in Bench.run authority "concsll" sizes 3 bench
-     (fn n => fn (sorted, len, inserts) => sorted andalso len = inserts)
+let val d = Savina.concsll
+    val sizes = Bench.sizesFromArgs (getCliArgs authority) d.sizes
+in Bench.run authority d.name sizes 3 d.bench d.check
 end

@@ -18,84 +18,10 @@
  *)
 
 import List
-import ListPair
 import Bench
+import Savina
 
-datatype Atoms = SAMPLE | FLUSH | OUT | BRANCHDONE | RESULT
-
-let val numBranches = 4
-    val firLen = 8
-    val decimation = 4
-
-    fun coeffs b = List.map (fn j => (b + 1) / (j + 2)) (List.range firLen)
-
-    fun takeUpTo (0, _)       = []
-      | takeUpTo (_, [])      = []
-      | takeUpTo (k, x :: xs) = x :: takeUpTo (k - 1, xs)
-
-    fun dot (cs, window) =
-        List.foldl (fn ((c, w), acc) => acc + c * w) 0.0 (ListPair.zip cs window)
-
-    (* One filter step: returns (window', count', emitted value or []).
-     * Shared by the branch actor and the sequential reference. *)
-    fun step (cs, x, window, count) =
-        let val w2 = takeUpTo (firLen, x :: window)
-            val c2 = count + 1
-        in if c2 >= firLen andalso c2 mod decimation = 0
-           then (w2, c2, [dot (cs, w2)])
-           else (w2, c2, [])
-        end
-
-    fun branch (b, comb) =
-        let val cs = coeffs b
-            fun loop (window, count) =
-                receive
-                  [ hn (SAMPLE, x) =>
-                      let val (w2, c2, out) = step (cs, x, window, count)
-                          val _ = List.map (fn y => send (comb, (OUT, y))) out
-                      in loop (w2, c2) end
-                  , hn FLUSH => send (comb, BRANCHDONE) ]
-        in loop ([], 0) end
-
-    fun combiner main =
-        let fun loop (total, done) =
-                if done = numBranches then send (main, (RESULT, total))
-                else receive [ hn (OUT, y)     => loop (total + y, done)
-                             , hn BRANCHDONE  => loop (total, done + 1) ]
-        in loop (0.0, 0) end
-
-    fun sampleAt i = (i mod 97) / 7.0
-
-    fun reference n =
-        let fun refBranch b =
-                let val cs = coeffs b
-                    fun go (i, window, count, acc) =
-                        if i = n then acc
-                        else let val (w2, c2, out) = step (cs, sampleAt i, window, count)
-                             in go (i + 1, w2, c2,
-                                    case out of [] => acc | y :: _ => acc + y)
-                             end
-                in go (0, [], 0, 0.0) end
-        in List.foldl (fn (b, acc) => acc + refBranch b) 0.0
-                      (List.range numBranches)
-        end
-
-    fun bench n =
-        let val main = self ()
-            val comb = spawn (fn () => combiner main)
-            val branches = List.map (fn b => spawn (fn () => branch (b, comb)))
-                                    (List.range numBranches)
-            fun stream i =
-                if i = n then List.map (fn p => send (p, FLUSH)) branches
-                else (List.map (fn p => send (p, (SAMPLE, sampleAt i))) branches;
-                      stream (i + 1))
-            val _ = stream 0
-        in receive [ hn (RESULT, total) => total ]
-        end
-
-    fun abs x = if x < 0.0 then 0.0 - x else x
-
-    val sizes = Bench.sizesFromArgs (getCliArgs authority) [2000, 8000, 20000]
-in Bench.run authority "filterbank" sizes 3 bench
-     (fn n => fn total => abs (total - reference n) < 0.001)
+let val d = Savina.filterbank
+    val sizes = Bench.sizesFromArgs (getCliArgs authority) d.sizes
+in Bench.run authority d.name sizes 3 d.bench d.check
 end

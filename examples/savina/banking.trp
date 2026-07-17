@@ -17,53 +17,9 @@
 
 import List
 import Bench
+import Savina
 
-datatype Atoms = TRANSFER | CREDIT | CONFIRM | GETBALANCE | BALANCE | STOP
-
-let val numAccounts = 20
-    val initialBalance = 10000
-
-    fun account balance =
-        receive
-          [ hn (TRANSFER, amount, dst, teller) =>
-              (send (dst, (CREDIT, amount, teller));
-               account (balance - amount))
-          , hn (CREDIT, amount, teller) =>
-              (send (teller, CONFIRM);
-               account (balance + amount))
-          , hn (GETBALANCE, p) =>
-              (send (p, (BALANCE, balance)); account balance)
-          , hn STOP => () ]
-
-    fun bench n =
-        let val main = self ()
-            val accounts = List.map (fn _ => spawn (fn () => account initialBalance))
-                                    (List.range numAccounts)
-            fun pick () = floor (random () * numAccounts)
-            fun transfers (k, done) =
-                if k = 0 then done
-                else let val src = pick ()
-                         val dstRaw = pick ()
-                         val dst = if dstRaw = src
-                                   then (dstRaw + 1) mod numAccounts
-                                   else dstRaw
-                         val amount = floor (random () * 100)
-                         val _ = send (List.nth accounts src,
-                                       (TRANSFER, amount, List.nth accounts dst, main))
-                     in receive [ hn CONFIRM => transfers (k - 1, done + 1) ]
-                     end
-            val completed = transfers (n, 0)
-            fun sumBalances ([], acc)      = acc
-              | sumBalances (a :: rest, acc) =
-                  (send (a, (GETBALANCE, main));
-                   receive [ hn (BALANCE, b) =>
-                               (send (a, STOP); sumBalances (rest, acc + b)) ])
-            val total = sumBalances (accounts, 0)
-        in (total, completed)
-        end
-
-    val sizes = Bench.sizesFromArgs (getCliArgs authority) [2000, 8000, 20000]
-in Bench.run authority "banking" sizes 3 bench
-     (fn n => fn (total, completed) =>
-        total = numAccounts * initialBalance andalso completed = n)
+let val d = Savina.banking
+    val sizes = Bench.sizesFromArgs (getCliArgs authority) d.sizes
+in Bench.run authority d.name sizes 3 d.bench d.check
 end

@@ -28,23 +28,33 @@ let (** Time a thunk. Returns `(result, elapsed)` with `elapsed` in
      *
      *      <name> n=<size> rep=<i> ms=<elapsed> ok=<bool>
      *)
-    fun run auth name sizes reps f check =
+    (** Like `run` below, but also returns the measurements as a list of
+     *  `(size, rep, ms, ok)` rows, oldest first. *)
+    fun collectRows auth name sizes reps f check =
         let fun say s = fwrite (stdout auth, s ^ "\n")
             fun oneRep size i =
                 let val (r, ms) = time (fn () => f size)
                     val ok = check size r
-                in say (name ^ " n=" ^ toString size ^ " rep=" ^ toString i
-                        ^ " ms=" ^ toString ms ^ " ok=" ^ toString ok)
+                    val _ = say (name ^ " n=" ^ toString size ^ " rep=" ^ toString i
+                                 ^ " ms=" ^ toString ms ^ " ok=" ^ toString ok)
+                in (size, i, ms, ok)
                 end
             fun oneSize size =
                 let val _ = f size
                 in List.map (oneRep size) (List.range reps)
                 end
-        in List.map oneSize sizes; ()
+            fun flatten ([], acc)       = List.reverse acc
+              | flatten (r :: rs, acc)  =
+                  flatten (rs, List.append (List.reverse r) acc)
+        in flatten (List.map oneSize sizes, [])
         end
+
+    fun run auth name sizes reps f check =
+        (collectRows auth name sizes reps f check; ())
 
 in [ ("time", time)
    , ("sizesFromArgs", sizesFromArgs)
    , ("run", run)
+   , ("collectRows", collectRows)
    ]
 end

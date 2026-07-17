@@ -16,72 +16,10 @@
  *)
 
 import List
-import Number
 import Bench
+import Savina
 
-datatype Atoms = BSORT | BSORTED | MERGE | MERGED
-
-let fun takeN (0, _)       = []
-      | takeN (k, x :: xs) = x :: takeN (k - 1, xs)
-
-    fun dropN (0, xs)      = xs
-      | dropN (k, _ :: xs) = dropN (k - 1, xs)
-
-    (* pairwise compare-exchange of two equal-length halves *)
-    fun pairMinMax ([], [])           = ([], [])
-      | pairMinMax (x :: xs, y :: ys) =
-          let val (ls, hs) = pairMinMax (xs, ys)
-          in if x <= y then (x :: ls, y :: hs) else (y :: ls, x :: hs) end
-
-    fun merger () =
-        receive [ hn (MERGE, xs, up, tag, parent) =>
-            let val len = List.length xs
-            in if len <= 1 then send (parent, (MERGED, tag, xs))
-               else let val half = Number.intDiv len 2
-                        val (lo, hi) = pairMinMax (takeN (half, xs), dropN (half, xs))
-                        val (first, second) = if up then (lo, hi) else (hi, lo)
-                        val me = self ()
-                        val _ = send (spawn merger, (MERGE, first, up, 0, me))
-                        val _ = send (spawn merger, (MERGE, second, up, 1, me))
-                    in receive [ hn (MERGED, 0, a) =>
-                         receive [ hn (MERGED, 1, b) =>
-                           send (parent, (MERGED, tag, List.append a b)) ] ]
-                    end
-            end ]
-
-    fun bsorter () =
-        receive [ hn (BSORT, xs, up, tag, parent) =>
-            let val len = List.length xs
-            in if len <= 1 then send (parent, (BSORTED, tag, xs))
-               else let val half = Number.intDiv len 2
-                        val me = self ()
-                        val _ = send (spawn bsorter,
-                                      (BSORT, takeN (half, xs), true, 0, me))
-                        val _ = send (spawn bsorter,
-                                      (BSORT, dropN (half, xs), false, 1, me))
-                    in receive [ hn (BSORTED, 0, asc) =>
-                         receive [ hn (BSORTED, 1, desc) =>
-                           (send (spawn merger,
-                                  (MERGE, List.append asc desc, up, 0, me));
-                            receive [ hn (MERGED, 0, merged) =>
-                              send (parent, (BSORTED, tag, merged)) ]) ] ]
-                    end
-            end ]
-
-    fun bench n =
-        let val input = List.map (fn _ => floor (random () * 1000000))
-                                 (List.range n)
-            val _ = send (spawn bsorter, (BSORT, input, true, 0, self ()))
-            val result = receive [ hn (BSORTED, 0, xs) => xs ]
-        in (result, input)
-        end
-
-    fun sameList ([], [])           = true
-      | sameList (x :: xs, y :: ys) = x = y andalso sameList (xs, ys)
-      | sameList (_, _)             = false
-
-    val sizes = Bench.sizesFromArgs (getCliArgs authority) [256, 1024, 4096]
-in Bench.run authority "bitonicsort" sizes 3 bench
-     (fn n => fn (result, input) =>
-        sameList (result, List.sort (fn a => fn b => a < b) input))
+let val d = Savina.bitonicsort
+    val sizes = Bench.sizesFromArgs (getCliArgs authority) d.sizes
+in Bench.run authority d.name sizes 3 d.bench d.check
 end

@@ -1,0 +1,140 @@
+(* SavinaReport — turn collected benchmark rows into a markdown summary
+ * table and an SVG chart sheet (small multiples of scaling curves).
+ * Shared by examples/savina/runall.trp (in-process rows) and
+ * examples/savina/analysis/mkreport.trp (rows parsed from a results
+ * file). A row is (benchmark name, size, ms, ok).
+ *)
+
+import List
+import String
+
+let fun uniq xs =
+        let fun go ([], acc) = List.reverse acc
+              | go (x :: rest, acc) =
+                  if List.length (List.filter (fn y => y = x) acc) > 0
+                  then go (rest, acc)
+                  else go (rest, x :: acc)
+        in go (xs, []) end
+
+    fun median xs =
+        let val sorted = List.sort (fn a => fn b => a < b) xs
+        in List.nth sorted (floor (List.length sorted / 2)) end
+
+    fun round1 x = floor (x * 10 + 0.5) / 10
+
+    (** Group rows into per-benchmark summaries
+     *  (name, allOk, [(size, median ms)]), preserving first-seen order. *)
+    fun summarize rows =
+        List.map (fn name =>
+            let val mine = List.filter (fn (b, _, _, _) => b = name) rows
+                val sizes = uniq (List.map (fn (_, n, _, _) => n) mine)
+                val allOk = List.length
+                              (List.filter (fn (_, _, _, ok) => not ok) mine) = 0
+                val meds = List.map (fn n =>
+                              (n, median (List.map (fn (_, _, ms, _) => ms)
+                                    (List.filter (fn (_, m, _, _) => m = n) mine))))
+                            sizes
+            in (name, allOk, meds) end)
+          (uniq (List.map (fn (b, _, _, _) => b) rows))
+
+    fun mdRow (name, allOk, meds) =
+        let val cells = List.map (fn (n, ms) =>
+                            toString n ^ ":" ^ toString ms) meds
+            val (nLast, msLast) = List.nth meds (List.length meds - 1)
+            val perUnit = round1 (msLast * 1000 / nLast)
+        in "| " ^ name ^ " | " ^ String.concatWith " · " cells
+           ^ " | " ^ toString perUnit
+           ^ " | " ^ (if allOk then "yes" else "NO") ^ " |"
+        end
+
+    (** Markdown report over summaries. *)
+    fun markdown summaries =
+        String.concatWith "\n"
+          (List.append
+             [ "# Savina results (generated)"
+             , ""
+             , "Medians over the repetitions of each run; per-unit cost is"
+             , "at the largest size (microseconds per size unit)."
+             , ""
+             , "| Benchmark | size:median ms | us/unit at max | all ok |"
+             , "|-----------|----------------|----------------|--------|" ]
+             (List.map mdRow summaries))
+
+    (* --- SVG small multiples --- *)
+    val cellW = 220
+    val cellH = 150
+    val cols = 5
+    val padL = 34
+    val padT = 26
+    val plotW = cellW - padL - 12
+    val plotH = cellH - padT - 26
+
+    fun chart (idx, (name, allOk, meds)) =
+        let val ox = (idx mod cols) * cellW
+            val oy = floor (idx / cols) * cellH
+            val maxMs = List.foldl (fn ((_, ms), m) => if ms > m then ms else m)
+                                   1 meds
+            val k = List.length meds
+            fun px i = ox + padL + (if k <= 1 then plotW / 2
+                                    else i * plotW / (k - 1))
+            fun py ms = oy + padT + plotH - (ms * plotH / maxMs)
+            val pts = List.mapi (fn (i, (_, ms)) =>
+                          toString (px i) ^ "," ^ toString (py ms)) meds
+            val dots = String.concatWith "\n"
+                         (List.mapi (fn (i, (_, ms)) =>
+                              "<circle cx='" ^ toString (px i) ^ "' cy='"
+                              ^ toString (py ms) ^ "' r='2.5' fill='#036'/>")
+                            meds)
+            val (n0, _) = List.nth meds 0
+            val (nK, _) = List.nth meds (k - 1)
+        in "<g>"
+           ^ "<text x='" ^ toString (ox + padL) ^ "' y='" ^ toString (oy + 14)
+           ^ "' font-size='11' font-family='sans-serif' font-weight='bold'>"
+           ^ name ^ (if allOk then "" else " (FAILED)") ^ "</text>"
+           ^ "<rect x='" ^ toString (ox + padL) ^ "' y='" ^ toString (oy + padT)
+           ^ "' width='" ^ toString plotW ^ "' height='" ^ toString plotH
+           ^ "' fill='none' stroke='#ccc'/>"
+           ^ "<polyline fill='none' stroke='#036' stroke-width='1.5' points='"
+           ^ String.concatWith " " pts ^ "'/>"
+           ^ dots
+           ^ "<text x='" ^ toString (ox + padL - 2) ^ "' y='" ^ toString (oy + padT + 8)
+           ^ "' font-size='8' font-family='sans-serif' text-anchor='end'>"
+           ^ toString maxMs ^ "</text>"
+           ^ "<text x='" ^ toString (ox + padL) ^ "' y='" ^ toString (oy + cellH - 10)
+           ^ "' font-size='8' font-family='sans-serif'>" ^ toString n0 ^ "</text>"
+           ^ "<text x='" ^ toString (ox + padL + plotW) ^ "' y='" ^ toString (oy + cellH - 10)
+           ^ "' font-size='8' font-family='sans-serif' text-anchor='end'>"
+           ^ toString nK ^ "</text>"
+           ^ "</g>"
+        end
+
+    (** SVG chart sheet over summaries. *)
+    fun svg summaries =
+        let val rows = floor ((List.length summaries + cols - 1) / cols)
+            val w = cols * cellW
+            val h = rows * cellH + 20
+        in "<svg xmlns='http://www.w3.org/2000/svg' width='" ^ toString w
+           ^ "' height='" ^ toString h ^ "' viewBox='0 0 " ^ toString w ^ " "
+           ^ toString h ^ "'>"
+           ^ "<rect width='100%' height='100%' fill='white'/>"
+           ^ String.concatWith "\n" (List.mapi chart summaries)
+           ^ "<text x='4' y='" ^ toString (h - 6)
+           ^ "' font-size='9' font-family='sans-serif' fill='#666'>"
+           ^ "median ms vs size (y scaled per chart); generated in Troupe</text>"
+           ^ "</svg>"
+        end
+
+    (** Rows rendered back in the Bench line format (for a results file). *)
+    fun resultLines rows =
+        String.concatWith "\n"
+          (List.map (fn (b, n, ms, ok) =>
+               b ^ " n=" ^ toString n ^ " rep=- ms=" ^ toString ms
+               ^ " ok=" ^ toString ok)
+             rows)
+
+in [ ("summarize", summarize)
+   , ("markdown", markdown)
+   , ("svg", svg)
+   , ("resultLines", resultLines)
+   ]
+end

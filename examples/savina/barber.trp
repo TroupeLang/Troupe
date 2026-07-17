@@ -21,53 +21,9 @@
 
 import List
 import Bench
+import Savina
 
-datatype Atoms = ENTER | FULL | CUT | NEXT | BARBERDONE | SERVED | STOP | INITBARBER
-
-let val capacity = 4
-
-    fun customer (room, main) =
-        (send (room, (ENTER, self ()));
-         receive [ hn FULL => (sleep 1; customer (room, main))
-                 , hn CUT  => send (main, SERVED) ])
-
-    fun barber room =
-        receive [ hn (NEXT, p) =>
-                    (send (p, CUT); send (room, BARBERDONE); barber room)
-                , hn STOP => () ]
-
-    fun room barberPid =
-        let fun loop (queue, qLen, busy) =
-                receive
-                  [ hn (ENTER, p) =>
-                      if qLen >= capacity
-                      then (send (p, FULL); loop (queue, qLen, busy))
-                      else if busy
-                      then loop (List.append queue [p], qLen + 1, true)
-                      else (send (barberPid, (NEXT, p)); loop (queue, qLen, true))
-                  , hn BARBERDONE =>
-                      (case queue of
-                         []      => loop ([], 0, false)
-                       | p :: ps => (send (barberPid, (NEXT, p));
-                                     loop (ps, qLen - 1, true)))
-                  , hn STOP => send (barberPid, STOP) ]
-        in loop ([], 0, false) end
-
-    fun bench n =
-        let val main = self ()
-            (* room and barber reference each other; wire the room second *)
-            val roomPid = spawn (fn () =>
-                receive [ hn (INITBARBER, b) => room b ])
-            val barberPid = spawn (fn () => barber roomPid)
-            val _ = send (roomPid, (INITBARBER, barberPid))
-            val _ = List.map (fn _ => spawn (fn () => customer (roomPid, main)))
-                             (List.range n)
-            fun collect k =
-                if k = 0 then (send (roomPid, STOP); n)
-                else receive [ hn SERVED => collect (k - 1) ]
-        in collect n
-        end
-
-    val sizes = Bench.sizesFromArgs (getCliArgs authority) [200, 500, 1000]
-in Bench.run authority "barber" sizes 3 bench (fn n => fn r => r = n)
+let val d = Savina.barber
+    val sizes = Bench.sizesFromArgs (getCliArgs authority) d.sizes
+in Bench.run authority d.name sizes 3 d.bench d.check
 end

@@ -18,55 +18,9 @@
 
 import List
 import Bench
+import Savina
 
-datatype Atoms = NEXTTERM | TERM | DONE | GETRESULT
-
-let val numSeries = 10
-
-    fun rate i = 3.46 + i * 0.0025
-    fun start i = 0.3 + i * 0.01
-
-    fun rateWorker r =
-        receive [ hn (NEXTTERM, x, p) =>
-                    (send (p, (TERM, r * x * (1.0 - x))); rateWorker r)
-                , hn DONE => () ]
-
-    fun series (i, n, main) =
-        let val me = self ()
-            val worker = spawn (fn () => rateWorker (rate i))
-            fun iterate (k, x) =
-                if k = 0 then (send (worker, DONE); x)
-                else (send (worker, (NEXTTERM, x, me));
-                      receive [ hn (TERM, x2) => iterate (k - 1, x2) ])
-            val final = iterate (n, start i)
-        in send (main, (DONE, i, final)) end
-
-    fun reference n =
-        let fun one i =
-                let val r = rate i
-                    fun go (k, x) = if k = 0 then x else go (k - 1, r * x * (1.0 - x))
-                in go (n, start i) end
-            fun sumUp (i, acc) =
-                if i = numSeries then acc else sumUp (i + 1, acc + one i)
-        in sumUp (0, 0.0) end
-
-    fun bench n =
-        let val main = self ()
-            val _ = List.map (fn i => spawn (fn () => series (i, n, main)))
-                             (List.range numSeries)
-            (* collect keyed by index, then sum in index order so float
-             * addition order matches the reference *)
-            fun collect (k, results) =
-                if k = 0 then results
-                else receive [ hn (DONE, i, x) => collect (k - 1, (i, x) :: results) ]
-            val results = collect (numSeries, [])
-            fun sumOrdered (i, acc) =
-                if i = numSeries then acc
-                else case List.filter (fn (j, _) => j = i) results of
-                       [(_, x)] => sumOrdered (i + 1, acc + x)
-        in sumOrdered (0, 0.0)
-        end
-
-    val sizes = Bench.sizesFromArgs (getCliArgs authority) [2000, 8000, 20000]
-in Bench.run authority "logmap" sizes 3 bench (fn n => fn s => s = reference n)
+let val d = Savina.logmap
+    val sizes = Bench.sizesFromArgs (getCliArgs authority) d.sizes
+in Bench.run authority d.name sizes 3 d.bench d.check
 end

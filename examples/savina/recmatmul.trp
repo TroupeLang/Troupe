@@ -18,60 +18,10 @@
  *)
 
 import List
-import Vector
-import Number
 import Bench
+import Savina
 
-datatype Atoms = MULT | RESULT
-
-let val cutoff = 8
-
-    fun mkMatrix n f =
-        Vector.tabulate n (fn i => Vector.tabulate n (fn j => f (i, j)))
-
-    fun mget (m, i, j) = Vector.sub (Vector.sub (m, i), j)
-
-    (* row i of the product, as a list *)
-    fun productRow (a, b, n, i) =
-        List.map (fn j =>
-            let fun dot (k, acc) =
-                    if k = n then acc
-                    else dot (k + 1, acc + mget (a, i, k) * mget (b, k, j))
-            in dot (0, 0) end)
-          (List.range n)
-
-    fun rows (a, b, n, r0, r1) =
-        List.map (fn i => productRow (a, b, n, r0 + i)) (List.range (r1 - r0))
-
-    fun multiplier (a, b, n) =
-        receive [ hn (MULT, r0, r1, tag, parent) =>
-            if r1 - r0 <= cutoff
-            then send (parent, (RESULT, tag, rows (a, b, n, r0, r1)))
-            else let val mid = r0 + Number.intDiv (r1 - r0) 2
-                     val me = self ()
-                     val _ = send (spawn (fn () => multiplier (a, b, n)),
-                                   (MULT, r0, mid, 0, me))
-                     val _ = send (spawn (fn () => multiplier (a, b, n)),
-                                   (MULT, mid, r1, 1, me))
-                 in receive [ hn (RESULT, 0, top) =>
-                      receive [ hn (RESULT, 1, bottom) =>
-                        send (parent, (RESULT, tag, List.append top bottom)) ] ]
-                 end ]
-
-    fun sameRows ([], [])           = true
-      | sameRows (r :: rs, q :: qs) = r = q andalso sameRows (rs, qs)
-      | sameRows (_, _)             = false
-
-    fun bench n =
-        let val a = mkMatrix n (fn (i, j) => (i + j) mod 10)
-            val b = mkMatrix n (fn (i, j) => (2 * i + j) mod 10)
-            val _ = send (spawn (fn () => multiplier (a, b, n)),
-                          (MULT, 0, n, 0, self ()))
-            val result = receive [ hn (RESULT, 0, rs) => rs ]
-            val reference = rows (a, b, n, 0, n)
-        in sameRows (result, reference)
-        end
-
-    val sizes = Bench.sizesFromArgs (getCliArgs authority) [16, 24, 32]
-in Bench.run authority "recmatmul" sizes 3 bench (fn n => fn same => same)
+let val d = Savina.recmatmul
+    val sizes = Bench.sizesFromArgs (getCliArgs authority) d.sizes
+in Bench.run authority d.name sizes 3 d.bench d.check
 end

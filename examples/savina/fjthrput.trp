@@ -13,31 +13,9 @@
 
 import List
 import Bench
+import Savina
 
-datatype Atoms = MSG | DONE
-
-let val numWorkers = 8
-
-    fun worker (main, n) =
-        let fun loop c =
-                if c = n then send (main, (DONE, c))
-                else receive [ hn MSG => loop (c + 1) ]
-        in loop 0 end
-
-    fun bench n =
-        let val main = self ()
-            val workers = List.map (fn _ => spawn (fn () => worker (main, n)))
-                                   (List.range numWorkers)
-            fun flood i =
-                if i = n then ()
-                else (List.map (fn w => send (w, MSG)) workers; flood (i + 1))
-            val _ = flood 0
-            fun collect (k, total) =
-                if k = 0 then total
-                else receive [ hn (DONE, c) => collect (k - 1, total + c) ]
-        in collect (numWorkers, 0)
-        end
-
-    val sizes = Bench.sizesFromArgs (getCliArgs authority) [5000, 20000, 50000]
-in Bench.run authority "fjthrput" sizes 3 bench (fn n => fn t => t = numWorkers * n)
+let val d = Savina.fjthrput
+    val sizes = Bench.sizesFromArgs (getCliArgs authority) d.sizes
+in Bench.run authority d.name sizes 3 d.bench d.check
 end

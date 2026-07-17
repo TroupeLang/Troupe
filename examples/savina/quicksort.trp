@@ -15,46 +15,9 @@
 
 import List
 import Bench
+import Savina
 
-datatype Atoms = SORT | SORTED
-
-let val cutoff = 32
-
-    fun lt a b = a < b
-
-    fun sorter () =
-        receive [ hn (SORT, xs, tag, parent) =>
-            if List.length xs <= cutoff
-            then send (parent, (SORTED, tag, List.sort lt xs))
-            else case xs of
-                   pivot :: rest =>
-                     let val me = self ()
-                         val smaller = List.filter (fn x => x < pivot) rest
-                         val bigger  = List.filter (fn x => not (x < pivot)) rest
-                         val _ = send (spawn sorter, (SORT, smaller, 0, me))
-                         val _ = send (spawn sorter, (SORT, bigger, 1, me))
-                     in receive [ hn (SORTED, 0, a) =>
-                          receive [ hn (SORTED, 1, b) =>
-                            send (parent, (SORTED, tag, List.append a (pivot :: b))) ] ]
-                     end ]
-
-    fun bench n =
-        let val input = List.map (fn _ => floor (random () * 1000000))
-                                 (List.range n)
-            val inputSum = List.foldl (fn (x, acc) => x + acc) 0 input
-            val _ = send (spawn sorter, (SORT, input, 0, self ()))
-            val result = receive [ hn (SORTED, 0, xs) => xs ]
-        in (result, inputSum)
-        end
-
-    fun isSorted []             = true
-      | isSorted (x :: [])      = true
-      | isSorted (x :: y :: xs) = (x <= y) andalso isSorted (y :: xs)
-
-    val sizes = Bench.sizesFromArgs (getCliArgs authority) [2000, 8000, 20000]
-in Bench.run authority "quicksort" sizes 3 bench
-     (fn n => fn (result, inputSum) =>
-        isSorted result
-        andalso List.length result = n
-        andalso List.foldl (fn (x, acc) => x + acc) 0 result = inputSum)
+let val d = Savina.quicksort
+    val sizes = Bench.sizesFromArgs (getCliArgs authority) d.sizes
+in Bench.run authority d.name sizes 3 d.bench d.check
 end

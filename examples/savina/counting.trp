@@ -12,22 +12,9 @@
 
 import List
 import Bench
+import Savina
 
-datatype Atoms = INC | GET | RESULT
-
-let fun counter c =
-        receive [ hn INC      => counter (c + 1)
-                , hn (GET, p) => send (p, (RESULT, c)) ]
-
-    fun bench n =
-        let val cnt = spawn (fn () => counter 0)
-            fun produce k =
-                if k = 0 then () else (send (cnt, INC); produce (k - 1))
-            val _ = produce n
-            val _ = send (cnt, (GET, self ()))
-        in receive [ hn (RESULT, c) => c ]
-        end
-
-    val sizes = Bench.sizesFromArgs (getCliArgs authority) [10000, 50000, 100000]
-in Bench.run authority "counting" sizes 3 bench (fn n => fn r => r = n)
+let val d = Savina.counting
+    val sizes = Bench.sizesFromArgs (getCliArgs authority) d.sizes
+in Bench.run authority d.name sizes 3 d.bench d.check
 end

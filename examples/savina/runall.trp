@@ -1,0 +1,82 @@
+(* runall — run the Savina evaluation from one place.
+ *
+ * Runs every benchmark in lib/Savina.trp (or a subset named on the
+ * command line) at its default sizes, one untimed warmup plus three
+ * timed repetitions per size, prints the Bench measurement lines as it
+ * goes, and writes three artifacts via SimpleFileIO:
+ *
+ *   savina-results.txt   the raw measurement rows
+ *   savina-report.md     per-benchmark medians and per-unit costs
+ *   savina-charts.svg    small-multiple scaling charts
+ *
+ *   ./local.sh examples/savina/runall.trp --io-root out
+ *   ./local.sh examples/savina/runall.trp --io-root out -- pingpong sieve
+ *
+ * The whole suite runs in a single Troupe process; between benchmarks
+ * the main mailbox is drained (a self-sent marker behind FIFO delivery
+ * bounds the drain), so a benchmark that leaked a message cannot
+ * confuse the next one — a nonzero drain count is reported.
+ *)
+
+import List
+import String
+import Bench
+import Savina
+import SavinaReport
+
+datatype Atoms = FLUSHMARK
+
+let val args = getCliArgs authority
+
+    val selected =
+        if List.length args = 0 then Savina.all
+        else List.filter (fn d => List.length
+                                    (List.filter (fn a => a = d.name) args) > 0)
+                         Savina.all
+
+    val unknown =
+        List.filter (fn a => List.length
+                               (List.filter (fn d => d.name = a) Savina.all) = 0)
+                    args
+
+    (* drain any residue in the main mailbox: the marker arrives behind
+     * everything already queued *)
+    fun flushMailbox () =
+        let val _ = send (self (), FLUSHMARK)
+            fun drain n =
+                receive [ hn FLUSHMARK => n
+                        , hn _         => drain (n + 1) ]
+        in drain 0 end
+
+    fun runOne d =
+        let val rows = Bench.collectRows authority d.name d.sizes 3 d.bench d.check
+            val leaked = flushMailbox ()
+            val _ = if leaked > 0
+                    then print (d.name, "leaked messages into main mailbox:", leaked)
+                    else ()
+        in List.map (fn (n, _, ms, ok) => (d.name, n, ms, ok)) rows end
+
+    fun runAll ([], acc)      = List.reverse acc
+      | runAll (d :: ds, acc) =
+          runAll (ds, List.append (List.reverse (runOne d)) acc)
+
+    fun save (path, content) =
+        case writeFile (authority, path, content) of
+          {tag = "Ok", value = _}  => print ("wrote", path)
+        | {tag = "Err", error = e} => print ("write error", path, e.reason)
+
+in if List.length unknown > 0
+   then print ("unknown benchmarks:", unknown)
+   else
+     let val rows = runAll (selected, [])
+         val summaries = SavinaReport.summarize rows
+         val _ = save ("savina-results.txt",
+                       SavinaReport.resultLines rows ^ "\n")
+         val _ = save ("savina-report.md",
+                       SavinaReport.markdown summaries ^ "\n")
+         val _ = save ("savina-charts.svg", SavinaReport.svg summaries)
+         val failed = List.filter (fn (_, ok, _) => not ok) summaries
+     in print (List.length summaries, "benchmarks run,",
+               List.length failed, "with failures")
+     end
+end

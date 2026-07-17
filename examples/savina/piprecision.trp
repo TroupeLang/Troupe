@@ -18,59 +18,10 @@
  *)
 
 import List
-import BigInt
 import Bench
+import Savina
 
-datatype Atoms = TASK | PART | STOP
-
-let val numWorkers = 4
-    val guardDigits = 10
-
-    val piRef = "31415926535897932384626433832795028841971693993751058209749445923078164062862089986280348253421170679"
-
-    fun pow (x, e) =
-        let fun go (k, acc) = if k = 0 then acc else go (k - 1, BigInt.mul (acc, x))
-        in go (e, 1n) end
-
-    (* sum of the arctan(1/x) series terms k0, k0+step, k0+2*step, ...
-     * at scale s: term k is (-1)^k * s / ((2k+1) * x^(2k+1)) *)
-    fun partial (x, k0, step, s) =
-        let val xStep = pow (x, 2 * step)
-            fun go (k, p, acc) =
-                let val t = BigInt.quot (s, BigInt.mul (BigInt.fromInt (2 * k + 1), p))
-                in if BigInt.eq (t, 0n) then acc
-                   else go (k + step, BigInt.mul (p, xStep),
-                            if k mod 2 = 0 then BigInt.add (acc, t)
-                            else BigInt.sub (acc, t))
-                end
-        in go (k0, pow (x, 2 * k0 + 1), 0n) end
-
-    fun worker () =
-        receive [ hn (TASK, x, k0, step, s, p) =>
-                    (send (p, (PART, partial (x, k0, step, s))); worker ())
-                , hn STOP => () ]
-
-    fun bench n =
-        let val main = self ()
-            val workers = List.map (fn _ => spawn worker) (List.range numWorkers)
-            val s = pow (10n, n + guardDigits)
-            fun arctanInv x =
-                let val _ = List.mapi
-                              (fn (w, p) => send (p, (TASK, x, w, numWorkers, s, main)))
-                              workers
-                    fun collect (k, acc) =
-                        if k = 0 then acc
-                        else receive [ hn (PART, t) => collect (k - 1, BigInt.add (acc, t)) ]
-                in collect (numWorkers, 0n) end
-            val a5 = arctanInv 5n
-            val a239 = arctanInv 239n
-            val _ = List.map (fn p => send (p, STOP)) workers
-            val piFixed = BigInt.sub (BigInt.mul (16n, a5), BigInt.mul (4n, a239))
-        in substring (BigInt.show piFixed, 0, n + 1)
-        end
-
-    fun check n digits = digits = substring (piRef, 0, n + 1)
-
-    val sizes = Bench.sizesFromArgs (getCliArgs authority) [30, 60, 100]
-in Bench.run authority "piprecision" sizes 3 bench check
+let val d = Savina.piprecision
+    val sizes = Bench.sizesFromArgs (getCliArgs authority) d.sizes
+in Bench.run authority d.name sizes 3 d.bench d.check
 end

@@ -19,45 +19,9 @@
 
 import List
 import Bench
+import Savina
 
-datatype Atoms = MEET | CHANGE | EXIT | DONE
-
-let val numChameneos = 10
-
-    fun complement (c1, c2) = if c1 = c2 then c1 else 3 - c1 - c2
-
-    fun chameneos (mall, main, color, count) =
-        (send (mall, (MEET, color, self ()));
-         receive [ hn (CHANGE, c) => chameneos (mall, main, c, count + 1)
-                 , hn EXIT        => send (main, (DONE, count)) ])
-
-    fun mall meetings =
-        let fun loop (waiting, m, exited) =
-                if exited = numChameneos then ()
-                else receive [ hn (MEET, c, p) =>
-                    if m = 0 then (send (p, EXIT); loop (waiting, m, exited + 1))
-                    else case waiting of
-                           [] => loop ([(c, p)], m, exited)
-                         | (c2, p2) :: _ =>
-                             let val nc = complement (c, c2)
-                                 val _ = send (p, (CHANGE, nc))
-                                 val _ = send (p2, (CHANGE, nc))
-                             in loop ([], m - 1, exited) end ]
-        in loop ([], meetings, 0) end
-
-    fun bench n =
-        let val main = self ()
-            val mallPid = spawn (fn () => mall n)
-            val _ = List.map
-                      (fn i => spawn (fn () =>
-                          chameneos (mallPid, main, i mod 3, 0)))
-                      (List.range numChameneos)
-            fun collect (k, total) =
-                if k = 0 then total
-                else receive [ hn (DONE, c) => collect (k - 1, total + c) ]
-        in collect (numChameneos, 0)
-        end
-
-    val sizes = Bench.sizesFromArgs (getCliArgs authority) [2000, 8000, 20000]
-in Bench.run authority "chameneos" sizes 3 bench (fn n => fn t => t = 2 * n)
+let val d = Savina.chameneos
+    val sizes = Bench.sizesFromArgs (getCliArgs authority) d.sizes
+in Bench.run authority d.name sizes 3 d.bench d.check
 end

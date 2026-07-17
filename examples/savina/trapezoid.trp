@@ -17,47 +17,10 @@
  *)
 
 import List
-import Number
 import Bench
+import Savina
 
-datatype Atoms = WORK | PARTIAL
-
-let val numWorkers = 8
-    val pi = 3.14159265358979
-
-    fun f x = 4.0 / (1.0 + x * x)
-
-    fun worker () =
-        receive [ hn (WORK, lo, h, count, master) =>
-            let fun go (i, acc) =
-                    if i = count then acc
-                    else let val x = lo + i * h
-                         in go (i + 1, acc + (f x + f (x + h)) * h / 2.0)
-                         end
-            in send (master, (PARTIAL, go (0, 0.0)))
-            end ]
-
-    fun bench n =
-        let val main = self ()
-            val h = 1.0 / n
-            val chunk = Number.intDiv n numWorkers
-            fun assign i =
-                let val count = if i = numWorkers - 1
-                                then n - chunk * (numWorkers - 1)
-                                else chunk
-                    val lo = i * chunk * h
-                in send (spawn worker, (WORK, lo, h, count, main))
-                end
-            val _ = List.map assign (List.range numWorkers)
-            fun collect (k, acc) =
-                if k = 0 then acc
-                else receive [ hn (PARTIAL, s) => collect (k - 1, acc + s) ]
-        in collect (numWorkers, 0.0)
-        end
-
-    fun abs x = if x < 0.0 then 0.0 - x else x
-
-    val sizes = Bench.sizesFromArgs (getCliArgs authority) [50000, 200000, 800000]
-in Bench.run authority "trapezoid" sizes 3 bench
-     (fn n => fn r => abs (r - pi) < 0.000001)
+let val d = Savina.trapezoid
+    val sizes = Bench.sizesFromArgs (getCliArgs authority) d.sizes
+in Bench.run authority d.name sizes 3 d.bench d.check
 end

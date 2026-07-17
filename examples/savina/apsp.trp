@@ -22,98 +22,10 @@
  *)
 
 import List
-import Vector
-import Number
 import Bench
+import Savina
 
-datatype Atoms = ROUND | ROWS | STOP
-
-let val numWorkers = 6
-    val inf = 999999
-
-    fun weight (i, j) =
-        if i = j then 0
-        else let val h = (i * 7 + j * 13) mod 36
-             in if h mod 4 = 0 then inf else 1 + h mod 9 end
-
-    fun mget (m, i, j) = Vector.sub (Vector.sub (m, i), j)
-
-    (* row i relaxed through vertex k, as a list; shared by workers and
-     * the sequential reference *)
-    fun relaxRow (dist, n, k, i) =
-        List.map (fn j =>
-            let val direct = mget (dist, i, j)
-                val viaK = mget (dist, i, k) + mget (dist, k, j)
-            in if viaK < direct then viaK else direct end)
-          (List.range n)
-
-    fun worker () =
-        receive
-          [ hn (ROUND, k, r0, r1, dist, n, p) =>
-              (send (p, (ROWS, r0,
-                         List.map (fn i => relaxRow (dist, n, k, r0 + i))
-                                  (List.range (r1 - r0))));
-               worker ())
-          , hn STOP => () ]
-
-    fun bench n =
-        let val main = self ()
-            val workers = List.map (fn _ => spawn worker) (List.range numWorkers)
-            val chunkSize = Number.intDiv (n + numWorkers - 1) numWorkers
-            fun bounds w = (w * chunkSize,
-                            let val hi = (w + 1) * chunkSize
-                            in if hi > n then n else hi end)
-
-            val dist0 = Vector.tabulate n (fn i =>
-                            Vector.tabulate n (fn j => weight (i, j)))
-
-            fun round (k, dist) =
-                if k = n then dist
-                else let val _ = List.mapi
-                                   (fn (w, p) =>
-                                      let val (r0, r1) = bounds w
-                                      in if r0 < r1
-                                         then send (p, (ROUND, k, r0, r1, dist, n, main))
-                                         else () end)
-                                   workers
-                         val active = List.length
-                                        (List.filter (fn w =>
-                                            let val (r0, r1) = bounds w
-                                            in r0 < r1 end)
-                                          (List.range numWorkers))
-                         fun collect (c, acc) =
-                             if c = 0 then acc
-                             else receive [ hn (ROWS, r0, rows) =>
-                                              collect (c - 1, (r0, rows) :: acc) ]
-                         val pieces = collect (active, [])
-                         fun rowAt i =
-                             let fun find ((r0, rows) :: rest) =
-                                     if i >= r0 andalso i < r0 + List.length rows
-                                     then List.nth rows (i - r0)
-                                     else find rest
-                             in find pieces end
-                         val dist2 = Vector.tabulate n (fn i =>
-                                        Vector.fromList (rowAt i))
-                     in round (k + 1, dist2) end
-
-            val final = round (0, dist0)
-            val _ = List.map (fn p => send (p, STOP)) workers
-
-            fun refRound (k, dist) =
-                if k = n then dist
-                else refRound (k + 1,
-                       Vector.tabulate n (fn i =>
-                           Vector.fromList (relaxRow (dist, n, k, i))))
-            val reference = refRound (0, dist0)
-
-            fun sameMatrix i =
-                i = n orelse
-                (Vector.toList (Vector.sub (final, i))
-                   = Vector.toList (Vector.sub (reference, i))
-                 andalso sameMatrix (i + 1))
-        in sameMatrix 0
-        end
-
-    val sizes = Bench.sizesFromArgs (getCliArgs authority) [12, 24, 32]
-in Bench.run authority "apsp" sizes 3 bench (fn n => fn same => same)
+let val d = Savina.apsp
+    val sizes = Bench.sizesFromArgs (getCliArgs authority) d.sizes
+in Bench.run authority d.name sizes 3 d.bench d.check
 end

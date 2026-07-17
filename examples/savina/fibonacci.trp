@@ -12,30 +12,9 @@
 
 import List
 import Bench
+import Savina
 
-datatype Atoms = COMPUTE | RESULT
-
-let fun fibActor () =
-        receive [ hn (COMPUTE, n, parent) =>
-            if n <= 2 then send (parent, (RESULT, 1))
-            else let val me = self ()
-                     val _ = send (spawn fibActor, (COMPUTE, n - 1, me))
-                     val _ = send (spawn fibActor, (COMPUTE, n - 2, me))
-                 in receive [ hn (RESULT, a) =>
-                      receive [ hn (RESULT, b) =>
-                        send (parent, (RESULT, a + b)) ] ]
-                 end ]
-
-    fun bench n =
-        let val _ = send (spawn fibActor, (COMPUTE, n, self ()))
-        in receive [ hn (RESULT, v) => v ]
-        end
-
-    fun fibRef n =
-        let fun go (k, a, b) = if k = n then b else go (k + 1, b, a + b)
-        in if n <= 2 then 1 else go (2, 1, 1)
-        end
-
-    val sizes = Bench.sizesFromArgs (getCliArgs authority) [16, 19, 22]
-in Bench.run authority "fibonacci" sizes 3 bench (fn n => fn r => r = fibRef n)
+let val d = Savina.fibonacci
+    val sizes = Bench.sizesFromArgs (getCliArgs authority) d.sizes
+in Bench.run authority d.name sizes 3 d.bench d.check
 end

@@ -21,102 +21,10 @@
  *)
 
 import List
-import Map
-import Number
 import Bench
+import Savina
 
-datatype Atoms = EXPAND | EXPANDED
-
-let val numWorkers = 4
-
-    fun cellCost (x, y) = 1 + (x * 7 + y * 13) mod 5
-
-    (* neighbors of a node with their edge costs: pure, shared by the
-     * workers and the sequential reference *)
-    fun expand (w, id) =
-        let val x = id mod w
-            val y = Number.intDiv id w
-            fun consider (nx, ny, acc) =
-                if nx < 0 orelse nx >= w orelse ny < 0 orelse ny >= w then acc
-                else (ny * w + nx, cellCost (nx, ny)) :: acc
-        in consider (x - 1, y,
-           consider (x + 1, y,
-           consider (x, y - 1,
-           consider (x, y + 1, [])))) end
-
-    fun worker w =
-        receive [ hn (EXPAND, id, g, p) =>
-                    (send (p, (EXPANDED, g, expand (w, id), self ())); worker w) ]
-
-    val ltNum = fn a => fn b => a < b
-
-    fun pqKey (w, dist, id) = dist * w * w + id
-
-    (* fold a batch of neighbor relaxations into (open, best); stale
-     * queue entries are skipped at dispatch (lazy deletion) *)
-    fun relaxAll (w, g, neighbors, open, best) =
-        case neighbors of
-          [] => (open, best)
-        | (nb, c) :: rest =>
-            let val nd = g + c
-                val better = case Map.findOpt best nb of
-                               []  => true
-                             | [d] => nd < d
-            in if better
-               then relaxAll (w, g, rest,
-                              Map.insert open (pqKey (w, nd, nb)) (nb, nd),
-                              Map.insert best nb nd)
-               else relaxAll (w, g, rest, open, best)
-            end
-
-    fun reference w =
-        let fun go (open, best) =
-                case Map.extractMinOpt open of
-                  ([], _) => best
-                | ([(k, (id, dist))], open2) =>
-                    let val stale = case Map.findOpt best id of
-                                      [d] => d < dist
-                                    | []  => false
-                    in if stale then go (open2, best)
-                       else let val (open3, best2) =
-                                    relaxAll (w, dist, expand (w, id), open2, best)
-                            in go (open3, best2) end
-                    end
-            val open0 = Map.insert (Map.empty ltNum) (pqKey (w, 0, 0)) (0, 0)
-            val best0 = Map.insert (Map.empty ltNum) 0 0
-        in Map.find (go (open0, best0)) (w * w - 1) end
-
-    fun bench w =
-        let val main = self ()
-            val workers = List.map (fn _ => spawn (fn () => worker w))
-                                   (List.range numWorkers)
-            fun loop (open, best, idle, inFlight) =
-                case idle of
-                  wk :: idles =>
-                    (case Map.extractMinOpt open of
-                       ([(k, (id, dist))], open2) =>
-                         let val stale = case Map.findOpt best id of
-                                           [d] => d < dist
-                                         | []  => false
-                         in if stale then loop (open2, best, idle, inFlight)
-                            else (send (wk, (EXPAND, id, dist, main));
-                                  loop (open2, best, idles, inFlight + 1))
-                         end
-                     | ([], _) =>
-                         if inFlight = 0 then best
-                         else receive [ hn (EXPANDED, g, nbs, wk2) =>
-                                let val (open2, best2) = relaxAll (w, g, nbs, open, best)
-                                in loop (open2, best2, wk2 :: idle, inFlight - 1) end ])
-                | [] =>
-                    receive [ hn (EXPANDED, g, nbs, wk2) =>
-                        let val (open2, best2) = relaxAll (w, g, nbs, open, best)
-                        in loop (open2, best2, wk2 :: idle, inFlight - 1) end ]
-            val open0 = Map.insert (Map.empty ltNum) (pqKey (w, 0, 0)) (0, 0)
-            val best0 = Map.insert (Map.empty ltNum) 0 0
-            val best = loop (open0, best0, workers, 0)
-        in Map.find best (w * w - 1)
-        end
-
-    val sizes = Bench.sizesFromArgs (getCliArgs authority) [20, 40, 60]
-in Bench.run authority "astar" sizes 3 bench (fn w => fn d => d = reference w)
+let val d = Savina.astar
+    val sizes = Bench.sizesFromArgs (getCliArgs authority) d.sizes
+in Bench.run authority d.name sizes 3 d.bench d.check
 end

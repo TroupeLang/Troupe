@@ -1,0 +1,23 @@
+(* bigint conversions: Result-shaped fromString/toInt, exact-double
+ * boundary at 9007199254740991 *)
+import BigInt
+
+let fun report r =
+        case r of
+          {tag = "Ok", value = v}  => print ("Ok", BigInt.show v)
+        | {tag = "Err", error = e} => print ("Err", e)
+
+    fun reportInt r =
+        case r of
+          {tag = "Ok", value = v}  => print ("Ok", v)
+        | {tag = "Err", error = e} => print ("Err", e)
+
+    val maxSafe = BigInt.fromInt 9007199254740991
+
+    val _ = report (BigInt.fromString "987654321987654321987654321")
+    val _ = report (BigInt.fromString "not a number")
+    val _ = reportInt (BigInt.toInt 42n)
+    val _ = reportInt (BigInt.toInt maxSafe)
+    val _ = reportInt (BigInt.toInt (BigInt.add (maxSafe, 1n)))
+    val _ = reportInt (BigInt.toInt (BigInt.neg (BigInt.add (maxSafe, 1n))))
+in () end

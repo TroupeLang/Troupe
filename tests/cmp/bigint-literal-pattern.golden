@@ -1,0 +1,6 @@
+tests/cmp/bigint-literal-pattern.trp:3:3: parse error
+  3 |   1n => "one"
+    |   ^
+  unexpected bigint 1n
+  expected expression or '_'
+

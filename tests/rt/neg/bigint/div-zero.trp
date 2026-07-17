@@ -1,0 +1,2 @@
+(* bigint division by zero is a runtime error *)
+bigDiv (1n, 0n)

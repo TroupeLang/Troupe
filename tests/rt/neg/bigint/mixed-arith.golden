@@ -1,0 +1,8 @@
+2026-07-17T17:41:24.090Z [RTM] [32minfo[39m: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+Runtime error in thread 9c0b35d2-8422-45ee-8900-2f1135f216d1@{}%{}
+
+  2 | 1 + 2n
+    |     ^
+
+>> value 2n is not a number
+>> at tests/rt/neg/bigint/mixed-arith.trp:2:5

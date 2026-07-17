@@ -1,0 +1,4 @@
+(* bigint literals are expressions only; matching uses BigInt.eq *)
+case 1n of
+  1n => "one"
+| _  => "other"

@@ -1,0 +1,2 @@
+(* bigFromInt requires an exactly-representable integer *)
+bigFromInt 1.5

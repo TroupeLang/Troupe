@@ -81,6 +81,27 @@ support document-processing programs and is expected to be superseded by a label
   write-confidentiality checks, bounded-integrity read content, quarantine integration, and
   streaming/handle-based access.
 
+## Arbitrary-precision integers (bigint)
+
+Bigints are a base value type backed by JavaScript BigInt, distinct from numbers.
+
+- **Syntax.** A bigint literal is a decimal digit run with an `n` suffix (`123n`). The parser
+  desugars the literal to the `bigFromLiteral` built-in, so no compiler phase past parsing knows
+  about bigints. Literals are expressions only; they are not accepted in patterns.
+- **Operations.** All bigint arithmetic goes through named built-ins (`rt/src/builtins/bigint.mts`),
+  surfaced by [lib/BigInt.trp](../lib/BigInt.trp) (`add`, `sub`, `mul`, `quot`, `rem`, `neg`,
+  `cmp`, comparison predicates, conversions). The ordinary arithmetic operators are number-only and
+  reject bigints at their type asserts; there is no implicit mixing.
+- **Semantics.** `getType` reports `"bigint"`. Equality is kind-first: two bigints compare by
+  value; a bigint never equals a number or a string. Bigints print in literal form (`5n`);
+  `BigInt.show` yields the plain decimal digits. `BigInt.fromString` and `BigInt.toInt` return
+  `Result` records (`toInt` fails beyond exact double range).
+- **Representation.** A bigint is boxed (`rt/src/TroupeBigInt.mts`) so it can carry the runtime
+  type tag; the label rides the enclosing labeled value like every base type, and every built-in
+  joins the current pc into its result label, matching the labeling of number literals. On the
+  wire (`serialize.mts`/`deserialize.mts`) a bigint travels as a decimal string.
+- `getNanoTime` returns a bigint (nanoseconds); it was unusable before this type existed.
+
 ## Information flow control
 
 Troupe implements dynamic information flow control:

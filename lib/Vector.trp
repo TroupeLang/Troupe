@@ -1,0 +1,90 @@
+(* Vector — immutable vectors with logarithmic indexed access.
+ *
+ * A vector is a 16-way branching tree of lists. `sub` and `update` walk
+ * one node per level and scan at most 16 entries in each, so both are
+ * O(16 * log16 n) — bounded by ~100 steps for a million elements, where
+ * a list's nth is O(n). `update` copies one node per level, sharing the
+ * rest of the structure.
+ *
+ * Intended for array-shaped workloads (matrices as vectors of vectors);
+ * see the Savina study's recmatmul/apsp/sor ports.
+ *)
+
+import List
+import Number
+
+let val branch = 16
+
+    (* representation: (n, cap, tree); tree is a value list when cap <=
+     * branch, otherwise a list of subtrees of capacity cap/branch *)
+
+    fun capFor n =
+        let fun go c = if c >= n then c else go (c * branch)
+        in go branch end
+
+    fun chunk (xs, size) =
+        let fun take (0, xs, acc)      = (List.reverse acc, xs)
+              | take (_, [], acc)      = (List.reverse acc, [])
+              | take (k, x :: xs, acc) = take (k - 1, xs, x :: acc)
+            fun go ([], acc) = List.reverse acc
+              | go (xs, acc) = let val (c, rest) = take (size, xs, [])
+                               in go (rest, c :: acc) end
+        in go (xs, []) end
+
+    fun build (xs, cap) =
+        if cap <= branch then xs
+        else let val sub = Number.intDiv cap branch
+             in List.map (fn c => build (c, sub)) (chunk (xs, sub)) end
+
+    (** Vector of the elements of a list. *)
+    fun fromList xs =
+        let val n = List.length xs
+        in if n = 0 then (0, branch, [])
+           else let val cap = capFor n
+                in (n, cap, build (xs, cap)) end
+        end
+
+    (** Vector of `n` elements where element `i` is `f i`. *)
+    fun tabulate n f = fromList (List.map f (List.range n))
+
+    (** Number of elements. *)
+    fun length (n, _, _) = n
+
+    (** Element at index `i` (0-based). Out-of-range indices are a
+     *  pattern-match failure inside List.nth's domain walk. *)
+    fun sub ((n, cap, tree), i) =
+        let fun go (tree, cap, i) =
+                if cap <= branch then List.nth tree i
+                else let val s = Number.intDiv cap branch
+                     in go (List.nth tree (Number.intDiv i s), s, i mod s) end
+        in go (tree, cap, i) end
+
+    (** Vector with element `i` replaced by `x`. *)
+    fun update ((n, cap, tree), i, x) =
+        let fun setNth (ys, j, y) =
+                List.mapi (fn (k, old) => if k = j then y else old) ys
+            fun go (tree, cap, i) =
+                if cap <= branch then setNth (tree, i, x)
+                else let val s = Number.intDiv cap branch
+                         val c = Number.intDiv i s
+                     in setNth (tree, c, go (List.nth tree c, s, i mod s)) end
+        in (n, cap, go (tree, cap, i)) end
+
+    (** The elements as a list, in index order. *)
+    fun toList (n, cap, tree) =
+        let fun go (tree, cap) =
+                if cap <= branch then tree
+                else let val s = Number.intDiv cap branch
+                         fun cat ([], acc)      = acc
+                           | cat (t :: ts, acc) = List.append (go (t, s)) (cat (ts, acc))
+                     in cat (tree, []) end
+        in go (tree, cap) end
+
+in [ ("fromList", fromList)
+   , ("tabulate", tabulate)
+   , ("length", length)
+   , ("sub", sub)
+   , ("update", update)
+   , ("toList", toList)
+   ]
+end

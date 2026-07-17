@@ -14,6 +14,9 @@ build:
   # Dependency on `Number`
 	$(COMPILER) ./Duration.trp -l
 
+  # Dependency on `List` and `Number`
+	$(COMPILER) ./Vector.trp -l
+
   # Dependency on `List`
 	$(COMPILER) ./Bench.trp -l
 	$(COMPILER) ./ListPair.trp -l

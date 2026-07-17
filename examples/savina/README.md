@@ -44,3 +44,19 @@ scaling behavior.
 Deviations from the originals are documented in each file's header comment
 (e.g. `trapezoid.trp` substitutes an integrand computable with Troupe's
 math built-ins).
+
+## Labeled variants (IFC dimension)
+
+Three benchmarks have information-flow variants with no counterpart in the
+original suite. Each checks its security property at run time with
+`levelOf`/`flowsTo` and prints the observed labels; they demonstrate what
+Troupe adds over label-free actor runtimes.
+
+| File                     | Demonstrates                                                        |
+|--------------------------|---------------------------------------------------------------------|
+| `pingpong-labeled.trp`   | A confidential payload taints the reply derived from it — exactly (`{alice}` in, `{alice}` out) — while a public control payload stays public. |
+| `prodcons-labeled.trp`   | Per-producer provenance survives buffering: the consumer's sum is labeled exactly `{alice,bob}`, the join of the producers' labels. |
+| `counting-labeled.trp`   | A secret-dependent *send* leaks through message presence; counting such messages requires raised mailbox clearance and a ranged receive (`rcv`), and the count comes out tainted. A public-pc `receive` cannot even observe the message. |
+
+`counting-labeled.trp` prints an expected runtime warning about mailbox
+clearance not being restored at process exit; see its header comment.

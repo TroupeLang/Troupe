@@ -1,0 +1,77 @@
+(* Labeled variant of the Producer-Consumer benchmark (IFC dimension of the
+ * Savina study).
+ *
+ * Two producers feed the bounded buffer: one produces items labeled
+ * `{alice}`, the other items labeled `{bob}`. A single consumer drains the
+ * buffer and sums everything. The sum is derived from both producers' data,
+ * so its label must be exactly the join {alice,bob} — per-item provenance
+ * survives buffering and coordination (credits, queued GETs) without the
+ * coordination itself adding taint.
+ *
+ *   ./local.sh examples/savina/prodcons-labeled.trp
+ *
+ * Expected: sum 190 (= 0+..+9 + 10+..+19); alice and bob both flow into the
+ * sum's level; the sum's level flows to {alice,bob} (nothing extra).
+ *)
+
+import List
+
+datatype Atoms = ITEM | CREDIT | GET | DATA | SUM | SHUTDOWN
+
+let val capacity = 4
+    val itemsPerProducer = 10
+
+    fun buffer (q, qLen, waitingCons, owedProd) =
+        receive
+          [ hn (ITEM, v, prod) =>
+              (case waitingCons of
+                 c :: cs =>
+                   (send (c, (DATA, v)); send (prod, CREDIT);
+                    buffer (q, qLen, cs, owedProd))
+               | [] =>
+                   if qLen + 1 < capacity
+                   then (send (prod, CREDIT);
+                         buffer (List.append q [v], qLen + 1, [], owedProd))
+                   else buffer (List.append q [v], qLen + 1, [],
+                                List.append owedProd [prod]))
+          , hn (GET, c) =>
+              (case q of
+                 v :: vs =>
+                   (send (c, (DATA, v));
+                    (case owedProd of
+                       p :: ps => (send (p, CREDIT);
+                                   buffer (vs, qLen - 1, waitingCons, ps))
+                     | []      => buffer (vs, qLen - 1, waitingCons, [])))
+               | [] => buffer ([], 0, List.append waitingCons [c], owedProd))
+          , hn SHUTDOWN => () ]
+
+    fun producer (buf, base, lev, k) =
+        let fun loop j =
+                if j = k then ()
+                else (send (buf, (ITEM, (base + j) raisedTo lev, self ()));
+                      receive [ hn CREDIT => loop (j + 1) ])
+        in loop 0 end
+
+    fun consumer (buf, main, k) =
+        let fun loop (j, acc) =
+                if j = k then send (main, (SUM, acc))
+                else (send (buf, (GET, self ()));
+                      receive [ hn (DATA, v) => loop (j + 1, acc + v) ])
+        in loop (0, 0) end
+
+    val main = self ()
+    val buf = spawn (fn () => buffer ([], 0, [], []))
+    val _ = spawn (fn () => producer (buf, 0, `{alice}`, itemsPerProducer))
+    val _ = spawn (fn () => producer (buf, itemsPerProducer, `{bob}`,
+                                      itemsPerProducer))
+    val _ = spawn (fn () => consumer (buf, main, 2 * itemsPerProducer))
+    val total = receive [ hn (SUM, s) => s ]
+    val _ = send (buf, SHUTDOWN)
+in
+    printWithLabels ("sum of consumed items", total);
+    print ("sum value ok (190): ", total = 190);
+    print ("alice flows into the sum: ", flowsTo (`{alice}`, levelOf total));
+    print ("bob flows into the sum: ", flowsTo (`{bob}`, levelOf total));
+    print ("sum level is exactly {alice,bob}: ",
+           flowsTo (levelOf total, `{alice,bob}`))
+end

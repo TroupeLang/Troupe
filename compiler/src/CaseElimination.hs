@@ -11,66 +11,21 @@ import qualified Direct as S
 import Direct (RecordPatternMode(..))
 import DirectWOPats as T
 import CompileMode
+import InternalError (internalError)
 import TroupePositionInfo (Located(..), getLoc, unLoc, PosInf(..))
 
 import Control.Monad.Reader
 import Control.Monad.Except
-import Control.Monad (foldM, unless)
+import Control.Monad (foldM)
 import Data.List (nub, (\\))
 
 type Trans = Except String
 
--- | Milestone stub: the grammar and AST for syntactic variants exist, but no
--- lowering is implemented yet. Any actual use of the new syntax — a nonempty
--- declaration-group list, or a constructor-application pattern anywhere in the
--- program — is rejected here with a clean compile-time error. Programs that do
--- not use the syntax are unaffected (empty group list, no 'S.ConPattern').
-synVarNotImplemented :: String
-synVarNotImplemented = "syntactic variants are not yet implemented"
-
--- | Whether a constructor-application pattern ('S.ConPattern') occurs anywhere
--- in a term. Used to reject uses of the new pattern syntax up front, before
--- pattern-match desugaring, so the rejection is a clean compile error rather
--- than surfacing from deeper in the pipeline.
-termHasConPattern :: S.LTerm -> Bool
-termHasConPattern = tt
-  where
-    tt (Loc _ t) = tm t
-    pp (Loc _ p) = pat p
-    tm (S.Abs (S.Lambda ps b))        = any pp ps || tt b
-    tm (S.Hnd (S.Handler p mp mg b))  = pp p || maybe False pp mp || maybe False tt mg || tt b
-    tm (S.App f as)                   = tt f || any tt as
-    tm (S.Let ds b)                   = any dd ds || tt b
-    tm (S.Case e arms)                = tt e || any (\(p, r) -> pp p || tt r) arms
-    tm (S.If a b c)                   = tt a || tt b || tt c
-    tm (S.Tuple es _)                 = any tt es
-    tm (S.Record fs)                  = any (maybe False tt . snd) fs
-    tm (S.WithRecord e fs)            = tt e || any (maybe False tt . snd) fs
-    tm (S.ProjField e _)              = tt e
-    tm (S.ProjIdx e _)                = tt e
-    tm (S.List es)                    = any tt es
-    tm (S.ListCons a b)               = tt a || tt b
-    tm (S.Bin _ a b)                  = tt a || tt b
-    tm (S.Un _ e)                     = tt e
-    tm (S.Seq es)                     = any tt es
-    tm (S.Error e)                    = tt e
-    tm (S.Lit _)                      = False
-    tm (S.Var _)                      = False
-    dd (S.ValDecl p e)                = pp p || tt e
-    dd (S.FunDecs fs)                 = any (\(Loc _ (S.FunDecl _ lams)) ->
-                                              any (\(S.Lambda ps b) -> any pp ps || tt b) lams) fs
-    dd S.ErrorDecl                    = False
-    pat (S.ConPattern _ _)            = True
-    pat (S.AtPattern p _)             = pp p
-    pat (S.TuplePattern ps)           = any pp ps
-    pat (S.ConsPattern a b)           = pp a || pp b
-    pat (S.ListPattern ps)            = any pp ps
-    pat (S.RecordPattern fs _)        = any (maybe False pp . snd) fs
-    pat _                             = False
-
+-- | Lower the Direct AST (with syntactic variants already folded away by
+-- 'SynVarFolding') to the pattern-free IR. The declaration-group list is
+-- empty and no 'S.ConPattern' remains by this point.
 trans :: CompileMode -> S.Prog -> Trans T.Prog
-trans compileMode (S.Prog imports atms groups tm) = do
-  unless (null groups && not (termHasConPattern tm)) $ throwError synVarNotImplemented
+trans compileMode (S.Prog imports atms _groups tm) = do
   let tm' = case compileMode of
         CompileMode.Library -> tm
         _                   ->
@@ -232,9 +187,9 @@ compilePattern succ (lv, Loc _ (S.ConsPattern lp1 lp2)) = do
   -- TODO Avoid list length (potentially expensive). Implement similarly to the improved list pattern (see above).
   return $ ifpat pos (Loc pos (Bin And (Loc pos (Un IsList lv)) (Loc pos (Bin Gt (Loc pos (Un ListLength lv)) (Loc _srcRT (Lit (LNumeric (NumInt 0)))))))) succ'' fail
 compilePattern _ (_, Loc _ (S.ConPattern _ _)) =
-  -- Milestone stub: constructor-application patterns parse and build AST but
-  -- are not yet lowered. Reaching one here means the program uses the syntax.
-  throwError synVarNotImplemented
+  -- Constructor patterns are rewritten to tuple patterns by SynVarFolding
+  -- before this pass runs, so none should remain here.
+  internalError "unexpected constructor pattern after variant folding"
 compilePattern succ (lv, Loc _ (S.RecordPattern fieldPatterns mode)) = do
   fail <- ask
   let pos = getLoc lv

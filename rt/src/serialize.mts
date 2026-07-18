@@ -168,10 +168,11 @@ export function serialize(w:LVal, pclev:Level, targetNodeId?: string) {
                 }
                 break;
             case Ty.TroupeType.TUPLE:
-                jsonObj = [];                                                
+                let tupleVals = [];
                 for (let i = 0; i < x.length; i++) {
-                    jsonObj.push(walk(x[i]));
+                    tupleVals.push(walk(x[i]));
                 }
+                jsonObj = { vals: tupleVals, isSynVariant: x._isSynVariant === true };
                 break;
             case Ty.TroupeType.CLOSURE:
                 if (!Ty.isSerializableClosure (lval.closureType)) {

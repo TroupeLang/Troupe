@@ -412,7 +412,8 @@ function constructCurrentUnchecked(compilerOutput: string) {
                     case Ty.TroupeType.LIST:
                         return mkList(this.deserializeArray(obj));
                     case Ty.TroupeType.TUPLE:
-                        return mkTuple(this.deserializeArray(obj));
+                        return mkTuple(this.deserializeArray(obj.vals),
+                                       obj.isSynVariant === true);
                     case Ty.TroupeType.CLOSURE:
                         return mkClosure(obj.ClosureID);
                     case Ty.TroupeType.NUMBER:

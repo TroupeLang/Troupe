@@ -1,7 +1,7 @@
 /**
  * Step 4b: value serialization round-trip.
  *
- * For random labelled-value trees (atoms, numbers, strings, booleans, unit,
+ * For random labelled-value trees (numbers, strings, booleans, unit,
  * lists, tuples, records; no closures or process handles), `deserialize` of the
  * JSON-encoded `serialize` output must reproduce the original value:
  *

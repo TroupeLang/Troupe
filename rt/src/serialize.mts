@@ -252,9 +252,6 @@ export function serialize(w:LVal, pclev:Level, targetNodeId?: string) {
                 // Authority level can also contain quarantined labels
                 jsonObj = { authorityLevel: serializeLevel(x.authorityLevel, lval) }
                 break;
-            case Ty.TroupeType.ATOM:
-                jsonObj = { atom: x.atom, creation_uuid: x.creation_uuid };
-                break;
             case Ty.TroupeType.BIGINT:
                 // bigints are not JSON-representable; decimal string form
                 jsonObj = x.value.toString();

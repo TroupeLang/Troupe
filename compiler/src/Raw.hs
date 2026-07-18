@@ -206,9 +206,8 @@ data FunDef = FunDef
                     IR.FunDef    -- original definition for serialization
                 deriving (Eq)
 
--- An IR program is just a collection of atoms declarations
--- and function definitions
-data RawProgram = RawProgram C.Atoms [LFunDef] 
+-- An IR program is just a collection of function definitions
+data RawProgram = RawProgram [LFunDef]
 
 
 -----------------------------------------------------------
@@ -216,8 +215,7 @@ data RawProgram = RawProgram C.Atoms [LFunDef]
 -----------------------------------------------------------
 data RawUnit
   = FunRawUnit LFunDef
-  | AtomRawUnit C.Atoms
-  | ProgramRawUnit RawProgram 
+  | ProgramRawUnit RawProgram
 
 
 
@@ -272,7 +270,7 @@ instructionType i = case i of
 -----------------------------------------------------------
 
 ppProg :: RawProgram -> PP PP.Doc
-ppProg (RawProgram atoms funs) =
+ppProg (RawProgram funs) =
   vcatMapPP ppLFunDef funs
 
 instance Show RawProgram where

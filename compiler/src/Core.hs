@@ -16,8 +16,6 @@ module Core (   Lambda (..)
               , Lit(..)
               , litEq
               , litNeq
-              , AtomName
-              , Atoms(..)
               , Prog(..)
               , VarAccess(..)
               , lowerProg
@@ -91,7 +89,6 @@ data Lit
     | LDCLabel DCLabelExp
     | LUnit
     | LBool Bool
-    | LAtom AtomName
   deriving (Show, Generic)
 instance Serialize Lit
 instance Eq Lit where
@@ -100,7 +97,6 @@ instance Eq Lit where
   (LLabel l) == (LLabel l') = l == l'
   LUnit == LUnit = True
   (LBool x) == (LBool y) = x == y
-  (LAtom x) == (LAtom y) = x == y
   (LDCLabel dc) == (LDCLabel dc') = dc == dc'
   _ == _ = False
 instance Ord Lit where
@@ -109,7 +105,6 @@ instance Ord Lit where
   compare (LLabel x) (LLabel y) = compare x y
   compare LUnit LUnit = EQ
   compare (LBool x) (LBool y) = compare x y
-  compare (LAtom x) (LAtom y) = compare x y
   compare (LDCLabel x) (LDCLabel y) = compare x y
   -- Cross-type ordering (for canonical ordering of different literal types)
   compare (LNumeric _) _ = LT
@@ -122,8 +117,6 @@ instance Ord Lit where
   compare _ LUnit = GT
   compare (LBool _) _ = LT
   compare _ (LBool _) = GT
-  compare (LAtom _) _ = LT
-  compare _ (LAtom _) = GT
 
 -- Note: Lit no longer has embedded position info. Position comes from the
 -- Located wrapper around terms containing literals.
@@ -138,7 +131,6 @@ litEq (LString s) (LString s') = s == s'
 litEq (LLabel l) (LLabel l') = v1LabelEq l l'
 litEq LUnit LUnit = True
 litEq (LBool x) (LBool y) = x == y
-litEq (LAtom x) (LAtom y) = x == y
 litEq (LDCLabel dc) (LDCLabel dc') = dcLabelEq dc dc'
 -- Cross-syntax comparison: V1 labels vs DC labels
 litEq (LLabel l) (LDCLabel dc) = dcLabelEq (v1LabelToDCLabelExp l) dc
@@ -180,12 +172,7 @@ data Term
   deriving (Eq)
 
 
-data Atoms = Atoms [AtomName]
-  deriving (Eq, Show, Generic)
-instance Serialize Atoms
-
-
-data Prog = Prog Imports Atoms LTerm
+data Prog = Prog Imports LTerm
   deriving (Eq, Show)
 
 -- Note: GetPosInfo instance for LTerm comes from TroupePositionInfo's
@@ -214,14 +201,11 @@ The module also contains pretty printing for the Core representation.
 -- 1. Lowering
 --------------------------------------------------
 
-lowerProg (D.Prog imports atms lterm) = Prog imports (transAtoms atms) (lower lterm)
+lowerProg (D.Prog imports lterm) = Prog imports (lower lterm)
 
 
 
 -- the rest of the declarations in this part are not exported
-
-transAtoms :: D.Atoms -> Atoms
-transAtoms (D.Atoms atms) = Atoms atms
 
 -- | Lower a lambda, producing Located terms for nested abstractions
 lowerLam :: D.Lambda -> Lambda
@@ -241,7 +225,6 @@ lowerLit (D.LLabel s) = LLabel s
 lowerLit (D.LDCLabel dc) = LDCLabel dc
 lowerLit D.LUnit = LUnit
 lowerLit (D.LBool b) = LBool b
-lowerLit (D.LAtom n) = LAtom n
 
 -- | Lower DirectWOPats.LTerm (Located Term) to Core.LTerm
 -- Position is now extracted from the Located wrapper
@@ -292,14 +275,13 @@ lower (Loc pos (D.Un op le)) = Loc pos (Un op (lower le))
 -- This is the only function that is exported here
 
 renameProg :: Prog -> Except String Prog
-renameProg (Prog imports (Atoms atms) term) =
-  let alist = map (\ a -> (a, a)) atms
-      initEnv    = Map.fromList alist
+renameProg (Prog imports term) =
+  let initEnv    = Map.empty
       initReader = mapFromImports imports
       initState  = 0
   in do
       (term', _, _) <- runRWST (rename term initEnv) initReader initState
-      return $ Prog imports (Atoms atms) term'
+      return $ Prog imports term'
 
 -- The rest of the declarations here are not exported
 
@@ -547,16 +529,10 @@ instance ShowDebug Prog where
 
 
 ppProg :: Prog -> PP PP.Doc
-ppProg (Prog (Imports imports) (Atoms atoms) term) = do
+ppProg (Prog (Imports imports) term) = do
   termDoc <- ppLTerm 0 term
-  let ppAtoms =
-        if null atoms
-          then PP.empty
-          else (text "datatype Atoms = ") <+>
-               (hsep $ PP.punctuate (text " |") (map text atoms))
-
-      ppImports = if null imports then PP.empty else text "<<imports>>\n"
-  pure $ ppImports $$ ppAtoms $$ termDoc
+  let ppImports = if null imports then PP.empty else text "<<imports>>\n"
+  pure $ ppImports $$ termDoc
 
 -- | Pretty print a Located Term
 ppLTerm :: Precedence -> LTerm -> PP PP.Doc
@@ -718,7 +694,6 @@ ppLit (LLabel s)    = PP.braces (text s)
 ppLit LUnit         = text "()"
 ppLit (LBool True)  = text "true"
 ppLit (LBool False) = text "false"
-ppLit (LAtom a) = text a
 ppLit (LDCLabel dc) = ppDCLabelExpLit dc
 
 

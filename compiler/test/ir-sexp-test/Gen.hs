@@ -96,7 +96,6 @@ genLit = oneof
   , Core.LString  <$> genName
   , Core.LBool    <$> arbitrary
   , pure Core.LUnit
-  , Core.LAtom    <$> genName
   , Core.LLabel   <$> genName
   , Core.LDCLabel <$> genDCLabel
   ]
@@ -188,6 +187,5 @@ genFun = do
 
 genProg :: Gen IRProgram
 genProg = do
-  atoms <- Core.Atoms <$> genSmallList genName
   funs  <- do k <- choose (1, 3); vectorOf k (noLoc <$> genFun)
-  return (IRProgram atoms funs)
+  return (IRProgram funs)

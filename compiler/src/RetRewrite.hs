@@ -367,4 +367,4 @@ lktWalkFix lkt =
        else lktWalkFix lkt'
 
 rewrite :: Prog -> Prog
-rewrite (Prog atoms lkterm) = Prog atoms (lktWalkFix lkterm)
+rewrite (Prog lkterm) = Prog (lktWalkFix lkterm)

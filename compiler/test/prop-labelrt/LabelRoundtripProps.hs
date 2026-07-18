@@ -10,13 +10,13 @@
 --
 --   * Parse.  There is no standalone label parser; the happy grammar only parses
 --     whole programs.  A DC-label literal is itself a valid Expr, and the top
---     production `Prog : ImportDecl AtomsDecl Expr` accepts an empty import list
---     and empty atoms declaration, so the rendered string *is* a minimal valid
+--     production `Prog : ImportDecl TopDecls Expr` accepts an empty import list
+--     and empty declaration section, so the rendered string *is* a minimal valid
 --     program.  We call `Parser.parseProg "roundtrip" rendered :: Either String
 --     Direct.Prog`.
 --
 --   * Extract.  The parsed program is
---         Prog (Imports []) (Atoms []) (Loc _ (Lit (LDCLabel e')))
+--         Prog (Imports []) [] (Loc _ (Lit (LDCLabel e')))
 --     so `extractLabel` walks the AST to the body literal and pulls out the
 --     `DCLabelExp e'`.
 --
@@ -70,7 +70,7 @@ import TroupePositionInfo (unLoc)
 
 -- Extract the DCLabelExp from a program whose body is a bare label literal.
 extractLabel :: Prog -> Maybe DCLabelExp
-extractLabel (Prog _ _ _ lterm) =
+extractLabel (Prog _ _ lterm) =
   case unLoc lterm of
     Lit (LDCLabel e') -> Just e'
     _                 -> Nothing

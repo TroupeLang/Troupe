@@ -6,8 +6,6 @@ module Direct ( Lambda (..)
               , Lit(..)
               , DeclPattern(..)
               , RecordPatternMode(..)
-              , AtomName
-              , Atoms(..)
               , Prog(..)
               , Handler(..)
               , FieldName
@@ -72,7 +70,6 @@ data Lit
     | LString String
     | LLabel String
     | LDCLabel DCLabelExp
-    | LAtom AtomName
   deriving (Eq, Show)
 
 data RecordPatternMode = ExactMatch | WildcardMatch
@@ -138,9 +135,6 @@ data Term
     | Error LTerm
           deriving (Eq)
 
-data Atoms = Atoms [AtomName]
-      deriving (Eq, Show)
-
 -- | A dotted name: a nonempty list of segments, the last being the base
 -- name and any preceding segments its qualifiers. For example @X.Y.t@ is
 -- @["X","Y","t"]@. Used for qualified type names and qualified constructor
@@ -172,7 +166,7 @@ newtype SynDataGroup = SynDataGroup [SynDataDecl]
   deriving (Eq, Show)
 
 
-data Prog = Prog Imports Atoms [SynDataGroup] LTerm
+data Prog = Prog Imports [SynDataGroup] LTerm
   deriving (Eq, Show)
 
 
@@ -192,14 +186,8 @@ instance ShowIndent Prog where
 
 
 ppProg :: Prog -> PP.Doc
-ppProg (Prog (Imports imports) (Atoms atoms) groups term) =
-  let ppAtoms =
-        if null atoms
-          then PP.empty
-          else (text "datatype Atoms = ") <+>
-               (hsep $ PP.punctuate (text " |") (map text atoms))
-
-      ppGroups =
+ppProg (Prog (Imports imports) groups term) =
+  let ppGroups =
         if null groups then PP.empty
         else vcat (map ppSynDataGroup groups)
 
@@ -221,7 +209,6 @@ ppProg (Prog (Imports imports) (Atoms atoms) groups term) =
           in
             (vcat $ (map ppLibName imports)) $$ PP.text ""
   in vcat [ ppImports
-          , ppAtoms
           , ppGroups
           , ppLTerm 0 term ]
 
@@ -475,7 +462,6 @@ ppLit LUnit       = text "()"
 ppLit (LBool True)  = text "true"
 ppLit (LBool False) = text "false"
 ppLit (LLabel s) = PP.braces (text s)
-ppLit (LAtom s) = text s
 
 
 termPrec :: Term -> Precedence

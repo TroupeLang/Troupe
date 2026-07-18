@@ -18,7 +18,6 @@ import ParseError (ParseEnv(..), ParseState(..), ParseErrorInfo(..),
 import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.State
-import Data.List (group, sort, intercalate)
 
 
 }
@@ -49,7 +48,6 @@ import Data.List (group, sort, intercalate)
     of    { L _ TokenOf }
     import { L _ TokenImport }
     datatype { L _ TokenDatatype }
-    Atoms { L _ TokenAtoms }
     fn    { L _ TokenFn }
     hn    { L _ TokenHn }
     pini  { L _ TokenPini }
@@ -159,7 +157,7 @@ import Data.List (group, sort, intercalate)
 
 
 Prog : ImportDecl TopDecls Expr
-         { let (atms, groups) = $2 in Prog (Imports $1) (Atoms atms) groups $3 }
+         { Prog (Imports $1) $2 $3 }
 
 ImportDecl: import OptQualified OptSelection VAR OptAlias ImportDecl
               { (ImportDecl (LibName (varTok $4)) $5 Nothing $3 $2) : $6 }
@@ -178,23 +176,11 @@ VarList : VAR              { [varTok $1] }
         | VAR ',' VarList  { (varTok $1) : $3 }
 
 
--- The declaration section: a sequence of `datatype` declarations, each of
--- which is either the legacy `datatype Atoms = ...` enumeration or one of the
--- new syntactic-variant declaration groups. The leading `datatype` keyword is
--- shared; the next token (the keyword `Atoms` versus anything else)
--- distinguishes the two forms with one token of lookahead. The result pairs
--- the accumulated atom names with the list of declaration groups.
-TopDecls : {- empty -}                          { ([], []) }
-   | datatype Atoms '=' VAR AtomsList TopDecls
-        {% do { p <- pos $4
-              ; names <- checkDuplicateAtoms ((varTok $4, p) : $5)
-              ; let (as, gs) = $6
-              ; return (names ++ as, gs) } }
-   | datatype DataGroup TopDecls
-        { let (as, gs) = $3 in (as, $2 : gs) }
-
-AtomsList : { [] }
-          | '|' VAR AtomsList  {% do { p <- pos $2; return ((varTok $2, p): $3) } }
+-- The declaration section: a sequence of `datatype` declaration groups. The
+-- leading `datatype` keyword introduces each group; the result is the list of
+-- declaration groups.
+TopDecls : {- empty -}                          { [] }
+   | datatype DataGroup TopDecls                { $2 : $3 }
 
 
 -- A single declaration group (the leading `datatype` is consumed by TopDecls);
@@ -648,7 +634,6 @@ cleanExpectedToken "receive" = "keyword 'receive'"
 cleanExpectedToken "qualified" = "keyword 'qualified'"
 cleanExpectedToken "as" = "keyword 'as'"
 cleanExpectedToken "datatype" = "keyword 'datatype'"
-cleanExpectedToken "Atoms" = "keyword 'Atoms'"
 cleanExpectedToken "true" = "'true'"
 cleanExpectedToken "false" = "'false'"
 cleanExpectedToken "andalso" = "'andalso'"
@@ -738,18 +723,5 @@ atPos :: L Token -> a -> ParseM (Located a)
 atPos tok x = do
     p <- pos tok
     return (Loc p x)
-
--- Check for duplicate atom names and report all duplicates with positions
-checkDuplicateAtoms :: [(String, PosInf)] -> ParseM [AtomName]
-checkDuplicateAtoms atoms
-  | null dups = return names
-  | otherwise = throwError $ intercalate "\n" (map formatOne dups)
-  where
-    names = map fst atoms
-    dups = [n | (n:_:_) <- group (sort names)]
-    formatOne d =
-      let positions = [p | (n, p) <- atoms, n == d]
-      in "Duplicate constructor '" ++ d ++ "' at " ++
-         intercalate " and " (map show positions)
 
 }

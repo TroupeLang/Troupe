@@ -205,7 +205,6 @@ typeOfLit lit =
       Core.LString _ -> Just RawString
       Core.LLabel _ -> Just RawLevel
       Core.LBool _ -> Just RawBoolean
-      Core.LAtom _ -> Nothing
       Core.LDCLabel _ -> Just RawDCLabel
       
 
@@ -643,8 +642,8 @@ class RawOptable a where
 
 
 instance RawOptable RawProgram where
-  rawopt (RawProgram atoms lfdefs) =
-      RawProgram (rawopt atoms)  (map rawopt lfdefs)
+  rawopt (RawProgram lfdefs) =
+      RawProgram (map rawopt lfdefs)
 
 instance RawOptable FunDef where
   rawopt = funopt
@@ -653,10 +652,6 @@ instance RawOptable FunDef where
 instance RawOptable LFunDef where
   rawopt (Loc pos fdef) = Loc pos (rawopt fdef)
 
-instance RawOptable Core.Atoms where
-  rawopt = id
-
 instance RawOptable RawUnit where
   rawopt (FunRawUnit lf) = FunRawUnit (rawopt lf)
-  rawopt (AtomRawUnit c) = AtomRawUnit (rawopt c)
   rawopt (ProgramRawUnit p) = ProgramRawUnit (rawopt p)

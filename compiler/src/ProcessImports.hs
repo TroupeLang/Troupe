@@ -65,6 +65,6 @@ processImports' (Imports imports)=
 
 
 processImports :: Prog -> IO Prog
-processImports (Prog imports atoms groups term) = do
+processImports (Prog imports groups term) = do
   imports' <- processImports' imports
-  return $ Prog imports' atoms groups term
+  return $ Prog imports' groups term

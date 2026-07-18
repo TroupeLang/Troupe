@@ -1,5 +1,0 @@
-(* An atom and a variant constructor may not share a name: atoms fold
-   first and would silently take over every occurrence. *)
-datatype Atoms = RED
-datatype color = RED | GREEN
-case RED of RED => "matched" | _ => "no"

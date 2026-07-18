@@ -147,9 +147,9 @@ data FunDef = FunDef
                     IRBBTree    -- body
                 deriving (Eq,Generic)
 
--- An IR program is just a collection of atoms declarations
--- and function definitions (wrapped with Located for position tracking)
-data IRProgram = IRProgram C.Atoms [LFunDef] deriving (Generic, Eq)
+-- An IR program is just a collection of
+-- function definitions (wrapped with Located for position tracking)
+data IRProgram = IRProgram [LFunDef] deriving (Generic, Eq)
 
 -----------------------------------------------------------
 -- Dependency calculation
@@ -158,15 +158,13 @@ data IRProgram = IRProgram C.Atoms [LFunDef] deriving (Generic, Eq)
 -- For dependencies, we only need the function dependencies
 
 class ComputesDependencies a where
-  dependencies :: a -> Writer ([HFN], [Basics.LibName], [Basics.AtomName])  ()
+  dependencies :: a -> Writer ([HFN], [Basics.LibName])  ()
 
 instance ComputesDependencies IRInst where
    dependencies (MkFunClosures _ fdefs) =
-        mapM_ (\(_, hfn) -> tell ([hfn],[],[])) fdefs
+        mapM_ (\(_, hfn) -> tell ([hfn],[])) fdefs
    dependencies (Assign _ (Lib libname _)) =
-        tell ([], [libname],[])
-   dependencies (Assign _ (Const (C.LAtom a))) =
-        tell ([], [], [a])
+        tell ([], [libname])
 
    dependencies _ = return ()
 
@@ -190,14 +188,14 @@ instance ComputesDependencies FunDef where
   dependencies (FunDef _ _ _ bb) = dependencies bb
 
 
-ppDepsAsJSON :: ComputesDependencies a => a -> (PP.Doc , PP.Doc, PP.Doc)
-ppDepsAsJSON a = let (ffs_0,lls_0, atoms_0) = execWriter  (dependencies a)
-                     (ffs, lls, aas) = (nub ffs_0, nub lls_0, nub atoms_0)
+ppDepsAsJSON :: ComputesDependencies a => a -> (PP.Doc , PP.Doc)
+ppDepsAsJSON a = let (ffs_0,lls_0) = execWriter  (dependencies a)
+                     (ffs, lls) = (nub ffs_0, nub lls_0)
 
                      format dd =
                        let tt = map (PP.doubleQuotes . ppId) dd
                        in (PP.brackets.PP.hsep) (PP.punctuate PP.comma tt)
-                 in ( format ffs, format lls , format aas )
+                 in ( format ffs, format lls )
 
 ppDeps a = ppDepsAsJSON a
 
@@ -220,7 +218,6 @@ instance Serialize IRBBTree
 -----------------------------------------------------------
 data SerializationUnit
   = FunSerialization FunDef
-  | AtomsSerialization C.Atoms
   | ProgramSerialization IRProgram
   deriving (Generic)
 
@@ -251,12 +248,6 @@ encodeBlob su =
 serializeFunDef :: FunDef -> BS.ByteString
 serializeFunDef fdef = encodeBlob (FunSerialization fdef)
 
-serializeAtoms :: C.Atoms -> BS.ByteString
-serializeAtoms atoms = encodeBlob (AtomsSerialization atoms)
-
-deserializeAtoms :: BS.ByteString -> Either String C.Atoms
-deserializeAtoms bs = Serialize.runGet (Serialize.get) bs
-
 -- Gzip-decompress with a hard output cap, using the incremental zlib API so
 -- that corrupt input becomes a Left (rather than an imprecise DecompressError
 -- thrown from a lazy thunk) and an over-cap stream is aborted with a Left. The
@@ -286,8 +277,8 @@ decompressGzipCapped cap input =
 deserialize :: BS.ByteString -> Either String SerializationUnit
 deserialize bs =
   -- Dispatch on the 4-byte format identifier. A legacy (unframed) blob is raw
-  -- cereal, whose first byte is the SerializationUnit constructor tag, always 0,
-  -- 1, or 2 and therefore never 0x54 ('T'); so a blob beginning with "TRPI" is
+  -- cereal, whose first byte is the SerializationUnit constructor tag, always 0
+  -- or 1 and therefore never 0x54 ('T'); so a blob beginning with "TRPI" is
   -- unambiguously the framed format. This invariant holds while
   -- SerializationUnit has <= 84 constructors.
   if irBlobFormatId `BS.isPrefixOf` bs
@@ -478,10 +469,7 @@ instance WellFormedIRCheck IRExpr where
 
 
 wfIRProg :: IRProgram -> Except String ()
-wfIRProg (IRProgram (C.Atoms atms) funs) = do
-  let duplicates = atms \\ nub atms
-  when (not (null duplicates)) $
-    throwError $ "Duplicate atom names: " ++ show (nub duplicates)
+wfIRProg (IRProgram funs) = do
   mapM_ wfLFun funs
 
 -- | Check well-formedness of a Located FunDef
@@ -505,7 +493,7 @@ wfFun (FunDef (HFN fn) (Loc _ (VN arg)) consts bb) =
 -----------------------------------------------------------
 
 ppProg :: IRProgram -> PP PP.Doc
-ppProg (IRProgram atoms funs) =
+ppProg (IRProgram funs) =
   vcatMapPP ppLFunDef funs
 
 instance Show IRProgram where
@@ -684,11 +672,8 @@ instance Identifier a => Identifier (Located a) where
 instance Identifier HFN where
   ppId (HFN n) = text n
 
-instance Identifier Basics.LibName where 
+instance Identifier Basics.LibName where
   ppId (Basics.LibName s) = text s
-
-instance Identifier Basics.AtomName where 
-  ppId = text
 
 
 ppArgs args = PP.parens( PP.hcat (PP.punctuate PP.comma args))

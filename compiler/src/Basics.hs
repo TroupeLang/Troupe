@@ -9,7 +9,6 @@ import GHC.Generics(Generic)
 import Data.Serialize (Serialize)
 
 type VarName = String
-type AtomName = String
 type FieldName = String
 
 -- | Tag on a tuple constructor marking whether the tuple encodes a

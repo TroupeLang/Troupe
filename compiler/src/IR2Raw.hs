@@ -886,11 +886,10 @@ fun2raw lirfdef@(Loc funDefPos irfdef@(IR.FunDef hfn (Loc argPos vname) consts (
 -- so we wrap with noLoc when deserializing.
 ir2raw :: IR.SerializationUnit -> RawUnit
 ir2raw (IR.FunSerialization f) = FunRawUnit (fun2raw (Loc NoPos f))
-ir2raw (IR.AtomsSerialization c) = AtomRawUnit c
 ir2raw (IR.ProgramSerialization prog) = ProgramRawUnit (prog2raw prog)
 
 prog2raw :: IR.IRProgram -> RawProgram
-prog2raw (IR.IRProgram atoms funs) =
-    RawProgram atoms (map fun2raw funs)
+prog2raw (IR.IRProgram funs) =
+    RawProgram (map fun2raw funs)
 
 

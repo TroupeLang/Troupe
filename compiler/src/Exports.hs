@@ -24,7 +24,7 @@ errorMessage = "parse error: libraries need to use restricted syntax for their m
 
 
 extractExports :: Prog -> Except String [String]
-extractExports (Prog imports atoms groups term) = do
+extractExports (Prog imports groups term) = do
   case unLoc (extractMain term) of
     List exports -> reify exports
     _ -> throwError errorMessage

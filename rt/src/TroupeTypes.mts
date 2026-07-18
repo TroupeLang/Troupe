@@ -7,7 +7,6 @@ export const enum TroupeType {
   LEVEL=5,
   AUTHORITY=6,
   CAPABILITY=7,
-  ATOM=8,
   BIGINT=9,
   /* up until this point only base types */
 
@@ -63,7 +62,7 @@ export function getTroupeType (x:any) {
 
 /*
 export function isBaseType (t:TroupeType) {
-  return t <= TroupeType.ATOM
+  return t <= TroupeType.BIGINT
 }
 
 export function isAggregate(t:TroupeType) {

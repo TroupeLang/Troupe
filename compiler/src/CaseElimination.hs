@@ -25,7 +25,7 @@ type Trans = Except String
 -- 'SynVarFolding') to the pattern-free IR. The declaration-group list is
 -- empty and no 'S.ConPattern' remains by this point.
 trans :: CompileMode -> S.Prog -> Trans T.Prog
-trans compileMode (S.Prog imports atms _groups tm) = do
+trans compileMode (S.Prog imports _groups tm) = do
   let tm' = case compileMode of
         CompileMode.Library -> tm
         _                   ->
@@ -33,12 +33,8 @@ trans compileMode (S.Prog imports atms _groups tm) = do
           let authPat = Loc _srcRT (S.VarPattern "authority")
               authVar = Loc NoPos (S.Var "$$authorityarg")
           in Loc NoPos (S.Let [ S.ValDecl authPat authVar ] tm)
-  atms' <- transAtoms atms
   tm'' <- transLTerm tm'
-  return (T.Prog imports atms' tm'')
-
-transAtoms :: S.Atoms -> Trans T.Atoms
-transAtoms (S.Atoms atms) = return (T.Atoms atms)
+  return (T.Prog imports tm'')
 
 transLit :: S.Lit -> T.Lit
 transLit (S.LNumeric n) = T.LNumeric (transNumeric n)
@@ -50,7 +46,6 @@ transLit (S.LLabel s)  = T.LLabel s
 transLit (S.LDCLabel dc)  = T.LDCLabel dc
 transLit (S.LUnit)     = T.LUnit
 transLit (S.LBool b)   = T.LBool b
-transLit (S.LAtom a)   = T.LAtom a
 
 
 transLambda_aux :: S.Lambda -> ReaderT T.LTerm Trans Lambda

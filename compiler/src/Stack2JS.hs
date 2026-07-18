@@ -18,8 +18,7 @@ module Stack2JS where
 
 import IR (HFN(..)
           , ppFunCall, ppArgs
-          , serializeFunDef
-          , serializeAtoms )
+          , serializeFunDef )
 import qualified Data.ByteString.Lazy.Char8 as BL
 import qualified IR
 import qualified Raw
@@ -75,7 +74,6 @@ addLibs xs = vcat $ nub (map addOneLib xs)
 data JSOutput = JSOutput { libs :: [LibAccess]
                          , fname:: Maybe String
                          , code :: String
-                         , atoms :: [Basics.AtomName]
                          , sourceMap :: Value  -- Source map for restored code error reporting
                          } deriving (Show, Generic)
 
@@ -101,7 +99,7 @@ data CodeGenOpts = CodeGenOpts
   , cgoSourceMapEnabled :: Bool  -- ^ Emit source position tracking for error messages
   } deriving (Show, Eq)
 
-type WData = ([LibAccess], [Basics.AtomName], [RetKontText], [MarkerData])
+type WData = ([LibAccess], [RetKontText], [MarkerData])
 type W = RWS CodeGenOpts WData TheState
 
 
@@ -126,7 +124,7 @@ emitMarker pos = case pos of
   p@(SrcPosInf {}) -> do
     markerId <- gets markerCounter
     modify (\s -> s { markerCounter = markerId + 1 })
-    tell ([], [], [], [(markerId, p)])
+    tell ([], [], [(markerId, p)])
     return $ text ("/*SM:" ++ show markerId ++ "*/")
   _ -> return PP.empty
 
@@ -153,13 +151,10 @@ instance Identifier VarName where
 instance Identifier HFN where
   ppId (HFN n) = text n
 
-instance Identifier Basics.LibName where 
+instance Identifier Basics.LibName where
   ppId (Basics.LibName s) = text s
 
-instance Identifier Basics.AtomName where 
-  ppId = text
-
-instance Identifier RawVar where 
+instance Identifier RawVar where
   ppId (RawVar x) = text x
 
 instance Identifier Raw.Assignable where 
@@ -182,7 +177,7 @@ sourceMapPlaceholder = PP.text sourceMapPlaceholderStr
 stack2PPDoc :: CompileMode -> CodeGenOpts -> StackUnit -> (PP.Doc, WData)
 
 stack2PPDoc compileMode opts (ProgramStackUnit sp) =
-  let (fns, _, w@(libs, atoms, konts, markers)) = runRWS (toJS sp) opts initState
+  let (fns, _, w@(libs, konts, markers)) = runRWS (toJS sp) opts initState
       sourceMapEnabled = cgoSourceMapEnabled opts
       -- Source map attachment: defineProperty ensures it's non-enumerable
       sourceMapAttachment = if sourceMapEnabled
@@ -206,7 +201,7 @@ stack2PPDoc compileMode opts (ProgramStackUnit sp) =
   in (ppDoc, w)
 
 stack2PPDoc _           opts su =
-  let (inner, _, w@(libs, _, konts, markers)) = runRWS (toJS su) opts initState
+  let (inner, _, w@(libs, konts, markers)) = runRWS (toJS su) opts initState
       ppDoc = vcat $ [ addLibs libs ] ++ (inner:konts)
   in (ppDoc, w)
 
@@ -225,7 +220,7 @@ stack2JSString compileMode debugMode su =
 stack2JSWithMappings :: CompileMode -> Bool -> Bool -> StackUnit -> (String, [Mapping])
 stack2JSWithMappings compileMode debugMode sourceMapEnabled su =
   let opts = CodeGenOpts { cgoDebugMode = debugMode, cgoSourceMapEnabled = sourceMapEnabled }
-      (ppDoc, (_, _, _, markerData)) = stack2PPDoc compileMode opts su
+      (ppDoc, (_, _, markerData)) = stack2PPDoc compileMode opts su
       rendered = PP.render ppDoc
       -- processMarkers handles marker stripping and merging whitespace-only lines
       (cleanCode, mappings) = processMarkers rendered markerData
@@ -304,18 +299,16 @@ parseMarker s
 stack2JSON :: CompileMode -> Bool -> StackUnit -> ByteString
 stack2JSON compileMode debugMode su =
   let opts = CodeGenOpts { cgoDebugMode = debugMode, cgoSourceMapEnabled = True }
-      (ppDoc, (libs, atoms, konts, markers)) = stack2PPDoc compileMode opts su
+      (ppDoc, (libs, konts, markers)) = stack2PPDoc compileMode opts su
       rendered = PP.render ppDoc
       -- Process markers to generate source map mappings
       (cleanCode, mappings) = processMarkers rendered markers
       fname = case su of FunStackUnit (Loc _ (FunDef (HFN n) _ _ _ _)) -> Just n
-                         AtomStackUnit _                       -> Nothing
                          ProgramStackUnit _                    -> error "Internal error: stack2JSON called with ProgramStackUnit"
       -- Build source map from mappings (use empty filename since this is dynamically loaded code)
       srcMap = buildSourceMap "" mappings
   in Aeson.encode $ JSOutput { libs = libs
                              , fname = fname
-                             , atoms = atoms
                              , code = cleanCode
                              , sourceMap = srcMap
                              }
@@ -323,7 +316,6 @@ stack2JSON compileMode debugMode su =
 
 instance ToJS StackUnit where
   toJS (FunStackUnit lfdecl) = toJS lfdecl
-  toJS (AtomStackUnit ca) = toJS ca
   toJS (ProgramStackUnit p) = error "not implemented"
 
 -- | Instance for Located FunDef - extracts position and delegates to FunDef ToJS
@@ -350,19 +342,9 @@ instance ToJS IR.LVarAccess where
   toJS (Loc _ va) = toJS va
 
 instance ToJS StackProgram where
-  toJS (StackProgram atoms funs) = do
-     jjA <- toJS atoms
+  toJS (StackProgram funs) = do
      jjF <- mapM toJS funs
-     return $ vcat $ [jjA] ++ jjF
-
-
-instance ToJS C.Atoms where
-  toJS catoms@(C.Atoms atoms) = return $
-    vcat [ vcat $ (map  (\a -> hsep ["const"
-                                    , text a
-                                    , "= new rt.Atom"
-                                                  , (PP.parens ( (PP.doubleQuotes.text) a))]) atoms)
-         , text "this.serializedatoms =" <+> (pickle.serializeAtoms) catoms]
+     return $ vcat jjF
 
 
 jsonValueToString :: Value -> String
@@ -380,16 +362,8 @@ constsToJS consts = do
      docs <- mapM toJsConst consts
      return $ vcat docs
   where
-    -- An atom in the constants table is emitted as a reference to the
-    -- namespace-level atom binding, so the atom must be recorded in this
-    -- unit's atom list — serialized functions are reconstructed with
-    -- exactly the atoms they declare, and a hoisted atom constant would
-    -- otherwise be a free identifier after restore.
     toJsConst :: (Raw.RawVar, C.Lit) -> W PP.Doc
-    toJsConst (x, lit) = do
-      case lit of
-        C.LAtom atom -> tell ([], [atom], [], [])
-        _            -> return ()
+    toJsConst (x, lit) =
       return $ hsep ["const", ppId x , text "=", lit2JS lit ]
 
 -- | Helper function for FunDef ToJS with explicit position
@@ -409,7 +383,7 @@ toJSFunDefWithPos pos (FunDef hfn stacksize consts bb irfdef) = do
        jj <- toJS bb
        opts <- ask
        let debug = cgoDebugMode opts
-       let (irdeps, libdeps, _atomdeps) = IR.ppDepsAsJSON irfdef
+       let (irdeps, libdeps) = IR.ppDepsAsJSON irfdef
        sparseSlotIdxPP <- ppSparseSlotIdx
        -- Emit source map marker for function definition
        marker <- emitMarker pos
@@ -649,7 +623,7 @@ tr2jsWithPos _pos (StackExpand bb bb2) = do
                     ]
 
 
-    tell ([], [], [jsKont], [])
+    tell ([], [jsKont], [])
     return $ vcat [
       "_SP_OLD = _SP; ", -- 2021-04-23; hack ! ;AA
       "_SP = _SP + " <+> text (show (_frameSize + 5)) <+> ";",
@@ -756,7 +730,7 @@ lfieldsToJS lfs = do
 instance ToJS RawExpr where
   toJS x = do
     HFN (fname) <- gets stHFN
-    let ppFunSelfRef = text "$env." PP.<> ppId fname
+    let ppFunSelfRef = text "$env." PP.<> text fname
     -- Helper to print VarAccess, with special case for self-reference
     let ppVarName IR.VarFunSelfRef = ppFunSelfRef
         ppVarName va = IR.ppVarAccess va
@@ -809,12 +783,9 @@ instance ToJS RawExpr where
       Const (C.LLabel s) -> return $
         text "rt.mkV1Label" <> (PP.parens . PP.doubleQuotes) (text s)
       Const lit -> do
-        case lit of
-          C.LAtom atom -> tell ([], [atom], [], [])
-          _ -> return ()
         return $ ppLit lit
       Lib lib'@(Basics.LibName libname) varname -> do
-        tell ([LibAccess lib' varname], [], [], [])
+        tell ([LibAccess lib' varname], [], [])
         return $
           text "rt.loadLib" <> PP.parens ((PP.doubleQuotes.text) libname <> text ", " <> (PP.doubleQuotes.text) varname <> text ", this")
       ConstructLVal r1 r2 r3 -> return $

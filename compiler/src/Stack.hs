@@ -82,13 +82,11 @@ data FunDef = FunDef
                     IR.FunDef      -- original definition for serialization
                 deriving (Eq)
 
--- An IR program is just a collection of atoms declarations
--- and function definitions
-data StackProgram = StackProgram C.Atoms [LFunDef]
+-- An IR program is just a collection of function definitions
+data StackProgram = StackProgram [LFunDef]
 
 data StackUnit
   = FunStackUnit LFunDef
-  | AtomStackUnit C.Atoms
   | ProgramStackUnit StackProgram
 
 -----------------------------------------------------------
@@ -96,7 +94,7 @@ data StackUnit
 -----------------------------------------------------------
 
 ppProg :: StackProgram -> PP PP.Doc
-ppProg (StackProgram atoms funs) =
+ppProg (StackProgram funs) =
   vcatMapPP ppLFunDef funs
 
 instance Show StackProgram where

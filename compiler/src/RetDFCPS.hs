@@ -32,10 +32,10 @@ transFunDecl (Core.FunDecl fname (Core.Nullary le) pos) = do
   return $ Loc pos $ CPS.Fun (VN fname) (CPS.Nullary e')
 
 transProg :: Core.Prog -> CPS.Prog
-transProg (Core.Prog imports atoms lt) =
+transProg (Core.Prog imports lt) =
   let pos = posInfo lt
   -- trans now passes LVarName; extract VarName for Halt
-  in Prog atoms $ evalState (trans lt (\(Loc _ z) -> return $ Loc pos (Halt z))) 1
+  in Prog $ evalState (trans lt (\(Loc _ z) -> return $ Loc pos (Halt z))) 1
 
 
 -- | Transform LFields in a context (non-explicit)

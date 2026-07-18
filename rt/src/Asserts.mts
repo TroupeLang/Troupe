@@ -63,14 +63,7 @@ function err(msg: string, source: AssertionSource) {
     const errorKind = sourceToErrorKind(source);
     _thread().threadError(msg, false, null, errorKind);
 }
-export function assertIsAtom (x: any, source: AssertionSource = AssertionSource.AssertInBuiltIn) {
-    _thread().raiseBlockingThreadLev(x.tlev)
-    if (x.val._troupeType != TroupeType.ATOM ) {
-        err ("value " + __stringRep(x) + " is not an atom", source)
-    }
-}
-
-export function assertIsBigInt (x: any, source: AssertionSource = AssertionSource.AssertInBuiltIn) {
+export function assertIsBigInt(x: any, source: AssertionSource = AssertionSource.AssertInBuiltIn) {
     _thread().raiseBlockingThreadLev(x.tlev)
     if (x.val._troupeType != TroupeType.BIGINT ) {
         err ("value " + __stringRep(x) + " is not a bigint", source)

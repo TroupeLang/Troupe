@@ -588,5 +588,5 @@ iter lkt =
                            iter lkt'
 
 rewrite :: Prog -> Prog
-rewrite (Prog atoms lkterm) =
- Prog atoms (iter lkterm)
+rewrite (Prog lkterm) =
+ Prog (iter lkterm)

@@ -2,7 +2,6 @@
 
 module Main (main) where
 
-import qualified AtomFolding as AF
 import qualified SynVarFolding as SVF
 import Parser
 import qualified Core as Core
@@ -131,7 +130,7 @@ process flags fname input = do
                         writeFileD "out/out.syntax" (showIndent 2 prog)
                         putStrLn (showIndent 2 prog)
       ------------------------------------------------------
-      folded <- case runExcept (SVF.foldProg (AF.visitProg prog)) of
+      folded <- case runExcept (SVF.foldProg prog) of
         Right p -> return p
         Left s -> die s
       prog' <- case runExcept (C.trans compileMode folded) of

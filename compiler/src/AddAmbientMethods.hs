@@ -81,7 +81,7 @@ inputLineDecl = lp $ FunDecl "inputLine"
     ]
 
 addAmbientMethods :: Prog -> Prog
-addAmbientMethods (Prog imports atoms groups t) =
+addAmbientMethods (Prog imports groups t) =
     let t' = lterm $ Let [FunDecs [ fwritelnDecl
                           , fwritelnWithLabelsDecl
                           , printStringDecl
@@ -89,4 +89,4 @@ addAmbientMethods (Prog imports atoms groups t) =
                           , printWithLabelsDecl
                           , inputLineDecl]
                  ] t
-    in Prog imports atoms groups t'
+    in Prog imports groups t'

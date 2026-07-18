@@ -8,7 +8,6 @@ import { LVal } from './Lval.mjs';
 import { mkTuple, mkList } from './ValuesUtil.mjs';
 import { ProcessID } from './process.mjs';
 import { Authority } from './Authority.mjs';
-import { Atom } from './Atom.mjs';
 import { TroupeBigInt } from './TroupeBigInt.mjs';
 import { __unitbase }from './UnitBase.mjs'
 import { mkLevel } from './Level.mjs';
@@ -220,7 +219,6 @@ function constructCurrentUnchecked(compilerOutput: string) {
         let ns = serobj.namespaces[i]
         let nsFun = HEADER
 
-        let atomSet = new Set<string>()
         // Collect source maps from all snippets in this namespace
         let namespaceMappings: any[] = []
 
@@ -231,30 +229,18 @@ function constructCurrentUnchecked(compilerOutput: string) {
             let snippetJson = JSON.parse(snippets[k++]);
             nsFun += snippetJson.code;
 
-            for (let atom of snippetJson.atoms) {
-                atomSet.add(atom)
-            }
             // Collect source map from snippet if available
             if (snippetJson.sourceMap) {
                 namespaceMappings.push(snippetJson.sourceMap)
             }
         }
-        let argNames = Array.from(atomSet);
-        let argValues = argNames.map( argName => {return new Atom(argName)})
-        argNames.unshift('rt')
-        argNames.push(nsFun)
-        // Observe that there is some serious level of
-        // reflection going on in here
-        //    Arguments to Function are
-        //             'rt', ATOM1, ..., ATOMk, nsFun
-        //
-        //
+        let argNames: string[] = ['rt', nsFun]
+        // The namespace function takes only the runtime object as its argument.
         let NS: any = Reflect.construct (Function, argNames)
 
         // We now construct an instance of the newly constructed object
-        // that takes the runtime object + atoms as its arguments
-
-        argValues.unshift(__rtObj)
+        // that takes the runtime object as its argument
+        let argValues: any[] = [__rtObj]
         ctxt.namespaces[i] = Reflect.construct (NS, argValues)
         // Mark namespace as restored code for error reporting
         Object.defineProperty(ctxt.namespaces[i], '__isDynamic', {
@@ -430,8 +416,6 @@ function constructCurrentUnchecked(compilerOutput: string) {
                         return mkLevel(obj.lev);
                     case Ty.TroupeType.LVAL:
                         return this.mkValue(obj);
-                    case Ty.TroupeType.ATOM:
-                        return new Atom(obj.atom, obj.creation_uuid);
                     case Ty.TroupeType.BIGINT:
                         // wire form is the decimal string (see serialize.mts)
                         return new TroupeBigInt(BigInt(obj));

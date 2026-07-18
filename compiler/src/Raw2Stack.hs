@@ -229,8 +229,8 @@ trFun lfdef =
 
 
 rawProg2Stack :: Raw.RawProgram -> Stack.StackProgram
-rawProg2Stack (Raw.RawProgram atms fdefs) =
-  Stack.StackProgram atms (map trFun fdefs)
+rawProg2Stack (Raw.RawProgram fdefs) =
+  Stack.StackProgram (map trFun fdefs)
 
 
 rawFun2Stack :: Raw.LFunDef -> Stack.LFunDef
@@ -239,5 +239,4 @@ rawFun2Stack = trFun
 raw2Stack :: Raw.RawUnit -> Stack.StackUnit
 raw2Stack r = case r of
   Raw.FunRawUnit f -> Stack.FunStackUnit (trFun f)
-  Raw.AtomRawUnit c -> Stack.AtomStackUnit c
   Raw.ProgramRawUnit p -> Stack.ProgramStackUnit (rawProg2Stack p)

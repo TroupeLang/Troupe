@@ -4,7 +4,7 @@
  * test (4d, equality.test.mts).
  *
  * `arbLVal` produces random labelled-value (LVal) trees over the serializable,
- * non-closure Troupe value space: atoms, numbers, strings, booleans, unit, and
+ * non-closure Troupe value space: numbers, strings, booleans, unit, and
  * the aggregates list / tuple / record. Every node carries two random labels
  * (a value label `lev` and a type label `tlev`), each drawn from the step-2
  * `arbDCLabel` generator (reused from arbitraries.mts).
@@ -26,7 +26,6 @@ import fc from 'fast-check'
 import { LVal } from '../Lval.mjs'
 import { mkList, mkTuple } from '../ValuesUtil.mjs'
 import { Record } from '../Record.mjs'
-import { Atom } from '../Atom.mjs'
 import { __unitbase } from '../UnitBase.mjs'
 import { DCLabel } from '../levels/DCLabels/dclabel.mjs'
 import { TroupeType } from '../TroupeTypes.mjs'
@@ -43,10 +42,6 @@ export const arbLabel: fc.Arbitrary<DCLabel> = arbDCLabel.filter(l => !l.isCorru
 // ---------------------------------------------------------------------------
 // Leaf raw-value generators
 // ---------------------------------------------------------------------------
-
-const arbAtom: fc.Arbitrary<Atom> =
-    fc.constantFrom('Foo', 'Bar', 'Baz', 'nil', 'cons', 'ok', 'error', 'none', 'some', '_a', 'x1')
-        .map(n => new Atom(n))
 
 /**
  * Numbers: small ints, large (near-2^53) ints, arbitrary finite doubles, and a
@@ -97,7 +92,7 @@ const { lval } = fc.letrec<{ lval: LVal; raw: any }>(tie => ({
     raw: fc.oneof(
         { maxDepth: 4, depthSize: 'small', withCrossShrink: true },
         // leaves
-        arbAtom, arbNumber, arbString, arbBool, arbUnit,
+        arbNumber, arbString, arbBool, arbUnit,
         // aggregates
         fc.array(tie('lval'), { maxLength: 4 }).map(a => mkList(a)),
         fc.array(tie('lval'), { minLength: 2, maxLength: 4 }).map(a => mkTuple(a)),
@@ -182,9 +177,6 @@ export function cloneLVal(l: LVal): LVal {
                 [...(l.val.__obj as Map<string, LVal>).entries()]
                     .map(([k, v]) => [k, cloneLVal(v)] as [string, LVal]),
             )
-            break
-        case TroupeType.ATOM:
-            raw = new Atom(l.val.atom, l.val.creation_uuid)
             break
         case TroupeType.UNIT:
             raw = __unitbase

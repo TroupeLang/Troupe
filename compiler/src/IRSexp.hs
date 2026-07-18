@@ -104,11 +104,8 @@ encodeProg p =
       ]
 
 encodeProgBody :: IRProgram -> Datum
-encodeProgBody (IRProgram atoms funs) =
-  Lst (Atom "program" : encodeAtoms atoms : map (encodeFun . unLoc) funs)
-
-encodeAtoms :: C.Atoms -> Datum
-encodeAtoms (C.Atoms names) = Lst (Atom "atoms" : map Str names)
+encodeProgBody (IRProgram funs) =
+  Lst (Atom "program" : map (encodeFun . unLoc) funs)
 
 encodeFun :: FunDef -> Datum
 encodeFun (FunDef (HFN name) (Loc _ (VN arg)) consts body) =
@@ -201,7 +198,6 @@ encodeLit (C.LNumeric (C.NumFloat d)) = Lst [Atom "float", Atom (show d)]
 encodeLit (C.LString s)               = Lst [Atom "string", Str s]
 encodeLit (C.LBool b)                 = Lst [Atom "bool", Atom (if b then "true" else "false")]
 encodeLit C.LUnit                     = Atom "unit"
-encodeLit (C.LAtom a)                 = Lst [Atom "atom", Str a]
 encodeLit (C.LLabel s)                = Lst [Atom "label-string", Str s]
 encodeLit (C.LDCLabel dc)             = encodeDCLabel dc
 
@@ -339,15 +335,10 @@ decodeDocument d =
         ++ headHint d)
 
 decodeProg :: Datum -> Either String IRProgram
-decodeProg (Lst (Atom "program" : atomsD : funDs)) = do
-  atoms <- decodeAtoms atomsD
+decodeProg (Lst (Atom "program" : funDs)) = do
   funs  <- mapM decodeFun funDs
-  Right (IRProgram atoms (map noLoc funs))
+  Right (IRProgram (map noLoc funs))
 decodeProg d = Left ("expected (program ...), got " ++ headHint d)
-
-decodeAtoms :: Datum -> Either String C.Atoms
-decodeAtoms (Lst (Atom "atoms" : ns)) = C.Atoms <$> mapM asName ns
-decodeAtoms d = Left ("expected (atoms ...), got " ++ headHint d)
 
 decodeFun :: Datum -> Either String FunDef
 decodeFun (Lst [Atom "fun", nameD, argD, constsD, bodyD]) = do
@@ -509,7 +500,6 @@ decodeLit (Lst [Atom "bool", bD]) = do
     "false" -> Right (C.LBool False)
     _       -> Left ("bad boolean literal: " ++ b)
 decodeLit (Atom "unit")            = Right C.LUnit
-decodeLit (Lst [Atom "atom", sD])  = C.LAtom <$> asName sD
 decodeLit (Lst [Atom "label-string", sD]) = C.LLabel <$> asName sD
 decodeLit d@(Lst (Atom "dclabel" : _)) = C.LDCLabel <$> decodeDCLabel d
 decodeLit d = Left ("not a valid literal, got " ++ headHint d)
@@ -615,8 +605,8 @@ headHint (Lst _)          = "(...)"
 -- always fills 'NoPos'; erasing the printer's input lets R1 be checked with
 -- the derived structural equality.
 erasePosProg :: IRProgram -> IRProgram
-erasePosProg (IRProgram atoms funs) =
-  IRProgram atoms (map (\(Loc _ f) -> noLoc (erasePosFun f)) funs)
+erasePosProg (IRProgram funs) =
+  IRProgram (map (\(Loc _ f) -> noLoc (erasePosFun f)) funs)
 
 erasePosFun :: FunDef -> FunDef
 erasePosFun (FunDef hfn (Loc _ vn) consts bb) =

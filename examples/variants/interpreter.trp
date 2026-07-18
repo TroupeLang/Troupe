@@ -1,0 +1,75 @@
+(* Interpreter for a small imperative language.
+ *
+ * Demonstrates:
+ *   - two mutually recursive datatypes declared with `and` (expr and stmt).
+ *     The group is genuinely mutually recursive, which the `and` well-formed-
+ *     ness check requires: stmt refers to expr (ASSIGN, IF, WHILE conditions),
+ *     and expr refers to stmt through the block expression BLOCK, which runs a
+ *     statement for its effect and then evaluates an expression in the
+ *     resulting environment;
+ *   - constructor patterns, including nested ones, driving a recursive
+ *     evaluator (eval) and executor (exec);
+ *   - an environment held in the standard-library Map (string -> int).
+ *
+ * The driver runs a program that computes 5! with a while loop, reads the
+ * accumulator back through a block expression, and also prints the final
+ * environment.
+ *
+ *   ./local.sh examples/variants/interpreter.trp --localonly
+ *
+ * Expected: the block expression evaluates to 120, and the final environment
+ * lists acc = 120 and i = 6.
+ *)
+
+import Map
+import List
+
+datatype expr = LIT of int
+              | VAR of string
+              | ADD of expr * expr
+              | SUB of expr * expr
+              | MUL of expr * expr
+              | LT  of expr * expr           (* yields 1 for true, 0 for false *)
+              | BLOCK of stmt * expr         (* run the stmt, then evaluate the expr *)
+     and stmt = SKIP
+              | ASSIGN of string * expr
+              | SEQ of stmt * stmt
+              | IF of expr * stmt * stmt
+              | WHILE of expr * stmt
+
+let val emptyEnv = Map.empty (fn a => fn b => a < b)
+
+    (* Evaluate an expression to an integer in the given environment. *)
+    fun eval env (LIT n)        = n
+      | eval env (VAR x)        = Map.findOrDefault env x 0
+      | eval env (ADD (l, r))   = eval env l + eval env r
+      | eval env (SUB (l, r))   = eval env l - eval env r
+      | eval env (MUL (l, r))   = eval env l * eval env r
+      | eval env (LT (l, r))    = if eval env l < eval env r then 1 else 0
+      | eval env (BLOCK (s, e)) = eval (exec env s) e
+
+    (* Execute a statement, returning the updated environment. *)
+    and exec env SKIP             = env
+      | exec env (ASSIGN (x, e))  = Map.insert env x (eval env e)
+      | exec env (SEQ (s1, s2))   = exec (exec env s1) s2
+      | exec env (IF (c, t, f))   = if eval env c = 0 then exec env f else exec env t
+      | exec env (WHILE (c, body)) =
+          if eval env c = 0 then env
+          else exec (exec env body) (WHILE (c, body))
+
+    (* acc := 1; i := 1; while i < 6 do { acc := acc * i; i := i + 1 } *)
+    val factorial =
+        SEQ (ASSIGN ("acc", LIT 1),
+        SEQ (ASSIGN ("i", LIT 1),
+             WHILE (LT (VAR "i", LIT 6),
+                    SEQ (ASSIGN ("acc", MUL (VAR "acc", VAR "i")),
+                         ASSIGN ("i", ADD (VAR "i", LIT 1))))))
+
+    (* Run the program as a block expression that reads acc back out. *)
+    val result = eval emptyEnv (BLOCK (factorial, VAR "acc"))
+
+    (* Run it again for the whole environment. *)
+    val finalEnv = exec emptyEnv factorial
+in print ("5! via while loop = ", result)
+ ; print ("final environment: ", Map.toAscList finalEnv)
+end

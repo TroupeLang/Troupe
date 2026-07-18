@@ -1,0 +1,47 @@
+(* A JSON-like value model with a recursive datatype and a renderer.
+ *
+ * Demonstrates:
+ *   - a recursive datatype (value) modelling JSON scalars and arrays, where
+ *     JARR of value list gives an array as a list of values. The payload type
+ *     applies the built-in list type constructor to the user datatype value,
+ *     which the recursion goes through;
+ *   - a renderer defined by constructor patterns, mapping over the array
+ *     payload with the standard-library List module.
+ *
+ * Restriction note: applying the built-in `list` constructor to a user
+ * datatype (`value list`) is accepted. Applying a *user-defined* parameterised
+ * type constructor (e.g. `int box` for a `datatype 'a box`) is rejected with
+ * "type application is not yet supported"; only the built-in `list` is
+ * available in `of` clauses.
+ *
+ *   ./local.sh examples/variants/json-lite.trp --localonly
+ *
+ * Expected: two sample values rendered as JSON text.
+ *)
+
+import List
+import String
+
+datatype value = JNULL
+               | JBOOL of bool
+               | JNUM of int
+               | JSTR of string
+               | JARR of value list
+
+let val q = "\x22"                              (* a double-quote character *)
+
+    (* Render a value to a JSON string. *)
+    fun render JNULL     = "null"
+      | render (JBOOL b) = if b then "true" else "false"
+      | render (JNUM n)  = toString n
+      | render (JSTR s)  = q ^ s ^ q
+      | render (JARR xs) = "[" ^ String.concatWith "," (List.map render xs) ^ "]"
+
+    val v1 = JARR [JNULL, JBOOL true, JNUM 42, JSTR "hello"]
+    val v2 = JARR [ JNUM 1
+                  , JARR [JBOOL false, JSTR "nested"]
+                  , JNULL
+                  ]
+in print (render v1)
+ ; print (render v2)
+end

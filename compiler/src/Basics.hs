@@ -12,6 +12,10 @@ type VarName = String
 type AtomName = String
 type FieldName = String
 
+-- | Tag on a tuple constructor marking whether the tuple encodes a
+-- syntactic-variant value. False for ordinary tuples.
+type SynVariantTag = Bool
+
 -- | Eq and Neq: deep equality check on the two parameters, including the types (any type inequality results in false being returned).
 data BinOp = Plus | Minus | Mult | Div | Mod |  Eq | Neq | Le | Lt | Ge | Gt | And | Or | RaisedTo | Concat| IntDiv | BinAnd | BinOr | BinXor | BinShiftLeft | BinShiftRight | BinZeroShiftRight | HasField | LatticeJoin
   deriving (Eq,Generic, Ord)

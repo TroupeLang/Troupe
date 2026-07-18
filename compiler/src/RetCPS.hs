@@ -88,7 +88,7 @@ data SimpleTerm
    = Bin BinOp LVarName LVarName
    | Un UnaryOp LVarName
    | ValSimpleTerm SVal
-   | Tuple [LVarName]
+   | Tuple [LVarName] Basics.SynVariantTag
    | Record LFields
    | WithRecord LVarName LFields
    | ProjField LVarName Basics.FieldName
@@ -189,7 +189,7 @@ ppSimpleTerm (ValSimpleTerm (Lit lit)) =
   pure $ ppLit lit
 ppSimpleTerm (ValSimpleTerm (KAbs klam)) =
   ppKLambda klam
-ppSimpleTerm (Tuple vars) = do
+ppSimpleTerm (Tuple vars _) = do
   ds <- mapM textlv vars
   pure $ PP.parens $ PP.hsep $ PP.punctuate (text ",") ds
 ppSimpleTerm (List vars) = do

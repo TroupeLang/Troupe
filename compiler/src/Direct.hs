@@ -125,7 +125,7 @@ data Term
     | Let [Decl] LTerm
     | Case LTerm [(LDeclPattern, LTerm)]
     | If LTerm LTerm LTerm
-    | Tuple [LTerm]
+    | Tuple [LTerm] SynVariantTag
     | Record LFields
     | WithRecord LTerm LFields
     | ProjField LTerm FieldName
@@ -280,7 +280,7 @@ ppTerm' (Lit literal) = ppLit literal
 
 ppTerm' (Error t) = text "error " PP.<> ppLTerm 0 t
 
-ppTerm'  (Tuple ts) =
+ppTerm'  (Tuple ts _) =
   PP.parens $
   PP.hcat $
   PP.punctuate (text ",") (map (ppLTerm 0) ts)
@@ -480,7 +480,7 @@ ppLit (LAtom s) = text s
 
 termPrec :: Term -> Precedence
 termPrec (Lit _)         = maxPrec
-termPrec (Tuple _)       = maxPrec
+termPrec (Tuple _ _)     = maxPrec
 termPrec (List _)        = maxPrec
 termPrec (Var _)         = maxPrec
 termPrec (App _ _)       = appPrec

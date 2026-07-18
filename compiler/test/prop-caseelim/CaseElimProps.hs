@@ -186,7 +186,7 @@ evalT env (T.ProjField e f) = do
   case v of
     VRecord kvs -> maybe (Left (Stuck ("ProjField missing " ++ f))) Right (lookup f kvs)
     _ -> Left (Stuck "ProjField on non-record")
-evalT env (T.Tuple es) = VTuple <$> mapM (eval env) es
+evalT env (T.Tuple es _) = VTuple <$> mapM (eval env) es
 evalT env (T.List es)  = VList  <$> mapM (eval env) es
 evalT env (T.ListCons h t) = do
   hv <- eval env h
@@ -248,7 +248,7 @@ litTToV l = error ("litTToV: unexpected literal " ++ show l)
 
 buildProg :: S.LDeclPattern -> S.Prog
 buildProg lp =
-  let body   = Loc NoPos (S.Tuple [ Loc NoPos (S.Var x) | x <- binders (unLoc lp) ])
+  let body   = Loc NoPos (S.Tuple [ Loc NoPos (S.Var x) | x <- binders (unLoc lp) ] False)
       scrut  = Loc NoPos (S.Var "$scrut")
       caseE  = Loc NoPos (S.Case scrut [(lp, body)])
   in S.Prog (Imports []) (S.Atoms []) [] caseE

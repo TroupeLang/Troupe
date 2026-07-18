@@ -66,7 +66,7 @@ data Term
     | Let [Decl] LTerm
     | If LTerm LTerm LTerm
     | AssertElseError LTerm LTerm LTerm    -- position from Located wrapper
-    | Tuple [LTerm]
+    | Tuple [LTerm] SynVariantTag
     | Record LFields
     | WithRecord LTerm LFields
     | ProjField LTerm FieldName
@@ -138,7 +138,7 @@ ppTerm' (Error lt) = do
   d <- ppLTerm 0 lt
   pure $ text "error " PP.<> d
 
-ppTerm' (Tuple lts) = do
+ppTerm' (Tuple lts _) = do
   ds <- mapM (ppLTerm 0) lts
   pure $ PP.parens $ PP.hcat $ PP.punctuate (text ",") ds
 
@@ -277,7 +277,7 @@ ppLit (LAtom a) = text a
 
 termPrec :: Term -> Precedence
 termPrec (Lit _)           = maxPrec
-termPrec (Tuple _)         = maxPrec
+termPrec (Tuple _ _)       = maxPrec
 termPrec (List _)          = maxPrec
 termPrec (Var _)           = maxPrec
 termPrec (App _ _)         = appPrec

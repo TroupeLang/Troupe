@@ -129,7 +129,7 @@ genExpr :: Gen IRExpr
 genExpr = oneof
   [ Bin <$> genBinOp <*> genLVA <*> genLVA
   , Un  <$> genUnOp  <*> genLVA
-  , Tuple      <$> genSmallList genLVA
+  , Tuple      <$> genSmallList genLVA <*> elements [False, True]
   , Record     <$> genSmallList genField
   , WithRecord <$> genLVA <*> genSmallList genField
   , ProjField  <$> genLVA <*> genName

@@ -465,9 +465,9 @@ expr2rawComp = \case
   -- The following constructor operations take labelled values as arguments,
   -- but these labels do not affect the labels of the resulting compound value.
   -- Now passes LVarAccess directly to Raw.Tuple (preserves source positions)
-  IR.Tuple lvs ->
+  IR.Tuple lvs tag ->
     return SimpleRawComp
-      { cVal = RExpr $ Tuple lvs
+      { cVal = RExpr $ Tuple lvs tag
       , cValLbl = PC
       , cTyLbl = PC
       }

@@ -43,7 +43,7 @@ termHasConPattern = tt
     tm (S.Let ds b)                   = any dd ds || tt b
     tm (S.Case e arms)                = tt e || any (\(p, r) -> pp p || tt r) arms
     tm (S.If a b c)                   = tt a || tt b || tt c
-    tm (S.Tuple es)                   = any tt es
+    tm (S.Tuple es _)                 = any tt es
     tm (S.Record fs)                  = any (maybe False tt . snd) fs
     tm (S.WithRecord e fs)            = tt e || any (maybe False tt . snd) fs
     tm (S.ProjField e _)              = tt e
@@ -154,8 +154,8 @@ transHandler (S.Handler pat1 mbpat2 guard body) = do
               Just p2 -> p2
               Nothing -> lp S.Wildcard
       lambdaPats = [lp (S.VarPattern argInput)]
-      callFailure = lt (S.Tuple [lt (S.Lit (S.LNumeric (S.NumInt 1))), lt (S.Lit S.LUnit)])
-      body' = lt (S.Tuple [lt (S.Lit (S.LNumeric (S.NumInt 0))), lt (S.Abs (S.Lambda [lp S.Wildcard] body))])
+      callFailure = lt (S.Tuple [lt (S.Lit (S.LNumeric (S.NumInt 1))), lt (S.Lit S.LUnit)] False)
+      body' = lt (S.Tuple [lt (S.Lit (S.LNumeric (S.NumInt 0))), lt (S.Abs (S.Lambda [lp S.Wildcard] body))] False)
       guardCheck = case guard of
          Nothing -> body'
          Just g -> lt (S.If g body' callFailure)
@@ -300,7 +300,7 @@ transDecl (S.FunDecs fundecs) succ = do
           -- Create Located variable names with positions from original patterns
           extractedPositions = argPositions lams
           argsWithPos = zipWith (\a p -> Loc p a) args (extractedPositions ++ repeat _srcRT)
-          args' =  Loc pos (Tuple (map (\a -> Loc pos (Var a)) args))
+          args' =  Loc pos (Tuple (map (\a -> Loc pos (Var a)) args) False)
           errorMsg = Loc pos (Error (Loc pos (Lit (LString $ "pattern match failure in function " ++ f))))
       (fst, decls) <- foldr (\(n, l) acc -> do
             (fail, decls) <- acc
@@ -353,9 +353,9 @@ transTerm pos (S.If lt1 lt2 lt3) = do
   t2' <- transLTerm lt2
   t3' <- transLTerm lt3
   return $ Loc pos (If t1' t2' t3')
-transTerm pos (S.Tuple ltms) = do
+transTerm pos (S.Tuple ltms tag) = do
   tms' <- mapM transLTerm ltms
-  return $ Loc pos (T.Tuple tms')
+  return $ Loc pos (T.Tuple tms' tag)
 transTerm pos (S.Record fields) = do
   fields' <- transFields pos fields
   return $ Loc pos (T.Record fields')

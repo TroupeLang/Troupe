@@ -103,7 +103,7 @@ data RawExpr
   | Un Basics.UnaryOp RawVar
   | ProjectLVal LVarAccess LValField
   | ProjectState MonComponent
-  | Tuple [LVarAccess]
+  | Tuple [LVarAccess] Basics.SynVariantTag
   | Record LFields
   | WithRecord RawVar LFields
   | ProjField RawVar Basics.FieldName
@@ -299,7 +299,7 @@ ppRawExpr (Bin binop _ va1 va2) = -- TODO: 2025-07-31; also print the fast flag
   ppId va1 <+> text (show binop) <+> ppId va2
 ppRawExpr (Un op v) =
   text (show op) <> PP.parens (ppId v)
-ppRawExpr (Tuple vars) =
+ppRawExpr (Tuple vars _) =
   PP.parens $ PP.hsep $ PP.punctuate (text ",") (map ppId vars)
 ppRawExpr (List vars) =
   PP.brackets $ PP.hsep $ PP.punctuate (text ",") (map ppId vars)

@@ -108,12 +108,13 @@ unOpCases =
 
 varAccessCases :: [(String, IRProgram)]
 varAccessCases =
-  [ ("VarLocal",      progExpr (Tuple [lva (VarLocal (VN "x"))]))
-  , ("VarEnv",        progExpr (Tuple [lva (VarEnv (VN "$env.y"))]))
-  , ("VarFunSelfRef", progExpr (Tuple [lva VarFunSelfRef]))
+  [ ("VarLocal",      progExpr (Tuple [lva (VarLocal (VN "x"))] False))
+  , ("VarEnv",        progExpr (Tuple [lva (VarEnv (VN "$env.y"))] False))
+  , ("VarFunSelfRef", progExpr (Tuple [lva VarFunSelfRef] False))
   , ("mixed",         progExpr (Tuple [ lva (VarLocal (VN "a"))
                                       , lva (VarEnv (VN "b"))
-                                      , lva VarFunSelfRef ]))
+                                      , lva VarFunSelfRef ] False))
+  , ("variant",       progExpr (Tuple [lva (VarLocal (VN "x"))] True))
   ]
 
 ------------------------------------------------------------

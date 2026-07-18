@@ -178,9 +178,9 @@ cpsToIR (Loc pos (CPS.LetSimple vname@(VN ident) (Loc stPos st) lkt)) = do
         CPS.Un unop lv -> do
           lv' <- transLVar lv
           return $ Just $ Loc stPos $ CCIR.Assign vname (Un unop lv')
-        CPS.Tuple lst -> do
+        CPS.Tuple lst tag -> do
           lst' <- transLVars lst
-          return $ Just $ Loc stPos $ CCIR.Assign vname (Tuple lst')
+          return $ Just $ Loc stPos $ CCIR.Assign vname (Tuple lst' tag)
         CPS.Record fields -> do
           fields' <- transLFields fields
           return $ Just $ Loc stPos $ CCIR.Assign vname (Record fields')

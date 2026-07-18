@@ -167,7 +167,7 @@ data Term
     | Let Decl LTerm
     | If LTerm LTerm LTerm
     | AssertElseError LTerm LTerm LTerm
-    | Tuple [LTerm]
+    | Tuple [LTerm] SynVariantTag
     | Record LFields
     | WithRecord LTerm LFields
     | ProjField LTerm FieldName
@@ -269,7 +269,7 @@ lower (Loc pos (D.Let decls le)) =
 -- lower (D.Case t patTermLst) = Case (lower t) (map (\(p,t) -> (lowerDeclPat p, lower t)) patTermLst)
 lower (Loc pos (D.If le1 le2 le3)) = Loc pos (If (lower le1) (lower le2) (lower le3))
 lower (Loc pos (D.AssertElseError le1 le2 le3)) = Loc pos (AssertElseError (lower le1) (lower le2) (lower le3))
-lower (Loc pos (D.Tuple lterms)) = Loc pos (Tuple (map lower lterms))
+lower (Loc pos (D.Tuple lterms tag)) = Loc pos (Tuple (map lower lterms) tag)
 lower (Loc pos (D.Record lfields)) = Loc pos (Record (map (\(f, lt) -> (f, lower lt)) lfields))
 lower (Loc pos (D.WithRecord le lfields)) = Loc pos (WithRecord (lower le) (map (\(f, lt) -> (f, lower lt)) lfields))
 lower (Loc pos (D.ProjField lt f)) = Loc pos (ProjField (lower lt) f)
@@ -440,9 +440,9 @@ renameTerm _ (AssertElseError t1 t2 t3) m = do
   return $ AssertElseError t1' t2' t3'
 
 
-renameTerm _ (Tuple terms) m = do
+renameTerm _ (Tuple terms tag) m = do
   terms' <- mapM (flip rename m) terms
-  return $ Tuple terms'
+  return $ Tuple terms' tag
 
 renameTerm _ (Record fields) m = do
   fields' <- mapM renameField fields
@@ -579,7 +579,7 @@ ppTerm' (Error lt) = do
   d <- ppLTerm 0 lt
   pure $ text "error " PP.<> d
 
-ppTerm' (Tuple lts) = do
+ppTerm' (Tuple lts _) = do
   ds <- mapM (ppLTerm 0) lts
   pure $ PP.parens $ PP.hcat $ PP.punctuate (text ",") ds
 
@@ -724,7 +724,7 @@ ppLit (LDCLabel dc) = ppDCLabelExpLit dc
 
 termPrec :: Term -> Precedence
 termPrec (Lit _)           = maxPrec
-termPrec (Tuple _)         = maxPrec
+termPrec (Tuple _ _)       = maxPrec
 termPrec (List _)          = maxPrec
 termPrec (Var _)           = maxPrec
 termPrec (App _ _)         = appPrec

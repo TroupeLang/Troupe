@@ -147,8 +147,8 @@ encodeExpr (Bin op a b) =
   Lst [Atom "bin", Atom (binOpName op), encodeLVA a, encodeLVA b]
 encodeExpr (Un op a) =
   Lst [Atom "un", Atom (unOpName op), encodeLVA a]
-encodeExpr (Tuple vas) =
-  Lst (Atom "tuple" : map encodeLVA vas)
+encodeExpr (Tuple vas tag) =
+  Lst (Atom (if tag then "tuple-variant" else "tuple") : map encodeLVA vas)
 encodeExpr (Record fields) =
   Lst (Atom "record" : map encField fields)
 encodeExpr (WithRecord lva fields) =
@@ -421,7 +421,9 @@ decodeExpr (Lst [Atom "un", opD, aD]) = do
   a  <- decodeLVA aD
   Right (Un op a)
 decodeExpr (Lst (Atom "tuple" : vas)) =
-  Tuple <$> mapM decodeLVA vas
+  Tuple <$> mapM decodeLVA vas <*> pure False
+decodeExpr (Lst (Atom "tuple-variant" : vas)) =
+  Tuple <$> mapM decodeLVA vas <*> pure True
 decodeExpr (Lst (Atom "record" : fields)) =
   Record <$> mapM decodeField fields
 decodeExpr (Lst (Atom "with-record" : lvaD : fields)) = do
@@ -633,7 +635,7 @@ erasePosInst (MkFunClosures caps clos) =
 erasePosExpr :: IRExpr -> IRExpr
 erasePosExpr (Bin op a b)         = Bin op (eLVA a) (eLVA b)
 erasePosExpr (Un op a)            = Un op (eLVA a)
-erasePosExpr (Tuple xs)           = Tuple (map eLVA xs)
+erasePosExpr (Tuple xs tag)       = Tuple (map eLVA xs) tag
 erasePosExpr (Record fs)          = Record (map eField fs)
 erasePosExpr (WithRecord lva fs)  = WithRecord (eLVA lva) (map eField fs)
 erasePosExpr (ProjField lva f)    = ProjField (eLVA lva) f

@@ -35,5 +35,5 @@ reify = mapM checkOne
 
 
 checkOne :: LTerm -> Except String String
-checkOne (Loc _ (Tuple [Loc _ (Lit (LString s)), Loc _ (Var vn)])) = return s
+checkOne (Loc _ (Tuple [Loc _ (Lit (LString s)), Loc _ (Var vn)] _)) = return s
 checkOne _ = throwError errorMessage

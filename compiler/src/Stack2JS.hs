@@ -779,9 +779,11 @@ instance ToJS RawExpr where
           then hsep [ ppId va1, text', ppId va2 ]
           else jsFunCall text' [ppId va1, ppId va2]
       Un op v -> return $ text (unaryOpToJS op) <> PP.parens (ppId v)
-      -- Tuple now takes [LVarAccess]
-      Tuple lvars -> return $
-        text "rt.mkTuple" <> PP.parens (PP.brackets $ PP.hsep $ PP.punctuate (text ",") (map ppLVarAccess lvars))
+      -- Tuple now takes [LVarAccess] and a syntactic-variant tag
+      Tuple lvars tag -> return $
+        text "rt.mkTuple" <> PP.parens ((PP.brackets $ PP.hsep $ PP.punctuate (text ",") (map ppLVarAccess lvars)) <> text ", " <> tagToJS tag)
+        where tagToJS True  = text "true"
+              tagToJS False = text "false"
       -- Record now takes LFields ([(FieldName, LVarAccess)])
       Record lfields -> do
         jsFields <- lfieldsToJS lfields

@@ -74,7 +74,7 @@ type LFields = [(Basics.FieldName, LVarAccess)]
 data IRExpr
   = Bin Basics.BinOp LVarAccess LVarAccess
   | Un Basics.UnaryOp LVarAccess
-  | Tuple [LVarAccess]
+  | Tuple [LVarAccess] Basics.SynVariantTag
   | Record LFields
   | WithRecord LVarAccess LFields
   | ProjField LVarAccess Basics.FieldName
@@ -544,7 +544,7 @@ ppIRExpr (Bin binop lva1 lva2) = do
 ppIRExpr (Un op lv) = do
   d <- ppLVA lv
   pure $ text (show op) PP.<> PP.parens d
-ppIRExpr (Tuple vars) = do
+ppIRExpr (Tuple vars _) = do
   ds <- mapM ppLVA vars
   pure $ PP.parens $ PP.hsep $ PP.punctuate (text ",") ds
 ppIRExpr (List vars) = do

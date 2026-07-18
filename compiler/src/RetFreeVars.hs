@@ -60,7 +60,7 @@ instance FreeNames SimpleTerm where
   freeVars (Bin _ lv1 lv2) = FreeVars (Set.fromList [unLocVar lv1, unLocVar lv2])
   freeVars (Un _ lv) = FreeVars (Set.singleton (unLocVar lv))
   freeVars (ValSimpleTerm sval) = freeVars sval
-  freeVars (Tuple lvs) = FreeVars (Set.fromList (map unLocVar lvs))
+  freeVars (Tuple lvs _) = FreeVars (Set.fromList (map unLocVar lvs))
   freeVars (List lvs)  = FreeVars (Set.fromList (map unLocVar lvs))
   freeVars (ListCons lv1 lv2) = FreeVars (Set.fromList [unLocVar lv1, unLocVar lv2])
   freeVars (Base _ ) = FreeVars $ Set.empty

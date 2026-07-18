@@ -371,7 +371,7 @@ Atom : '(' Expr ')'                { $2 }
      | BIGNUM                      {% atPos $1 (App (noLoc (Var "bigFromLiteral")) [noLoc (Lit (LString (bigTok $1)))]) }
      | VAR                         {% atPos $1 (Var (varTok $1)) }
      | '(' ')'                     {% atPos $1 (Lit LUnit) }
-     | '(' CSExpr Expr ')'         {% atPos $1 (Tuple (reverse ($3:$2))) }
+     | '(' CSExpr Expr ')'         {% atPos $1 (Tuple (reverse ($3:$2)) False) }
      | '{' '}'                     {% atPos $1 (Record []) }
      | RecordExpr                  { $1 }
      | ListExpr                    { $1 }

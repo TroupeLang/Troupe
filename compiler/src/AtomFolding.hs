@@ -40,8 +40,8 @@ visitTerm atms (Case lt declTermList) =
   (map (\(lpat, lterm) -> (visitLPattern atms lpat, visitLTerm atms lterm)) declTermList)
 visitTerm atms (If lt1 lt2 lt3) =
   If (visitLTerm atms lt1) (visitLTerm atms lt2) (visitLTerm atms lt3)
-visitTerm atms (Tuple lterms) =
-  Tuple (map (visitLTerm atms) lterms)
+visitTerm atms (Tuple lterms tag) =
+  Tuple (map (visitLTerm atms) lterms) tag
 visitTerm atms (Record fields) = Record (visitFields atms fields)
 visitTerm atms (WithRecord le fields) =
     WithRecord (visitLTerm atms le) (visitFields atms fields)

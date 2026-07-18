@@ -5,8 +5,8 @@ import Direct
 import TroupePositionInfo (Located(..))
 
 visitProg :: Prog -> Prog
-visitProg (Prog imports (Atoms atms) tm) =
-  Prog imports (Atoms atms) (visitLTerm atms tm)
+visitProg (Prog imports (Atoms atms) groups tm) =
+  Prog imports (Atoms atms) groups (visitLTerm atms tm)
 
 -- | Visit a located term
 visitLTerm :: [AtomName] -> LTerm -> LTerm
@@ -86,6 +86,9 @@ visitPattern atms (ListPattern lpats) = ListPattern (map (visitLPattern atms) lp
 visitPattern atms (RecordPattern fields mode) = RecordPattern (map visitField fields) mode
       where visitField pat@(_, Nothing) = pat
             visitField (f, Just lp) = (f, Just (visitLPattern atms lp))
+visitPattern atms (ConPattern qname mpayload) =
+  ConPattern qname (fmap (visitLPattern atms) mpayload)
+visitPattern _ ErrorPattern = ErrorPattern
 
 visitLambda :: [AtomName] -> Lambda -> Lambda
 visitLambda atms (Lambda lpats lterm) =

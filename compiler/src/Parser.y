@@ -66,6 +66,7 @@ import Data.List (group, sort, intercalate)
     FLOAT { L _ (TokenFloat _) }
     STRING{ L _ (TokenString _)}
     VAR   { L _  (TokenSym _) }
+    TYVAR { L _  (TokenTyVar _) }
     LABEL { L _  (TokenLabel _) }
     '@'   { L _  TokenAt }
     '=>'  { L _ TokenArrow }
@@ -120,6 +121,11 @@ import Data.List (group, sort, intercalate)
 
 -- Operators
 
+-- Lowest precedence: tags the type-application reduce rules (TyExp -> AppTy,
+-- ProdList -> AppTy) so that a following VAR is shifted to extend a postfix
+-- type application (`int list`) rather than ending the type. This makes type
+-- application greedy, as in SML; see the TyExp productions.
+%nonassoc TYAPP_LOW
 
 %nonassoc with
 %right '=>' 
@@ -143,12 +149,17 @@ import Data.List (group, sort, intercalate)
 %left 'isRecord'
 %left 'not'
 %left '^'
+
+-- Highest precedence: a type name (VAR) shifted to extend a postfix type
+-- application wins over ending the type expression (see TYAPP_LOW above).
+%left VAR
 %%
 
 
 
 
-Prog : ImportDecl AtomsDecl Expr                       { Prog (Imports $1) (Atoms $2) $3 }
+Prog : ImportDecl TopDecls Expr
+         { let (atms, groups) = $2 in Prog (Imports $1) (Atoms atms) groups $3 }
 
 ImportDecl: import OptQualified OptSelection VAR OptAlias ImportDecl
               { (ImportDecl (LibName (varTok $4)) $5 Nothing $3 $2) : $6 }
@@ -167,11 +178,70 @@ VarList : VAR              { [varTok $1] }
         | VAR ',' VarList  { (varTok $1) : $3 }
 
 
-AtomsDecl : datatype Atoms '=' VAR AtomsList    {% do { p <- pos $4; checkDuplicateAtoms ((varTok $4, p):$5) } }
-          |  {[]}
+-- The declaration section: a sequence of `datatype` declarations, each of
+-- which is either the legacy `datatype Atoms = ...` enumeration or one of the
+-- new syntactic-variant declaration groups. The leading `datatype` keyword is
+-- shared; the next token (the keyword `Atoms` versus anything else)
+-- distinguishes the two forms with one token of lookahead. The result pairs
+-- the accumulated atom names with the list of declaration groups.
+TopDecls : {- empty -}                          { ([], []) }
+   | datatype Atoms '=' VAR AtomsList TopDecls
+        {% do { p <- pos $4
+              ; names <- checkDuplicateAtoms ((varTok $4, p) : $5)
+              ; let (as, gs) = $6
+              ; return (names ++ as, gs) } }
+   | datatype DataGroup TopDecls
+        { let (as, gs) = $3 in (as, $2 : gs) }
 
 AtomsList : { [] }
           | '|' VAR AtomsList  {% do { p <- pos $2; return ((varTok $2, p): $3) } }
+
+
+-- A single declaration group (the leading `datatype` is consumed by TopDecls);
+-- its members are joined by `and`.
+DataGroup : DataParams VAR '=' CtorList DataAndRest
+        { SynDataGroup (SynDataDecl $1 (varTok $2) $4 : $5) }
+
+DataAndRest : {- empty -}                       { [] }
+   | and DataParams VAR '=' CtorList DataAndRest
+        { SynDataDecl $2 (varTok $3) $5 : $6 }
+
+-- Type parameters: none, a single `'a`, or a parenthesized comma list.
+DataParams : {- empty -}          { [] }
+   | TYVAR                        { [tyvarTok $1] }
+   | '(' TyVarList ')'            { $2 }
+
+TyVarList : TYVAR                 { [tyvarTok $1] }
+   | TYVAR ',' TyVarList          { tyvarTok $1 : $3 }
+
+CtorList : Ctor                   { [$1] }
+   | Ctor '|' CtorList            { $1 : $3 }
+
+Ctor : VAR                        { SynCtor (varTok $1) Nothing }
+   | VAR of TyExp                 { SynCtor (varTok $1) (Just $3) }
+
+-- Type expressions (spec §2). Application (juxtaposition) binds tighter than
+-- the product `*`; parentheses nest. Products are flat and n-ary.
+TyExp : AppTy   %prec TYAPP_LOW   { $1 }
+   | AppTy '*' ProdList           { STyProd ($1 : reverse $3) }
+
+ProdList : AppTy   %prec TYAPP_LOW  { [$1] }
+   | ProdList '*' AppTy           { $3 : $1 }
+
+AppTy : AtomTy                    { $1 }
+   | AppTy QTyName                { STyApp [$1] $2 }
+
+AtomTy : TYVAR                    { STyVar (tyvarTok $1) }
+   | QTyName                      { STyName $1 }
+   | '(' TyExp ')'               { $2 }
+   | '(' TyExp ',' TyArgList ')' QTyName   { STyApp ($2 : reverse $4) $6 }
+
+TyArgList : TyExp                 { [$1] }
+   | TyArgList ',' TyExp          { $3 : $1 }
+
+-- A possibly dotted type name: `t`, `X.t`, `X.Y.t`.
+QTyName : VAR                     { [varTok $1] }
+   | VAR '.' QTyName              { varTok $1 : $3 }
 
 
 Expr: Form                        { $1 }
@@ -217,8 +287,42 @@ Expr: Form                        { $1 }
 
 Match : Pattern '=>' Expr                      { [($1,$3)] }
       | Pattern '=>' Expr '|' Match            { ($1,$3):$5 }
+      | ConPat '=>' Expr                       { [($1,$3)] }
+      | ConPat '=>' Expr '|' Match             { ($1,$3):$5 }
       -- Error recovery: skip bad case arm content
       | catch                                  { [(noLoc ErrorPattern, noLoc (Lit LUnit))] }
+
+
+-- Constructor-application patterns (syntactic variants). The qualification is
+-- inlined (rather than factored into a nonterminal that reduces from a bare
+-- VAR) so that a leading VAR never has a reduce action competing with
+-- 'VarPattern'; a constructor is recognised only once an argument pattern or a
+-- dotted qualifier follows. Supported forms: bare applied `C p`, qualified
+-- applied `T.C p` / `M.T.C p`, and nullary qualified `T.C` / `M.T.C`. A bare
+-- nullary constructor is an ordinary variable pattern, resolved later.
+ConPat : VAR APat                          {% atPos $1 (ConPattern [varTok $1] (Just $2)) }
+       | VAR '.' VAR APat                  {% atPos $1 (ConPattern [varTok $1, varTok $3] (Just $4)) }
+       | VAR '.' VAR '.' VAR APat          {% atPos $1 (ConPattern [varTok $1, varTok $3, varTok $5] (Just $6)) }
+       | VAR '.' VAR                       {% atPos $1 (ConPattern [varTok $1, varTok $3] Nothing) }
+       | VAR '.' VAR '.' VAR               {% atPos $1 (ConPattern [varTok $1, varTok $3, varTok $5] Nothing) }
+
+-- Argument of a constructor pattern: an atomic (self-delimited) pattern. A
+-- nested constructor application must be parenthesized here.
+APat : VAR                                 {% atPos $1 (VarPattern (varTok $1)) }
+     | '_'                                 {% atPos $1 Wildcard }
+     | '(' ')'                             {% atPos $1 (ValPattern LUnit) }
+     | NUM                                 {% atPos $1 (ValPattern (LNumeric (NumInt (numTok $1)))) }
+     | FLOAT                               {% atPos $1 (ValPattern (LNumeric (NumFloat (floatTok $1)))) }
+     | STRING                              {% atPos $1 (ValPattern (LString (strTok $1))) }
+     | true                                {% atPos $1 (ValPattern (LBool True)) }
+     | false                               {% atPos $1 (ValPattern (LBool False)) }
+     | LABEL                               {% atPos $1 (ValPattern (LLabel (lblTok $1))) }
+     | '`<' DCLabelExp '>`'                {% atPos $1 (ValPattern (LDCLabel $2)) }
+     | '(' Pattern ')'                     { $2 }
+     | '(' ConPat ')'                      { $2 }
+     | '(' CSPattern PatElem ')'           {% atPos $1 (TuplePattern (reverse ($3:$2))) }
+     | FieldPattern                        { $1 }
+     | ListPattern                         { $1 }
 
 
 Form :: { LTerm }
@@ -312,9 +416,16 @@ Pattern : VAR                               {% atPos $1 (VarPattern (varTok $1))
     | false                                 {% atPos $1 (ValPattern (LBool False)) }
     | LABEL                                 {% atPos $1 (ValPattern (LLabel (lblTok $1))) }
     | '`<' DCLabelExp '>`'                  {% atPos $1 (ValPattern (LDCLabel $2)) }
-    | '(' CSPattern Pattern ')'             {% atPos $1 (TuplePattern (reverse ($3:$2))) }
+    | '(' CSPattern PatElem ')'             {% atPos $1 (TuplePattern (reverse ($3:$2))) }
+    | '(' ConPat ')'                        { $2 }
     | FieldPattern                          { $1 }
     | ListPattern   { $1}
+
+-- An element of a tuple or list pattern: an ordinary pattern or a bare
+-- constructor-application pattern. This lets constructor patterns nest inside
+-- tuples and lists without parenthesizing each one (e.g. @(SOME x, NONE)@).
+PatElem : Pattern                           { $1 }
+        | ConPat                            { $1 }
 
 
 FieldPattern :
@@ -336,13 +447,13 @@ FieldPat
     | VAR '=' Pattern  {(varTok $1, Just $3) }
 
 ListPattern:  '[' ']'                              {% atPos $1 (ListPattern []) }
-    | '[' Pattern ']'                              {% atPos $1 (ListPattern [$2]) }
-    | '[' CSPattern Pattern ']'                    {% atPos $1 (ListPattern (reverse ($3:$2))) }
+    | '[' PatElem ']'                              {% atPos $1 (ListPattern [$2]) }
+    | '[' CSPattern PatElem ']'                    {% atPos $1 (ListPattern (reverse ($3:$2))) }
     |     Pattern '::' Pattern                     {% atPos $2 (ConsPattern $1 $3) }
 
 
-CSPattern : Pattern ','         { [$1] }
-    | CSPattern  Pattern ','    { ($2:$1) }
+CSPattern : PatElem ','         { [$1] }
+    | CSPattern  PatElem ','    { ($2:$1) }
 
 
 Dec : val Pattern '=' Expr         { ValDecl $2 $4 }
@@ -613,6 +724,7 @@ bigTok (L _ (TokenBigInt x)) = x
 floatTok (L _ (TokenFloat x)) = x
 strTok (L _ (TokenString x)) = x
 varTok (L _ (TokenSym x ))   = x
+tyvarTok (L _ (TokenTyVar x)) = x
 lblTok (L _ (TokenLabel x))  = x
 
 pos :: L Token -> ParseM PosInf

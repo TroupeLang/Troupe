@@ -32,6 +32,7 @@ $alpha_ = [$alpha \_]
 $eol   = [\n]
 $graphic    = $printable # $white
 @sym        = $alpha_ [$alpha $digit \_ \']*
+@tyvar      = \' $alpha [$alpha $digit \_ \']*
 @string     = \" ($printable # \")* \"
 @label      = \`\{ ($printable # \})*  \}\`
 @declit     = $digit[\_$digit]*
@@ -163,6 +164,7 @@ tokens:-
 <0>   [\[]                           { mkL TokenLBracket }
 <0>   [\]]                           { mkL TokenRBracket }
 <0, state_dclabel>   [\&]            { mkL TokenAmpersand }
+<0>   @tyvar                         { mkLs (\s -> TokenTyVar (tail s)) }
 <0, state_dclabel>   @sym            { mkLs (\s -> TokenSym s) }
 <0>   @label                         { mkLs (\s -> (TokenLabel (((map toLower) . trim . unquote) s)))}
 
@@ -227,6 +229,7 @@ data Token
   | TokenBigInt String
   | TokenFloat Double
   | TokenSym String
+  | TokenTyVar String
   | TokenString String
   | TokenTrue
   | TokenFalse
@@ -427,6 +430,7 @@ showToken (TokenNum n) = "number " ++ show n
 showToken (TokenBigInt s) = "bigint " ++ s ++ "n"
 showToken (TokenFloat f) = "float " ++ show f
 showToken (TokenSym s) = "identifier '" ++ s ++ "'"
+showToken (TokenTyVar s) = "type variable '" ++ '\'' : s ++ "'"
 showToken (TokenString s) = "string \"" ++ s ++ "\""
 showToken (TokenLabel l) = "label `{" ++ l ++ "}`"
 showToken TokenArrow = "'=>'"

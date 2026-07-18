@@ -251,7 +251,7 @@ buildProg lp =
   let body   = Loc NoPos (S.Tuple [ Loc NoPos (S.Var x) | x <- binders (unLoc lp) ])
       scrut  = Loc NoPos (S.Var "$scrut")
       caseE  = Loc NoPos (S.Case scrut [(lp, body)])
-  in S.Prog (Imports []) (S.Atoms []) caseE
+  in S.Prog (Imports []) (S.Atoms []) [] caseE
 
 prop_match :: Property
 prop_match = forAllShrinkShow genCase shrinkCase showCase check

@@ -88,10 +88,26 @@ fresh = do
 -- | Fold declaration groups into tags and rewrite the program term. The
 -- returned program has an empty group list and no constructor patterns.
 foldProg :: Prog -> Except String Prog
-foldProg (Prog imports atoms groups term) = do
+foldProg (Prog imports atoms@(Atoms atomNames) groups term) = do
+  checkAtomCollisions atomNames groups
   env   <- processGroups emptyEnv groups
   term' <- evalStateT (rewriteLTerm env term) 0
   return (Prog imports atoms [] term')
+
+-- | Atoms are folded before this pass runs, so an atom name would silently
+-- take over every occurrence of a same-named constructor or datatype.
+-- Reject the collision instead. (Atoms are scheduled for removal; this
+-- check exists only while both declaration forms coexist.)
+checkAtomCollisions :: [AtomName] -> [SynDataGroup] -> Except String ()
+checkAtomCollisions atomNames groups =
+  forM_ [ d | SynDataGroup ds <- groups, d <- ds ] $
+    \(SynDataDecl _ n ctors) -> do
+      when (n `elem` atomNames) $
+        throwError ("datatype " ++ n ++ " collides with the atom " ++ n)
+      forM_ [ c | SynCtor c _ <- ctors ] $ \c ->
+        when (c `elem` atomNames) $
+          throwError ("constructor " ++ c ++ " of datatype " ++ n
+                      ++ " collides with the atom " ++ c)
 
 ------------------------------------------------------------
 -- Declaration processing

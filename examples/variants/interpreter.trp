@@ -3,8 +3,8 @@
  * Demonstrates:
  *   - two mutually recursive datatypes declared with `and` (expr and stmt).
  *     The group is genuinely mutually recursive, which the `and` well-formed-
- *     ness check requires: stmt refers to expr (ASSIGN, IF, WHILE conditions),
- *     and expr refers to stmt through the block expression BLOCK, which runs a
+ *     ness check requires: stmt refers to expr (assign, ite, while conditions),
+ *     and expr refers to stmt through the block expression block, which runs a
  *     statement for its effect and then evaluates an expression in the
  *     resulting environment;
  *   - constructor patterns, including nested ones, driving a recursive
@@ -24,49 +24,49 @@
 import Map
 import List
 
-datatype expr = LIT of int
-              | VAR of string
-              | ADD of expr * expr
-              | SUB of expr * expr
-              | MUL of expr * expr
-              | LT  of expr * expr           (* yields 1 for true, 0 for false *)
-              | BLOCK of stmt * expr         (* run the stmt, then evaluate the expr *)
-     and stmt = SKIP
-              | ASSIGN of string * expr
-              | SEQ of stmt * stmt
-              | IF of expr * stmt * stmt
-              | WHILE of expr * stmt
+datatype expr = lit of int
+              | var of string
+              | add of expr * expr
+              | sub of expr * expr
+              | mul of expr * expr
+              | lt  of expr * expr           (* yields 1 for true, 0 for false *)
+              | block of stmt * expr         (* run the stmt, then evaluate the expr *)
+     and stmt = skip
+              | assign of string * expr
+              | seq of stmt * stmt
+              | ite of expr * stmt * stmt
+              | while of expr * stmt
 
 let val emptyEnv = Map.empty (fn a => fn b => a < b)
 
     (* Evaluate an expression to an integer in the given environment. *)
-    fun eval env (LIT n)        = n
-      | eval env (VAR x)        = Map.findOrDefault env x 0
-      | eval env (ADD (l, r))   = eval env l + eval env r
-      | eval env (SUB (l, r))   = eval env l - eval env r
-      | eval env (MUL (l, r))   = eval env l * eval env r
-      | eval env (LT (l, r))    = if eval env l < eval env r then 1 else 0
-      | eval env (BLOCK (s, e)) = eval (exec env s) e
+    fun eval env (lit n)        = n
+      | eval env (var x)        = Map.findOrDefault env x 0
+      | eval env (add (l, r))   = eval env l + eval env r
+      | eval env (sub (l, r))   = eval env l - eval env r
+      | eval env (mul (l, r))   = eval env l * eval env r
+      | eval env (lt (l, r))    = if eval env l < eval env r then 1 else 0
+      | eval env (block (s, e)) = eval (exec env s) e
 
     (* Execute a statement, returning the updated environment. *)
-    and exec env SKIP             = env
-      | exec env (ASSIGN (x, e))  = Map.insert env x (eval env e)
-      | exec env (SEQ (s1, s2))   = exec (exec env s1) s2
-      | exec env (IF (c, t, f))   = if eval env c = 0 then exec env f else exec env t
-      | exec env (WHILE (c, body)) =
+    and exec env skip             = env
+      | exec env (assign (x, e))  = Map.insert env x (eval env e)
+      | exec env (seq (s1, s2))   = exec (exec env s1) s2
+      | exec env (ite (c, t, f))  = if eval env c = 0 then exec env f else exec env t
+      | exec env (while (c, body)) =
           if eval env c = 0 then env
-          else exec (exec env body) (WHILE (c, body))
+          else exec (exec env body) (while (c, body))
 
     (* acc := 1; i := 1; while i < 6 do { acc := acc * i; i := i + 1 } *)
     val factorial =
-        SEQ (ASSIGN ("acc", LIT 1),
-        SEQ (ASSIGN ("i", LIT 1),
-             WHILE (LT (VAR "i", LIT 6),
-                    SEQ (ASSIGN ("acc", MUL (VAR "acc", VAR "i")),
-                         ASSIGN ("i", ADD (VAR "i", LIT 1))))))
+        seq (assign ("acc", lit 1),
+        seq (assign ("i", lit 1),
+             while (lt (var "i", lit 6),
+                    seq (assign ("acc", mul (var "acc", var "i")),
+                         assign ("i", add (var "i", lit 1))))))
 
     (* Run the program as a block expression that reads acc back out. *)
-    val result = eval emptyEnv (BLOCK (factorial, VAR "acc"))
+    val result = eval emptyEnv (block (factorial, var "acc"))
 
     (* Run it again for the whole environment. *)
     val finalEnv = exec emptyEnv factorial

@@ -8,21 +8,21 @@ A `datatype` declaration introduces named constructors, each optionally
 carrying a payload described by an `of` clause:
 
 ```sml
-datatype 'a option = NONE | SOME of 'a
+datatype 'a option = none | some of 'a
 ```
 
-Constructors are values (nullary, e.g. `NONE`) or functions (with a payload,
-e.g. `SOME 5`). They match in patterns anywhere a pattern is allowed: case
+Constructors are values (nullary, e.g. `none`) or functions (with a payload,
+e.g. `some 5`). They match in patterns anywhere a pattern is allowed: case
 heads, function clauses, tuple and list elements, and receive handlers. A bare
 constructor application used as a whole function argument must be parenthesised:
-`fun f (SOME x) = ...`. A value prints as its constructor name (`NONE`) or as
-`(C payload)` (`(SOME 5)`).
+`fun f (some x) = ...`. A value prints as its constructor name (`none`) or as
+`(c payload)` (`(some 5)`).
 
 Mutually recursive datatypes are grouped with `and`:
 
 ```sml
-datatype expr = LIT of int | BLOCK of stmt * expr
-     and stmt = ASSIGN of string * expr | SEQ of stmt * stmt
+datatype expr = lit of int | block of stmt * expr
+     and stmt = assign of string * expr | seq of stmt * stmt
 ```
 
 An `and` group must be genuinely mutually recursive — each member must reach
@@ -30,8 +30,8 @@ every other through payload references — otherwise it is a static error.
 Scoping is sequential: a datatype may refer only to members of its own `and`
 group and to datatypes declared earlier, so dependencies are declared before
 dependents. When a constructor name is declared by more than one datatype in
-scope, a use is disambiguated with the datatype-qualified form `t.C`
-(`color.RED`).
+scope, a use is disambiguated with the datatype-qualified form `t.c`
+(`color.red`).
 
 ## Examples
 

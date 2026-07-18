@@ -2,7 +2,7 @@
  *
  * Demonstrates:
  *   - a datatype whose constructors carry tuple payloads of floats
- *     (CIRCLE of float, RECT of float * float, TRIANGLE of the three side
+ *     (circle of float, rect of float * float, tri of the three side
  *     lengths);
  *   - area and perimeter functions defined by constructor patterns that
  *     destructure those tuples;
@@ -20,33 +20,33 @@
 
 import List
 
-datatype shape = CIRCLE of float
-               | RECT of float * float
-               | TRIANGLE of float * float * float
+datatype shape = circle of float
+               | rect of float * float
+               | tri of float * float * float
 
 let val pi = 3.14159265
 
-    fun area (CIRCLE r)          = pi * r * r
-      | area (RECT (w, h))       = w * h
-      | area (TRIANGLE (a, b, c)) =
+    fun area (circle r)      = pi * r * r
+      | area (rect (w, h))   = w * h
+      | area (tri (a, b, c)) =
           let val s = (a + b + c) / 2.0            (* semi-perimeter *)
           in sqrt (s * (s - a) * (s - b) * (s - c))
           end
 
-    fun perimeter (CIRCLE r)           = 2.0 * pi * r
-      | perimeter (RECT (w, h))        = 2.0 * (w + h)
-      | perimeter (TRIANGLE (a, b, c)) = a + b + c
+    fun perimeter (circle r)      = 2.0 * pi * r
+      | perimeter (rect (w, h))   = 2.0 * (w + h)
+      | perimeter (tri (a, b, c)) = a + b + c
 
-    fun name (CIRCLE _)     = "circle"
-      | name (RECT _)       = "rectangle"
-      | name (TRIANGLE _)   = "triangle"
+    fun name (circle _) = "circle"
+      | name (rect _)   = "rectangle"
+      | name (tri _)    = "triangle"
 
     fun describe s =
         print (name s, "area =", area s, "perimeter =", perimeter s)
 
-    val shapes = [ CIRCLE 2.0
-                 , RECT (3.0, 4.0)
-                 , TRIANGLE (3.0, 4.0, 5.0)
+    val shapes = [ circle 2.0
+                 , rect (3.0, 4.0)
+                 , tri (3.0, 4.0, 5.0)
                  ]
 
     val _ = List.map describe shapes

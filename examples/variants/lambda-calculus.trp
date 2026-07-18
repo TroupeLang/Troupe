@@ -5,8 +5,8 @@
  * Demonstrates:
  *   - an AST datatype (term) for the object language;
  *   - a mutually recursive value/env `and` group: value refers to env
- *     through the closure constructor CLO, and env refers to value through
- *     its cons constructor BIND, so the group is genuinely mutually
+ *     through the closure constructor clo, and env refers to value through
+ *     its cons constructor bind, so the group is genuinely mutually
  *     recursive in both directions (the `and` well-formedness rule).  term is
  *     declared in an earlier group; env is a cons-list environment;
  *   - a constructor-pattern evaluator eval : env -> term -> value with an
@@ -28,67 +28,67 @@
  * largest interpreted n.  Timings are wall-clock and vary between runs.
  *)
 
-datatype term = VAR of string
-              | LAM of string * term
-              | APP of term * term
-              | LIT of int
-              | ADD of term * term
-              | SUB of term * term
-              | LEQ of term * term
-              | IF  of term * term * term
+datatype term = var of string
+              | lam of string * term
+              | app of term * term
+              | lit of int
+              | add of term * term
+              | sub of term * term
+              | leq of term * term
+              | ite of term * term * term
 
-datatype value = NUM of int | CLO of string * term * env
-     and env   = EMPTY | BIND of string * value * env
+datatype value = num of int | clo of string * term * env
+     and env   = empty | bind of string * value * env
 
 let (* --- interpreter --------------------------------------------------- *)
 
     (* environment lookup (cons-list of name/value bindings) *)
-    fun lookup EMPTY x               = ("unbound", x)
-      | lookup (BIND (y, v, rest)) x = if x = y then v else lookup rest x
+    fun lookup empty x               = ("unbound", x)
+      | lookup (bind (y, v, rest)) x = if x = y then v else lookup rest x
 
     (* project the integer out of a value *)
-    fun numOf (NUM n) = n
+    fun numOf (num n) = n
       | numOf _       = 0
 
     (* call-by-value evaluator *)
-    fun eval rho (VAR x)         = lookup rho x
-      | eval rho (LIT n)         = NUM n
-      | eval rho (LAM (x, body)) = CLO (x, body, rho)
-      | eval rho (ADD (a, b))    = NUM (numOf (eval rho a) + numOf (eval rho b))
-      | eval rho (SUB (a, b))    = NUM (numOf (eval rho a) - numOf (eval rho b))
-      | eval rho (LEQ (a, b))    = if numOf (eval rho a) <= numOf (eval rho b)
-                                   then NUM 1 else NUM 0
-      | eval rho (IF (c, t, f))  = (case eval rho c of
-                                      NUM 0 => eval rho f
+    fun eval rho (var x)         = lookup rho x
+      | eval rho (lit n)         = num n
+      | eval rho (lam (x, body)) = clo (x, body, rho)
+      | eval rho (add (a, b))    = num (numOf (eval rho a) + numOf (eval rho b))
+      | eval rho (sub (a, b))    = num (numOf (eval rho a) - numOf (eval rho b))
+      | eval rho (leq (a, b))    = if numOf (eval rho a) <= numOf (eval rho b)
+                                   then num 1 else num 0
+      | eval rho (ite (c, t, f)) = (case eval rho c of
+                                      num 0 => eval rho f
                                     | _     => eval rho t)
-      | eval rho (APP (f, a))    =
+      | eval rho (app (f, a))    =
           (case eval rho f of
-             CLO (x, body, cenv) => eval (BIND (x, eval rho a, cenv)) body
-           | _                   => NUM 0)
+             clo (x, body, cenv) => eval (bind (x, eval rho a, cenv)) body
+           | _                   => num 0)
 
     (* --- object-language fib via the Z combinator ---------------------- *)
 
     (* Z = \f.(\x. f (\v. x x v)) (\x. f (\v. x x v))  --- the call-by-value
        (eta-expanded) fixed-point combinator, built as a term. *)
     val zc =
-        let val half = LAM ("x",
-                         APP (VAR "f",
-                              LAM ("v", APP (APP (VAR "x", VAR "x"), VAR "v"))))
-        in LAM ("f", APP (half, half))
+        let val half = lam ("x",
+                         app (var "f",
+                              lam ("v", app (app (var "x", var "x"), var "v"))))
+        in lam ("f", app (half, half))
         end
 
     (* fibStep self n = if n <= 1 then n else self (n-1) + self (n-2) *)
     val fibStep =
-        LAM ("self",
-          LAM ("n",
-            IF (LEQ (VAR "n", LIT 1),
-                VAR "n",
-                ADD (APP (VAR "self", SUB (VAR "n", LIT 1)),
-                     APP (VAR "self", SUB (VAR "n", LIT 2))))))
+        lam ("self",
+          lam ("n",
+            ite (leq (var "n", lit 1),
+                var "n",
+                add (app (var "self", sub (var "n", lit 1)),
+                     app (var "self", sub (var "n", lit 2))))))
 
     (* the recursive fib as a term, then a Troupe-level wrapper *)
-    val fibTerm = APP (zc, fibStep)
-    fun ifib n = numOf (eval EMPTY (APP (fibTerm, LIT n)))
+    val fibTerm = app (zc, fibStep)
+    fun ifib n = numOf (eval empty (app (fibTerm, lit n)))
 
     (* --- native Troupe fib (same doubly recursive shape) --------------- *)
     fun nfib n = if n <= 1 then n else nfib (n - 1) + nfib (n - 2)

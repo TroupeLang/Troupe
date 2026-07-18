@@ -1,4 +1,4 @@
-2026-07-18T20:38:36.046Z [RTM] [32minfo[39m: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+2026-07-18T21:20:15.240Z [RTM] [32minfo[39m: Skipping network creation. Observe that all external IO operations will yield a runtime error.
 ("fib 10 via Z = ", 55)
 ("(\x.x) 42    = ", 42)
 ("if 3<=2 ...   = ", 222)

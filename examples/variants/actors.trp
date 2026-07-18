@@ -1,17 +1,17 @@
 (* Message protocol modelled as a datatype, driving an actor.
  *
  * Demonstrates:
- *   - a datatype used as the message protocol of a process: DEPOSIT and
- *     WITHDRAW carry an integer amount, BALANCE carries the client's pid to
- *     reply to, and STOP is nullary;
+ *   - a datatype used as the message protocol of a process: deposit and
+ *     withdraw carry an integer amount, balance carries the client's pid to
+ *     reply to, and stop is nullary;
  *   - constructor patterns in receive handlers (hn), including payload-
- *     carrying ones (hn (DEPOSIT amount) => ...);
+ *     carrying ones (hn (deposit amount) => ...);
  *   - a server loop that threads its state (the balance) through the
  *     recursion, and a client that drives it and reads a reply back through
  *     self().
  *
  * The reply address is a pid. Troupe has no `pid` primitive type, so the
- * payload of BALANCE is typed with a type variable ('a) — the account
+ * payload of balance is typed with a type variable ('a) — the account
  * datatype is parameterised over the reply-address type, and the client
  * instantiates it with self().
  *
@@ -21,25 +21,25 @@
  * reply, and the server prints its final balance when it stops.
  *)
 
-datatype 'a account = DEPOSIT of int
-                    | WITHDRAW of int
-                    | BALANCE of 'a
-                    | STOP
+datatype 'a account = deposit of int
+                    | withdraw of int
+                    | balance of 'a
+                    | stop
 
-let (* The account process: balance is the state carried across receives. *)
-    fun serve balance =
+let (* The account process: bal is the state carried across receives. *)
+    fun serve bal =
         receive [
-            hn (DEPOSIT amount)  => serve (balance + amount)
-          , hn (WITHDRAW amount) => serve (balance - amount)
-          , hn (BALANCE client)  => (send (client, balance); serve balance)
-          , hn STOP              => print ("account closed with balance", balance)
+            hn (deposit amount)  => serve (bal + amount)
+          , hn (withdraw amount) => serve (bal - amount)
+          , hn (balance client)  => (send (client, bal); serve bal)
+          , hn stop              => print ("account closed with balance", bal)
         ]
 
     val acct = spawn (fn () => serve 0)
-in send (acct, DEPOSIT 100)
- ; send (acct, WITHDRAW 30)
- ; send (acct, DEPOSIT 50)
- ; send (acct, BALANCE (self ()))
+in send (acct, deposit 100)
+ ; send (acct, withdraw 30)
+ ; send (acct, deposit 50)
+ ; send (acct, balance (self ()))
  ; receive [ hn b => print ("client observed balance", b) ]
- ; send (acct, STOP)
+ ; send (acct, stop)
 end

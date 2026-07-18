@@ -1,15 +1,15 @@
 (* Calculator over an arithmetic-expression datatype.
  *
  * Demonstrates:
- *   - a nullary-constructor datatype (binop: ADD/SUB/MUL/DIV) used as an
+ *   - a nullary-constructor datatype (binop: add/sub/mul/divide) used as an
  *     enumeration of operators;
  *   - a recursive datatype (expr) whose constructors carry payloads: a
  *     numeric literal, a binary node holding an operator and two subtrees,
  *     and a unary negation;
- *   - a result datatype ('a result = OK of 'a | ERR of string) that reports
+ *   - a result datatype ('a result = ok of 'a | err of string) that reports
  *     division by zero instead of failing;
  *   - constructor patterns in case heads, and nested constructor patterns
- *     (BIN (oper, l, r)) that destructure the operator and both subtrees;
+ *     (bin (oper, l, r)) that destructure the operator and both subtrees;
  *   - a pretty-printer rendering an expr as an infix string.
  *
  * Sequential scoping: binop is declared before expr, which refers to it.
@@ -17,56 +17,56 @@
  *   ./local.sh examples/variants/calculator.trp --localonly
  *
  * Expected: each expression is printed as its infix rendering followed by
- * its evaluated result (OK n), except the divide-by-zero case which yields
- * (ERR "division by zero").
+ * its evaluated result (ok n), except the divide-by-zero case which yields
+ * (err "division by zero").
  *)
 
-datatype binop = ADD | SUB | MUL | DIV
+datatype binop = add | sub | mul | divide
 
-datatype expr = LIT of int
-              | BIN of binop * expr * expr
-              | NEG of expr
+datatype expr = lit of int
+              | bin of binop * expr * expr
+              | neg of expr
 
-datatype 'a result = OK of 'a | ERR of string
+datatype 'a result = ok of 'a | err of string
 
 let (* Render a binary operator as its infix symbol. *)
-    fun opSym ADD = "+"
-      | opSym SUB = "-"
-      | opSym MUL = "*"
-      | opSym DIV = "/"
+    fun opSym add    = "+"
+      | opSym sub    = "-"
+      | opSym mul    = "*"
+      | opSym divide = "/"
 
     (* Pretty-print an expression as a fully-parenthesised infix string. *)
-    fun show (LIT n)          = toString n
-      | show (NEG e)          = "-" ^ show e
-      | show (BIN (op, l, r)) = "(" ^ show l ^ " " ^ opSym op ^ " " ^ show r ^ ")"
+    fun show (lit n)          = toString n
+      | show (neg e)          = "-" ^ show e
+      | show (bin (op, l, r)) = "(" ^ show l ^ " " ^ opSym op ^ " " ^ show r ^ ")"
 
     (* Apply an operator, guarding division by zero. *)
-    fun apply DIV _ 0 = ERR "division by zero"
-      | apply ADD a b = OK (a + b)
-      | apply SUB a b = OK (a - b)
-      | apply MUL a b = OK (a * b)
-      | apply DIV a b = OK (a / b)
+    fun apply divide _ 0 = err "division by zero"
+      | apply add a b    = ok (a + b)
+      | apply sub a b    = ok (a - b)
+      | apply mul a b    = ok (a * b)
+      | apply divide a b = ok (a / b)
 
     (* Evaluate an expression to a result, propagating the first error. *)
-    fun eval (LIT n) = OK n
-      | eval (NEG e) =
+    fun eval (lit n) = ok n
+      | eval (neg e) =
           (case eval e of
-               OK v  => OK (0 - v)
-             | ERR m => ERR m)
-      | eval (BIN (op, l, r)) =
+               ok v  => ok (0 - v)
+             | err m => err m)
+      | eval (bin (op, l, r)) =
           (case (eval l, eval r) of
-               (OK a, OK b) => apply op a b
-             | (ERR m, _)   => ERR m
-             | (_, ERR m)   => ERR m)
+               (ok a, ok b) => apply op a b
+             | (err m, _)   => err m
+             | (_, err m)   => err m)
 
     fun report e = print (show e ^ "  =>  " ^ toString (eval e))
 
     (* (8 + -4) * 5 *)
-    val e1 = BIN (MUL, BIN (ADD, LIT 8, NEG (LIT 4)), LIT 5)
+    val e1 = bin (mul, bin (add, lit 8, neg (lit 4)), lit 5)
     (* 100 / (2 - 2)  -- division by zero *)
-    val e2 = BIN (DIV, LIT 100, BIN (SUB, LIT 2, LIT 2))
+    val e2 = bin (divide, lit 100, bin (sub, lit 2, lit 2))
     (* 3 * (4 + 5) *)
-    val e3 = BIN (MUL, LIT 3, BIN (ADD, LIT 4, LIT 5))
+    val e3 = bin (mul, lit 3, bin (add, lit 4, lit 5))
 in report e1
  ; report e2
  ; report e3

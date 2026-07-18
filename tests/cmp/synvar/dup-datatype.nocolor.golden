@@ -1,0 +1,1 @@
+duplicate datatype t: redeclaring a datatype from an earlier group is not allowed

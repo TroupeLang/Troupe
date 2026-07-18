@@ -1,0 +1,6 @@
+(* Pins: using a non-nullary constructor as a bare pattern (no argument) is a
+   static error. *)
+datatype 'a option = NONE | SOME of 'a
+
+let val x = SOME 5
+in case x of SOME => 1 | _ => 0 end

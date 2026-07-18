@@ -1,0 +1,5 @@
+(* Pins: re-declaring a datatype name in a later group is a static error. *)
+datatype t = A | B
+datatype t = C | D
+
+let val x = A in print x end

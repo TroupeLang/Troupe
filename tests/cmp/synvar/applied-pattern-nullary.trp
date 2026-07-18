@@ -1,0 +1,5 @@
+(* Pins: applying a pattern argument to a nullary constructor is a static error. *)
+datatype color = RED | GREEN
+
+let val x = RED
+in case x of RED y => 1 | _ => 0 end

@@ -1,0 +1,1 @@
+the 'and' group {a, b, c} is not mutually recursive: a, b are not mutually recursive with the rest; declare them in a separate group before this one.

@@ -1,0 +1,7 @@
+(* Pins: a function binding whose name collides with a constructor in scope
+   is a static error. *)
+datatype color = RED | GREEN
+
+let fun RED x = x
+in print (RED 5)
+end

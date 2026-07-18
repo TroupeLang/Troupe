@@ -1,0 +1,6 @@
+2026-07-18T01:31:35.279Z [RTM] [32minfo[39m: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+100
+212
+(DEG 100)
+(DEG 212)
+>>> Main thread finished with value: ()@{}%{}

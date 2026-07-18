@@ -1,0 +1,6 @@
+(* Pins: a bare constructor name that names constructors in two datatypes is
+   ambiguous; it must be datatype-qualified. *)
+datatype a = SHARED | AONLY
+datatype b = SHARED | BONLY
+
+let val x = SHARED in print x end

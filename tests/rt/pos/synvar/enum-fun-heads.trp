@@ -1,0 +1,12 @@
+(* Pins: nullary enum declaration, constructor patterns in fun clause heads,
+   and printing a nullary variant. *)
+datatype signal = RED | YELLOW | GREEN
+
+let fun next RED    = GREEN
+      | next GREEN  = YELLOW
+      | next YELLOW = RED
+in
+  print (next RED);     (* GREEN  *)
+  print (next GREEN);   (* YELLOW *)
+  print YELLOW          (* nullary variant printed directly *)
+end

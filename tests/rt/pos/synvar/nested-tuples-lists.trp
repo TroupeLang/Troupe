@@ -1,0 +1,13 @@
+(* Pins: variants nested inside tuples and lists, with constructor patterns
+   appearing as bare tuple elements and bare list (cons) elements. *)
+datatype 'a option = NONE | SOME of 'a
+
+let val pairs = [(SOME 1, NONE), (NONE, SOME 2)]
+    fun firstSome []                   = 0
+      | firstSome ((SOME x, _) :: _)   = x
+      | firstSome ((NONE, SOME y) :: _) = y
+      | firstSome (_ :: rest)          = firstSome rest
+in
+  print pairs;              (* [((SOME 1), NONE), (NONE, (SOME 2))] *)
+  print (firstSome pairs)   (* 1 *)
+end

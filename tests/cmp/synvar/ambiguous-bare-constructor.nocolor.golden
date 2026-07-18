@@ -1,0 +1,1 @@
+constructor SHARED is ambiguous: declared in datatypes b, a; qualify it, e.g. b.SHARED

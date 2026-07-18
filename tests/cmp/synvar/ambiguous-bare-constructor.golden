@@ -1,1 +1,1 @@
-constructor SHARED is ambiguous: declared in datatypes b, a; qualify it, e.g. b.SHARED
+tests/cmp/synvar/ambiguous-bare-constructor.trp:6:13: constructor SHARED is ambiguous: declared in datatypes b, a; qualify it, e.g. b.SHARED

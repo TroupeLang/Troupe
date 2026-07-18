@@ -1,1 +1,1 @@
-datatype box expects 1 type argument
+tests/cmp/synvar/bare-parameterized-datatype.trp:4:16: datatype box expects 1 type argument

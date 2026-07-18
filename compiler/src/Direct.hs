@@ -31,7 +31,7 @@ import DCLabels
 import Text.PrettyPrint.HughesPJ (
     (<+>), ($$), text, hsep, vcat, nest)
 import           ShowIndent
-import           TroupePositionInfo (Located(..))
+import           TroupePositionInfo (Located(..), PosInf(..))
 
 
 data PrimType
@@ -152,13 +152,16 @@ data SynTyExp
                                --   or @(t1, ..., tn) name@ (several)
   deriving (Eq, Show)
 
--- | A single constructor: its name and its optional payload type.
-data SynCtor = SynCtor String (Maybe SynTyExp)
+-- | A single constructor: the source position of its name, its name, and its
+-- optional payload type. The position is carried for diagnostics; payload
+-- resolution errors are reported against the enclosing constructor's name.
+data SynCtor = SynCtor PosInf String (Maybe SynTyExp)
   deriving (Eq, Show)
 
--- | One @datatype@ declaration: type parameters (each stored without its
--- leading tick), the datatype name, and its constructors (at least one).
-data SynDataDecl = SynDataDecl [String] String [SynCtor]
+-- | One @datatype@ declaration: the source position of its datatype name, the
+-- type parameters (each stored without its leading tick), the datatype name,
+-- and its constructors (at least one). The position is carried for diagnostics.
+data SynDataDecl = SynDataDecl PosInf [String] String [SynCtor]
   deriving (Eq, Show)
 
 -- | An @and@-group of one or more mutually recursive datatype declarations.
@@ -220,7 +223,7 @@ ppSynDataGroup (SynDataGroup (d:ds)) =
   vcat (map (ppSynDataDecl (text "and")) ds)
 
 ppSynDataDecl :: PP.Doc -> SynDataDecl -> PP.Doc
-ppSynDataDecl kw (SynDataDecl params name ctors) =
+ppSynDataDecl kw (SynDataDecl _ params name ctors) =
   kw <+> ppParams params <+> text name <+> text "=" <+>
     hsep (PP.punctuate (text " |") (map ppSynCtor ctors))
   where
@@ -229,8 +232,8 @@ ppSynDataDecl kw (SynDataDecl params name ctors) =
     ppParams ps = PP.parens (hsep (PP.punctuate (text ",") (map (text . ('\'':)) ps)))
 
 ppSynCtor :: SynCtor -> PP.Doc
-ppSynCtor (SynCtor cn Nothing)   = text cn
-ppSynCtor (SynCtor cn (Just ty)) = text cn <+> text "of" <+> ppSynTyExp ty
+ppSynCtor (SynCtor _ cn Nothing)   = text cn
+ppSynCtor (SynCtor _ cn (Just ty)) = text cn <+> text "of" <+> ppSynTyExp ty
 
 -- | Pretty print a type expression. Products and applications are shown
 -- with parentheses where nesting requires them.

@@ -1,1 +1,1 @@
-type variable 'b is not in the parameter list of datatype box
+tests/cmp/synvar/free-type-variable.trp:3:19: type variable 'b is not in the parameter list of datatype box

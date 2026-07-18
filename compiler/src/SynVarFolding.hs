@@ -21,7 +21,7 @@ module SynVarFolding ( foldProg ) where
 import           Direct
 import           Basics (VarName)
 import qualified SynVarHash as H
-import           TroupePositionInfo (Located(..), PosInf, getLoc)
+import           TroupePositionInfo (Located(..), PosInf(..), getLoc)
 
 import           Control.Monad (forM, forM_, when, foldM)
 import           Control.Monad.State
@@ -102,33 +102,39 @@ processGroups = foldM processGroup
 
 processGroup :: Env -> SynDataGroup -> Except String Env
 processGroup env (SynDataGroup decls) = do
-  let dtNames = [ n | SynDataDecl _ n _ <- decls ]
+  let dtNames = [ (n, dp) | SynDataDecl dp _ n _ <- decls ]
   -- (1) duplicate datatype name within the group: the members are
   -- simultaneously in scope, so there is no "nearest" to prefer. Shadowing a
   -- name from an earlier group, a primitive, or a built-in is legal lexical
-  -- shadowing (spec §2) and is *not* checked here.
-  case firstDup dtNames of
-    Just d  -> throwError ("duplicate datatype " ++ d ++ " in declaration group")
+  -- shadowing (spec §2) and is *not* checked here. Both occurrences are cited.
+  case firstDupPos dtNames of
+    Just (d, p0, p1) ->
+      throwError (at p1 ("duplicate datatype " ++ d ++ " in declaration group"
+                         ++ firstAt p0))
     Nothing -> return ()
-  -- (2) duplicate constructor name within a datatype
-  forM_ decls $ \(SynDataDecl _ n ctors) ->
-    case firstDup [ c | SynCtor c _ <- ctors ] of
-      Just d  -> throwError ("duplicate constructor " ++ d ++ " in datatype " ++ n)
+  -- (2) duplicate constructor name within a datatype; both occurrences are cited
+  forM_ decls $ \(SynDataDecl _ _ n ctors) ->
+    case firstDupPos [ (c, cp) | SynCtor cp c _ <- ctors ] of
+      Just (d, p0, p1) ->
+        throwError (at p1 ("duplicate constructor " ++ d ++ " in datatype " ++ n
+                           ++ firstAt p0))
       Nothing -> return ()
   -- same-group members and their parameter counts (for resolution / check 6)
-  let sameGroup = Map.fromList [ (n, length ps) | SynDataDecl ps n _ <- decls ]
-  -- (4,6) resolve each constructor payload to a type normal form
-  resolved <- forM decls $ \(SynDataDecl params n ctors) -> do
-    ctors' <- forM ctors $ \(SynCtor c mty) -> do
-      mnf <- traverse (resolveTy env sameGroup params n) mty
+  let sameGroup = Map.fromList [ (n, length ps) | SynDataDecl _ ps n _ <- decls ]
+  -- (4,6) resolve each constructor payload to a type normal form; payload
+  -- resolution errors are reported against the enclosing constructor's name.
+  resolved <- forM decls $ \(SynDataDecl _ params n ctors) -> do
+    ctors' <- forM ctors $ \(SynCtor cp c mty) -> do
+      mnf <- traverse (resolveTy env sameGroup params n cp) mty
       return (c, mnf)
     return (n, length params, ctors')
   -- (5) genuineness: a multi-member group must be strongly connected
-  checkGenuine resolved
+  let dtPos = Map.fromList dtNames
+  checkGenuine dtPos resolved
   -- normalize + hash the group
   let hash = H.groupHash resolved
   -- extend the environment with this group's datatypes and constructors
-  let paramsOf = Map.fromList [ (n, ps) | SynDataDecl ps n _ <- decls ]
+  let paramsOf = Map.fromList [ (n, ps) | SynDataDecl _ ps n _ <- decls ]
       newEntries =
         [ (n, DtEntry (Map.findWithDefault [] n paramsOf) hash ctorMap)
         | (n, _, ctors) <- resolved
@@ -142,21 +148,23 @@ processGroup env (SynDataGroup decls) = do
 
 -- | Resolve a surface type expression to its normal form (spec §2 resolution
 -- rules, §4 normal form).
-resolveTy :: Env -> Map String Int -> [String] -> String -> SynTyExp
+resolveTy :: Env -> Map String Int -> [String] -> String -> PosInf -> SynTyExp
           -> Except String H.TyNF
-resolveTy env sameGroup params dtName = go
+resolveTy env sameGroup params dtName cpos = go
   where
     go (STyVar v) = case elemIndex v params of
       Just i  -> return (H.Var i)
-      Nothing -> throwError ("type variable '" ++ v
+      Nothing -> throwHere ("type variable '" ++ v
                              ++ " is not in the parameter list of datatype " ++ dtName)
     go (STyName q) = case q of
       [n] -> resolveName n
-      _   -> throwError "datatype imports are not yet supported"
+      _   -> throwHere "datatype imports are not yet supported"
     go (STyProd tys) = H.Prod <$> mapM go tys
     go (STyApp args q) = do
       args' <- mapM go args
       resolveApp (length args) args' q
+
+    throwHere msg = throwError (at cpos msg)
 
     -- | Resolve an application @t1 ... tk target@. The target is a built-in
     -- type constructor, a same-group datatype, or a datatype in a previously
@@ -170,13 +178,13 @@ resolveTy env sameGroup params dtName = go
                      in checkArity n pc >> return (H.App args (H.RExt (deGroupHash e) n))
           Nothing
             | n == "list" && k == 1 -> return (H.App args (H.RBuiltin "list"))
-            | n == "list"           -> throwError "the built-in type list expects 1 argument"
-            | otherwise             -> throwError ("unbound type name: " ++ n)
-      _ -> throwError "datatype imports are not yet supported"
+            | n == "list"           -> throwHere "the built-in type list expects 1 argument"
+            | otherwise             -> throwHere ("unbound type name: " ++ n)
+      _ -> throwHere "datatype imports are not yet supported"
       where
         checkArity n pc
-          | pc == 0   = throwError ("datatype " ++ n ++ " takes no type arguments")
-          | k /= pc   = throwError ("datatype " ++ n ++ " expects " ++ arity pc
+          | pc == 0   = throwHere ("datatype " ++ n ++ " takes no type arguments")
+          | k /= pc   = throwHere ("datatype " ++ n ++ " expects " ++ arity pc
                                     ++ ", got " ++ show k)
           | otherwise = return ()
 
@@ -187,19 +195,19 @@ resolveTy env sameGroup params dtName = go
     -- then unbound.
     resolveName n = case Map.lookup n sameGroup of
       Just pc
-        | pc > 0    -> throwError ("datatype " ++ n ++ " expects " ++ arity pc)
+        | pc > 0    -> throwHere ("datatype " ++ n ++ " expects " ++ arity pc)
         | otherwise -> return (H.In n)
       Nothing -> case Map.lookup n (envDts env) of
         Just e
           | not (null (deParams e)) ->
-              throwError ("datatype " ++ n ++ " expects "
+              throwHere ("datatype " ++ n ++ " expects "
                           ++ arity (length (deParams e)))
           | otherwise -> return (H.Ext (deGroupHash e) n)
         Nothing
           | n `elem` primNames -> return (H.Prim n)
           | n == "list" ->
-              throwError "the built-in type list must be applied to an argument (e.g. int list)"
-          | otherwise -> throwError ("unbound type name: " ++ n)
+              throwHere "the built-in type list must be applied to an argument (e.g. int list)"
+          | otherwise -> throwHere ("unbound type name: " ++ n)
 
     -- | Render an expected type-argument count, e.g. @1 type argument@ /
     -- @2 type arguments@.
@@ -207,8 +215,8 @@ resolveTy env sameGroup params dtName = go
 
 -- | Genuineness check (spec §3): a group of two or more members must be
 -- strongly connected through in-group payload references.
-checkGenuine :: H.Group -> Except String ()
-checkGenuine group
+checkGenuine :: Map String PosInf -> H.Group -> Except String ()
+checkGenuine dtPos group
   | length group < 2 = return ()
   | otherwise =
       case Graph.stronglyConnComp nodes of
@@ -216,7 +224,10 @@ checkGenuine group
         sccs ->
           let biggest   = longest (map Graph.flattenSCC sccs)
               offenders = [ n | n <- allNames, n `notElem` biggest ]
-          in throwError
+              offPos    = case offenders of
+                            (o:_) -> Map.findWithDefault NoPos o dtPos
+                            []    -> NoPos
+          in throwError $ at offPos
                ("the 'and' group " ++ braces allNames
                 ++ " is not mutually recursive: "
                 ++ intercalate ", " offenders
@@ -241,6 +252,34 @@ firstDup :: Eq a => [a] -> Maybe a
 firstDup xs = case xs \\ nub xs of
   (d:_) -> Just d
   []    -> Nothing
+
+-- | Find the first repeated element in a positioned list, returning the value
+-- together with the position of its first occurrence and the position of the
+-- repeat. Used to cite both occurrences in duplicate diagnostics.
+firstDupPos :: Eq a => [(a, PosInf)] -> Maybe (a, PosInf, PosInf)
+firstDupPos = go []
+  where
+    go _ [] = Nothing
+    go seen ((x, p) : rest) = case lookup x seen of
+      Just p0 -> Just (x, p0, p)
+      Nothing -> go (seen ++ [(x, p)]) rest
+
+------------------------------------------------------------
+-- Diagnostic positions
+------------------------------------------------------------
+
+-- | Prefix a message with a source position, matching the compiler's error
+-- convention (@FILE:ROW:COL: message@). A position-less node yields the bare
+-- message.
+at :: PosInf -> String -> String
+at NoPos msg = msg
+at p      msg = show p ++ ": " ++ msg
+
+-- | A parenthetical citing an earlier occurrence, e.g. for the first of two
+-- duplicate declarations.
+firstAt :: PosInf -> String
+firstAt NoPos = ""
+firstAt p     = " (first declared at " ++ show p ++ ")"
 
 ------------------------------------------------------------
 -- Term rewriting
@@ -302,11 +341,11 @@ rewriteProj env pos e f = case e of
     | Just entry <- Map.lookup t (envDts env) ->
         case Map.lookup f (deCtors entry) of
           Just res -> ctorExpr pos res
-          Nothing  -> throwError ("datatype " ++ t ++ " has no constructor " ++ f)
+          Nothing  -> throwError (at pos ("datatype " ++ t ++ " has no constructor " ++ f))
   Loc _ (ProjField (Loc _ (Var _)) t)
     | Just entry <- Map.lookup t (envDts env)
     , Map.member f (deCtors entry) ->
-        throwError "datatype imports are not yet supported"
+        throwError (at pos "datatype imports are not yet supported")
   _ -> ProjField <$> rewriteLTerm env e <*> pure f
 
 -- | Build the expression for a constructor occurrence: a tagged 1-tuple for a
@@ -337,8 +376,8 @@ rewriteLFunDecl env (Loc p (FunDecl name lams)) = do
   return (Loc p (FunDecl name lams'))
   where
     checkBinder n = do
-      when (Map.member n (envBare env)) $ throwError (n ++ " is a constructor name")
-      when (Map.member n (envDts env))  $ throwError (n ++ " is a datatype name")
+      when (Map.member n (envBare env)) $ throwError (at p (n ++ " is a constructor name"))
+      when (Map.member n (envDts env))  $ throwError (at p (n ++ " is a datatype name"))
 
 ------------------------------------------------------------
 -- Patterns
@@ -350,7 +389,7 @@ rewritePat env (Loc pos p) = Loc pos <$> rewritePat' env pos p
 rewritePat' :: Env -> PosInf -> DeclPattern -> RW DeclPattern
 rewritePat' env pos = \case
   VarPattern x
-    | Map.member x (envDts env) -> throwError (x ++ " is a datatype name")
+    | Map.member x (envDts env) -> throwError (at pos (x ++ " is a datatype name"))
     | otherwise -> case Map.lookup x (envBare env) of
         Just cands -> do res <- uniqueBare pos x cands
                          ctorPat env pos res Nothing
@@ -361,42 +400,42 @@ rewritePat' env pos = \case
   TuplePattern ps     -> TuplePattern <$> mapM (rewritePat env) ps
   ConsPattern a b     -> ConsPattern <$> rewritePat env a <*> rewritePat env b
   ListPattern ps      -> ListPattern <$> mapM (rewritePat env) ps
-  RecordPattern fs md -> RecordPattern <$> mapM (rewriteField env) fs <*> pure md
+  RecordPattern fs md -> RecordPattern <$> mapM (rewriteField env pos) fs <*> pure md
   ConPattern q mp     -> rewriteConPat env pos q mp
   ErrorPattern        -> return ErrorPattern
 
 -- | A record field: a punned field @{x}@ binds @x@, so its name is a binder
 -- and subject to check 7; @{x = p}@ names field @x@ and matches @p@.
-rewriteField :: Env -> (FieldName, Maybe LDeclPattern)
+rewriteField :: Env -> PosInf -> (FieldName, Maybe LDeclPattern)
              -> RW (FieldName, Maybe LDeclPattern)
-rewriteField env (f, Nothing) = do
-  when (Map.member f (envDts env))  $ throwError (f ++ " is a datatype name")
-  when (Map.member f (envBare env)) $ throwError (f ++ " is a constructor name")
+rewriteField env pos (f, Nothing) = do
+  when (Map.member f (envDts env))  $ throwError (at pos (f ++ " is a datatype name"))
+  when (Map.member f (envBare env)) $ throwError (at pos (f ++ " is a constructor name"))
   return (f, Nothing)
-rewriteField env (f, Just p) = (,) f . Just <$> rewritePat env p
+rewriteField env _ (f, Just p) = (,) f . Just <$> rewritePat env p
 
 rewriteConPat :: Env -> PosInf -> QName -> Maybe LDeclPattern -> RW DeclPattern
 rewriteConPat env pos q mp = case q of
   [c]    -> case Map.lookup c (envBare env) of
               Just cands -> do res <- uniqueBare pos c cands
                                ctorPat env pos res mp
-              Nothing    -> throwError ("unbound constructor: " ++ c)
+              Nothing    -> throwError (at pos ("unbound constructor: " ++ c))
   [t, c] -> case Map.lookup t (envDts env) of
               Just entry -> case Map.lookup c (deCtors entry) of
                 Just res -> ctorPat env pos res mp
-                Nothing  -> throwError ("datatype " ++ t ++ " has no constructor " ++ c)
-              Nothing -> throwError ("datatype " ++ t ++ " is not in scope")
-  (_:_:_:_) -> throwError "datatype imports are not yet supported"
-  _         -> throwError "malformed constructor pattern"
+                Nothing  -> throwError (at pos ("datatype " ++ t ++ " has no constructor " ++ c))
+              Nothing -> throwError (at pos ("datatype " ++ t ++ " is not in scope"))
+  (_:_:_:_) -> throwError (at pos "datatype imports are not yet supported")
+  _         -> throwError (at pos "malformed constructor pattern")
 
 -- | Build the tuple pattern for a constructor pattern, enforcing arity.
 ctorPat :: Env -> PosInf -> CtorRes -> Maybe LDeclPattern -> RW DeclPattern
 ctorPat env pos res mp = case mp of
   Nothing
     | crNullary res -> return (TuplePattern [tagPat])
-    | otherwise     -> throwError ("constructor " ++ crName res ++ " expects an argument")
+    | otherwise     -> throwError (at pos ("constructor " ++ crName res ++ " expects an argument"))
   Just p
-    | crNullary res -> throwError ("constructor " ++ crName res ++ " takes no argument")
+    | crNullary res -> throwError (at pos ("constructor " ++ crName res ++ " takes no argument"))
     | otherwise     -> do p' <- rewritePat env p
                           return (TuplePattern [tagPat, p'])
   where tagPat = Loc pos (ValPattern (LString (crTag res)))
@@ -410,10 +449,10 @@ ctorPat env pos res mp = case mp of
 -- identical re-declarations, diamond imports — collapse to one and resolve
 -- silently. Distinct tags remain a static error resolved by qualification.
 uniqueBare :: PosInf -> String -> [CtorRes] -> RW CtorRes
-uniqueBare _ name cands = case nubBy sameTag cands of
+uniqueBare pos name cands = case nubBy sameTag cands of
   [res] -> return res
   distinct ->
-    throwError ("constructor " ++ name ++ " is ambiguous: declared in datatypes "
+    throwError (at pos ("constructor " ++ name ++ " is ambiguous: declared in datatypes "
                 ++ intercalate ", " (map crDatatype distinct)
-                ++ "; qualify it, e.g. " ++ crDatatype (head distinct) ++ "." ++ name)
+                ++ "; qualify it, e.g. " ++ crDatatype (head distinct) ++ "." ++ name))
   where sameTag a b = crTag a == crTag b

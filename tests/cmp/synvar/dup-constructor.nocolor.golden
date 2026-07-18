@@ -1,1 +1,1 @@
-duplicate constructor RED in datatype color
+tests/cmp/synvar/dup-constructor.trp:2:32: duplicate constructor RED in datatype color (first declared at tests/cmp/synvar/dup-constructor.trp:2:18)

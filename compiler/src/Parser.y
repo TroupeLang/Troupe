@@ -186,11 +186,13 @@ TopDecls : {- empty -}                          { [] }
 -- A single declaration group (the leading `datatype` is consumed by TopDecls);
 -- its members are joined by `and`.
 DataGroup : DataParams VAR '=' CtorList DataAndRest
-        { SynDataGroup (SynDataDecl $1 (varTok $2) $4 : $5) }
+        {% do { p <- pos $2
+              ; return (SynDataGroup (SynDataDecl p $1 (varTok $2) $4 : $5)) } }
 
 DataAndRest : {- empty -}                       { [] }
    | and DataParams VAR '=' CtorList DataAndRest
-        { SynDataDecl $2 (varTok $3) $5 : $6 }
+        {% do { p <- pos $3
+              ; return (SynDataDecl p $2 (varTok $3) $5 : $6) } }
 
 -- Type parameters: none, a single `'a`, or a parenthesized comma list.
 DataParams : {- empty -}          { [] }
@@ -203,8 +205,10 @@ TyVarList : TYVAR                 { [tyvarTok $1] }
 CtorList : Ctor                   { [$1] }
    | Ctor '|' CtorList            { $1 : $3 }
 
-Ctor : VAR                        { SynCtor (varTok $1) Nothing }
-   | VAR of TyExp                 { SynCtor (varTok $1) (Just $3) }
+Ctor : VAR                        {% do { p <- pos $1
+                                        ; return (SynCtor p (varTok $1) Nothing) } }
+   | VAR of TyExp                 {% do { p <- pos $1
+                                        ; return (SynCtor p (varTok $1) (Just $3)) } }
 
 -- Type expressions (spec §2). Application (juxtaposition) binds tighter than
 -- the product `*`; parentheses nest. Products are flat and n-ary.

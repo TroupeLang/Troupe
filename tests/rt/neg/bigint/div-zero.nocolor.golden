@@ -1,0 +1,8 @@
+2026-07-18T22:40:05.712Z [RTM] info: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+Runtime error in thread fb0b681b-2fb0-4a19-94cf-86436a44f4da@{}%{}
+
+  2 | bigDiv (1n, 0n)
+    | ^
+
+>> bigDiv: division by zero
+>> at tests/rt/neg/bigint/div-zero.trp:2:1

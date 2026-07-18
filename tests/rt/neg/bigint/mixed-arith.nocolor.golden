@@ -1,0 +1,8 @@
+2026-07-18T22:40:05.696Z [RTM] info: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+Runtime error in thread 0dad5e2d-8802-421c-a226-e03a843cee0d@{}%{}
+
+  2 | 1 + 2n
+    |     ^
+
+>> value 2n is not a number
+>> at tests/rt/neg/bigint/mixed-arith.trp:2:5

@@ -1,0 +1,8 @@
+2026-07-18T22:40:05.750Z [RTM] info: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+Runtime error in thread 0a8ca5de-cf90-4d17-b22c-99a7eae3eaef@{}%{}
+
+  2 | bigFromInt 1.5
+    | ^
+
+>> bigFromInt requires an exactly-representable integer, got 1.5
+>> at tests/rt/neg/bigint/fromint-fractional.trp:2:1

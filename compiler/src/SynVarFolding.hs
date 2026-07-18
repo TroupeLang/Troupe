@@ -10,38 +10,51 @@
 -- patterns. After this pass the program carries no declaration groups and
 -- no 'S.ConPattern'.
 --
--- Datatype imports are out of scope for this milestone: this pass handles
--- locally declared datatype groups only. Qualified (dotted) type names and
--- three-segment constructor occurrences are rejected with a
--- "datatype imports are not yet supported" error.
+-- Datatype imports (spec §10): the interface of an imported library carries,
+-- per exported datatype group, its group hash and canonical form. Those enter
+-- the resolution environment as groups declared BEFORE all local groups (local
+-- groups may shadow them). Imported constructors are usable bare (for
+-- unqualified imports) and through the qualified forms @L.c@ / @L.t.c@, and
+-- imported datatypes may be referenced in @of@ clauses bare (unqualified) or as
+-- @L.t@. The compiler recomputes each imported group's hash from its canonical
+-- form, so the interface's stored hash is documentation only; a corrupted
+-- interface can only produce non-matching tags, never a forged identity.
 --
--- See @_dev_planning/syntactic-variants/normalization.md@ (§2–§6).
-module SynVarFolding ( foldProg ) where
+-- The pass returns, alongside the rewritten program: the (hash, canonical form)
+-- of each local group in declaration order (for the library @.exports@ file and
+-- the library's embedded exported-hash list), and the group hashes consumed per
+-- imported library (for the load-time version-skew check, spec §10).
+module SynVarFolding ( foldProg, FoldResult(..) ) where
 
 import           Direct
-import           Basics (VarName)
+import           Basics (VarName, Imports(..), ImportDecl(..), ImportMode(..),
+                         LibName(..))
 import qualified SynVarHash as H
 import           TroupePositionInfo (Located(..), PosInf(..), getLoc)
 
 import           Control.Monad (forM, forM_, when, foldM)
 import           Control.Monad.State
 import           Control.Monad.Except
-import           Data.List (elemIndex, nub, nubBy, (\\), intercalate)
+import           Data.List (elemIndex, nub, nubBy, (\\), intercalate, sort)
 import qualified Data.Map.Strict as Map
 import           Data.Map.Strict (Map)
+import qualified Data.Set as Set
+import           Data.Set (Set)
 import qualified Data.Graph as Graph
 
 ------------------------------------------------------------
 -- Environment
 ------------------------------------------------------------
 
--- | A resolved constructor: its runtime tag, whether it is nullary, and the
--- datatype / constructor names (kept for diagnostics).
+-- | A resolved constructor: its runtime tag, whether it is nullary, the
+-- datatype / constructor names (kept for diagnostics), and its group hash
+-- (used to record cross-library consumption for the load-time skew check).
 data CtorRes = CtorRes
-  { crTag      :: String
-  , crNullary  :: Bool
-  , crDatatype :: String
-  , crName     :: String
+  { crTag       :: String
+  , crNullary   :: Bool
+  , crDatatype  :: String
+  , crName      :: String
+  , crGroupHash :: String
   }
 
 -- | A resolved datatype: its declared type parameters, its group hash, and
@@ -53,54 +66,175 @@ data DtEntry = DtEntry
   }
 
 -- | The resolution environment accumulated across declaration groups.
+--
+-- @envDts@ / @envBare@ hold the bare-visible datatypes and constructors:
+-- locally declared ones and those from unqualified imports. @envMod@ /
+-- @envModCtors@ hold every import's datatypes and constructors keyed by the
+-- import's qualifier (its alias, else the library name), enabling the
+-- @L.t@ / @L.t.c@ / @L.c@ forms for both qualified and unqualified imports.
 data Env = Env
-  { envDts  :: Map String DtEntry     -- ^ datatype name -> entry
-  , envBare :: Map String [CtorRes]   -- ^ bare constructor name -> candidates
+  { envDts            :: Map String DtEntry            -- ^ datatype name -> entry
+  , envBare           :: Map String [CtorRes]          -- ^ bare constructor name -> candidates
+  , envMod            :: Map String (Map String DtEntry)
+      -- ^ qualifier -> (datatype name -> entry)
+  , envModCtors       :: Map String (Map String [CtorRes])
+      -- ^ qualifier -> (constructor name -> candidates)
+  , envImportedHashes :: Set String                    -- ^ all imported group hashes
+  , envHashToLib      :: Map String String             -- ^ imported group hash -> library name
   }
-
-emptyEnv :: Env
-emptyEnv = Env Map.empty Map.empty
 
 -- | Fixed primitive type names (spec §2 / §5).
 primNames :: [String]
 primNames = ["int", "float", "bigint", "bool", "string", "unit"]
 
 ------------------------------------------------------------
--- Fresh-name supply
+-- Rewriting monad
 ------------------------------------------------------------
 
--- | Rewriting runs in a state monad supplying fresh, collision-safe names
--- for the constructor lambdas. Names are prefixed with @$@, which the lexer
--- never produces for source identifiers (matching @$arg@, @$input@, etc. in
--- CaseElimination), so they cannot capture user bindings.
-type RW = StateT Int (Except String)
+-- | Rewriting runs in a state monad supplying fresh, collision-safe names for
+-- the constructor lambdas and accumulating the set of imported group hashes
+-- consumed by constructor occurrences. Fresh names are prefixed with @$@,
+-- which the lexer never produces for source identifiers, so they cannot
+-- capture user bindings.
+type RW = StateT RWState (Except String)
+
+data RWState = RWState { rwFresh :: Int, rwConsumed :: Set String }
 
 fresh :: RW VarName
 fresh = do
-  n <- get
-  put (n + 1)
-  return ("$synvar" ++ show n)
+  st <- get
+  put st { rwFresh = rwFresh st + 1 }
+  return ("$synvar" ++ show (rwFresh st))
+
+-- | Record that a constructor from an imported group was used, so the
+-- consumed-hash list can drive the load-time version-skew check (spec §10).
+noteConsumed :: Env -> CtorRes -> RW ()
+noteConsumed env res =
+  when (crGroupHash res `Set.member` envImportedHashes env) $
+    modify (\st -> st { rwConsumed = Set.insert (crGroupHash res) (rwConsumed st) })
 
 ------------------------------------------------------------
 -- Entry point
 ------------------------------------------------------------
 
+-- | The result of folding: the rewritten program, each local group's
+-- (hash, canonical form) in declaration order, and the group hashes consumed
+-- per imported library.
+data FoldResult = FoldResult
+  { frProg     :: Prog
+  , frLocal    :: [(String, String)]      -- ^ (group hash, canonical form), declaration order
+  , frConsumed :: [(String, [String])]    -- ^ (library name, consumed group hashes)
+  }
+
 -- | Fold declaration groups into tags and rewrite the program term. The
 -- returned program has an empty group list and no constructor patterns.
-foldProg :: Prog -> Except String Prog
+foldProg :: Prog -> Except String FoldResult
 foldProg (Prog imports groups term) = do
-  env   <- processGroups emptyEnv groups
-  term' <- evalStateT (rewriteLTerm env term) 0
-  return (Prog imports [] term')
+  env0                  <- buildImportEnv imports
+  (env, localInfos, tyC) <- processGroups env0 groups
+  (term', st) <- runStateT (rewriteLTerm env term) (RWState 0 Set.empty)
+  let consumed = Set.union tyC (rwConsumed st)
+      byLib    = groupConsumedByLib env consumed
+  return FoldResult { frProg     = Prog imports [] term'
+                    , frLocal    = localInfos
+                    , frConsumed = byLib }
+
+-- | Group consumed hashes by the library that supplied them, dropping
+-- libraries whose datatypes were not consumed. Hashes and libraries are sorted
+-- for deterministic output.
+groupConsumedByLib :: Env -> Set String -> [(String, [String])]
+groupConsumedByLib env consumed =
+  let byLib = Map.fromListWith (++)
+                [ (lib, [h])
+                | h <- Set.toList consumed
+                , Just lib <- [Map.lookup h (envHashToLib env)] ]
+  in [ (lib, sort hs) | (lib, hs) <- Map.toAscList byLib ]
+
+------------------------------------------------------------
+-- Imported datatype interface (spec §10)
+------------------------------------------------------------
+
+-- | The name under which an import is qualified: its alias if present, else the
+-- library name. Mirrors the value-import scoping in 'Core.mapFromImports'.
+importQualifier :: ImportDecl -> String
+importQualifier imp = case importAlias imp of
+  Just (LibName a) -> a
+  Nothing          -> let LibName l = importLib imp in l
+
+-- | Build the initial environment from the imported libraries' datatype
+-- interfaces. Imported groups are treated as declared before every local
+-- group. The stored interface hash is ignored; the hash is recomputed from the
+-- canonical form (spec §10: the interface is a cache with no authority).
+buildImportEnv :: Imports -> Except String Env
+buildImportEnv (Imports imports) = foldM addImport emptyEnv imports
+  where
+    emptyEnv = Env Map.empty Map.empty Map.empty Map.empty Set.empty Map.empty
+
+    addImport env imp = do
+      let LibName lib = importLib imp
+          qual        = importQualifier imp
+          bareVisible = importMode imp == Unqualified
+      -- Each interface line is one group's canonical form; parse it and
+      -- build the datatype entries, recomputing the group's hash.
+      dtEntries <- forM (importDatatypes imp) $ \(_stored, canon) ->
+        case H.parseGroup canon of
+          Left err -> throwError ("malformed datatype interface for library '"
+                                   ++ lib ++ "': " ++ err ++ " in: " ++ canon)
+          Right grp -> return (entriesOfGroup grp)
+      let entries = concat dtEntries        -- [(dtName, DtEntry)]
+          hashes  = [ deGroupHash e | (_, e) <- entries ]
+          env1 = env
+            { envImportedHashes = foldr Set.insert (envImportedHashes env) hashes
+            , envHashToLib = foldr (\h -> Map.insertWith (\_ old -> old) h lib)
+                                   (envHashToLib env) hashes
+            , envMod = Map.insertWith Map.union qual (Map.fromList entries) (envMod env)
+            , envModCtors = Map.insertWith (Map.unionWith (++)) qual
+                              (ctorMapOf entries) (envModCtors env)
+            }
+      -- Unqualified imports also make their datatypes and constructors visible
+      -- bare, as groups declared before all local groups.
+      return $ if bareVisible
+               then env1 { envDts  = Map.union (envDts env1) (Map.fromList entries)
+                         , envBare = Map.unionWith (++) (envBare env1)
+                                       (bareCtorsOf entries) }
+               else env1
+
+    -- | Turn a parsed group into datatype entries. The group's hash is
+    -- recomputed here from its canonical form.
+    entriesOfGroup :: H.Group -> [(String, DtEntry)]
+    entriesOfGroup grp =
+      let h = H.groupHash grp
+      in [ (dtName, DtEntry (replicate nparams "_") h ctors)
+         | (dtName, nparams, cs) <- grp
+         , let ctors = Map.fromList
+                 [ (cn, CtorRes (H.constructorTag h dtName cn)
+                                (payload == Nothing) dtName cn h)
+                 | (cn, payload) <- cs ] ]
+
+    ctorMapOf :: [(String, DtEntry)] -> Map String [CtorRes]
+    ctorMapOf entries = Map.fromListWith (++)
+      [ (crName res, [res]) | (_, e) <- entries, res <- Map.elems (deCtors e) ]
+
+    bareCtorsOf :: [(String, DtEntry)] -> Map String [CtorRes]
+    bareCtorsOf = ctorMapOf
 
 ------------------------------------------------------------
 -- Declaration processing
 ------------------------------------------------------------
 
-processGroups :: Env -> [SynDataGroup] -> Except String Env
-processGroups = foldM processGroup
+-- | Process local declaration groups left to right, threading the environment,
+-- the accumulating (hash, canonical form) list, and the set of imported group
+-- hashes consumed through @of@-clause references to imported types.
+processGroups :: Env -> [SynDataGroup]
+              -> Except String (Env, [(String, String)], Set String)
+processGroups env0 = foldM step (env0, [], Set.empty)
+  where
+    step (env, infos, consumed) grp = do
+      (env', info, c) <- processGroup env grp
+      return (env', infos ++ [info], Set.union consumed c)
 
-processGroup :: Env -> SynDataGroup -> Except String Env
+processGroup :: Env -> SynDataGroup
+             -> Except String (Env, (String, String), Set String)
 processGroup env (SynDataGroup decls) = do
   let dtNames = [ (n, dp) | SynDataDecl dp _ n _ <- decls ]
   -- (1) duplicate datatype name within the group: the members are
@@ -132,19 +266,36 @@ processGroup env (SynDataGroup decls) = do
   let dtPos = Map.fromList dtNames
   checkGenuine dtPos resolved
   -- normalize + hash the group
-  let hash = H.groupHash resolved
+  let canon = H.canonicalGroup resolved
+      hash  = H.groupHash resolved
+  -- imported group hashes referenced by this group's payloads are consumed
+  let consumed = Set.fromList
+        [ h | (_, _, ctors) <- resolved, (_, mnf) <- ctors, Just nf <- [mnf]
+            , h <- extHashes nf, h `Set.member` envImportedHashes env ]
   -- extend the environment with this group's datatypes and constructors
   let paramsOf = Map.fromList [ (n, ps) | SynDataDecl _ ps n _ <- decls ]
       newEntries =
         [ (n, DtEntry (Map.findWithDefault [] n paramsOf) hash ctorMap)
         | (n, _, ctors) <- resolved
         , let ctorMap = Map.fromList
-                [ (c, CtorRes (H.constructorTag hash n c) (mnf == Nothing) n c)
+                [ (c, CtorRes (H.constructorTag hash n c) (mnf == Nothing) n c hash)
                 | (c, mnf) <- ctors ] ]
       env' = env { envDts = foldr (\(n, e) -> Map.insert n e) (envDts env) newEntries }
       bareAdds = [ res | (_, e) <- newEntries, res <- Map.elems (deCtors e) ]
       envBare' = foldr (\res -> Map.insertWith (++) (crName res) [res]) (envBare env') bareAdds
-  return env' { envBare = envBare' }
+  return (env' { envBare = envBare' }, (hash, canon), consumed)
+
+-- | Collect the group hashes appearing in @ext@ / @app ... ext@ nodes of a
+-- payload normal form (the imported-type references).
+extHashes :: H.TyNF -> [String]
+extHashes = \case
+  H.Ext h _   -> [h]
+  H.Prod ts   -> concatMap extHashes ts
+  H.App ts tg -> concatMap extHashes ts ++ targetHashes tg
+  _           -> []
+  where
+    targetHashes (H.RExt h _) = [h]
+    targetHashes _            = []
 
 -- | Resolve a surface type expression to its normal form (spec §2 resolution
 -- rules, §4 normal form).
@@ -156,9 +307,7 @@ resolveTy env sameGroup params dtName cpos = go
       Just i  -> return (H.Var i)
       Nothing -> throwHere ("type variable '" ++ v
                              ++ " is not in the parameter list of datatype " ++ dtName)
-    go (STyName q) = case q of
-      [n] -> resolveName n
-      _   -> throwHere "datatype imports are not yet supported"
+    go (STyName q) = resolveName q
     go (STyProd tys) = H.Prod <$> mapM go tys
     go (STyApp args q) = do
       args' <- mapM go args
@@ -167,9 +316,9 @@ resolveTy env sameGroup params dtName cpos = go
     throwHere msg = throwError (at cpos msg)
 
     -- | Resolve an application @t1 ... tk target@. The target is a built-in
-    -- type constructor, a same-group datatype, or a datatype in a previously
-    -- hashed group; the applied argument count must equal its declared
-    -- parameter count.
+    -- type constructor, a same-group datatype, a bare-visible datatype in a
+    -- previously hashed group, or a module-qualified imported datatype (@L.t@);
+    -- the applied argument count must equal its declared parameter count.
     resolveApp k args q = case q of
       [n] -> case Map.lookup n sameGroup of
         Just pc -> checkArity n pc >> return (H.App args (H.RIn n))
@@ -180,7 +329,12 @@ resolveTy env sameGroup params dtName cpos = go
             | n == "list" && k == 1 -> return (H.App args (H.RBuiltin "list"))
             | n == "list"           -> throwHere "the built-in type list expects 1 argument"
             | otherwise             -> throwHere ("unbound type name: " ++ n)
-      _ -> throwHere "datatype imports are not yet supported"
+      [m, t] -> do
+        e <- lookupQualifiedTy m t
+        let pc = length (deParams e)
+        checkArity t pc
+        return (H.App args (H.RExt (deGroupHash e) t))
+      _ -> throwHere ("malformed qualified type name: " ++ intercalate "." q)
       where
         checkArity n pc
           | pc == 0   = throwHere ("datatype " ++ n ++ " takes no type arguments")
@@ -190,10 +344,11 @@ resolveTy env sameGroup params dtName cpos = go
 
     -- Resolution order (spec §2): the nearest datatype in scope shadows a
     -- primitive or built-in of the same name. Same-group members are nearest,
-    -- then the accumulated environment (where later groups have overwritten
-    -- earlier same-named datatypes), then the fixed primitive / built-in set,
-    -- then unbound.
-    resolveName n = case Map.lookup n sameGroup of
+    -- then the accumulated environment (bare-visible local + unqualified
+    -- imports, later groups winning), then the fixed primitive / built-in set,
+    -- then unbound. A qualified name @L.t@ resolves through the import
+    -- qualifier only.
+    resolveName [n] = case Map.lookup n sameGroup of
       Just pc
         | pc > 0    -> throwHere ("datatype " ++ n ++ " expects " ++ arity pc)
         | otherwise -> return (H.In n)
@@ -208,6 +363,20 @@ resolveTy env sameGroup params dtName cpos = go
           | n == "list" ->
               throwHere "the built-in type list must be applied to an argument (e.g. int list)"
           | otherwise -> throwHere ("unbound type name: " ++ n)
+    resolveName [m, t] = do
+      e <- lookupQualifiedTy m t
+      if not (null (deParams e))
+        then throwHere ("datatype " ++ m ++ "." ++ t ++ " expects "
+                         ++ arity (length (deParams e)))
+        else return (H.Ext (deGroupHash e) t)
+    resolveName q = throwHere ("malformed qualified type name: " ++ intercalate "." q)
+
+    -- | Resolve @m.t@ against the imported datatypes of qualifier @m@.
+    lookupQualifiedTy m t = case Map.lookup m (envMod env) of
+      Nothing -> throwHere ("no imported library qualified as " ++ m)
+      Just dts -> case Map.lookup t dts of
+        Nothing -> throwHere ("library " ++ m ++ " has no datatype " ++ t)
+        Just e  -> return e
 
     -- | Render an expected type-argument count, e.g. @1 type argument@ /
     -- @2 type arguments@.
@@ -328,25 +497,56 @@ rewriteLambda env (Lambda ps b) =
 rewriteVar :: Env -> PosInf -> VarName -> RW Term
 rewriteVar env pos x = case Map.lookup x (envBare env) of
   Just cands -> do res <- uniqueBare pos x cands
+                   noteConsumed env res
                    ctorExpr pos res
   Nothing    -> return (Var x)
 
--- | Reinterpret @t.f@ as a datatype-qualified constructor when @t@ names a
--- datatype in scope; otherwise it stays a record projection. A three-segment
--- @m.t.c@ whose middle segment is a datatype with constructor @c@ is a
--- datatype-import error.
+-- | Reinterpret dotted expressions as constructor occurrences where a segment
+-- names a datatype or an import qualifier (spec §2, §10):
+--
+--   * @t.c@   — datatype-qualified constructor (t a bare-visible datatype);
+--   * @L.c@   — module-qualified bare constructor (L an import qualifier);
+--   * @L.t.c@ — module-qualified, datatype-qualified constructor.
+--
+-- Anything else stays a record projection.
 rewriteProj :: Env -> PosInf -> LTerm -> FieldName -> RW Term
 rewriteProj env pos e f = case e of
+  -- t.c where t is a bare-visible datatype: definitively a constructor form,
+  -- so a missing constructor is an error (a datatype name is not a value).
   Loc _ (Var t)
     | Just entry <- Map.lookup t (envDts env) ->
         case Map.lookup f (deCtors entry) of
-          Just res -> ctorExpr pos res
+          Just res -> noteConsumed env res >> ctorExpr pos res
           Nothing  -> throwError (at pos ("datatype " ++ t ++ " has no constructor " ++ f))
-  Loc _ (ProjField (Loc _ (Var _)) t)
-    | Just entry <- Map.lookup t (envDts env)
-    , Map.member f (deCtors entry) ->
-        throwError (at pos "datatype imports are not yet supported")
+  -- L.c where L is an import qualifier and c is one of its constructors. The
+  -- qualifier namespace overlaps value/module access (e.g. Number.intDiv), so
+  -- this fires only when c is actually a constructor of L; otherwise it falls
+  -- through to ordinary projection. A constructor ambiguous across L's
+  -- datatypes is a use-site error (uniqueBare).
+  Loc _ (Var m)
+    | Just cands <- moduleCands env m f -> do
+        res <- uniqueBare pos f cands
+        noteConsumed env res
+        ctorExpr pos res
+  -- L.t.c where L is an import qualifier and t one of its datatypes: a
+  -- datatype has no further projection, so once L and t match this is
+  -- definitively a constructor form and a missing constructor is an error.
+  -- (When t is not a datatype of L, e.g. L.value.field, this falls through.)
+  Loc _ (ProjField (Loc _ (Var m)) t)
+    | Just dts <- Map.lookup m (envMod env)
+    , Just entry <- Map.lookup t dts ->
+        case Map.lookup f (deCtors entry) of
+          Just res -> noteConsumed env res >> ctorExpr pos res
+          Nothing  -> throwError (at pos ("datatype " ++ m ++ "." ++ t
+                                          ++ " has no constructor " ++ f))
   _ -> ProjField <$> rewriteLTerm env e <*> pure f
+
+-- | The candidates for a module-qualified bare constructor @m.f@: the
+-- constructors named @f@ among the datatypes of import qualifier @m@. Returns
+-- 'Nothing' when @m@ is not a qualifier or @f@ is not one of its constructors,
+-- so callers fall through to value/record projection.
+moduleCands :: Env -> String -> String -> Maybe [CtorRes]
+moduleCands env m f = Map.lookup m (envModCtors env) >>= Map.lookup f
 
 -- | Build the expression for a constructor occurrence: a tagged 1-tuple for a
 -- nullary constructor, or a unary lambda that tags its argument otherwise.
@@ -392,6 +592,7 @@ rewritePat' env pos = \case
     | Map.member x (envDts env) -> throwError (at pos (x ++ " is a datatype name"))
     | otherwise -> case Map.lookup x (envBare env) of
         Just cands -> do res <- uniqueBare pos x cands
+                         noteConsumed env res
                          ctorPat env pos res Nothing
         Nothing    -> return (VarPattern x)
   ValPattern l        -> return (ValPattern l)
@@ -414,19 +615,40 @@ rewriteField env pos (f, Nothing) = do
   return (f, Nothing)
 rewriteField env _ (f, Just p) = (,) f . Just <$> rewritePat env p
 
+-- | A constructor pattern. Segments (spec §2, §10):
+--
+--   * @[c]@       — bare constructor;
+--   * @[t, c]@    — datatype-qualified (t a bare-visible datatype) or
+--                   module-qualified bare (t an import qualifier);
+--   * @[m, t, c]@ — module-qualified, datatype-qualified.
 rewriteConPat :: Env -> PosInf -> QName -> Maybe LDeclPattern -> RW DeclPattern
 rewriteConPat env pos q mp = case q of
-  [c]    -> case Map.lookup c (envBare env) of
-              Just cands -> do res <- uniqueBare pos c cands
-                               ctorPat env pos res mp
-              Nothing    -> throwError (at pos ("unbound constructor: " ++ c))
-  [t, c] -> case Map.lookup t (envDts env) of
-              Just entry -> case Map.lookup c (deCtors entry) of
-                Just res -> ctorPat env pos res mp
-                Nothing  -> throwError (at pos ("datatype " ++ t ++ " has no constructor " ++ c))
-              Nothing -> throwError (at pos ("datatype " ++ t ++ " is not in scope"))
-  (_:_:_:_) -> throwError (at pos "datatype imports are not yet supported")
-  _         -> throwError (at pos "malformed constructor pattern")
+  [c] -> case Map.lookup c (envBare env) of
+    Just cands -> do res <- uniqueBare pos c cands
+                     noteConsumed env res
+                     ctorPat env pos res mp
+    Nothing    -> throwError (at pos ("unbound constructor: " ++ c))
+  [t, c]
+    | Just entry <- Map.lookup t (envDts env) ->
+        case Map.lookup c (deCtors entry) of
+          Just res -> noteConsumed env res >> ctorPat env pos res mp
+          Nothing  -> throwError (at pos ("datatype " ++ t ++ " has no constructor " ++ c))
+    | Just ctors <- Map.lookup t (envModCtors env) ->
+        case Map.lookup c ctors of
+          Just cands -> do res <- uniqueBare pos c cands
+                           noteConsumed env res
+                           ctorPat env pos res mp
+          Nothing    -> throwError (at pos ("library " ++ t ++ " has no constructor " ++ c))
+    | otherwise -> throwError (at pos ("datatype " ++ t ++ " is not in scope"))
+  [m, t, c] -> case Map.lookup m (envMod env) of
+    Nothing  -> throwError (at pos ("no imported library qualified as " ++ m))
+    Just dts -> case Map.lookup t dts of
+      Nothing    -> throwError (at pos ("library " ++ m ++ " has no datatype " ++ t))
+      Just entry -> case Map.lookup c (deCtors entry) of
+        Just res -> noteConsumed env res >> ctorPat env pos res mp
+        Nothing  -> throwError (at pos ("datatype " ++ m ++ "." ++ t
+                                        ++ " has no constructor " ++ c))
+  _ -> throwError (at pos "malformed constructor pattern")
 
 -- | Build the tuple pattern for a constructor pattern, enforcing arity.
 ctorPat :: Env -> PosInf -> CtorRes -> Maybe LDeclPattern -> RW DeclPattern

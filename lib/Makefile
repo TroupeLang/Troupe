@@ -11,6 +11,7 @@ build:
 	$(COMPILER) ./ThreadUtil.trp -l
 	$(COMPILER) ./timeout.trp -l
 	$(COMPILER) ./Result.trp -l
+	$(COMPILER) ./VariantsDemo.trp -l
 
   # Dependency on `Number`
 	$(COMPILER) ./Duration.trp -l

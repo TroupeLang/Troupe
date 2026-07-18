@@ -119,9 +119,16 @@ instance Serialize ImportMode
 data ImportDecl = ImportDecl
   { importLib      :: LibName          -- Original library name
   , importAlias    :: Maybe LibName    -- Optional alias (from "as X")
-  , importExports  :: Maybe [VarName]  -- Exports from .exports file (filled by ProcessImports)
+  , importExports  :: Maybe [VarName]  -- Value exports from .exports file (filled by ProcessImports)
   , importSelected :: Maybe [VarName]  -- Selective imports (user-specified)
   , importMode     :: ImportMode       -- Qualified | Unqualified
+  , importDatatypes :: [(VarName, VarName)]
+      -- ^ Datatype groups exported by the library, as (group hash, canonical
+      -- form) pairs in declaration order (dependencies precede dependents).
+      -- Filled by ProcessImports from the @datatype@ lines of the @.exports@
+      -- file; empty until then and for libraries that declare no datatypes.
+      -- Datatypes are imported wholesale, independent of 'importSelected'
+      -- (they are compile-time only).
   } deriving (Eq, Show, Ord, Generic)
 
 instance Serialize ImportDecl

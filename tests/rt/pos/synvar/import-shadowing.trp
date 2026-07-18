@@ -1,0 +1,19 @@
+(* A local datatype named `color` shadows the imported one in the type
+   environment (lexical shadowing, nearest declaration wins): the `of color`
+   in `ink` resolves to the LOCAL color, not VariantsDemo's. The local
+   constructors (CYAN/MAGENTA/YELLOW) do not clash with the imported ones
+   (RED/GREEN/BLUE), so they are used bare; the imported color is still
+   reachable through the module qualifier, so both coexist. *)
+import VariantsDemo
+
+datatype color = CYAN | MAGENTA | YELLOW
+datatype ink = INK of color
+
+let val i = INK CYAN
+    fun shade (INK CYAN)    = "cyan"
+      | shade (INK MAGENTA) = "magenta"
+      | shade (INK YELLOW)  = "yellow"
+in print (shade i);
+   print (shade (INK YELLOW));
+   print (describe VariantsDemo.RED)   (* imported color, via the qualifier *)
+end

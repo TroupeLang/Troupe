@@ -1,0 +1,20 @@
+(* Imported constructors used bare, module-qualified (L.c), and
+   module-and-datatype-qualified (L.t.c), in both expressions and patterns.
+   The tags come from VariantsDemo's compiled code; matching is string
+   equality, so the library need not be called into. *)
+import VariantsDemo
+
+let fun kind (CIRCLE _)            = "circle"      (* bare pattern *)
+      | kind (VariantsDemo.RECT _) = "rect"        (* module-qualified pattern *)
+
+    val s1 = CIRCLE 3                     (* bare expression *)
+    val s2 = VariantsDemo.RECT (2, 5)     (* module-qualified expression *)
+    val s3 = VariantsDemo.shape.CIRCLE 1  (* module + datatype qualified *)
+    val c  = VariantsDemo.color.BLUE
+in print (area s1);
+   print (area s2);
+   print (kind s1);
+   print (kind s2);
+   print (kind s3);
+   print (describe c)
+end

@@ -67,10 +67,51 @@ export async function loadLibsAsync(obj, rtObj) {
             let libf = table[i].val[1].val
             if (name == decl) {
                 // We store the resulting function in the object that was provided
-                // to us as an argument 
+                // to us as an argument
                 obj.libs[key] = libf;
                 __libcache[key] = libf;
                 break;
+            }
+        }
+    }
+
+    // Datatype version-skew check (normalization.md §10). Enforced here, in the
+    // single universal library-load path, but kept as a self-contained pass so
+    // it is easy to locate and reason about independently of value linking.
+    await checkConsumedDatatypes(obj, rtObj)
+}
+
+// Cache of a library's exported datatype group hashes, keyed by library name.
+const __datatypeHashCache: Record<string, string[]> = {}
+
+// Read the exported datatype group hashes a library embeds in its compiled
+// artifact (this.__datatypeHashes, set by the compiler for library builds).
+async function loadExportedDatatypeHashes(libname: string, rtObj): Promise<string[]> {
+    if (__datatypeHashCache[libname]) return __datatypeHashCache[libname]
+    let filename = getTroupeRoot() + "/lib/out/" + libname + ".js"
+    let input = await readFile(filename, 'utf8')
+    let Lib: any = new Function('rt', input)
+    let libinstance = new Lib(rtObj)
+    let hashes = libinstance.__datatypeHashes || []
+    __datatypeHashCache[libname] = hashes
+    return hashes
+}
+
+// Verify that every datatype group hash the artifact consumed at compile time
+// is still among the loaded library's exported group hashes (membership, not
+// equality: library extension is harmless, a changed consumed group is not).
+async function checkConsumedDatatypes(obj, rtObj) {
+    let consumed = obj.__consumedDatatypeHashes
+    if (!consumed) return
+    for (let libname of Object.keys(consumed)) {
+        let exported = await loadExportedDatatypeHashes(libname, rtObj)
+        for (let h of consumed[libname]) {
+            if (!exported.includes(h)) {
+                throw new Error(
+                    "datatype version skew: library '" + libname + "' no longer exports a "
+                    + "datatype group that was consumed at compile time (group hash " + h
+                    + "). The importer was compiled against a different version of '" + libname
+                    + "'; recompile it against the current library.")
             }
         }
     }

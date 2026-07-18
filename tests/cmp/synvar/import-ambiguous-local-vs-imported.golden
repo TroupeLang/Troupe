@@ -1,0 +1,1 @@
+tests/cmp/synvar/import-ambiguous-local-vs-imported.trp:9:13: constructor RED is ambiguous: declared in datatypes hue, color; qualify it, e.g. hue.RED

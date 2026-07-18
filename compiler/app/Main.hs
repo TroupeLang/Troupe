@@ -130,9 +130,12 @@ process flags fname input = do
                         writeFileD "out/out.syntax" (showIndent 2 prog)
                         putStrLn (showIndent 2 prog)
       ------------------------------------------------------
-      folded <- case runExcept (SVF.foldProg prog) of
-        Right p -> return p
+      foldRes <- case runExcept (SVF.foldProg prog) of
+        Right r -> return r
         Left s -> die s
+      let folded         = SVF.frProg foldRes
+          localGroups    = SVF.frLocal foldRes      -- [(group hash, canonical form)]
+          consumedRecord = SVF.frConsumed foldRes   -- [(library, consumed hashes)]
       prog' <- case runExcept (C.trans compileMode folded) of
         Right p -> return p
         Left s -> die s
@@ -231,11 +234,16 @@ process flags fname input = do
                                              ++ BS.unpack mapBase64 ++ "\n"
                          in jsWithMap ++ inlineComment
                     else stackjs
-      writeFile outPath finalJs
+      -- Embed the datatype records (spec §10): a library carries its own
+      -- exported group hashes; any artifact that consumed imported datatypes
+      -- carries the per-library consumed hashes, checked at load time.
+      let finalJs' = injectDatatypeRecords compileMode (map fst localGroups)
+                                           consumedRecord finalJs
+      writeFile outPath finalJs'
 
       -- case compileMode of Library -> ...
       case exports of Nothing -> return ()
-                      Just es -> writeExports outPath es
+                      Just es -> writeExports outPath es (map snd localGroups) (map fst localGroups)
 
       ----- EPILOGUE --------------------------------------
       when verbose printHr
@@ -282,9 +290,55 @@ outFile flags fname = case List.find isOutFlag flags of
                                , if takeExtension f == ".trp" then takeBaseName f else takeFileName f
                                ]
 
-writeExports path exports =
+-- | Write the @.exports@ interface: one value name per line, followed by one
+-- @datatype <group-hash> <canonical-form>@ line per exported datatype group in
+-- declaration order (spec §10). A library exports all its header datatype
+-- groups.
+writeExports path names canons hashes =
   let path' = if takeExtension path == ".js" then dropExtension path else path
-  in writeFileD (path' ++ ".exports") (intercalate "\n" exports)
+      dtLines = [ "datatype " ++ h ++ " " ++ c | (h, c) <- zip hashes canons ]
+  in writeFileD (path' ++ ".exports") (intercalate "\n" (names ++ dtLines))
+
+--------------------------------------------------------------------------------
+----- DATATYPE RECORDS EMBEDDED IN THE COMPILED ARTIFACT (spec §10) ------------
+
+-- | A JS array literal of string hashes.
+jsStringArray :: [String] -> String
+jsStringArray xs = "[" ++ intercalate "," (map quote xs) ++ "]"
+  where quote s = "\"" ++ s ++ "\""
+
+-- | Inject the datatype records into the generated JS. A library body (which
+-- executes with @this@ bound to the fresh namespace instance) gains its own
+-- exported-hash list and any consumed-hash record as leading @this.@ statements.
+-- A normal program's records are injected inside its @Top@ constructor body.
+injectDatatypeRecords :: CompileMode -> [String] -> [(String, [String])]
+                      -> String -> String
+injectDatatypeRecords compileMode exportedHashes consumed js =
+  case compileMode of
+    Library -> exportedDecl ++ consumedDecl ++ js
+    _       -> if null consumed
+               then js
+               else replaceFirst "function Top (rt) {"
+                                 ("function Top (rt) {\n" ++ consumedDecl) js
+  where
+    exportedDecl
+      | null exportedHashes = ""
+      | otherwise = "this.__datatypeHashes = " ++ jsStringArray exportedHashes ++ ";\n"
+    consumedDecl
+      | null consumed = ""
+      | otherwise =
+          "this.__consumedDatatypeHashes = {"
+          ++ intercalate "," [ "\"" ++ lib ++ "\":" ++ jsStringArray hs
+                             | (lib, hs) <- consumed ]
+          ++ "};\n"
+
+-- | Replace the first occurrence of @needle@ in @hay@ with @repl@.
+replaceFirst :: String -> String -> String -> String
+replaceFirst needle repl = go
+  where
+    go s | needle `List.isPrefixOf` s = repl ++ drop (length needle) s
+    go (c:cs) = c : go cs
+    go []     = []
 
 -- Utility functions for printing things out
 hrWidth = 70

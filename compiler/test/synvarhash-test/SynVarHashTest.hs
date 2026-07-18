@@ -233,4 +233,31 @@ main = defaultMain $ testGroup "SynVarHash exact vectors"
         constructorTag hBinop "binop" "ADD"
           @?= hBinop ++ "#binop#ADD"
     ]
+  , testGroup "parse round-trip (parse . render == id on canonical strings)"
+    [ roundTrip "option"  optionGroup
+    , roundTrip "binop"   binopGroup
+    , roundTrip "expr"    exprGroup
+    , roundTrip "mutual"  mutualGroup
+    , roundTrip "cmd"     cmdGroup
+    , roundTrip "box"     boxGroup
+    , roundTrip "item"    itemGroup
+    , roundTrip "intlist" intlistGroup
+    , roundTrip "pair"    pairGroup
+    , roundTrip "pr"      prGroup
+    , roundTrip "tree"    treeGroup
+    ]
   ]
+
+-- | Parsing the canonical string and re-rendering must reproduce it exactly,
+-- and the hash recomputed from the parsed form must match the original. This
+-- pins @parseGroup@ as the inverse of @canonicalGroup@ on canonical input for
+-- every worked vector (products, applications, ext references, built-ins,
+-- multiple type parameters, self-application, mutual recursion).
+roundTrip :: String -> Group -> TestTree
+roundTrip name g = testGroup name
+  [ testCase "canonical" $
+      (canonicalGroup <$> parseGroup canon) @?= Right canon
+  , testCase "hash" $
+      (groupHash <$> parseGroup canon) @?= Right (groupHash g)
+  ]
+  where canon = canonicalGroup g

@@ -1,0 +1,1 @@
+tests/cmp/synvar/import-unknown-constructor.trp:5:31: datatype VariantsDemo.color has no constructor MAUVE

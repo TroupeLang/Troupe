@@ -160,7 +160,7 @@ Prog : ImportDecl TopDecls Expr
          { Prog (Imports $1) $2 $3 }
 
 ImportDecl: import OptQualified OptSelection VAR OptAlias ImportDecl
-              { (ImportDecl (LibName (varTok $4)) $5 Nothing $3 $2) : $6 }
+              { (ImportDecl (LibName (varTok $4)) $5 Nothing $3 $2 []) : $6 }
           | { [] }
 
 OptQualified : qualified  { Qualified }

@@ -25,6 +25,8 @@ module SynVarHash
   , canonicalGroup
   , groupHash
   , constructorTag
+    -- * Parsing (inverse of 'canonicalGroup')
+  , parseGroup
     -- * Building blocks (exposed for testing)
   , base32hexEncode
   ) where
@@ -109,6 +111,94 @@ canonicalGroup :: Group -> String
 canonicalGroup dts =
   sexp ("group" : map renderDt (sortOn dtName dts))
   where dtName (n, _, _) = n
+
+------------------------------------------------------------
+-- Parsing (inverse of the canonical encoding, spec section 5)
+------------------------------------------------------------
+
+-- | A raw s-expression: an atom or a parenthesized node. Intermediate
+-- representation for parsing the canonical form.
+data Sx = SAtom String | SNode [Sx]
+
+-- | Tokenize the canonical ASCII s-expression. Parentheses are single-character
+-- tokens; every other token is a maximal run of non-space, non-parenthesis
+-- characters (identifiers, hashes, and integers, which by construction contain
+-- no spaces or parentheses). Single spaces separate tokens and are discarded.
+tokenize :: String -> [String]
+tokenize [] = []
+tokenize (c:cs)
+  | c == '('  = "(" : tokenize cs
+  | c == ')'  = ")" : tokenize cs
+  | c == ' '  = tokenize cs
+  | otherwise = let (a, rest) = span (\x -> x /= '(' && x /= ')' && x /= ' ') (c:cs)
+                in a : tokenize rest
+
+parseSx :: [String] -> Either String (Sx, [String])
+parseSx ("(":ts) = do (kids, ts') <- parseNodes ts
+                      return (SNode kids, ts')
+parseSx (")":_)  = Left "unexpected ')'"
+parseSx (t:ts)   = Right (SAtom t, ts)
+parseSx []       = Left "unexpected end of input"
+
+parseNodes :: [String] -> Either String ([Sx], [String])
+parseNodes (")":ts) = Right ([], ts)
+parseNodes []       = Left "unterminated '('"
+parseNodes ts       = do (x, ts')   <- parseSx ts
+                         (xs, ts'') <- parseNodes ts'
+                         return (x:xs, ts'')
+
+-- | Parse a canonical group string back into a 'Group'. Inverse of
+-- 'canonicalGroup': @parseGroup (canonicalGroup g) == Right g'@ where @g'@ is
+-- @g@ with members and constructors in canonical (sorted) order. The interface
+-- reader recomputes the hash from the parsed form, so this parser is not asked
+-- to recover any hash from the surrounding @datatype@ line.
+parseGroup :: String -> Either String Group
+parseGroup s = do
+  (sx, rest) <- parseSx (tokenize s)
+  case rest of
+    [] -> sxGroup sx
+    _  -> Left "trailing tokens after group"
+
+sxGroup :: Sx -> Either String Group
+sxGroup (SNode (SAtom "group" : dts)) = mapM sxDt dts
+sxGroup _ = Left "expected a (group ...) node"
+
+sxDt :: Sx -> Either String Datatype
+sxDt (SNode (SAtom "dt" : SAtom name : SAtom np : ctors)) = do
+  n  <- readInt np
+  cs <- mapM sxCtor ctors
+  return (name, n, cs)
+sxDt _ = Left "expected a (dt ...) node"
+
+sxCtor :: Sx -> Either String Constructor
+sxCtor (SNode [SAtom "ctor", SAtom name])     = Right (name, Nothing)
+sxCtor (SNode [SAtom "ctor", SAtom name, ty]) = do t <- sxTy ty; return (name, Just t)
+sxCtor _ = Left "expected a (ctor ...) node"
+
+sxTy :: Sx -> Either String TyNF
+sxTy (SNode [SAtom "var", SAtom i])          = Var <$> readInt i
+sxTy (SNode [SAtom "prim", SAtom p])         = Right (Prim p)
+sxTy (SNode [SAtom "in", SAtom n])           = Right (In n)
+sxTy (SNode [SAtom "ext", SAtom h, SAtom n]) = Right (Ext h n)
+sxTy (SNode (SAtom "prod" : tys))
+  | length tys >= 2                          = Prod <$> mapM sxTy tys
+sxTy (SNode (SAtom "app" : rest))
+  | length rest >= 2                         = do
+      as  <- mapM sxTy (init rest)
+      tgt <- sxTarget (last rest)
+      return (App as tgt)
+sxTy _ = Left "malformed type node"
+
+sxTarget :: Sx -> Either String TyRef
+sxTarget (SNode [SAtom "builtin", SAtom n])     = Right (RBuiltin n)
+sxTarget (SNode [SAtom "in", SAtom n])          = Right (RIn n)
+sxTarget (SNode [SAtom "ext", SAtom h, SAtom n]) = Right (RExt h n)
+sxTarget _ = Left "malformed application target node"
+
+readInt :: String -> Either String Int
+readInt str = case reads str of
+  [(n, "")] -> Right n
+  _         -> Left ("expected an integer, got " ++ show str)
 
 ------------------------------------------------------------
 -- Hashing (spec section 5)

@@ -5,7 +5,8 @@ import Control.Monad (unless)
 import System.Environment
 import System.Exit
 import System.Directory (doesFileExist)
-import Data.String.Utils 
+import Data.String.Utils
+import Data.List (partition)
 
 defaultLibFolder="/lib/out/" 
 defaultBin="/bin/troupec"
@@ -48,15 +49,32 @@ processImport imp = do
     die $ "cannot find library '" ++ lib
         ++ "' (looked in $TROUPE" ++ defaultLibFolder ++ lib ++ ".exports)"
   input <- readFile fname
-  let exports = lines input
-  -- Validate selective imports if specified
+  -- The .exports file carries one value name per line, followed by zero or
+  -- more @datatype <group-hash> <canonical-form>@ lines (normalization.md §10).
+  -- Value names feed value-name scoping (Core); datatype lines feed the
+  -- syntactic-variant resolver (SynVarFolding) and are kept separate here so
+  -- they never leak into the value namespace.
+  let (dtLines, nameLines) = partition (startswith "datatype ") (lines input)
+      datatypes = map parseDatatypeLine dtLines
+  -- Validate selective imports if specified. Selection restricts *value*
+  -- imports only; datatypes are imported wholesale regardless (they are
+  -- compile-time only), so selection is checked against the value names.
   case importSelected imp of
     Just selected -> do
-      let missing = filter (`notElem` exports) selected
+      let missing = filter (`notElem` nameLines) selected
       if null missing
-        then return imp { importExports = Just exports }
+        then return imp { importExports = Just nameLines, importDatatypes = datatypes }
         else die $ "Library '" ++ lib ++ "' does not export: " ++ unwords missing
-    Nothing -> return imp { importExports = Just exports }
+    Nothing -> return imp { importExports = Just nameLines, importDatatypes = datatypes }
+
+-- | Parse a @datatype <group-hash> <canonical-form>@ interface line into its
+-- (hash, canonical-form) pair. The hash is the first whitespace-delimited token
+-- after the keyword; the canonical form is the remainder (it contains spaces).
+parseDatatypeLine :: String -> (String, String)
+parseDatatypeLine line =
+  let rest = drop (length ("datatype " :: String)) line
+      (h, canon) = break (== ' ') rest
+  in (h, dropWhile (== ' ') canon)
 
 
 processImports' :: Imports -> IO Imports

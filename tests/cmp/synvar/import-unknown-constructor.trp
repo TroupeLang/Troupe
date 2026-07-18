@@ -1,0 +1,5 @@
+(* A qualified reference to a constructor the imported datatype does not
+   declare is a static error. *)
+import VariantsDemo
+
+let val x = VariantsDemo.color.MAUVE in print x end

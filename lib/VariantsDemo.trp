@@ -1,0 +1,24 @@
+(* A library exporting datatype groups for the syntactic-variant import tests
+   (normalization.md §10). It declares an enumeration, a parameterized wrapper,
+   and a shape datatype, and exports functions over them. Importers use the
+   constructors bare and qualified, reference the datatypes in their own `of`
+   clauses, and shadow them locally. *)
+
+datatype color = RED | GREEN | BLUE
+datatype 'a box = BOX of 'a
+datatype shape = CIRCLE of int | RECT of int * int
+
+let fun describe RED   = "red"
+      | describe GREEN = "green"
+      | describe BLUE  = "blue"
+
+    fun unbox (BOX x) = x
+
+    fun area (CIRCLE r)     = 3 * r * r
+      | area (RECT (w, h))  = w * h
+
+in [ ("describe", describe)
+   , ("unbox", unbox)
+   , ("area", area)
+   ]
+end

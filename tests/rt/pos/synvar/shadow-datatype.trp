@@ -1,4 +1,4 @@
-(* Pins: a later group re-declaring a datatype name is legal lexical shadowing
+(* A later group re-declaring a datatype name is legal lexical shadowing
    (spec §2). The name 't' resolves to the newest declaration; values built
    under the old declaration remain constructible and matchable through their
    own bare constructor, which stays reachable while unambiguous. A qualified

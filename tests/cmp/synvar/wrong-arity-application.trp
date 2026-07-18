@@ -1,4 +1,4 @@
-(* Pins: applying a parameterized datatype to the wrong number of type
+(* Applying a parameterized datatype to the wrong number of type
    arguments is a static error. *)
 datatype 'a box = BOX of 'a
 datatype bad = B of (int, string) box

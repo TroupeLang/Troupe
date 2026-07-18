@@ -1,4 +1,4 @@
-(* Pins: a syntactic-variant AST for the untyped lambda calculus (extended
+(* A syntactic-variant AST for the untyped lambda calculus (extended
    with if, integer literals and arithmetic), a mutually recursive value/env
    `and` group, a constructor-pattern evaluator, and the call-by-value Z
    combinator built as an AST value.  Deterministic distillation of

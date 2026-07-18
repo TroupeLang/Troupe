@@ -1,4 +1,4 @@
-(* Pins: constructors used as first-class values, held in a list and applied;
+(* Constructors used as first-class values, held in a list and applied;
    printing the resulting applied variants. *)
 datatype shape = CIRCLE of int | SQUARE of int
 

@@ -1,4 +1,4 @@
-(* Pins: a type variable in an `of` clause that is not in the datatype's
+(* A type variable in an `of` clause that is not in the datatype's
    parameter list is a static error. *)
 datatype 'a box = BOX of 'b
 

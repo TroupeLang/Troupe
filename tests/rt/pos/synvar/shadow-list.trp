@@ -1,4 +1,4 @@
-(* Pins: a datatype named 'list' may shadow the built-in list constructor
+(* A datatype named 'list' may shadow the built-in list constructor
    (spec §2). In the payload 'int * list', 'list' resolves to this datatype
    (self-reference), not the built-in. Native list literals are a value-level
    form, untouched by type-name shadowing, so [1,2,3] still works. *)

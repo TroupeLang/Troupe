@@ -1,4 +1,4 @@
-(* Pins: variant values sent between processes -- spawn a worker, send it
+(* Variant values sent between processes -- spawn a worker, send it
    variant messages, and match them with constructor patterns in receive. *)
 datatype msg = PUT of int | DONE
 

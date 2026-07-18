@@ -1,4 +1,4 @@
-(* Pins: two datatypes sharing a constructor name (DEG); the datatype-qualified
+(* Two datatypes sharing a constructor name (DEG); the datatype-qualified
    forms t.C in both expression and pattern position resolve the ambiguity. *)
 datatype celsius    = DEG of int
 datatype fahrenheit = DEG of int

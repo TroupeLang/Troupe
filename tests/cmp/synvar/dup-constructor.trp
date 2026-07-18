@@ -1,4 +1,4 @@
-(* Pins: duplicate constructor name within a single datatype is a static error. *)
+(* Duplicate constructor name within a single datatype is a static error. *)
 datatype color = RED | GREEN | RED
 
 let val x = GREEN in print x end

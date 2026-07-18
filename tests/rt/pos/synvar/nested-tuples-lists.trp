@@ -1,4 +1,4 @@
-(* Pins: variants nested inside tuples and lists, with constructor patterns
+(* Variants nested inside tuples and lists, with constructor patterns
    appearing as bare tuple elements and bare list (cons) elements. *)
 datatype 'a option = NONE | SOME of 'a
 

@@ -1,4 +1,4 @@
-(* Pins: a genuinely mutually recursive `and` group (expr/stmt) and a
+(* A genuinely mutually recursive `and` group (expr/stmt) and a
    recursive walk that crosses between the two types. *)
 datatype expr = NUM of int | DO of stmt
      and stmt = SKIP | RUN of expr | SEQ of stmt * stmt

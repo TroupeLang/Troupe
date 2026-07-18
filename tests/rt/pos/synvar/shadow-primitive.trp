@@ -1,4 +1,4 @@
-(* Pins: a datatype may shadow a primitive type name (spec §2). In 'box' the
+(* A datatype may shadow a primitive type name (spec §2). In 'box' the
    payload 'of int' means the primitive int; a later 'datatype int' shadows it,
    so 'user's 'of int' references that datatype. Type names have no runtime
    semantics -- this test pins that both forms compile and their constructors

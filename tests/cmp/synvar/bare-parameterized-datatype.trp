@@ -1,4 +1,4 @@
-(* Pins: a bare, unapplied reference to a parameterized datatype is a static
+(* A bare, unapplied reference to a parameterized datatype is a static
    error (partial/zero application is ill-formed). *)
 datatype 'a box = BOX of 'a
 datatype bad = B of box

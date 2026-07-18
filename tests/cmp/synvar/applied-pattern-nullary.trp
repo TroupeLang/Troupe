@@ -1,4 +1,4 @@
-(* Pins: applying a pattern argument to a nullary constructor is a static error. *)
+(* Applying a pattern argument to a nullary constructor is a static error. *)
 datatype color = RED | GREEN
 
 let val x = RED

@@ -1,4 +1,4 @@
-(* Pins: a function binding whose name collides with a constructor in scope
+(* A function binding whose name collides with a constructor in scope
    is a static error. *)
 datatype color = RED | GREEN
 

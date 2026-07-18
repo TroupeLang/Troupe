@@ -1,4 +1,4 @@
-(* Pins: using a non-nullary constructor as a bare pattern (no argument) is a
+(* Using a non-nullary constructor as a bare pattern (no argument) is a
    static error. *)
 datatype 'a option = NONE | SOME of 'a
 

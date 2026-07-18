@@ -1,4 +1,4 @@
-(* Pins: an identical re-declaration in a later group is the *same* type
+(* An identical re-declaration in a later group is the *same* type
    (content addressing, spec §5/§10). Both declarations hash identically, so
    their constructors carry identical tags: the bare names RED / GREEN are
    therefore NOT ambiguous (ambiguity is tag-based -- distinct tags would make

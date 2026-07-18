@@ -1,4 +1,4 @@
-(* Pins: applying a datatype that takes no type parameters is a static error. *)
+(* Applying a datatype that takes no type parameters is a static error. *)
 datatype thing = TH
 datatype bad = B of int thing
 

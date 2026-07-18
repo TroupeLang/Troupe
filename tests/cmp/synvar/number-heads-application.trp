@@ -1,4 +1,4 @@
-(* Pins: a numeric literal heading a constructor-application form is a parse
+(* A numeric literal heading a constructor-application form is a parse
    error (numbers are not constructors). *)
 let val x = 0
 in case x of 11 22 => 0 | _ => 1 end

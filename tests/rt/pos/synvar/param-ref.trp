@@ -1,4 +1,4 @@
-(* Pins: a datatype whose payload applies another parameterized datatype
+(* A datatype whose payload applies another parameterized datatype
    (`int box`), constructing and matching the nested variant. *)
 datatype 'a box = BOX of 'a
 datatype item = NOTHING | T of int box

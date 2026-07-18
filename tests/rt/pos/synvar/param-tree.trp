@@ -1,4 +1,4 @@
-(* Pins: a parameterized datatype referencing itself applied under a built-in
+(* A parameterized datatype referencing itself applied under a built-in
    (`('a tree) list`); build a small tree and count its leaves recursively. *)
 datatype 'a tree = LEAF | NODE of ('a tree) list
 

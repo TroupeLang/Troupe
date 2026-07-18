@@ -1,4 +1,4 @@
-(* Pins: a case with a default branch and nested constructor patterns
+(* A case with a default branch and nested constructor patterns
    (a constructor pattern inside another constructor pattern). *)
 datatype 'a option = NONE | SOME of 'a
 

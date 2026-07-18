@@ -1,4 +1,4 @@
-(* Pins: parameterized 'a option, matching SOME/NONE in fun heads, and a
+(* Parameterized 'a option, matching SOME/NONE in fun heads, and a
    wildcard default branch in a case. *)
 datatype 'a option = NONE | SOME of 'a
 

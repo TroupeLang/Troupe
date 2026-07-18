@@ -1,4 +1,4 @@
-(* Pins: an unbound bare type name in an `of` clause is a static error. *)
+(* An unbound bare type name in an `of` clause is a static error. *)
 datatype box = BOX of widget
 
 let val x = BOX 3 in print x end

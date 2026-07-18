@@ -1,4 +1,4 @@
-(* Pins: a constructor used as a first-class function -- mapped over a list. *)
+(* A constructor used as a first-class function -- mapped over a list. *)
 import List
 datatype 'a option = NONE | SOME of 'a
 

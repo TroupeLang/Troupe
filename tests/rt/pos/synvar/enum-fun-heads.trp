@@ -1,4 +1,4 @@
-(* Pins: nullary enum declaration, constructor patterns in fun clause heads,
+(* Nullary enum declaration, constructor patterns in fun clause heads,
    and printing a nullary variant. *)
 datatype signal = RED | YELLOW | GREEN
 

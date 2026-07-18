@@ -1,4 +1,4 @@
-(* Pins: the spec 6.3 evaluator -- a datatype referencing an earlier group,
+(* The spec 6.3 evaluator -- a datatype referencing an earlier group,
    nested constructor patterns with a tuple payload, computing an arithmetic
    result. *)
 datatype binop = ADD | SUB

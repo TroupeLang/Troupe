@@ -26,7 +26,7 @@ import           TroupePositionInfo (Located(..), PosInf, getLoc)
 import           Control.Monad (forM, forM_, when, foldM)
 import           Control.Monad.State
 import           Control.Monad.Except
-import           Data.List (elemIndex, nub, (\\), intercalate)
+import           Data.List (elemIndex, nub, nubBy, (\\), intercalate)
 import qualified Data.Map.Strict as Map
 import           Data.Map.Strict (Map)
 import qualified Data.Graph as Graph
@@ -119,19 +119,13 @@ processGroups = foldM processGroup
 processGroup :: Env -> SynDataGroup -> Except String Env
 processGroup env (SynDataGroup decls) = do
   let dtNames = [ n | SynDataDecl _ n _ <- decls ]
-  -- (1) duplicate datatype name within the group
+  -- (1) duplicate datatype name within the group: the members are
+  -- simultaneously in scope, so there is no "nearest" to prefer. Shadowing a
+  -- name from an earlier group, a primitive, or a built-in is legal lexical
+  -- shadowing (spec §2) and is *not* checked here.
   case firstDup dtNames of
     Just d  -> throwError ("duplicate datatype " ++ d ++ " in declaration group")
     Nothing -> return ()
-  -- (1,3) collisions with earlier groups and with primitive / built-in names
-  forM_ dtNames $ \n -> do
-    when (n `elem` primNames) $
-      throwError ("datatype " ++ n ++ " collides with the primitive type name " ++ n)
-    when (n == "list") $
-      throwError "datatype list collides with the built-in type constructor list"
-    when (Map.member n (envDts env)) $
-      throwError ("duplicate datatype " ++ n
-                  ++ ": redeclaring a datatype from an earlier group is not allowed")
   -- (2) duplicate constructor name within a datatype
   forM_ decls $ \(SynDataDecl _ n ctors) ->
     case firstDup [ c | SynCtor c _ <- ctors ] of
@@ -185,15 +179,15 @@ resolveTy env sameGroup params dtName = go
     -- hashed group; the applied argument count must equal its declared
     -- parameter count.
     resolveApp k args q = case q of
-      ["list"]
-        | k == 1    -> return (H.App args (H.RBuiltin "list"))
-        | otherwise -> throwError "the built-in type list expects 1 argument"
       [n] -> case Map.lookup n sameGroup of
         Just pc -> checkArity n pc >> return (H.App args (H.RIn n))
         Nothing -> case Map.lookup n (envDts env) of
           Just e  -> let pc = length (deParams e)
                      in checkArity n pc >> return (H.App args (H.RExt (deGroupHash e) n))
-          Nothing -> throwError ("unbound type name: " ++ n)
+          Nothing
+            | n == "list" && k == 1 -> return (H.App args (H.RBuiltin "list"))
+            | n == "list"           -> throwError "the built-in type list expects 1 argument"
+            | otherwise             -> throwError ("unbound type name: " ++ n)
       _ -> throwError "datatype imports are not yet supported"
       where
         checkArity n pc
@@ -202,21 +196,26 @@ resolveTy env sameGroup params dtName = go
                                     ++ ", got " ++ show k)
           | otherwise = return ()
 
-    resolveName n
-      | n `elem` primNames = return (H.Prim n)
-      | n == "list" =
-          throwError "the built-in type list must be applied to an argument (e.g. int list)"
-      | otherwise = case Map.lookup n sameGroup of
-          Just pc
-            | pc > 0    -> throwError ("datatype " ++ n ++ " expects " ++ arity pc)
-            | otherwise -> return (H.In n)
-          Nothing -> case Map.lookup n (envDts env) of
-            Just e
-              | not (null (deParams e)) ->
-                  throwError ("datatype " ++ n ++ " expects "
-                              ++ arity (length (deParams e)))
-              | otherwise -> return (H.Ext (deGroupHash e) n)
-            Nothing -> throwError ("unbound type name: " ++ n)
+    -- Resolution order (spec §2): the nearest datatype in scope shadows a
+    -- primitive or built-in of the same name. Same-group members are nearest,
+    -- then the accumulated environment (where later groups have overwritten
+    -- earlier same-named datatypes), then the fixed primitive / built-in set,
+    -- then unbound.
+    resolveName n = case Map.lookup n sameGroup of
+      Just pc
+        | pc > 0    -> throwError ("datatype " ++ n ++ " expects " ++ arity pc)
+        | otherwise -> return (H.In n)
+      Nothing -> case Map.lookup n (envDts env) of
+        Just e
+          | not (null (deParams e)) ->
+              throwError ("datatype " ++ n ++ " expects "
+                          ++ arity (length (deParams e)))
+          | otherwise -> return (H.Ext (deGroupHash e) n)
+        Nothing
+          | n `elem` primNames -> return (H.Prim n)
+          | n == "list" ->
+              throwError "the built-in type list must be applied to an argument (e.g. int list)"
+          | otherwise -> throwError ("unbound type name: " ++ n)
 
     -- | Render an expected type-argument count, e.g. @1 type argument@ /
     -- @2 type arguments@.
@@ -422,9 +421,15 @@ ctorPat env pos res mp = case mp of
 -- Bare-name disambiguation (spec §2, check 8)
 ------------------------------------------------------------
 
+-- | Ambiguity is tag-based (spec §10): a bare constructor name is ambiguous
+-- only when *distinct tags* compete for it. Candidates that share a tag —
+-- identical re-declarations, diamond imports — collapse to one and resolve
+-- silently. Distinct tags remain a static error resolved by qualification.
 uniqueBare :: PosInf -> String -> [CtorRes] -> RW CtorRes
-uniqueBare _ _ [res] = return res
-uniqueBare _ name cands =
-  throwError ("constructor " ++ name ++ " is ambiguous: declared in datatypes "
-              ++ intercalate ", " (map crDatatype cands)
-              ++ "; qualify it, e.g. " ++ crDatatype (head cands) ++ "." ++ name)
+uniqueBare _ name cands = case nubBy sameTag cands of
+  [res] -> return res
+  distinct ->
+    throwError ("constructor " ++ name ++ " is ambiguous: declared in datatypes "
+                ++ intercalate ", " (map crDatatype distinct)
+                ++ "; qualify it, e.g. " ++ crDatatype (head distinct) ++ "." ++ name)
+  where sameTag a b = crTag a == crTag b

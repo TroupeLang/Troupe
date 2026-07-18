@@ -42,6 +42,7 @@ scope, a use is disambiguated with the datatype-qualified form `t.C`
 | `shapes.trp`       | Area and perimeter over a shape datatype with float tuple payloads; map and fold over a list of shapes.                         |
 | `actors.trp`       | Bank-account process whose message protocol is a datatype; server loop matches constructor patterns in `receive`.              |
 | `json-lite.trp`    | Recursive JSON-like value datatype with an array payload (`value list`) and a renderer to a string.                            |
+| `lambda-calculus.trp` | Call-by-value interpreter for the untyped lambda calculus (extended with if-then-else and integer arithmetic) over an AST datatype, with a mutually recursive value/environment `and` group. Builds the Z combinator as an AST value to define a doubly recursive fib inside the object language, then times interpreted fib against native Troupe fib and reports the slowdown ratio. |
 
 ## Running
 

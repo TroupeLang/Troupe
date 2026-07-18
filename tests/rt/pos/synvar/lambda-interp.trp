@@ -1,0 +1,78 @@
+(* Pins: a syntactic-variant AST for the untyped lambda calculus (extended
+   with if, integer literals and arithmetic), a mutually recursive value/env
+   `and` group, a constructor-pattern evaluator, and the call-by-value Z
+   combinator built as an AST value.  Deterministic distillation of
+   examples/variants/lambda-calculus.trp (no timing).
+
+   value references env through CLO and env references value through BIND, so
+   the `and` group is mutually recursive in both directions.  term is declared
+   in an earlier group (sequential scoping).  The evaluator's environment
+   argument is named rho, since env is a datatype name. *)
+
+datatype term = VAR of string
+              | LAM of string * term
+              | APP of term * term
+              | LIT of int
+              | ADD of term * term
+              | SUB of term * term
+              | LEQ of term * term
+              | IF  of term * term * term
+
+datatype value = NUM of int | CLO of string * term * env
+     and env   = EMPTY | BIND of string * value * env
+
+let (* environment lookup *)
+    fun lookup EMPTY x                = ("unbound", x)
+      | lookup (BIND (y, v, rest)) x  = if x = y then v else lookup rest x
+
+    (* project the integer out of a value *)
+    fun numOf (NUM n) = n
+      | numOf _       = 0
+
+    (* call-by-value evaluator *)
+    fun eval rho (VAR x)         = lookup rho x
+      | eval rho (LIT n)         = NUM n
+      | eval rho (LAM (x, body)) = CLO (x, body, rho)
+      | eval rho (ADD (a, b))    = NUM (numOf (eval rho a) + numOf (eval rho b))
+      | eval rho (SUB (a, b))    = NUM (numOf (eval rho a) - numOf (eval rho b))
+      | eval rho (LEQ (a, b))    = if numOf (eval rho a) <= numOf (eval rho b)
+                                   then NUM 1 else NUM 0
+      | eval rho (IF (c, t, f))  = (case eval rho c of
+                                      NUM 0 => eval rho f
+                                    | _     => eval rho t)
+      | eval rho (APP (f, a))    =
+          (case eval rho f of
+             CLO (x, body, cenv) => eval (BIND (x, eval rho a, cenv)) body
+           | _                   => NUM 0)
+
+    (* Z = \f.(\x. f (\v. x x v)) (\x. f (\v. x x v))  --- the call-by-value
+       (eta-expanded) fixed-point combinator, built as a term. *)
+    val zc =
+        let val half = LAM ("x",
+                         APP (VAR "f",
+                              LAM ("v", APP (APP (VAR "x", VAR "x"), VAR "v"))))
+        in LAM ("f", APP (half, half))
+        end
+
+    (* fibStep self n = if n <= 1 then n else self (n-1) + self (n-2) *)
+    val fibStep =
+        LAM ("self",
+          LAM ("n",
+            IF (LEQ (VAR "n", LIT 1),
+                VAR "n",
+                ADD (APP (VAR "self", SUB (VAR "n", LIT 1)),
+                     APP (VAR "self", SUB (VAR "n", LIT 2))))))
+
+    (* the recursive fib as a term, then a Troupe-level wrapper *)
+    val fibTerm = APP (zc, fibStep)
+    fun fib n = numOf (eval EMPTY (APP (fibTerm, LIT n)))
+
+    (* identity application:  (\x.x) 42  *)
+    val idApp = numOf (eval EMPTY (APP (LAM ("x", VAR "x"), LIT 42)))
+
+    (* branch selection:  if 3 <= 2 then 111 else 222  *)
+    val branch = numOf (eval EMPTY (IF (LEQ (LIT 3, LIT 2), LIT 111, LIT 222)))
+in print ("fib 10 via Z = ", fib 10)   (* 55  *)
+ ; print ("(\\x.x) 42    = ", idApp)    (* 42  *)
+ ; print ("if 3<=2 ...   = ", branch)   (* 222 *)
+end

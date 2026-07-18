@@ -1,0 +1,5 @@
+2026-07-18T20:38:47.898Z [RTM] info: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+("fib 10 via Z = ", 55)
+("(\x.x) 42    = ", 42)
+("if 3<=2 ...   = ", 222)
+>>> Main thread finished with value: ()@{}%{}

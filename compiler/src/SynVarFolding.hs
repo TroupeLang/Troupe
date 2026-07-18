@@ -176,11 +176,31 @@ resolveTy env sameGroup params dtName = go
       [n] -> resolveName n
       _   -> throwError "datatype imports are not yet supported"
     go (STyProd tys) = H.Prod <$> mapM go tys
-    go (STyApp [arg] q) = case q of
-      ["list"] -> do a <- go arg; return (H.App a "list")
-      [_]      -> throwError "type application is not yet supported"
-      _        -> throwError "datatype imports are not yet supported"
-    go (STyApp _ _) = throwError "type application is not yet supported"
+    go (STyApp args q) = do
+      args' <- mapM go args
+      resolveApp (length args) args' q
+
+    -- | Resolve an application @t1 ... tk target@. The target is a built-in
+    -- type constructor, a same-group datatype, or a datatype in a previously
+    -- hashed group; the applied argument count must equal its declared
+    -- parameter count.
+    resolveApp k args q = case q of
+      ["list"]
+        | k == 1    -> return (H.App args (H.RBuiltin "list"))
+        | otherwise -> throwError "the built-in type list expects 1 argument"
+      [n] -> case Map.lookup n sameGroup of
+        Just pc -> checkArity n pc >> return (H.App args (H.RIn n))
+        Nothing -> case Map.lookup n (envDts env) of
+          Just e  -> let pc = length (deParams e)
+                     in checkArity n pc >> return (H.App args (H.RExt (deGroupHash e) n))
+          Nothing -> throwError ("unbound type name: " ++ n)
+      _ -> throwError "datatype imports are not yet supported"
+      where
+        checkArity n pc
+          | pc == 0   = throwError ("datatype " ++ n ++ " takes no type arguments")
+          | k /= pc   = throwError ("datatype " ++ n ++ " expects " ++ arity pc
+                                    ++ ", got " ++ show k)
+          | otherwise = return ()
 
     resolveName n
       | n `elem` primNames = return (H.Prim n)
@@ -188,16 +208,19 @@ resolveTy env sameGroup params dtName = go
           throwError "the built-in type list must be applied to an argument (e.g. int list)"
       | otherwise = case Map.lookup n sameGroup of
           Just pc
-            | pc > 0    -> throwError ("referencing the parameterized datatype " ++ n
-                                       ++ " is not yet supported")
+            | pc > 0    -> throwError ("datatype " ++ n ++ " expects " ++ arity pc)
             | otherwise -> return (H.In n)
           Nothing -> case Map.lookup n (envDts env) of
             Just e
               | not (null (deParams e)) ->
-                  throwError ("referencing the parameterized datatype " ++ n
-                              ++ " is not yet supported")
+                  throwError ("datatype " ++ n ++ " expects "
+                              ++ arity (length (deParams e)))
               | otherwise -> return (H.Ext (deGroupHash e) n)
             Nothing -> throwError ("unbound type name: " ++ n)
+
+    -- | Render an expected type-argument count, e.g. @1 type argument@ /
+    -- @2 type arguments@.
+    arity pc = show pc ++ " type argument" ++ (if pc == 1 then "" else "s")
 
 -- | Genuineness check (spec §3): a group of two or more members must be
 -- strongly connected through in-group payload references.
@@ -222,10 +245,12 @@ checkGenuine group
     allNames = [ n | (n, _, _) <- group ]
     nodes    = [ (n, n, refsOf ctors) | (n, _, ctors) <- group ]
     refsOf ctors = nub [ r | (_, mnf) <- ctors, r <- maybe [] inRefs mnf ]
-    inRefs (H.In n)      = [n]
-    inRefs (H.Prod ts)   = concatMap inRefs ts
-    inRefs (H.App t _)   = inRefs t
-    inRefs _             = []
+    inRefs (H.In n)         = [n]
+    inRefs (H.Prod ts)      = concatMap inRefs ts
+    inRefs (H.App ts tgt)   = concatMap inRefs ts ++ inRefsTarget tgt
+    inRefs _                = []
+    inRefsTarget (H.RIn n)  = [n]
+    inRefsTarget _          = []
     longest = foldr (\a b -> if length a >= length b then a else b) []
     braces xs = "{" ++ intercalate ", " xs ++ "}"
 

@@ -1,0 +1,6 @@
+(* Pins: applying a parameterized datatype to the wrong number of type
+   arguments is a static error. *)
+datatype 'a box = BOX of 'a
+datatype bad = B of (int, string) box
+
+let val x = B (BOX 3) in print x end

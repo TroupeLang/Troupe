@@ -98,6 +98,87 @@ cmdCanon =
 cmdHash :: String
 cmdHash = "b33sbuuols9nlngu253qhh2vur7o6qc89ovnh0ui114oij6jasog"
 
+-- 6.5 box: singleton group, one type parameter, no application.
+boxGroup :: Group
+boxGroup = [ ("box", 1, [ ("BOX", Just (Var 0)) ]) ]
+
+boxCanon :: String
+boxCanon = "(group (dt box 1 (ctor BOX (var 0))))"
+
+hBox :: String
+hBox = "jbke14euh6s5nkl5i3isctbnioe150ajvucq2au5d2vhimvijucg"
+
+-- 6.5 item: references box applied to int. Constructors fed T before NOTHING.
+itemGroup :: Group
+itemGroup =
+  [ ("item", 0
+    , [ ("T",       Just (App [Prim "int"] (RExt hBox "box")))
+      , ("NOTHING", Nothing)
+      ])
+  ]
+
+itemCanon :: String
+itemCanon =
+  "(group (dt item 0 (ctor NOTHING) (ctor T (app (prim int) (ext "
+    ++ hBox ++ " box)))))"
+
+itemHash :: String
+itemHash = "6qnqkn1d01i9vj3u6k15jrq88abg92ou34tanhm4pmtp9d29pe0g"
+
+-- 6.5 intlist: built-in list application uses the uniform target shape.
+intlistGroup :: Group
+intlistGroup =
+  [ ("intlist", 0, [ ("L", Just (App [Prim "int"] (RBuiltin "list"))) ]) ]
+
+intlistCanon :: String
+intlistCanon = "(group (dt intlist 0 (ctor L (app (prim int) (builtin list)))))"
+
+intlistHash :: String
+intlistHash = "c009kcon60h45fqsui73qlbc4tako7evhnpbjoc2qna6kdmm1p00"
+
+-- 6.5 pair: two type parameters, no application.
+pairGroup :: Group
+pairGroup = [ ("pair", 2, [ ("P", Just (Prod [ Var 0, Var 1 ])) ]) ]
+
+pairCanon :: String
+pairCanon = "(group (dt pair 2 (ctor P (prod (var 0) (var 1)))))"
+
+hPair :: String
+hPair = "ja320ve8cs3b94m21eak1evrlfr228jctjgonsv5r25ubtr8lc20"
+
+-- 6.5 pr: multi-argument application to pair, one n-ary node.
+prGroup :: Group
+prGroup =
+  [ ("pr", 0
+    , [ ("Q", Just (App [Prim "int", Prim "string"] (RExt hPair "pair"))) ])
+  ]
+
+prCanon :: String
+prCanon =
+  "(group (dt pr 0 (ctor Q (app (prim int) (prim string) (ext "
+    ++ hPair ++ " pair)))))"
+
+prHash :: String
+prHash = "dlpoemskvn9405qmvla6m5l2c3rkn2rb21b3qn5m7hg836vaunrg"
+
+-- 6.5 tree: a parameterized datatype referencing itself applied.
+-- Constructors fed NODE before LEAF.
+treeGroup :: Group
+treeGroup =
+  [ ("tree", 1
+    , [ ("NODE", Just (App [App [Var 0] (RIn "tree")] (RBuiltin "list")))
+      , ("LEAF", Nothing)
+      ])
+  ]
+
+treeCanon :: String
+treeCanon =
+  "(group (dt tree 1 (ctor LEAF) "
+    ++ "(ctor NODE (app (app (var 0) (in tree)) (builtin list)))))"
+
+treeHash :: String
+treeHash = "l4t3v11o49m7cc0kgbcekj0nb8jml2qtc4bcpif69kgmuiqkl5tg"
+
 main :: IO ()
 main = defaultMain $ testGroup "SynVarHash exact vectors"
   [ testGroup "6.1 option"
@@ -119,6 +200,30 @@ main = defaultMain $ testGroup "SynVarHash exact vectors"
   , testGroup "10 cmd (import reference)"
     [ testCase "canonical" $ canonicalGroup cmdGroup @?= cmdCanon
     , testCase "hash"      $ groupHash cmdGroup @?= cmdHash
+    ]
+  , testGroup "6.5 box"
+    [ testCase "canonical" $ canonicalGroup boxGroup @?= boxCanon
+    , testCase "hash"      $ groupHash boxGroup @?= hBox
+    ]
+  , testGroup "6.5 item (applied ext reference)"
+    [ testCase "canonical" $ canonicalGroup itemGroup @?= itemCanon
+    , testCase "hash"      $ groupHash itemGroup @?= itemHash
+    ]
+  , testGroup "6.5 intlist (built-in application)"
+    [ testCase "canonical" $ canonicalGroup intlistGroup @?= intlistCanon
+    , testCase "hash"      $ groupHash intlistGroup @?= intlistHash
+    ]
+  , testGroup "6.5 pair"
+    [ testCase "canonical" $ canonicalGroup pairGroup @?= pairCanon
+    , testCase "hash"      $ groupHash pairGroup @?= hPair
+    ]
+  , testGroup "6.5 pr (multi-argument application)"
+    [ testCase "canonical" $ canonicalGroup prGroup @?= prCanon
+    , testCase "hash"      $ groupHash prGroup @?= prHash
+    ]
+  , testGroup "6.5 tree (self-application)"
+    [ testCase "canonical" $ canonicalGroup treeGroup @?= treeCanon
+    , testCase "hash"      $ groupHash treeGroup @?= treeHash
     ]
   , testGroup "constructor tags"
     [ testCase "expr#BIN" $

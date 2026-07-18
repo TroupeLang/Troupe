@@ -1,0 +1,10 @@
+(* Pins: a datatype whose payload applies another parameterized datatype
+   (`int box`), constructing and matching the nested variant. *)
+datatype 'a box = BOX of 'a
+datatype item = NOTHING | T of int box
+
+let val x = T (BOX 42)
+in
+  print (case x of T (BOX n) => n | NOTHING => 0);   (* 42 *)
+  print x                                             (* the T (BOX 42) variant *)
+end

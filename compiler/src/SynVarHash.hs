@@ -17,6 +17,7 @@
 module SynVarHash
   ( -- * Intermediate representation
     TyNF(..)
+  , TyRef(..)
   , Constructor
   , Datatype
   , Group
@@ -45,7 +46,16 @@ data TyNF
   | In String        -- ^ reference to a member of this same group, by name
   | Ext String String -- ^ reference to a previously hashed group: (group hash, member name)
   | Prod [TyNF]      -- ^ n-ary product (n >= 2)
-  | App TyNF String  -- ^ application of a built-in / referenced constructor
+  | App [TyNF] TyRef -- ^ n-ary application to a built-in / referenced target
+  deriving (Eq, Show)
+
+-- | The target of an application (spec section 5): a built-in type
+-- constructor, a same-group datatype, or a datatype in a previously hashed
+-- group.
+data TyRef
+  = RBuiltin String   -- ^ built-in type constructor (e.g. @list@)
+  | RIn String        -- ^ same-group datatype, by name
+  | RExt String String -- ^ previously hashed group: (group hash, member name)
   deriving (Eq, Show)
 
 -- | A constructor: its name and either its payload normal form ('Just') or
@@ -74,7 +84,13 @@ renderTy (Prim p)   = sexp ["prim", p]
 renderTy (In n)     = sexp ["in", n]
 renderTy (Ext h n)  = sexp ["ext", h, n]
 renderTy (Prod tys) = sexp ("prod" : map renderTy tys)
-renderTy (App ty c) = sexp ["app", renderTy ty, c]
+renderTy (App tys tgt) = sexp ("app" : map renderTy tys ++ [renderTarget tgt])
+
+-- | Render an application target.
+renderTarget :: TyRef -> String
+renderTarget (RBuiltin n) = sexp ["builtin", n]
+renderTarget (RIn n)      = sexp ["in", n]
+renderTarget (RExt h n)   = sexp ["ext", h, n]
 
 -- | Render one constructor (nullary or unary).
 renderCtor :: Constructor -> String

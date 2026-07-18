@@ -8,11 +8,11 @@
  *   - a renderer defined by constructor patterns, mapping over the array
  *     payload with the standard-library List module.
  *
- * Restriction note: applying the built-in `list` constructor to a user
- * datatype (`value list`) is accepted. Applying a *user-defined* parameterised
- * type constructor (e.g. `int box` for a `datatype 'a box`) is rejected with
- * "type application is not yet supported"; only the built-in `list` is
- * available in `of` clauses.
+ * Type application in `of` clauses: a payload may apply the built-in `list`
+ * constructor to a user datatype (`value list`, as JARR does here) or apply a
+ * user-defined parameterised datatype to arguments (e.g. `int box` for a
+ * `datatype 'a box`). The applied argument count must match the target's
+ * declared parameter count.
  *
  *   ./local.sh examples/variants/json-lite.trp --localonly
  *

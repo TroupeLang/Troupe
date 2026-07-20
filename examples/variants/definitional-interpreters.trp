@@ -1,0 +1,294 @@
+(* Native support for recursion in a definitional interpreter, after
+ * John C. Reynolds, "Definitional Interpreters for Higher-Order Programming
+ * Languages" (ACM National Conference 1972; reprinted in Higher-Order and
+ * Symbolic Computation 11(4), 1998).
+ *
+ * The object language is the untyped lambda calculus with if-then-else and
+ * integer arithmetic of lambda-calculus.trp, extended with one construct:
+ * fixt (f, x, body) -- a recursive function, fix f x. body.  Five evaluation
+ * strategies interpret the same doubly recursive fib:
+ *
+ *   zcomb    no interpreter support at all: recursion stays in the object
+ *            language via the call-by-value Z combinator (the baseline that
+ *            lambda-calculus.trp times);
+ *   unroll   first-order, direct style: fixt builds a recursive closure
+ *            (rclo) that re-inserts itself into the environment at every
+ *            application.  Recursion is explained without either
+ *            metalanguage recursion tricks or higher-order values -- this is
+ *            the defunctionalized-interpreter treatment (Reynolds'
+ *            Interpreter II);
+ *   meta     meta-circular, higher-order: object functions are Troupe
+ *            functions, environments are Troupe functions, and fixt ties the
+ *            knot with a recursive Troupe fun -- the defined language
+ *            inherits recursion from the defining language (Reynolds'
+ *            Interpreter I, with his caveat that the object language then
+ *            also inherits the defining language's evaluation order);
+ *   cps      continuation-passing style: higher-order values, but every
+ *            control transfer goes through an explicit continuation, making
+ *            the evaluation order independent of the defining language's
+ *            (Reynolds' Interpreter III);
+ *   machine  defunctionalized CPS: closures AND continuations are
+ *            first-order datatype values, and evaluation is a three-way
+ *            mutually recursive transition group (evalk/continuek/applyk) --
+ *            a CEK-style abstract machine (Reynolds' Interpreter IV).
+ *
+ * Reynolds' remaining strategy -- recursion by assignment, building the
+ * circular environment with an update -- needs mutable cells; Troupe would
+ * express the cell as a process, putting a send/receive round-trip on every
+ * variable lookup, so it is left out of the timing study.
+ *
+ *   ./local.sh examples/variants/definitional-interpreters.trp --localonly
+ *
+ * Output: fib 10 under every strategy (all 55), then a timing table for
+ * fib 18 under every strategy with the slowdown relative to native Troupe
+ * fib.  Timings are wall-clock and vary between runs.
+ *)
+
+datatype term = var of string
+              | lam of string * term
+              | fixt of string * string * term
+              | app of term * term
+              | lit of int
+              | add of term * term
+              | sub of term * term
+              | leq of term * term
+              | ite of term * term * term
+
+(* First-order values and environments (strategies zcomb, unroll, machine).
+   rclo is the recursive closure introduced by fixt. *)
+datatype value = num of int
+              | clo of string * term * env
+              | rclo of string * string * term * env
+     and env   = empty | bind of string * value * env
+
+(* Higher-order values (strategies meta, cps): the function payload is a
+   Troupe function -- unary for meta, value-and-continuation for cps. *)
+datatype 'f hval = hnum of int | hfun of 'f
+
+(* First-order continuations of the machine strategy: one frame per
+   evaluation position, plus a tag for the pending primitive. *)
+datatype prim = padd | psub | pleq
+datatype kont = halt
+              | karg  of term * env * kont
+              | kcall of value * kont
+              | kbin1 of prim * term * env * kont
+              | kbin2 of prim * value * kont
+              | kite  of term * term * env * kont
+
+let (* --- shared first-order helpers ------------------------------------ *)
+    fun lookup empty x               = ("unbound", x)
+      | lookup (bind (y, v, rest)) x = if x = y then v else lookup rest x
+
+    fun numOf (num n) = n
+      | numOf _       = 0
+
+    (* --- strategy zcomb: direct style, recursion via the Z combinator -- *)
+    fun evalz rho (var x)         = lookup rho x
+      | evalz rho (lit n)         = num n
+      | evalz rho (lam (x, body)) = clo (x, body, rho)
+      | evalz rho (add (a, b))    = num (numOf (evalz rho a) + numOf (evalz rho b))
+      | evalz rho (sub (a, b))    = num (numOf (evalz rho a) - numOf (evalz rho b))
+      | evalz rho (leq (a, b))    = if numOf (evalz rho a) <= numOf (evalz rho b)
+                                    then num 1 else num 0
+      | evalz rho (ite (c, t, f)) = (case evalz rho c of
+                                       num 0 => evalz rho f
+                                     | _     => evalz rho t)
+      | evalz rho (app (f, a))    =
+          (case evalz rho f of
+             clo (x, body, cenv) => evalz (bind (x, evalz rho a, cenv)) body
+           | _                   => num 0)
+
+    (* --- strategy unroll: fixt as a self-re-inserting closure ---------- *)
+    fun evalr rho (var x)         = lookup rho x
+      | evalr rho (lit n)         = num n
+      | evalr rho (lam (x, body)) = clo (x, body, rho)
+      | evalr rho (fixt (f, x, body)) = rclo (f, x, body, rho)
+      | evalr rho (add (a, b))    = num (numOf (evalr rho a) + numOf (evalr rho b))
+      | evalr rho (sub (a, b))    = num (numOf (evalr rho a) - numOf (evalr rho b))
+      | evalr rho (leq (a, b))    = if numOf (evalr rho a) <= numOf (evalr rho b)
+                                    then num 1 else num 0
+      | evalr rho (ite (c, t, f)) = (case evalr rho c of
+                                       num 0 => evalr rho f
+                                     | _     => evalr rho t)
+      | evalr rho (app (f, a))    =
+          (case evalr rho f of
+             clo (x, body, cenv) => evalr (bind (x, evalr rho a, cenv)) body
+           | rclo (g, x, body, cenv) =>
+               evalr (bind (g, rclo (g, x, body, cenv),
+                            bind (x, evalr rho a, cenv))) body
+           | _                   => num 0)
+
+    (* --- strategy meta: higher-order values, functional environments --- *)
+    fun hnumOf (hnum n) = n
+      | hnumOf _        = 0
+
+    fun emptyh x        = hnum 0
+    fun extend rho x v  = fn y => if y = x then v else rho y
+
+    fun evalh rho (var x)         = rho x
+      | evalh rho (lit n)         = hnum n
+      | evalh rho (lam (x, body)) = hfun (fn v => evalh (extend rho x v) body)
+      | evalh rho (fixt (f, x, body)) =
+          (* the recursive Troupe fun ties the knot: recursion is inherited
+             from the defining language *)
+          let fun self v = evalh (extend (extend rho f (hfun self)) x v) body
+          in hfun self end
+      | evalh rho (add (a, b))    = hnum (hnumOf (evalh rho a) + hnumOf (evalh rho b))
+      | evalh rho (sub (a, b))    = hnum (hnumOf (evalh rho a) - hnumOf (evalh rho b))
+      | evalh rho (leq (a, b))    = if hnumOf (evalh rho a) <= hnumOf (evalh rho b)
+                                    then hnum 1 else hnum 0
+      | evalh rho (ite (c, t, f)) = (case evalh rho c of
+                                       hnum 0 => evalh rho f
+                                     | _      => evalh rho t)
+      | evalh rho (app (f, a))    =
+          (case evalh rho f of
+             hfun g => g (evalh rho a)
+           | v      => v)
+
+    (* --- strategy cps: explicit continuations, higher-order values ----- *)
+    (* object functions are curried over the argument and the continuation *)
+    fun evalc rho (var x) k         = k (rho x)
+      | evalc rho (lit n) k         = k (hnum n)
+      | evalc rho (lam (x, body)) k =
+          k (hfun (fn v => fn k2 => evalc (extend rho x v) body k2))
+      | evalc rho (fixt (f, x, body)) k =
+          let fun self v = fn k2 =>
+                evalc (extend (extend rho f (hfun self)) x v) body k2
+          in k (hfun self) end
+      | evalc rho (add (a, b)) k    =
+          evalc rho a (fn va => evalc rho b (fn vb =>
+            k (hnum (hnumOf va + hnumOf vb))))
+      | evalc rho (sub (a, b)) k    =
+          evalc rho a (fn va => evalc rho b (fn vb =>
+            k (hnum (hnumOf va - hnumOf vb))))
+      | evalc rho (leq (a, b)) k    =
+          evalc rho a (fn va => evalc rho b (fn vb =>
+            k (if hnumOf va <= hnumOf vb then hnum 1 else hnum 0)))
+      | evalc rho (ite (c, t, f)) k =
+          evalc rho c (fn vc => case vc of
+                                  hnum 0 => evalc rho f k
+                                | _      => evalc rho t k)
+      | evalc rho (app (f, a)) k    =
+          evalc rho f (fn fv => evalc rho a (fn av =>
+            case fv of
+              hfun g => g av k
+            | v      => k v))
+
+    (* --- strategy machine: defunctionalized CPS (a CEK-style machine) -- *)
+    fun delta padd (num a) (num b) = num (a + b)
+      | delta psub (num a) (num b) = num (a - b)
+      | delta pleq (num a) (num b) = if a <= b then num 1 else num 0
+      | delta _    _       _       = num 0
+
+    fun evalk rho (var x) k         = continuek k (lookup rho x)
+      | evalk rho (lit n) k         = continuek k (num n)
+      | evalk rho (lam (x, body)) k = continuek k (clo (x, body, rho))
+      | evalk rho (fixt (f, x, body)) k = continuek k (rclo (f, x, body, rho))
+      | evalk rho (add (a, b)) k    = evalk rho a (kbin1 (padd, b, rho, k))
+      | evalk rho (sub (a, b)) k    = evalk rho a (kbin1 (psub, b, rho, k))
+      | evalk rho (leq (a, b)) k    = evalk rho a (kbin1 (pleq, b, rho, k))
+      | evalk rho (ite (c, t, f)) k = evalk rho c (kite (t, f, rho, k))
+      | evalk rho (app (f, a)) k    = evalk rho f (karg (a, rho, k))
+    and continuek halt v                     = v
+      | continuek (karg (a, rho, k)) fv      = evalk rho a (kcall (fv, k))
+      | continuek (kcall (fv, k)) av         = applyk fv av k
+      | continuek (kbin1 (p, b, rho, k)) va  = evalk rho b (kbin2 (p, va, k))
+      | continuek (kbin2 (p, va, k)) vb      = continuek k (delta p va vb)
+      | continuek (kite (t, f, rho, k)) vc   = (case vc of
+                                                  num 0 => evalk rho f k
+                                                | _     => evalk rho t k)
+    and applyk (clo (x, body, cenv)) av k    = evalk (bind (x, av, cenv)) body k
+      | applyk (rclo (g, x, body, cenv)) av k =
+          evalk (bind (g, rclo (g, x, body, cenv), bind (x, av, cenv))) body k
+      | applyk _ av k                        = continuek k (num 0)
+
+    (* --- the two fib programs ------------------------------------------ *)
+
+    (* Z = \f.(\x. f (\v. x x v)) (\x. f (\v. x x v)), as in
+       lambda-calculus.trp; fib tied entirely in the object language. *)
+    val zc =
+        let val half = lam ("x",
+                         app (var "f",
+                              lam ("v", app (app (var "x", var "x"), var "v"))))
+        in lam ("f", app (half, half))
+        end
+    val fibStep =
+        lam ("self",
+          lam ("n",
+            ite (leq (var "n", lit 1),
+                var "n",
+                add (app (var "self", sub (var "n", lit 1)),
+                     app (var "self", sub (var "n", lit 2))))))
+    val fibZ = app (zc, fibStep)
+
+    (* the same fib through the native fixt construct *)
+    val fibFix =
+        fixt ("fib", "n",
+          ite (leq (var "n", lit 1),
+              var "n",
+              add (app (var "fib", sub (var "n", lit 1)),
+                   app (var "fib", sub (var "n", lit 2)))))
+
+    (* one entry point per strategy *)
+    fun fibZcomb n   = numOf  (evalz empty (app (fibZ, lit n)))
+    fun fibUnroll n  = numOf  (evalr empty (app (fibFix, lit n)))
+    fun fibMeta n    = hnumOf (evalh emptyh (app (fibFix, lit n)))
+    fun fibCps n     = hnumOf (evalc emptyh (app (fibFix, lit n)) (fn v => v))
+    fun fibMachine n = numOf  (evalk empty (app (fibFix, lit n)) halt)
+
+    (* --- native Troupe fib and timing helpers -------------------------- *)
+    fun nfib n = if n <= 1 then n else nfib (n - 1) + nfib (n - 2)
+
+    fun timeMs f =
+        let val start  = getTime ()
+            val result = f ()
+            val finish = getTime ()
+        in (result, finish - start)
+        end
+
+    fun repeat 0 _ = ()
+      | repeat k f = (f (); repeat (k - 1) f)
+
+    (* native fib is far below timer resolution for a single call, so time a
+       growing batch until it exceeds 200 ms and report ms per call. *)
+    fun nativePerCallMs n =
+        let fun go reps =
+                let val (_, el) = timeMs (fn () => repeat reps (fn () => nfib n))
+                in if el >= 200 then el / reps else go (reps * 4)
+                end
+        in go 1
+        end
+
+    val fibN = 18
+
+    (* best of three calls, to damp JIT-warmup and wall-clock noise *)
+    fun bestOf 0 f best = best
+      | bestOf k f best =
+          let val (_, ms) = timeMs f
+          in bestOf (k - 1) f (if ms < best then ms else best)
+          end
+
+    fun row name f nativeMs =
+        let val (r, _) = timeMs (fn () => f fibN)
+            val ms     = bestOf 3 (fn () => f fibN) (10 * 1000 * 1000)
+        in print ("  ", name, ": fib", fibN, "=", r, "in", ms,
+                  "ms (best of 3); slowdown vs native:", ms / nativeMs)
+        end
+
+in print "--- sanity: fib 10 under every strategy (all 55) ---"
+ ; print ("  zcomb  ", fibZcomb 10)
+ ; print ("  unroll ", fibUnroll 10)
+ ; print ("  meta   ", fibMeta 10)
+ ; print ("  cps    ", fibCps 10)
+ ; print ("  machine", fibMachine 10)
+ ; print "--- timing: fib 18 under every strategy ---"
+ ; let val nativeMs = nativePerCallMs fibN
+   in print ("  native Troupe fib", fibN, "=", nfib fibN, "at", nativeMs,
+             "ms per call (averaged over a batch)")
+    ; row "zcomb  " fibZcomb nativeMs
+    ; row "unroll " fibUnroll nativeMs
+    ; row "meta   " fibMeta nativeMs
+    ; row "cps    " fibCps nativeMs
+    ; row "machine" fibMachine nativeMs
+   end
+end

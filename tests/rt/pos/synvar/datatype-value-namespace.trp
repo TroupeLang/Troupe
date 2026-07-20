@@ -1,0 +1,30 @@
+(* Datatype names and value names are separate worlds (spec §2): a datatype
+   name may be freely reused as a variable, a function parameter, or a
+   let-binding. Here the datatype 'env' coexists with a parameter named 'env'
+   and a let-bound value named 'env'.
+
+   A dotted head is resolved against the value names in scope: 'env.name' /
+   'env.size' off a value named 'env' are ordinary record projections, while
+   'env.frame' with no value 'env' in scope is datatype-qualified constructor
+   access. The datatype's constructors also stay reachable bare. *)
+datatype env = empty | frame of string * int
+
+let (* 'env' the parameter is a bound value; 'env.name' projects off it *)
+    fun nameOf env = env.name
+
+    (* no value 'env' is in scope in this clause (the 'val env' below is a
+       later, sequential binding), so 'env.frame' is datatype-qualified
+       constructor access *)
+    fun mk n = env.frame ("built", n)
+
+    (* matching on the datatype's own constructors, bare *)
+    fun describe empty          = "empty"
+      | describe (frame (s, n)) = (s, n)
+
+    val env = { name = "root", size = 3 }   (* value 'env' shadows the datatype *)
+in
+  print (nameOf env);       (* "root"  -- projection off the parameter value  *)
+  print (env.size);         (* 3       -- projection off the let-bound value   *)
+  print (describe empty);   (* "empty" -- nullary constructor, matched bare    *)
+  print (describe (mk 7))   (* ("built", 7) -- built via env.frame, matched bare *)
+end

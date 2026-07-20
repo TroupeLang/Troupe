@@ -132,7 +132,7 @@ foldProg :: Prog -> Except String FoldResult
 foldProg (Prog imports groups term) = do
   env0                  <- buildImportEnv imports
   (env, localInfos, tyC) <- processGroups env0 groups
-  (term', st) <- runStateT (rewriteLTerm env term) (RWState 0 Set.empty)
+  (term', st) <- runStateT (rewriteLTerm env Set.empty term) (RWState 0 Set.empty)
   let consumed = Set.union tyC (rwConsumed st)
       byLib    = groupConsumedByLib env consumed
   return FoldResult { frProg     = Prog imports [] term'
@@ -454,46 +454,67 @@ firstAt p     = " (first declared at " ++ show p ++ ")"
 -- Term rewriting
 ------------------------------------------------------------
 
-rewriteLTerm :: Env -> LTerm -> RW LTerm
-rewriteLTerm env (Loc pos t) = Loc pos <$> rewriteTerm env pos t
+rewriteLTerm :: Env -> Set VarName -> LTerm -> RW LTerm
+rewriteLTerm env bnd (Loc pos t) = Loc pos <$> rewriteTerm env bnd pos t
 
-rewriteTerm :: Env -> PosInf -> Term -> RW Term
-rewriteTerm env pos = \case
+-- | Rewrite a term. @bnd@ is the set of value names bound in the enclosing
+-- scope; it is threaded through every binding construct and consulted only in
+-- 'rewriteProj', where a dotted head may name both a value and a datatype /
+-- import qualifier (spec §10).
+rewriteTerm :: Env -> Set VarName -> PosInf -> Term -> RW Term
+rewriteTerm env bnd pos = \case
   Lit l          -> return (Lit l)
   Var x          -> rewriteVar env pos x
-  Abs lam        -> Abs <$> rewriteLambda env lam
-  Hnd (Handler p mp mg b) ->
-    Hnd <$> (Handler <$> rewritePat env p
-                     <*> traverse (rewritePat env) mp
-                     <*> traverse (rewriteLTerm env) mg
-                     <*> rewriteLTerm env b)
-  App f as       -> App <$> rewriteLTerm env f <*> mapM (rewriteLTerm env) as
-  Let ds b       -> Let <$> mapM (rewriteDecl env) ds <*> rewriteLTerm env b
-  Case e arms    -> Case <$> rewriteLTerm env e
-                         <*> mapM (\(p, r) -> (,) <$> rewritePat env p
-                                                  <*> rewriteLTerm env r) arms
-  If a b c       -> If <$> rewriteLTerm env a <*> rewriteLTerm env b <*> rewriteLTerm env c
-  Tuple es tag   -> Tuple <$> mapM (rewriteLTerm env) es <*> pure tag
-  Record fs      -> Record <$> rewriteFields env fs
-  WithRecord e fs-> WithRecord <$> rewriteLTerm env e <*> rewriteFields env fs
-  ProjField e f  -> rewriteProj env pos e f
-  ProjIdx e i    -> ProjIdx <$> rewriteLTerm env e <*> pure i
-  List es        -> List <$> mapM (rewriteLTerm env) es
-  ListCons a b   -> ListCons <$> rewriteLTerm env a <*> rewriteLTerm env b
-  Bin op a b     -> Bin op <$> rewriteLTerm env a <*> rewriteLTerm env b
-  Un op e        -> Un op <$> rewriteLTerm env e
-  Seq es         -> Seq <$> mapM (rewriteLTerm env) es
-  Error e        -> Error <$> rewriteLTerm env e
+  Abs lam        -> Abs <$> rewriteLambda env bnd lam
+  Hnd (Handler p mp mg b) -> do
+    p'  <- rewritePat env p
+    mp' <- traverse (rewritePat env) mp
+    -- The handler patterns bind within the guard and the body.
+    let bnd' = Set.unions [bnd, patBound env p, maybe Set.empty (patBound env) mp]
+    Hnd <$> (Handler p' mp' <$> traverse (rewriteLTerm env bnd') mg
+                            <*> rewriteLTerm env bnd' b)
+  App f as       -> App <$> rewriteLTerm env bnd f <*> mapM (rewriteLTerm env bnd) as
+  Let ds b       -> do
+                      (ds', bnd') <- rewriteDecls env bnd ds
+                      Let ds' <$> rewriteLTerm env bnd' b
+  Case e arms    -> Case <$> rewriteLTerm env bnd e
+                         <*> mapM (rewriteArm env bnd) arms
+  If a b c       -> If <$> rewriteLTerm env bnd a <*> rewriteLTerm env bnd b
+                       <*> rewriteLTerm env bnd c
+  Tuple es tag   -> Tuple <$> mapM (rewriteLTerm env bnd) es <*> pure tag
+  Record fs      -> Record <$> rewriteFields env bnd fs
+  WithRecord e fs-> WithRecord <$> rewriteLTerm env bnd e <*> rewriteFields env bnd fs
+  ProjField e f  -> rewriteProj env bnd pos e f
+  ProjIdx e i    -> ProjIdx <$> rewriteLTerm env bnd e <*> pure i
+  List es        -> List <$> mapM (rewriteLTerm env bnd) es
+  ListCons a b   -> ListCons <$> rewriteLTerm env bnd a <*> rewriteLTerm env bnd b
+  Bin op a b     -> Bin op <$> rewriteLTerm env bnd a <*> rewriteLTerm env bnd b
+  Un op e        -> Un op <$> rewriteLTerm env bnd e
+  Seq es         -> Seq <$> mapM (rewriteLTerm env bnd) es
+  Error e        -> Error <$> rewriteLTerm env bnd e
 
-rewriteFields :: Env -> LFields -> RW LFields
-rewriteFields env = mapM $ \(f, mt) -> (,) f <$> traverse (rewriteLTerm env) mt
+-- | A case arm: the arm's pattern binds within its body.
+rewriteArm :: Env -> Set VarName -> (LDeclPattern, LTerm) -> RW (LDeclPattern, LTerm)
+rewriteArm env bnd (p, r) = do
+  p' <- rewritePat env p
+  r' <- rewriteLTerm env (Set.union bnd (patBound env p)) r
+  return (p', r')
 
-rewriteLambda :: Env -> Lambda -> RW Lambda
-rewriteLambda env (Lambda ps b) =
-  Lambda <$> mapM (rewritePat env) ps <*> rewriteLTerm env b
+rewriteFields :: Env -> Set VarName -> LFields -> RW LFields
+rewriteFields env bnd = mapM $ \(f, mt) -> (,) f <$> traverse (rewriteLTerm env bnd) mt
+
+rewriteLambda :: Env -> Set VarName -> Lambda -> RW Lambda
+rewriteLambda env bnd (Lambda ps b) = do
+  ps' <- mapM (rewritePat env) ps
+  -- The clause parameters bind within the clause body.
+  let bnd' = Set.union bnd (Set.unions (map (patBound env) ps))
+  Lambda ps' <$> rewriteLTerm env bnd' b
 
 -- | Bare name in expression position: a constructor occurrence, else an
--- ordinary variable.
+-- ordinary variable. A value binding can never share a name with a bare
+-- constructor (constructor names are rejected in the recursive-definition-name
+-- position and are constructor patterns, not binders, in every pattern
+-- position), so no scope information is needed to disambiguate here.
 rewriteVar :: Env -> PosInf -> VarName -> RW Term
 rewriteVar env pos x = case Map.lookup x (envBare env) of
   Just cands -> do res <- uniqueBare pos x cands
@@ -501,45 +522,65 @@ rewriteVar env pos x = case Map.lookup x (envBare env) of
                    ctorExpr pos res
   Nothing    -> return (Var x)
 
--- | Reinterpret dotted expressions as constructor occurrences where a segment
--- names a datatype or an import qualifier (spec §2, §10):
+-- | Reinterpret a dotted expression as a constructor occurrence where its head
+-- names a datatype or an import qualifier (spec §2, §10). Datatype names and
+-- value names occupy separate worlds that overlap only in this head position,
+-- so resolution is scope-aware (@bnd@ is the set of value names in scope):
 --
---   * @t.c@   — datatype-qualified constructor (t a bare-visible datatype);
---   * @L.c@   — module-qualified bare constructor (L an import qualifier);
---   * @L.t.c@ — module-qualified, datatype-qualified constructor.
+--   * @t.c@   — head @t@ a datatype and NOT a bound value: constructor access
+--     (a missing constructor is an error);
+--   * @t.c@   — head @t@ a bound value, and either not a datatype or a datatype
+--     without a constructor @c@: ordinary record projection;
+--   * @t.c@   — head @t@ BOTH a bound value AND a datatype with constructor @c@:
+--     use-site ambiguity error (spec §10);
+--   * @L.c@   — head @L@ an import qualifier with constructor @c@:
+--     module-qualified constructor, unless @L@ is also a bound value (the same
+--     ambiguity);
+--   * @L.t.c@ — head @L.t@ a module-qualified datatype: constructor access,
+--     with the same value-vs-qualifier guard on @L@.
 --
 -- Anything else stays a record projection.
-rewriteProj :: Env -> PosInf -> LTerm -> FieldName -> RW Term
-rewriteProj env pos e f = case e of
-  -- t.c where t is a bare-visible datatype: definitively a constructor form,
-  -- so a missing constructor is an error (a datatype name is not a value).
+rewriteProj :: Env -> Set VarName -> PosInf -> LTerm -> FieldName -> RW Term
+rewriteProj env bnd pos e f = case e of
   Loc _ (Var t)
     | Just entry <- Map.lookup t (envDts env) ->
-        case Map.lookup f (deCtors entry) of
-          Just res -> noteConsumed env res >> ctorExpr pos res
-          Nothing  -> throwError (at pos ("datatype " ++ t ++ " has no constructor " ++ f))
-  -- L.c where L is an import qualifier and c is one of its constructors. The
-  -- qualifier namespace overlaps value/module access (e.g. Number.intDiv), so
-  -- this fires only when c is actually a constructor of L; otherwise it falls
-  -- through to ordinary projection. A constructor ambiguous across L's
-  -- datatypes is a use-site error (uniqueBare).
+        case (Set.member t bnd, Map.lookup f (deCtors entry)) of
+          (True,  Just _)   -> throwError (ambiguousHead pos (t ++ "." ++ f) t
+                                            ("a datatype with constructor " ++ f))
+          (True,  Nothing)  -> projectFallthrough
+          (False, Just res) -> noteConsumed env res >> ctorExpr pos res
+          (False, Nothing)  ->
+            throwError (at pos ("datatype " ++ t ++ " has no constructor " ++ f))
   Loc _ (Var m)
-    | Just cands <- moduleCands env m f -> do
-        res <- uniqueBare pos f cands
-        noteConsumed env res
-        ctorExpr pos res
-  -- L.t.c where L is an import qualifier and t one of its datatypes: a
-  -- datatype has no further projection, so once L and t match this is
-  -- definitively a constructor form and a missing constructor is an error.
-  -- (When t is not a datatype of L, e.g. L.value.field, this falls through.)
+    | Just cands <- moduleCands env m f ->
+        if Set.member m bnd
+          then throwError (ambiguousHead pos (m ++ "." ++ f) m
+                            ("an import qualifier with constructor " ++ f))
+          else do res <- uniqueBare pos f cands
+                  noteConsumed env res
+                  ctorExpr pos res
   Loc _ (ProjField (Loc _ (Var m)) t)
     | Just dts <- Map.lookup m (envMod env)
     , Just entry <- Map.lookup t dts ->
-        case Map.lookup f (deCtors entry) of
-          Just res -> noteConsumed env res >> ctorExpr pos res
-          Nothing  -> throwError (at pos ("datatype " ++ m ++ "." ++ t
-                                          ++ " has no constructor " ++ f))
-  _ -> ProjField <$> rewriteLTerm env e <*> pure f
+        if Set.member m bnd
+          then throwError (ambiguousHead pos (m ++ "." ++ t ++ "." ++ f) m
+                            ("an import qualifier whose datatype " ++ t
+                             ++ " has constructor " ++ f))
+          else case Map.lookup f (deCtors entry) of
+                 Just res -> noteConsumed env res >> ctorExpr pos res
+                 Nothing  -> throwError (at pos ("datatype " ++ m ++ "." ++ t
+                                                 ++ " has no constructor " ++ f))
+  _ -> projectFallthrough
+  where projectFallthrough = ProjField <$> rewriteLTerm env bnd e <*> pure f
+
+-- | The use-site ambiguity error (spec §10) raised when a dotted head names
+-- both a value in scope and a datatype / import qualifier that would read the
+-- field as a constructor. Resolved by renaming the value or qualifying the
+-- constructor.
+ambiguousHead :: PosInf -> String -> String -> String -> String
+ambiguousHead pos dotted headName kind =
+  at pos (dotted ++ " is ambiguous: " ++ headName ++ " is both a value here and "
+          ++ kind ++ "; rename the value or qualify the constructor")
 
 -- | The candidates for a module-qualified bare constructor @m.f@: the
 -- constructors named @f@ among the datatypes of import qualifier @m@. Returns
@@ -563,34 +604,92 @@ ctorExpr pos res
 -- Declarations
 ------------------------------------------------------------
 
-rewriteDecl :: Env -> Decl -> RW Decl
-rewriteDecl env = \case
-  ValDecl p e -> ValDecl <$> rewritePat env p <*> rewriteLTerm env e
-  FunDecs fds -> FunDecs <$> mapM (rewriteLFunDecl env) fds
-  ErrorDecl   -> return ErrorDecl
+-- | Rewrite a @let@'s declaration list, threading the value names it binds.
+-- The declarations scope sequentially (a val's right-hand side does not see its
+-- own binding; a mutually-recursive @fun@ group's names are all in scope in
+-- every clause body), matching the left-to-right lowering in 'Core.lower'.
+-- The returned set is the enclosing scope extended with everything the list
+-- binds, for use in the @let@ body.
+rewriteDecls :: Env -> Set VarName -> [Decl] -> RW ([Decl], Set VarName)
+rewriteDecls env = go
+  where
+    go bnd []       = return ([], bnd)
+    go bnd (d : ds) = do
+      (d', bnd')   <- rewriteDecl env bnd d
+      (ds', bnd'') <- go bnd' ds
+      return (d' : ds', bnd'')
 
-rewriteLFunDecl :: Env -> LFunDecl -> RW LFunDecl
-rewriteLFunDecl env (Loc p (FunDecl name lams)) = do
-  checkBinder name       -- (7) a function name may not shadow a constructor / datatype
-  lams' <- mapM (rewriteLambda env) lams
+rewriteDecl :: Env -> Set VarName -> Decl -> RW (Decl, Set VarName)
+rewriteDecl env bnd = \case
+  ValDecl p e -> do
+    e' <- rewriteLTerm env bnd e            -- the RHS does not see p's bindings
+    p' <- rewritePat env p
+    return (ValDecl p' e', Set.union bnd (patBound env p))
+  FunDecs fds -> do
+    -- The function names are mutually recursive: all in scope in every body.
+    let names = Set.fromList [ n | Loc _ (FunDecl n _) <- fds ]
+        bnd'  = Set.union bnd names
+    fds' <- mapM (rewriteLFunDecl env bnd') fds
+    return (FunDecs fds', bnd')
+  ErrorDecl   -> return (ErrorDecl, bnd)
+
+rewriteLFunDecl :: Env -> Set VarName -> LFunDecl -> RW LFunDecl
+rewriteLFunDecl env bnd (Loc p (FunDecl name lams)) = do
+  checkBinder name       -- a constructor name cannot name a recursive definition
+  lams' <- mapM (rewriteLambda env bnd) lams
   return (Loc p (FunDecl name lams'))
   where
-    checkBinder n = do
-      when (Map.member n (envBare env)) $ throwError (at p (n ++ " is a constructor name"))
-      when (Map.member n (envDts env))  $ throwError (at p (n ++ " is a datatype name"))
+    -- Constructor and value names are separate worlds only in that a value may
+    -- freely take a datatype name; a constructor name, however, cannot name a
+    -- recursive definition (it is a constructor pattern in binding positions,
+    -- never a fresh binder), so a function so named is rejected.
+    checkBinder n = case Map.lookup n (envBare env) of
+      Just (res : _) ->
+        throwError (at p (n ++ " is a constructor of datatype " ++ crDatatype res
+                          ++ " and cannot be used as a function name"))
+      _ -> return ()
 
 ------------------------------------------------------------
 -- Patterns
 ------------------------------------------------------------
+
+-- | The value names a pattern binds, used to thread the in-scope value set
+-- through the term rewriter (see 'rewriteProj'). A bare name that resolves to a
+-- constructor is a constructor pattern and binds nothing; every other
+-- 'VarPattern' binds its name (including one equal to a datatype name, which is
+-- a legal binder), a punned record field binds its label unless it too is a
+-- constructor, and the @at@-pattern's label is an information-flow label, not a
+-- value binder. Mirrors the binding decisions in 'rewritePat'' / 'rewriteField'.
+patBound :: Env -> LDeclPattern -> Set VarName
+patBound env (Loc _ p) = patBound' p
+  where
+    patBound' = \case
+      VarPattern x
+        | Map.member x (envBare env) -> Set.empty
+        | otherwise                  -> Set.singleton x
+      ValPattern _        -> Set.empty
+      Wildcard            -> Set.empty
+      AtPattern q _       -> patBound env q
+      TuplePattern ps     -> Set.unions (map (patBound env) ps)
+      ConsPattern a b     -> Set.union (patBound env a) (patBound env b)
+      ListPattern ps      -> Set.unions (map (patBound env) ps)
+      RecordPattern fs _  -> Set.unions
+        [ maybe (if Map.member f (envBare env) then Set.empty else Set.singleton f)
+                (patBound env) mp
+        | (f, mp) <- fs ]
+      ConPattern _ mp     -> maybe Set.empty (patBound env) mp
+      ErrorPattern        -> Set.empty
 
 rewritePat :: Env -> LDeclPattern -> RW LDeclPattern
 rewritePat env (Loc pos p) = Loc pos <$> rewritePat' env pos p
 
 rewritePat' :: Env -> PosInf -> DeclPattern -> RW DeclPattern
 rewritePat' env pos = \case
-  VarPattern x
-    | Map.member x (envDts env) -> throwError (at pos (x ++ " is a datatype name"))
-    | otherwise -> case Map.lookup x (envBare env) of
+  -- A bare name in a pattern is a nullary-constructor pattern when it names a
+  -- constructor (it matches, it does not bind); otherwise it is a binder. A
+  -- name that equals a datatype in scope is an ordinary binder — datatype names
+  -- and value names are separate worlds (spec §2).
+  VarPattern x -> case Map.lookup x (envBare env) of
         Just cands -> do res <- uniqueBare pos x cands
                          noteConsumed env res
                          ctorPat env pos res Nothing
@@ -605,14 +704,19 @@ rewritePat' env pos = \case
   ConPattern q mp     -> rewriteConPat env pos q mp
   ErrorPattern        -> return ErrorPattern
 
--- | A record field: a punned field @{x}@ binds @x@, so its name is a binder
--- and subject to check 7; @{x = p}@ names field @x@ and matches @p@.
+-- | A record field pattern. A punned field @{x}@ abbreviates @{x = x}@, so its
+-- pattern side follows the same discipline as any pattern: when @x@ names a
+-- constructor it is a constructor pattern (matching field @x@ against the
+-- nullary constructor), otherwise it binds @x@ (freely taking a datatype name).
+-- @{x = p}@ names field @x@ and matches @p@.
 rewriteField :: Env -> PosInf -> (FieldName, Maybe LDeclPattern)
              -> RW (FieldName, Maybe LDeclPattern)
-rewriteField env pos (f, Nothing) = do
-  when (Map.member f (envDts env))  $ throwError (at pos (f ++ " is a datatype name"))
-  when (Map.member f (envBare env)) $ throwError (at pos (f ++ " is a constructor name"))
-  return (f, Nothing)
+rewriteField env pos (f, Nothing) = case Map.lookup f (envBare env) of
+  Just cands -> do res <- uniqueBare pos f cands
+                   noteConsumed env res
+                   p' <- ctorPat env pos res Nothing
+                   return (f, Just (Loc pos p'))
+  Nothing    -> return (f, Nothing)
 rewriteField env _ (f, Just p) = (,) f . Just <$> rewritePat env p
 
 -- | A constructor pattern. Segments (spec §2, §10):

@@ -1,0 +1,1 @@
+tests/cmp/synvar/head-value-vs-datatype-ambiguous.trp:9:12: t.C is ambiguous: t is both a value here and a datatype with constructor C; rename the value or qualify the constructor

@@ -1,0 +1,1 @@
+tests/cmp/duplicate-constructor-in-datatype.trp:1:28: duplicate constructor Timeout in datatype Atoms (first declared at tests/cmp/duplicate-constructor-in-datatype.trp:1:18)

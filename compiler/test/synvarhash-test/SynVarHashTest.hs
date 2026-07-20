@@ -9,7 +9,8 @@
 -- module.
 module Main (main) where
 
-import           Data.List (isInfixOf)
+import           Data.List (isInfixOf, partition)
+import           Control.Monad.Except (runExcept)
 
 import           Test.Tasty
 import           Test.Tasty.HUnit
@@ -18,6 +19,11 @@ import           SynVarHash
 import qualified Stack2JS
 import qualified Stack
 import           CompileMode (CompileMode(..))
+import           Exports (exportsFileContent, isDatatypeLine, parseDatatypeLine)
+import           SynVarFolding (foldProg)
+import           Direct (Prog(..), Term(List))
+import           Basics (Imports(..), ImportDecl(..), ImportMode(..), LibName(..))
+import           TroupePositionInfo (Located(..), PosInf(..))
 
 -- Exact group hashes from the spec, reused as dependency hashes in later
 -- vectors.
@@ -260,6 +266,38 @@ main = defaultMain $ testGroup "SynVarHash exact vectors"
         assertBool "unexpected __consumedDatatypeHashes"
           (not ("__consumedDatatypeHashes" `isInfixOf` js))
     ]
+  , testGroup "exports interface line format (single definition point)"
+    -- The writer (exportsFileContent) and the reader (the partition +
+    -- parseDatatypeLine used by ProcessImports) share one datatype-line format
+    -- in Exports; this round-trips a names + datatype-lines interface through
+    -- both so producer and consumer cannot drift silently.
+    [ testCase "names + datatype lines round-trip writer -> parser" $ do
+        let names  = ["describe", "unbox", "area"]
+            groups = [ (optionHash, optionCanon)
+                     , (hBox, boxCanon)
+                     , (mutualHash, mutualCanon) ]
+            content = exportsFileContent names groups
+            (dtLines, nameLines) = partition isDatatypeLine (lines content)
+        nameLines               @?= names
+        map parseDatatypeLine dtLines @?= groups
+    ]
+  , testGroup "imported interface checksum (spec 10)"
+    -- Identity comes from the recomputed hash; the stored hash is verified
+    -- against it on read. A well-formed interface is accepted; a tampered
+    -- stored hash fails compilation, naming the library.
+    [ testCase "well-formed interface is accepted" $
+        case foldImports [(optionHash, optionCanon)] of
+          Right _ -> return ()
+          Left e  -> assertFailure ("expected acceptance, got: " ++ e)
+    , testCase "tampered stored hash is rejected, naming the library" $
+        case foldImports [(tamperedHash, optionCanon)] of
+          Left e  -> do
+            assertBool ("error should name the library, got: " ++ e)
+              ("Fake" `isInfixOf` e)
+            assertBool ("error should flag corruption, got: " ++ e)
+              ("corrupt" `isInfixOf` e)
+          Right _ -> assertFailure "expected the tampered interface to be rejected"
+    ]
   , testGroup "parse round-trip (parse . render == id on canonical strings)"
     [ roundTrip "option"  optionGroup
     , roundTrip "binop"   binopGroup
@@ -295,3 +333,25 @@ roundTrip name g = testGroup name
       (groupHash <$> parseGroup canon) @?= Right (groupHash g)
   ]
   where canon = canonicalGroup g
+
+-- | A syntactically well-formed group hash that is not the hash of any group
+-- used here, standing in for a corrupted / hand-edited interface line.
+tamperedHash :: String
+tamperedHash = replicate 52 '0'
+
+-- | Run 'foldProg' on a trivial program that imports one library carrying the
+-- given (stored hash, canonical form) datatype interface. Exercises the
+-- interface-reading path (buildImportEnv) where the stored hash is verified
+-- against the recomputed one.
+foldImports :: [(String, String)] -> Either String ()
+foldImports dts =
+  () <$ runExcept (foldProg (Prog (Imports [imp]) [] (Loc NoPos (List []))))
+  where
+    imp = ImportDecl
+      { importLib       = LibName "Fake"
+      , importAlias     = Nothing
+      , importExports   = Just []
+      , importSelected  = Nothing
+      , importMode      = Qualified
+      , importDatatypes = dts
+      }

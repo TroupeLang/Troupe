@@ -11,6 +11,14 @@ import Data.Serialize (Serialize)
 type VarName = String
 type FieldName = String
 
+-- | The base32hex-rendered SHA-256 identity of a datatype declaration group
+-- (see 'SynVarHash.groupHash').
+type GroupHash = String
+
+-- | The canonical ASCII s-expression of a datatype declaration group (see
+-- 'SynVarHash.canonicalGroup'), from which its 'GroupHash' is recomputed.
+type CanonicalForm = String
+
 -- | Tag on a tuple constructor marking whether the tuple encodes a
 -- syntactic-variant value. False for ordinary tuples.
 type SynVariantTag = Bool
@@ -122,7 +130,7 @@ data ImportDecl = ImportDecl
   , importExports  :: Maybe [VarName]  -- Value exports from .exports file (filled by ProcessImports)
   , importSelected :: Maybe [VarName]  -- Selective imports (user-specified)
   , importMode     :: ImportMode       -- Qualified | Unqualified
-  , importDatatypes :: [(VarName, VarName)]
+  , importDatatypes :: [(GroupHash, CanonicalForm)]
       -- ^ Datatype groups exported by the library, as (group hash, canonical
       -- form) pairs in declaration order (dependencies precede dependents).
       -- Filled by ProcessImports from the @datatype@ lines of the @.exports@

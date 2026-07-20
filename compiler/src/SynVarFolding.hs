@@ -17,8 +17,10 @@
 -- unqualified imports) and through the qualified forms @L.c@ / @L.t.c@, and
 -- imported datatypes may be referenced in @of@ clauses bare (unqualified) or as
 -- @L.t@. The compiler recomputes each imported group's hash from its canonical
--- form, so the interface's stored hash is documentation only; a corrupted
--- interface can only produce non-matching tags, never a forged identity.
+-- form; identity always comes from the recomputed value. The interface's stored
+-- hash is a checksum verified on read: a stored hash that disagrees with the
+-- recomputed one rejects the interface (a corrupted or hand-edited line fails
+-- compilation loudly), so the interface can never forge identity.
 --
 -- The pass returns, alongside the rewritten program: the (hash, canonical form)
 -- of each local group in declaration order (for the library @.exports@ file and
@@ -30,7 +32,8 @@ import           Direct
 import           Basics (VarName, Imports(..), ImportDecl(..), ImportMode(..),
                          LibName(..))
 import qualified SynVarHash as H
-import           TroupePositionInfo (Located(..), PosInf(..), getLoc)
+import           Exports (renderDatatypeLine)
+import           TroupePositionInfo (Located(..), PosInf(..))
 
 import           Control.Monad (forM, forM_, when, foldM)
 import           Control.Monad.State
@@ -174,8 +177,9 @@ importQualifier imp = case importAlias imp of
 
 -- | Build the initial environment from the imported libraries' datatype
 -- interfaces. Imported groups are treated as declared before every local
--- group. The stored interface hash is ignored; the hash is recomputed from the
--- canonical form (spec §10: the interface is a cache with no authority).
+-- group. Identity comes from the hash recomputed from the canonical form; the
+-- stored interface hash is verified against it as a checksum and a mismatch
+-- rejects the interface (spec §10).
 buildImportEnv :: Imports -> Except String Env
 buildImportEnv (Imports imports) = foldM addImport emptyEnv imports
   where
@@ -185,13 +189,21 @@ buildImportEnv (Imports imports) = foldM addImport emptyEnv imports
       let LibName lib = importLib imp
           qual        = importQualifier imp
           bareVisible = importMode imp == Unqualified
-      -- Each interface line is one group's canonical form; parse it and
-      -- build the datatype entries, recomputing the group's hash.
-      dtEntries <- forM (importDatatypes imp) $ \(_stored, canon) ->
+      -- Each interface line is one group's (stored hash, canonical form); parse
+      -- the canonical form, recompute the group's hash, and verify the stored
+      -- hash matches it before building the datatype entries.
+      dtEntries <- forM (importDatatypes imp) $ \(stored, canon) ->
         case H.parseGroup canon of
           Left err -> throwError ("malformed datatype interface for library '"
                                    ++ lib ++ "': " ++ err ++ " in: " ++ canon)
-          Right grp -> return (entriesOfGroup grp)
+          Right grp -> do
+            let recomputed = H.groupHash grp
+            when (recomputed /= stored) $
+              throwError ("corrupt datatype interface for library '" ++ lib
+                          ++ "': stored hash does not match the canonical form "
+                          ++ "(recomputed " ++ recomputed ++ ") in line: "
+                          ++ renderDatatypeLine (stored, canon))
+            return (entriesOfGroup grp)
       let entries = concat dtEntries        -- [(dtName, DtEntry)]
           hashes  = [ deGroupHash e | (_, e) <- entries ]
           env1 = env

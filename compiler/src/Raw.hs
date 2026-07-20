@@ -297,8 +297,11 @@ ppRawExpr (Bin binop _ va1 va2) = -- TODO: 2025-07-31; also print the fast flag
   ppId va1 <+> text (show binop) <+> ppId va2
 ppRawExpr (Un op v) =
   text (show op) <> PP.parens (ppId v)
-ppRawExpr (Tuple vars _) =
-  PP.parens $ PP.hsep $ PP.punctuate (text ",") (map ppId vars)
+ppRawExpr (Tuple vars tag) =
+  -- Mark a syntactic-variant tuple distinctly (matching the ir-sexp
+  -- "tuple-variant" naming); a plain tuple keeps the bare @(a, b)@ form.
+  (if tag then text "tuple-variant" else PP.empty)
+    <> (PP.parens $ PP.hsep $ PP.punctuate (text ",") (map ppId vars))
 ppRawExpr (List vars) =
   PP.brackets $ PP.hsep $ PP.punctuate (text ",") (map ppId vars)
 ppRawExpr (ListCons v1 v2) =

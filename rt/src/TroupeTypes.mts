@@ -7,6 +7,7 @@ export const enum TroupeType {
   LEVEL=5,
   AUTHORITY=6,
   CAPABILITY=7,
+  /* slot 8 is retired (was ATOM, a serialization tag) and must not be reused */
   BIGINT=9,
   /* up until this point only base types */
 

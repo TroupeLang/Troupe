@@ -6,6 +6,7 @@ import * as Ty from './TroupeTypes.mjs'
 import { __exitInitiated } from './runtimeMonitored.mjs';
 import { LVal } from './Lval.mjs';
 import { mkTuple, mkList } from './ValuesUtil.mjs';
+import { isWellFormedSynVariant } from './RawTuple.mjs';
 import { ProcessID } from './process.mjs';
 import { Authority } from './Authority.mjs';
 import { TroupeBigInt } from './TroupeBigInt.mjs';
@@ -397,9 +398,18 @@ function constructCurrentUnchecked(compilerOutput: string) {
                         return Record.mkRecord(a);
                     case Ty.TroupeType.LIST:
                         return mkList(this.deserializeArray(obj));
-                    case Ty.TroupeType.TUPLE:
-                        return mkTuple(this.deserializeArray(obj.vals),
-                                       obj.isSynVariant === true);
+                    case Ty.TroupeType.TUPLE: {
+                        const isSynVariant = obj.isSynVariant === true;
+                        const vals = this.deserializeArray(obj.vals);
+                        // A flagged tuple must carry the (tag) / (tag, payload)
+                        // shape; a malformed one is corrupt inbound data and is
+                        // dropped like any other, rather than crashing the
+                        // printer later.
+                        if (isSynVariant && !isWellFormedSynVariant(vals)) {
+                            throw new CorruptDataException();
+                        }
+                        return mkTuple(vals, isSynVariant);
+                    }
                     case Ty.TroupeType.CLOSURE:
                         return mkClosure(obj.ClosureID);
                     case Ty.TroupeType.NUMBER:

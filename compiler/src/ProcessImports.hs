@@ -1,11 +1,12 @@
 module ProcessImports (processImports) where
 import Basics
 import Direct
+import Exports (isDatatypeLine, parseDatatypeLine)
 import Control.Monad (unless)
 import System.Environment
 import System.Exit
 import System.Directory (doesFileExist)
-import Data.String.Utils
+import Data.String.Utils (endswith)
 import Data.List (partition)
 
 defaultLibFolder="/lib/out/" 
@@ -54,7 +55,7 @@ processImport imp = do
   -- Value names feed value-name scoping (Core); datatype lines feed the
   -- syntactic-variant resolver (SynVarFolding) and are kept separate here so
   -- they never leak into the value namespace.
-  let (dtLines, nameLines) = partition (startswith "datatype ") (lines input)
+  let (dtLines, nameLines) = partition isDatatypeLine (lines input)
       datatypes = map parseDatatypeLine dtLines
   -- Validate selective imports if specified. Selection restricts *value*
   -- imports only; datatypes are imported wholesale regardless (they are
@@ -66,15 +67,6 @@ processImport imp = do
         then return imp { importExports = Just nameLines, importDatatypes = datatypes }
         else die $ "Library '" ++ lib ++ "' does not export: " ++ unwords missing
     Nothing -> return imp { importExports = Just nameLines, importDatatypes = datatypes }
-
--- | Parse a @datatype <group-hash> <canonical-form>@ interface line into its
--- (hash, canonical-form) pair. The hash is the first whitespace-delimited token
--- after the keyword; the canonical form is the remainder (it contains spaces).
-parseDatatypeLine :: String -> (String, String)
-parseDatatypeLine line =
-  let rest = drop (length ("datatype " :: String)) line
-      (h, canon) = break (== ' ') rest
-  in (h, dropWhile (== ' ') canon)
 
 
 processImports' :: Imports -> IO Imports

@@ -13,16 +13,44 @@ import Direct
 import TroupePositionInfo (Located(..), unLoc)
 import Control.Monad.Except
 import Data.List (intercalate)
+import Data.String.Utils (startswith)
 
 type Exports = [(Basics.VarName, Basics.VarName)]
 
+-- | The prefix marking a datatype line in a @.exports@ interface file. The one
+-- definition of the datatype-line format lives here: 'renderDatatypeLine' /
+-- 'isDatatypeLine' / 'parseDatatypeLine' are the writer/recognizer/parser that
+-- share it, and 'ProcessImports' consumes them so producer and consumer cannot
+-- drift.
+datatypePrefix :: String
+datatypePrefix = "datatype "
+
+-- | Render one interface datatype line from its (group hash, canonical form):
+-- @datatype <group-hash> <canonical-form>@. Inverse of 'parseDatatypeLine'.
+renderDatatypeLine :: (String, String) -> String
+renderDatatypeLine (h, c) = datatypePrefix ++ h ++ " " ++ c
+
+-- | Whether an interface line is a datatype line (as opposed to a value-name
+-- line).
+isDatatypeLine :: String -> Bool
+isDatatypeLine = startswith datatypePrefix
+
+-- | Parse a datatype interface line into its (group hash, canonical form) pair.
+-- Inverse of 'renderDatatypeLine': the hash is the first whitespace-delimited
+-- token after the prefix; the canonical form is the remainder (it contains
+-- spaces).
+parseDatatypeLine :: String -> (String, String)
+parseDatatypeLine line =
+  let rest = drop (length datatypePrefix) line
+      (h, canon) = break (== ' ') rest
+  in (h, dropWhile (== ' ') canon)
+
 -- | Assemble the @.exports@ interface content: one value name per line,
--- followed by one @datatype <group-hash> <canonical-form>@ line per exported
--- datatype group in declaration order (spec §10). A library exports all its
--- header datatype groups.
+-- followed by one datatype line per exported datatype group in declaration
+-- order (spec §10). A library exports all its header datatype groups.
 exportsFileContent :: [Basics.VarName] -> [(String, String)] -> String
 exportsFileContent names groups =
-  intercalate "\n" (names ++ [ "datatype " ++ h ++ " " ++ c | (h, c) <- groups ])
+  intercalate "\n" (names ++ map renderDatatypeLine groups)
 
 -- | Extract the main term from let bindings (now works with LTerm)
 extractMain :: LTerm -> LTerm

@@ -1,0 +1,1 @@
+tests/cmp/synvar/fun-shadows-ambient-constructor.trp:6:9: print is a constructor of datatype t and cannot be used as a function name

@@ -1,0 +1,8 @@
+(* A user function named `print` while `print` is a constructor in scope
+   is a static error, exactly as for any other constructor name: the
+   constructor-name check is unchanged by the ambient-method reorder. *)
+datatype t = print of int
+
+let fun print x = x
+in print 5
+end

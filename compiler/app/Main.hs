@@ -116,10 +116,7 @@ process flags fname input = do
 
       ------------------------------------------------------
       -- TROUPE (FRONTEND) ---------------------------------
-      let prog_without_dependencies = case compileMode of Normal -> addAmbientMethods prog_parsed
-                                                          _      -> prog_parsed
-
-      prog <- (processImports) prog_without_dependencies
+      prog <- (processImports) prog_parsed
 
       exports <- case compileMode of Library -> case runExcept (extractExports prog) of
                                                      Right es -> return (Just (es))
@@ -130,12 +127,16 @@ process flags fname input = do
                         writeFileD "out/out.syntax" (showIndent 2 prog)
                         putStrLn (showIndent 2 prog)
       ------------------------------------------------------
+      -- Syntactic-variant folding runs on the user program before the ambient
+      -- methods are injected, so the folder never inspects the generated
+      -- declarations and a datatype constructor may shadow an ambient builtin.
       foldRes <- case runExcept (SVF.foldProg prog) of
         Right r -> return r
         Left s -> die s
-      let folded         = SVF.frProg foldRes
-          localGroups    = SVF.frLocal foldRes      -- [(group hash, canonical form)]
+      let localGroups    = SVF.frLocal foldRes      -- [(group hash, canonical form)]
           consumedRecord = SVF.frConsumed foldRes   -- [(library, consumed hashes)]
+          folded = case compileMode of Normal -> addAmbientMethods (SVF.frProg foldRes)
+                                       _      -> SVF.frProg foldRes
       prog' <- case runExcept (C.trans compileMode folded) of
         Right p -> return p
         Left s -> die s

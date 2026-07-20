@@ -35,7 +35,7 @@ import           TroupePositionInfo (Located(..), PosInf(..), getLoc)
 import           Control.Monad (forM, forM_, when, foldM)
 import           Control.Monad.State
 import           Control.Monad.Except
-import           Data.List (elemIndex, nub, nubBy, (\\), intercalate, sort)
+import           Data.List (elemIndex, nub, nubBy, intercalate, sort)
 import qualified Data.Map.Strict as Map
 import           Data.Map.Strict (Map)
 import qualified Data.Set as Set
@@ -57,12 +57,12 @@ data CtorRes = CtorRes
   , crGroupHash :: String
   }
 
--- | A resolved datatype: its declared type parameters, its group hash, and
--- its constructors keyed by constructor name.
+-- | A resolved datatype: its type-parameter count, its group hash, and its
+-- constructors keyed by constructor name.
 data DtEntry = DtEntry
-  { deParams    :: [String]
-  , deGroupHash :: String
-  , deCtors     :: Map String CtorRes
+  { deParamCount :: Int
+  , deGroupHash  :: String
+  , deCtors      :: Map String CtorRes
   }
 
 -- | The resolution environment accumulated across declaration groups.
@@ -81,6 +81,17 @@ data Env = Env
       -- ^ qualifier -> (constructor name -> candidates)
   , envImportedHashes :: Set String                    -- ^ all imported group hashes
   , envHashToLib      :: Map String String             -- ^ imported group hash -> library name
+  }
+
+-- | The one builder for a datatype entry, shared by import ingestion and local
+-- declaration processing so both derive constructor tags identically.
+mkDtEntry :: String -> String -> Int -> [(String, Bool)] -> DtEntry
+mkDtEntry hash dtName paramCount ctors = DtEntry
+  { deParamCount = paramCount
+  , deGroupHash  = hash
+  , deCtors      = Map.fromList
+      [ (cn, CtorRes (H.constructorTag hash dtName cn) nullary dtName cn hash)
+      | (cn, nullary) <- ctors ]
   }
 
 -- | Fixed primitive type names (spec §2 / §5).
@@ -196,7 +207,7 @@ buildImportEnv (Imports imports) = foldM addImport emptyEnv imports
       return $ if bareVisible
                then env1 { envDts  = Map.union (envDts env1) (Map.fromList entries)
                          , envBare = Map.unionWith (++) (envBare env1)
-                                       (bareCtorsOf entries) }
+                                       (ctorMapOf entries) }
                else env1
 
     -- | Turn a parsed group into datatype entries. The group's hash is
@@ -204,19 +215,13 @@ buildImportEnv (Imports imports) = foldM addImport emptyEnv imports
     entriesOfGroup :: H.Group -> [(String, DtEntry)]
     entriesOfGroup grp =
       let h = H.groupHash grp
-      in [ (dtName, DtEntry (replicate nparams "_") h ctors)
-         | (dtName, nparams, cs) <- grp
-         , let ctors = Map.fromList
-                 [ (cn, CtorRes (H.constructorTag h dtName cn)
-                                (payload == Nothing) dtName cn h)
-                 | (cn, payload) <- cs ] ]
+      in [ (dtName, mkDtEntry h dtName nparams
+                     [ (cn, payload == Nothing) | (cn, payload) <- cs ])
+         | (dtName, nparams, cs) <- grp ]
 
     ctorMapOf :: [(String, DtEntry)] -> Map String [CtorRes]
     ctorMapOf entries = Map.fromListWith (++)
       [ (crName res, [res]) | (_, e) <- entries, res <- Map.elems (deCtors e) ]
-
-    bareCtorsOf :: [(String, DtEntry)] -> Map String [CtorRes]
-    bareCtorsOf = ctorMapOf
 
 ------------------------------------------------------------
 -- Declaration processing
@@ -227,11 +232,13 @@ buildImportEnv (Imports imports) = foldM addImport emptyEnv imports
 -- hashes consumed through @of@-clause references to imported types.
 processGroups :: Env -> [SynDataGroup]
               -> Except String (Env, [(String, String)], Set String)
-processGroups env0 = foldM step (env0, [], Set.empty)
+processGroups env0 groups = do
+  (env, infosRev, consumed) <- foldM step (env0, [], Set.empty) groups
+  return (env, reverse infosRev, consumed)
   where
     step (env, infos, consumed) grp = do
       (env', info, c) <- processGroup env grp
-      return (env', infos ++ [info], Set.union consumed c)
+      return (env', info : infos, Set.union consumed c)
 
 processGroup :: Env -> SynDataGroup
              -> Except String (Env, (String, String), Set String)
@@ -265,21 +272,15 @@ processGroup env (SynDataGroup decls) = do
   -- (5) genuineness: a multi-member group must be strongly connected
   let dtPos = Map.fromList dtNames
   checkGenuine dtPos resolved
-  -- normalize + hash the group
   let canon = H.canonicalGroup resolved
       hash  = H.groupHash resolved
   -- imported group hashes referenced by this group's payloads are consumed
   let consumed = Set.fromList
         [ h | (_, _, ctors) <- resolved, (_, mnf) <- ctors, Just nf <- [mnf]
             , h <- extHashes nf, h `Set.member` envImportedHashes env ]
-  -- extend the environment with this group's datatypes and constructors
-  let paramsOf = Map.fromList [ (n, ps) | SynDataDecl _ ps n _ <- decls ]
-      newEntries =
-        [ (n, DtEntry (Map.findWithDefault [] n paramsOf) hash ctorMap)
-        | (n, _, ctors) <- resolved
-        , let ctorMap = Map.fromList
-                [ (c, CtorRes (H.constructorTag hash n c) (mnf == Nothing) n c hash)
-                | (c, mnf) <- ctors ] ]
+  let newEntries =
+        [ (n, mkDtEntry hash n npar [ (c, mnf == Nothing) | (c, mnf) <- ctors ])
+        | (n, npar, ctors) <- resolved ]
       env' = env { envDts = foldr (\(n, e) -> Map.insert n e) (envDts env) newEntries }
       bareAdds = [ res | (_, e) <- newEntries, res <- Map.elems (deCtors e) ]
       envBare' = foldr (\res -> Map.insertWith (++) (crName res) [res]) (envBare env') bareAdds
@@ -323,7 +324,7 @@ resolveTy env sameGroup params dtName cpos = go
       [n] -> case Map.lookup n sameGroup of
         Just pc -> checkArity n pc >> return (H.App args (H.RIn n))
         Nothing -> case Map.lookup n (envDts env) of
-          Just e  -> let pc = length (deParams e)
+          Just e  -> let pc = deParamCount e
                      in checkArity n pc >> return (H.App args (H.RExt (deGroupHash e) n))
           Nothing
             | n == "list" && k == 1 -> return (H.App args (H.RBuiltin "list"))
@@ -331,7 +332,7 @@ resolveTy env sameGroup params dtName cpos = go
             | otherwise             -> throwHere ("unbound type name: " ++ n)
       [m, t] -> do
         e <- lookupQualifiedTy m t
-        let pc = length (deParams e)
+        let pc = deParamCount e
         checkArity t pc
         return (H.App args (H.RExt (deGroupHash e) t))
       _ -> throwHere ("malformed qualified type name: " ++ intercalate "." q)
@@ -354,9 +355,8 @@ resolveTy env sameGroup params dtName cpos = go
         | otherwise -> return (H.In n)
       Nothing -> case Map.lookup n (envDts env) of
         Just e
-          | not (null (deParams e)) ->
-              throwHere ("datatype " ++ n ++ " expects "
-                          ++ arity (length (deParams e)))
+          | deParamCount e /= 0 ->
+              throwHere ("datatype " ++ n ++ " expects " ++ arity (deParamCount e))
           | otherwise -> return (H.Ext (deGroupHash e) n)
         Nothing
           | n `elem` primNames -> return (H.Prim n)
@@ -365,9 +365,9 @@ resolveTy env sameGroup params dtName cpos = go
           | otherwise -> throwHere ("unbound type name: " ++ n)
     resolveName [m, t] = do
       e <- lookupQualifiedTy m t
-      if not (null (deParams e))
+      if deParamCount e /= 0
         then throwHere ("datatype " ++ m ++ "." ++ t ++ " expects "
-                         ++ arity (length (deParams e)))
+                         ++ arity (deParamCount e))
         else return (H.Ext (deGroupHash e) t)
     resolveName q = throwHere ("malformed qualified type name: " ++ intercalate "." q)
 
@@ -416,11 +416,6 @@ checkGenuine dtPos group
     inRefsTarget _          = []
     longest = foldr (\a b -> if length a >= length b then a else b) []
     braces xs = "{" ++ intercalate ", " xs ++ "}"
-
-firstDup :: Eq a => [a] -> Maybe a
-firstDup xs = case xs \\ nub xs of
-  (d:_) -> Just d
-  []    -> Nothing
 
 -- | Find the first repeated element in a positioned list, returning the value
 -- together with the position of its first occurrence and the position of the
@@ -506,7 +501,6 @@ rewriteFields env bnd = mapM $ \(f, mt) -> (,) f <$> traverse (rewriteLTerm env 
 rewriteLambda :: Env -> Set VarName -> Lambda -> RW Lambda
 rewriteLambda env bnd (Lambda ps b) = do
   ps' <- mapM (rewritePat env) ps
-  -- The clause parameters bind within the clause body.
   let bnd' = Set.union bnd (Set.unions (map (patBound env) ps))
   Lambda ps' <$> rewriteLTerm env bnd' b
 

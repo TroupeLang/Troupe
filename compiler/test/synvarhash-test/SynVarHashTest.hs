@@ -9,10 +9,15 @@
 -- module.
 module Main (main) where
 
+import           Data.List (isInfixOf)
+
 import           Test.Tasty
 import           Test.Tasty.HUnit
 
 import           SynVarHash
+import qualified Stack2JS
+import qualified Stack
+import           CompileMode (CompileMode(..))
 
 -- Exact group hashes from the spec, reused as dependency hashes in later
 -- vectors.
@@ -233,6 +238,28 @@ main = defaultMain $ testGroup "SynVarHash exact vectors"
         constructorTag hBinop "binop" "ADD"
           @?= hBinop ++ "#binop#ADD"
     ]
+  , testGroup "datatype records embedded in generated JS (spec 10)"
+    -- Guards the emission moved into Stack2JS: a regression that stops emitting
+    -- the records makes the load-time skew check vacuous but silent, so it must
+    -- fail loudly here. Runs the real whole-program codegen entry point on an
+    -- empty program carrying only the records.
+    [ testCase "library emits its exported hashes" $ do
+        let js = genJS Library (Stack2JS.DatatypeRecords [optionHash] [])
+        assertBool "missing this.__datatypeHashes" ("this.__datatypeHashes" `isInfixOf` js)
+        assertBool "missing the exported hash"     (optionHash `isInfixOf` js)
+    , testCase "consuming program emits its consumed record" $ do
+        let js = genJS Normal (Stack2JS.DatatypeRecords [] [("VariantsDemo", [optionHash])])
+        assertBool "missing this.__consumedDatatypeHashes"
+          ("this.__consumedDatatypeHashes" `isInfixOf` js)
+        assertBool "missing the consumed library name" ("VariantsDemo" `isInfixOf` js)
+        assertBool "missing the consumed hash"         (optionHash `isInfixOf` js)
+    , testCase "no records means no record declarations" $ do
+        let js = genJS Normal Stack2JS.noDatatypeRecords
+        assertBool "unexpected __datatypeHashes"
+          (not ("__datatypeHashes" `isInfixOf` js))
+        assertBool "unexpected __consumedDatatypeHashes"
+          (not ("__consumedDatatypeHashes" `isInfixOf` js))
+    ]
   , testGroup "parse round-trip (parse . render == id on canonical strings)"
     [ roundTrip "option"  optionGroup
     , roundTrip "binop"   binopGroup
@@ -247,6 +274,13 @@ main = defaultMain $ testGroup "SynVarHash exact vectors"
     , roundTrip "tree"    treeGroup
     ]
   ]
+
+-- | Generate JS for an empty program carrying only the given datatype records,
+-- through the real whole-program codegen entry point (source maps off).
+genJS :: CompileMode -> Stack2JS.DatatypeRecords -> String
+genJS mode records =
+  fst (Stack2JS.stack2JSWithMappings mode False False records
+         (Stack.ProgramStackUnit (Stack.StackProgram [])))
 
 -- | Parsing the canonical string and re-rendering must reproduce it exactly,
 -- and the hash recomputed from the parsed form must match the original. This

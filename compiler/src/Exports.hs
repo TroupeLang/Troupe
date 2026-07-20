@@ -12,8 +12,17 @@ import Basics
 import Direct
 import TroupePositionInfo (Located(..), unLoc)
 import Control.Monad.Except
+import Data.List (intercalate)
 
 type Exports = [(Basics.VarName, Basics.VarName)]
+
+-- | Assemble the @.exports@ interface content: one value name per line,
+-- followed by one @datatype <group-hash> <canonical-form>@ line per exported
+-- datatype group in declaration order (spec §10). A library exports all its
+-- header datatype groups.
+exportsFileContent :: [Basics.VarName] -> [(String, String)] -> String
+exportsFileContent names groups =
+  intercalate "\n" (names ++ [ "datatype " ++ h ++ " " ++ c | (h, c) <- groups ])
 
 -- | Extract the main term from let bindings (now works with LTerm)
 extractMain :: LTerm -> LTerm

@@ -211,9 +211,16 @@ process flags fname input = do
       when verbose $ writeFileD "out/out.stack" (PP.render $ PPrint.runPP ppConfig $ Stack.ppProg stack)
 
       ----- JAVASCRIPT -------------------------------------
+      -- The compiled artifact embeds its datatype records (spec §10): a library
+      -- carries its own exported group hashes; any artifact that consumed
+      -- imported datatypes carries the per-library consumed hashes.
+      let records = Stack2JS.DatatypeRecords
+                      { Stack2JS.drExported = map fst localGroups
+                      , Stack2JS.drConsumed = consumedRecord }
       let (stackjs, mappings) = Stack2JS.stack2JSWithMappings compileMode
                                                               debugJS
                                                               sourceMapEnabled
+                                                              records
                                                               (Stack.ProgramStackUnit stack)
 
       ----- SOURCE MAP EMBEDDING ---------------------------
@@ -234,16 +241,11 @@ process flags fname input = do
                                              ++ BS.unpack mapBase64 ++ "\n"
                          in jsWithMap ++ inlineComment
                     else stackjs
-      -- Embed the datatype records (spec §10): a library carries its own
-      -- exported group hashes; any artifact that consumed imported datatypes
-      -- carries the per-library consumed hashes, checked at load time.
-      let finalJs' = injectDatatypeRecords compileMode (map fst localGroups)
-                                           consumedRecord finalJs
-      writeFile outPath finalJs'
+      writeFile outPath finalJs
 
       -- case compileMode of Library -> ...
       case exports of Nothing -> return ()
-                      Just es -> writeExports outPath es (map snd localGroups) (map fst localGroups)
+                      Just es -> writeExports outPath (exportsFileContent es localGroups)
 
       ----- EPILOGUE --------------------------------------
       when verbose printHr
@@ -271,6 +273,7 @@ ingestIRSexp flags file input =
           stack    = Raw2Stack.rawProg2Stack rawopt
           (stackjs, _mappings) =
             Stack2JS.stack2JSWithMappings CompileMode.Normal debugJS False
+                                          Stack2JS.noDatatypeRecords
                                           (Stack.ProgramStackUnit stack)
       writeFile outPath stackjs
       exitSuccess
@@ -290,55 +293,12 @@ outFile flags fname = case List.find isOutFlag flags of
                                , if takeExtension f == ".trp" then takeBaseName f else takeFileName f
                                ]
 
--- | Write the @.exports@ interface: one value name per line, followed by one
--- @datatype <group-hash> <canonical-form>@ line per exported datatype group in
--- declaration order (spec §10). A library exports all its header datatype
--- groups.
-writeExports path names canons hashes =
+-- | Write the assembled @.exports@ interface content to the artifact's
+-- @.exports@ file (dropping a trailing @.js@ from the output path).
+writeExports :: FilePath -> String -> IO ()
+writeExports path content =
   let path' = if takeExtension path == ".js" then dropExtension path else path
-      dtLines = [ "datatype " ++ h ++ " " ++ c | (h, c) <- zip hashes canons ]
-  in writeFileD (path' ++ ".exports") (intercalate "\n" (names ++ dtLines))
-
---------------------------------------------------------------------------------
------ DATATYPE RECORDS EMBEDDED IN THE COMPILED ARTIFACT (spec §10) ------------
-
--- | A JS array literal of string hashes.
-jsStringArray :: [String] -> String
-jsStringArray xs = "[" ++ intercalate "," (map quote xs) ++ "]"
-  where quote s = "\"" ++ s ++ "\""
-
--- | Inject the datatype records into the generated JS. A library body (which
--- executes with @this@ bound to the fresh namespace instance) gains its own
--- exported-hash list and any consumed-hash record as leading @this.@ statements.
--- A normal program's records are injected inside its @Top@ constructor body.
-injectDatatypeRecords :: CompileMode -> [String] -> [(String, [String])]
-                      -> String -> String
-injectDatatypeRecords compileMode exportedHashes consumed js =
-  case compileMode of
-    Library -> exportedDecl ++ consumedDecl ++ js
-    _       -> if null consumed
-               then js
-               else replaceFirst "function Top (rt) {"
-                                 ("function Top (rt) {\n" ++ consumedDecl) js
-  where
-    exportedDecl
-      | null exportedHashes = ""
-      | otherwise = "this.__datatypeHashes = " ++ jsStringArray exportedHashes ++ ";\n"
-    consumedDecl
-      | null consumed = ""
-      | otherwise =
-          "this.__consumedDatatypeHashes = {"
-          ++ intercalate "," [ "\"" ++ lib ++ "\":" ++ jsStringArray hs
-                             | (lib, hs) <- consumed ]
-          ++ "};\n"
-
--- | Replace the first occurrence of @needle@ in @hay@ with @repl@.
-replaceFirst :: String -> String -> String -> String
-replaceFirst needle repl = go
-  where
-    go s | needle `List.isPrefixOf` s = repl ++ drop (length needle) s
-    go (c:cs) = c : go cs
-    go []     = []
+  in writeFileD (path' ++ ".exports") content
 
 -- Utility functions for printing things out
 hrWidth = 70

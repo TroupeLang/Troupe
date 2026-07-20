@@ -80,6 +80,41 @@ data JSOutput = JSOutput { libs :: [LibAccess]
 instance Aeson.ToJSON JSOutput
 
 
+-- | The datatype records embedded in a compiled artifact (spec §10). A library
+-- carries the group hashes it exports; any artifact that consumed imported
+-- datatypes carries the per-library consumed hashes, checked at load time.
+data DatatypeRecords = DatatypeRecords
+  { drExported :: [String]              -- ^ this library's exported group hashes
+  , drConsumed :: [(String, [String])]  -- ^ per-library consumed group hashes
+  }
+
+noDatatypeRecords :: DatatypeRecords
+noDatatypeRecords = DatatypeRecords [] []
+
+-- | The leading @this.@ declarations that embed the datatype records. A library
+-- emits its exported-hash list; both libraries and programs emit any consumed
+-- record. Placed at the top of the enclosing constructor body (the library body
+-- or the program's @Top@ constructor), where the load-time skew check reads
+-- them off the instance.
+datatypeRecordDecls :: CompileMode -> DatatypeRecords -> [PP.Doc]
+datatypeRecordDecls compileMode (DatatypeRecords exported consumed) =
+  case compileMode of
+    Library -> [exportedDecl, consumedDecl]
+    _       -> [consumedDecl]
+  where
+    exportedDecl
+      | null exported = PP.empty
+      | otherwise = semi $ text "this.__datatypeHashes =" <+> jsStringArray exported
+    consumedDecl
+      | null consumed = PP.empty
+      | otherwise = semi $ text "this.__consumedDatatypeHashes =" <+> obj
+    obj = PP.braces $ hcatComma
+            [ PP.doubleQuotes (text lib) <> text ":" <> jsStringArray hs
+            | (lib, hs) <- consumed ]
+    jsStringArray xs = PP.brackets $ hcatComma (map (PP.doubleQuotes . text) xs)
+    hcatComma = PP.hcat . PP.punctuate (text ",")
+
+
 data TheState = TheState { freshCounter :: Integer
                          , frameSize    :: Int
                          , sparseSlot   :: Int
@@ -174,9 +209,9 @@ sourceMapPlaceholderStr = "/*__SOURCE_MAP_PLACEHOLDER__*/"
 sourceMapPlaceholder :: PP.Doc
 sourceMapPlaceholder = PP.text sourceMapPlaceholderStr
 
-stack2PPDoc :: CompileMode -> CodeGenOpts -> StackUnit -> (PP.Doc, WData)
+stack2PPDoc :: CompileMode -> CodeGenOpts -> DatatypeRecords -> StackUnit -> (PP.Doc, WData)
 
-stack2PPDoc compileMode opts (ProgramStackUnit sp) =
+stack2PPDoc compileMode opts records (ProgramStackUnit sp) =
   let (fns, _, w@(libs, konts, markers)) = runRWS (toJS sp) opts initState
       sourceMapEnabled = cgoSourceMapEnabled opts
       -- Source map attachment: defineProperty ensures it's non-enumerable
@@ -184,6 +219,7 @@ stack2PPDoc compileMode opts (ProgramStackUnit sp) =
                             then PP.text "Object.defineProperty(this, '__sourceMap', { value:" <+> sourceMapPlaceholder <+> PP.text ", enumerable: false })"
                             else PP.empty
       inner = vcat $
+        datatypeRecordDecls compileMode records ++
         [ sourceMapAttachment
         , jsLoadLibs
         , addLibs libs
@@ -200,7 +236,7 @@ stack2PPDoc compileMode opts (ProgramStackUnit sp) =
                                   _                      -> outer
   in (ppDoc, w)
 
-stack2PPDoc _           opts su =
+stack2PPDoc _           opts _ su =
   let (inner, _, w@(libs, konts, markers)) = runRWS (toJS su) opts initState
       ppDoc = vcat $ [ addLibs libs ] ++ (inner:konts)
   in (ppDoc, w)
@@ -209,7 +245,7 @@ stack2PPDoc _           opts su =
 stack2JSString :: CompileMode -> Bool -> StackUnit -> String
 stack2JSString compileMode debugMode su =
   let opts = CodeGenOpts { cgoDebugMode = debugMode, cgoSourceMapEnabled = False }
-      (ppDoc, _) = stack2PPDoc compileMode opts su
+      (ppDoc, _) = stack2PPDoc compileMode opts noDatatypeRecords su
       rendered = PP.render ppDoc
       -- Remove lines that contain only whitespace
       cleanedLines = filter (not . isWhitespaceOnly) (lines rendered)
@@ -217,10 +253,10 @@ stack2JSString compileMode debugMode su =
 
 -- | Generate JS string and source map mappings
 -- Returns (JS code with markers stripped, list of source map mappings)
-stack2JSWithMappings :: CompileMode -> Bool -> Bool -> StackUnit -> (String, [Mapping])
-stack2JSWithMappings compileMode debugMode sourceMapEnabled su =
+stack2JSWithMappings :: CompileMode -> Bool -> Bool -> DatatypeRecords -> StackUnit -> (String, [Mapping])
+stack2JSWithMappings compileMode debugMode sourceMapEnabled records su =
   let opts = CodeGenOpts { cgoDebugMode = debugMode, cgoSourceMapEnabled = sourceMapEnabled }
-      (ppDoc, (_, _, markerData)) = stack2PPDoc compileMode opts su
+      (ppDoc, (_, _, markerData)) = stack2PPDoc compileMode opts records su
       rendered = PP.render ppDoc
       -- processMarkers handles marker stripping and merging whitespace-only lines
       (cleanCode, mappings) = processMarkers rendered markerData
@@ -299,7 +335,7 @@ parseMarker s
 stack2JSON :: CompileMode -> Bool -> StackUnit -> ByteString
 stack2JSON compileMode debugMode su =
   let opts = CodeGenOpts { cgoDebugMode = debugMode, cgoSourceMapEnabled = True }
-      (ppDoc, (libs, konts, markers)) = stack2PPDoc compileMode opts su
+      (ppDoc, (libs, konts, markers)) = stack2PPDoc compileMode opts noDatatypeRecords su
       rendered = PP.render ppDoc
       -- Process markers to generate source map mappings
       (cleanCode, mappings) = processMarkers rendered markers

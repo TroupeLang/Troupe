@@ -79,7 +79,6 @@ type Group = [Datatype]
 sexp :: [String] -> String
 sexp parts = "(" ++ unwords parts ++ ")"
 
--- | Render a payload type normal form.
 renderTy :: TyNF -> String
 renderTy (Var i)    = sexp ["var", show i]
 renderTy (Prim p)   = sexp ["prim", p]
@@ -88,13 +87,11 @@ renderTy (Ext h n)  = sexp ["ext", h, n]
 renderTy (Prod tys) = sexp ("prod" : map renderTy tys)
 renderTy (App tys tgt) = sexp ("app" : map renderTy tys ++ [renderTarget tgt])
 
--- | Render an application target.
 renderTarget :: TyRef -> String
 renderTarget (RBuiltin n) = sexp ["builtin", n]
 renderTarget (RIn n)      = sexp ["in", n]
 renderTarget (RExt h n)   = sexp ["ext", h, n]
 
--- | Render one constructor (nullary or unary).
 renderCtor :: Constructor -> String
 renderCtor (cname, Nothing) = sexp ["ctor", cname]
 renderCtor (cname, Just ty) = sexp ["ctor", cname, renderTy ty]

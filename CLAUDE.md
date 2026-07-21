@@ -30,6 +30,24 @@ commands are documented in [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) ("Building
 
 Always invoke `/usr/bin/make` instead of `make`, to avoid a zsh function conflict.
 
+## Ground claims in the source — no arguing from extrapolation
+
+Any claim about how the compiler or runtime behaves — how a construct is compiled, what a
+pass does or does not optimize, what an operation costs — must be verified before it is
+asserted:
+
+- Compile a **minimal probe program** and read the artifact the claim is about.
+  `bin/troupec -v probe.trp -o probe.js` refreshes the stage dumps in `out/`
+  (`out.nopats`, `out.cpsopt`, `out.iropt`, `out.rawopt`, `out.stack`) alongside the emitted JS.
+- Read the **pass that implements the behavior**, not just its name, a summary, or a
+  downstream artifact two stages away.
+- For performance claims, **measure** (`examples/variants/bench.trp`, or a timing probe);
+  predictions about which variant is faster are routinely wrong here.
+- Attach provenance to every such claim: the `file:line` read or the probe/dump inspected.
+  A claim without provenance must be labeled as unverified inference — never presented with
+  the same confidence as a verified fact. When challenged ("are you sure?"), the answer is a
+  probe or a source read, not a restatement of the argument.
+
 ## Running tests
 
 - Running the suite takes time. Run it once, redirect output to a temp file, and read that file

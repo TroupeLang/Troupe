@@ -129,96 +129,133 @@ ifpat pos lt1 lt2 lt3 =
 -- 2023-06-21: FW: an alternative would be to add a pseudo pattern at the end of each pattern list,
 -- which includes the error message and always compiles to an error term.
 -- | Compile pattern matching to conditionals and assertions.
+--
+-- The failure term (held in the Reader environment) is spliced into a clause
+-- exactly once: 'collectPattern' gathers a clause's refutable tests into an
+-- ordered list of conjuncts and a binding wrapper, and 'compilePattern' joins
+-- the conjuncts with a single short-circuit '&&' and emits one 'ifpat'. Because
+-- the failure application then occurs once per clause (census 1), the downstream
+-- shrinking beta-reducer can inline the per-clause dispatch lambdas, so a clause
+-- no longer survives closure conversion as a per-call closure allocation.
+--
 -- succ: term corresponding to a successful match
 -- lv: the Located term to be assigned to the pattern
 -- lpat: the Located pattern (we unwrap to get both pattern and position)
 -- The Reader monad stores the error term (now also Located).
 compilePattern :: T.LTerm -> (T.LTerm, S.LDeclPattern) -> ReaderT T.LTerm Trans T.LTerm
-compilePattern succ (lv, Loc _ (S.AtPattern lp l))  = do
+compilePattern succ (lv, lpat) = do
   fail <- ask
+  (tests, wrap) <- lift (collectPattern (lv, lpat))
   let pos = getLoc lv
-  succ' <- compilePattern succ (lv, lp)
-  return $ ifpat pos (Loc pos (Bin Eq (Loc pos (Un LevelOf lv)) (Loc pos (Lit (LLabel l))))) succ' fail
-compilePattern succ (lv, Loc _ (S.VarPattern var)) =
+  case tests of
+    -- An irrefutable clause (no tests, e.g. a variable or wildcard pattern)
+    -- emits no conditional at all, just its bindings.
+    [] -> return (wrap succ)
+    -- Otherwise a single 'ifpat' guarded by the conjunction of all tests, with
+    -- the bindings wrapping the success continuation. 'ifpat' turns fail = Error
+    -- into a single 'AssertElseError', so the last clause has exactly one error site.
+    --
+    -- The nested emission reported a refuted pattern at the failure term's own
+    -- position (the clause's error message carries the clause position). Since the
+    -- accessor values carry no source position of their own ('getLoc lv' is NoPos
+    -- for a function argument), take the failure term's position for the assertion
+    -- when it is an error, so the reported error location is unchanged.
+    _  -> let cond = foldr1 (\a b -> Loc pos (Bin And a b)) tests
+              errPos = case unLoc fail of
+                         Error _ -> getLoc fail
+                         _       -> pos
+          in return (ifpat errPos cond (wrap succ) fail)
+
+-- | Gather a pattern's refutable tests and its variable bindings.
+--
+-- Returns @(tests, wrap)@ where @tests@ are the shape/equality/label conjuncts
+-- in the exact left-to-right order the nested emission evaluated them (parent
+-- shape test before child tests; children left-to-right), and @wrap@ threads the
+-- pattern's variable bindings (pure @Let@s of projections) around the success
+-- continuation. The tests never mention the bound names, so hoisting every
+-- binding inside the success branch preserves scope: guards and bodies still see
+-- all bindings, and each test still sees only projections of the matched value.
+collectPattern :: (T.LTerm, S.LDeclPattern) -> Trans ([T.LTerm], T.LTerm -> T.LTerm)
+collectPattern (lv, Loc _ (S.AtPattern lp l)) = do
   let pos = getLoc lv
-  in return $ Loc pos (Let [T.ValDecl var lv] succ)
-compilePattern succ (lv, Loc _ (S.ValPattern lit)) = do
-  fail <- ask
+  (innerTests, innerWrap) <- collectPattern (lv, lp)
+  -- The label test is just another conjunct, evaluated before the inner pattern.
+  let levelTest = Loc pos (Bin Eq (Loc pos (Un LevelOf lv)) (Loc pos (Lit (LLabel l))))
+  return (levelTest : innerTests, innerWrap)
+collectPattern (lv, Loc _ (S.VarPattern var)) =
   let pos = getLoc lv
-  return $ ifpat pos (Loc pos (Bin Eq lv (Loc _srcRT (Lit (transLit lit))))) succ fail
-compilePattern succ (lv, Loc _ S.Wildcard) =
+  in return ([], \s -> Loc pos (Let [T.ValDecl var lv] s))
+collectPattern (lv, Loc _ (S.ValPattern lit)) =
   let pos = getLoc lv
-  in return $ Loc pos (Let [T.ValDecl "$wildcard" lv] succ)
-compilePattern succ (lv, Loc _ (S.TuplePattern pats)) = do
-  fail <- ask
+  in return ([Loc pos (Bin Eq lv (Loc _srcRT (Lit (transLit lit))))], id)
+collectPattern (lv, Loc _ S.Wildcard) =
+  let pos = getLoc lv
+  in return ([], \s -> Loc pos (Let [T.ValDecl "$wildcard" lv] s))
+collectPattern (lv, Loc _ (S.TuplePattern pats)) = do
   let pos = getLoc lv
   -- Accessors for the value to be assigned to the patterns.
   let accessors = map (\idx -> Loc pos (ProjIdx lv idx)) [0..(fromIntegral (length pats) - 1)]
-  -- Compile the nested patterns, combining the resulting terms for the respective patterns so that the left-most is evaluated first.
-  succ' <- foldM compilePattern succ (reverse (zip accessors pats))
-  -- The expression for the tuple pattern checks whether the to-be-assigned value is a tuple with the correct length,
-  -- and then executes the expression succ' which checks the nested patterns.
-  return $ ifpat pos (Loc pos (Bin And (Loc pos (Un IsTuple lv)) (Loc pos (Bin Eq (Loc pos (Un TupleLength lv)) (Loc _srcRT (Lit (LNumeric (NumInt (toInteger (length pats)))))))))) succ' fail
+  -- Collect the nested patterns left-to-right so the left-most is evaluated first.
+  childResults <- mapM collectPattern (zip accessors pats)
+  -- Check first that the value is a tuple of the right length, then the children.
+  let shapeTest = Loc pos (Bin And (Loc pos (Un IsTuple lv)) (Loc pos (Bin Eq (Loc pos (Un TupleLength lv)) (Loc _srcRT (Lit (LNumeric (NumInt (toInteger (length pats)))))))))
+  return (shapeTest : concatMap fst childResults, foldr (.) id (map snd childResults))
 -- TODO Generate more efficient code:
 -- Decompose the list v according to the pattern with a DFS pass.
 -- This would benefit from an "is empty" operation (to not having to use the RT-dispatched equals).
 -- A potentially expensive length calculation is then unnecessary.
 -- However, this is more complicated, as would need unique name generation, also for potentially nested list patterns.
-compilePattern succ (lv, Loc _ (S.ListPattern pats)) = do
-  fail <- ask
+collectPattern (lv, Loc _ (S.ListPattern pats)) = do
   let pos = getLoc lv
   -- Accessors for the value to be assigned to the patterns.
   let accessors = map (\lt -> Loc pos (Un Head lt)) $ iterate (\lt -> Loc pos (Un Tail lt)) lv
-  -- Compile the nested patterns, combining the resulting terms for the respective patterns so that the left-most is evaluated first.
-  succ' <- foldM compilePattern succ (reverse (zip accessors pats)) -- pairs of pattern (the nested ones in the list) and term accessing the value at the corresponding index in the list term
-  -- The expression for the list pattern checks whether the to-be-assigned value is a list with the correct length,
-  -- and then executes the expression succ' which checks the nested patterns.
-  return $ ifpat pos (Loc pos (Bin And (Loc pos (Un IsList lv)) (Loc pos (Bin Eq (Loc pos (Un ListLength lv)) (Loc _srcRT (Lit (LNumeric (NumInt (toInteger (length pats)))))))))) succ' fail
-compilePattern succ (lv, Loc _ (S.ConsPattern lp1 lp2)) = do
-  fail <- ask
+  -- Collect the nested patterns left-to-right so the left-most is evaluated first.
+  childResults <- mapM collectPattern (zip accessors pats) -- pairs of pattern (the nested ones in the list) and term accessing the value at the corresponding index in the list term
+  -- Check first that the value is a list of the right length, then the children.
+  let shapeTest = Loc pos (Bin And (Loc pos (Un IsList lv)) (Loc pos (Bin Eq (Loc pos (Un ListLength lv)) (Loc _srcRT (Lit (LNumeric (NumInt (toInteger (length pats)))))))))
+  return (shapeTest : concatMap fst childResults, foldr (.) id (map snd childResults))
+collectPattern (lv, Loc _ (S.ConsPattern lp1 lp2)) = do
   let pos = getLoc lv
-  succ' <- compilePattern succ (Loc pos (Un Head lv), lp1)
-  succ'' <- compilePattern succ' (Loc pos (Un Tail lv), lp2)
+  (t1, w1) <- collectPattern (Loc pos (Un Head lv), lp1)
+  (t2, w2) <- collectPattern (Loc pos (Un Tail lv), lp2)
   -- TODO Avoid list length (potentially expensive). Implement similarly to the improved list pattern (see above).
-  return $ ifpat pos (Loc pos (Bin And (Loc pos (Un IsList lv)) (Loc pos (Bin Gt (Loc pos (Un ListLength lv)) (Loc _srcRT (Lit (LNumeric (NumInt 0)))))))) succ'' fail
-compilePattern _ (_, Loc _ (S.ConPattern _ _)) =
+  -- Preserve the nested emission's order: shape test, then the tail pattern's
+  -- tests, then the head pattern's tests.
+  let shapeTest = Loc pos (Bin And (Loc pos (Un IsList lv)) (Loc pos (Bin Gt (Loc pos (Un ListLength lv)) (Loc _srcRT (Lit (LNumeric (NumInt 0)))))))
+  return (shapeTest : (t2 ++ t1), w2 . w1)
+collectPattern (_, Loc _ (S.ConPattern _ _)) =
   -- Constructor patterns are rewritten to tuple patterns by SynVarFolding
   -- before this pass runs, so none should remain here.
   internalError "unexpected constructor pattern after variant folding"
-compilePattern succ (lv, Loc _ (S.RecordPattern fieldPatterns mode)) = do
-  fail <- ask
+collectPattern (lv, Loc _ (S.RecordPattern fieldPatterns mode)) = do
   let pos = getLoc lv
   -- Check for duplicate field names
   let fieldNames = map fst fieldPatterns
   let duplicates = fieldNames \\ nub fieldNames
   if not (null duplicates)
-    then lift $ throwError $ "Duplicate field names in record pattern: " ++ show duplicates
+    then throwError $ "Duplicate field names in record pattern: " ++ show duplicates
     else do
-      succ' <- foldM compileField succ (reverse fieldPatterns)
-      case mode of
-        WildcardMatch ->
-          -- Current behavior - just check it's a record and has the specified fields
-          return $ ifpat pos (Loc pos (Un IsRecord lv)) succ' fail
-        ExactMatch ->
-          -- Check that the record has exactly the specified number of fields
-          let expectedSize = length fieldPatterns
-              sizeCheck = Loc pos (Bin Eq (Loc pos (Un RecordSize lv)) (Loc _srcRT (Lit (LNumeric (NumInt (fromIntegral expectedSize))))))
-              recordCheck = Loc pos (Bin And (Loc pos (Un IsRecord lv)) sizeCheck)
-          in return $ ifpat pos recordCheck succ' fail
-    where ifHasField f k = do
-              succ' <- k
-              fail <- ask
-              let f' = Loc _srcRT (Lit (LString f))
-                  pos = getLoc lv
-              return $ ifpat pos (Loc pos (Bin HasField lv f')) succ' fail
-
-          compileField succ (f, Just lp) = do
+      fieldResults <- mapM collectField fieldPatterns
+      let recordCheck = case mode of
+            WildcardMatch ->
+              -- Current behavior - just check it's a record and has the specified fields
+              Loc pos (Un IsRecord lv)
+            ExactMatch ->
+              -- Check that the record has exactly the specified number of fields
+              let expectedSize = length fieldPatterns
+                  sizeCheck = Loc pos (Bin Eq (Loc pos (Un RecordSize lv)) (Loc _srcRT (Lit (LNumeric (NumInt (fromIntegral expectedSize))))))
+              in Loc pos (Bin And (Loc pos (Un IsRecord lv)) sizeCheck)
+      return (recordCheck : concatMap fst fieldResults, foldr (.) id (map snd fieldResults))
+    where collectField (f, mlp) = do
+              -- Check the field is present, then the field's pattern.
               let pos = getLoc lv
-              ifHasField f $ compilePattern succ (Loc pos (T.ProjField lv f), lp)
-
-          compileField succ (f, Nothing) = do
-              let pos = getLoc lv
-              ifHasField f $ compilePattern succ (Loc pos (T.ProjField lv f), Loc _srcRT (S.VarPattern f))
+                  f' = Loc _srcRT (Lit (LString f))
+                  hasFieldTest = Loc pos (Bin HasField lv f')
+                  fieldLp = case mlp of
+                              Just lp -> lp
+                              Nothing -> Loc _srcRT (S.VarPattern f)
+              (innerTests, innerWrap) <- collectPattern (Loc pos (T.ProjField lv f), fieldLp)
+              return (hasFieldTest : innerTests, innerWrap)
 
 
 

@@ -14,6 +14,7 @@ import qualified Data.Set as Set
 import qualified Basics
 import qualified Core
 import Core (Numeric(..))
+import DCLabels (v1LabelToDCLabelExp, dcLabelEq)
 import           RetCPS (VarName (..))
 import qualified Data.Map.Lazy as Map
 import           IR ( VarAccess(..)
@@ -92,7 +93,12 @@ instance Substitutable RawBBTree where
 data PState =
     PState { stateMon   :: Map MonComponent RawVar,               -- monitor state
              stateLVals :: Map (VarName, LValField) RawVar,       -- lvalues
-             stateJoins :: Map (RawVar, RawVar) RawVar,           -- computed joins
+             -- A lattice join is normalized to its canonical set of atoms under the
+             -- semilattice laws (see the LatticeJoin case of 'pevalInst'). 'stateJoins'
+             -- memoizes each live atom set to the var holding it; 'stateJoinSets' records,
+             -- for each join-defined var, its atom set, so operands flatten (associativity).
+             stateJoins :: Map (Set RawVar) RawVar,               -- atom set -> var holding it
+             stateJoinSets :: Map RawVar (Set RawVar),            -- join-defined var -> its atom set
              stateSubst :: Subst,
              stateChange:: ChangeFlag,
              stateRawVarTypes :: Map RawVar RawType,              -- for assertions optimizations
@@ -208,6 +214,17 @@ typeOfLit lit =
       Core.LDCLabel _ -> Just RawDCLabel
       
 
+-- | Whether a label constant denotes the lattice bottom (the join identity).
+-- Both the V1 empty tagset @{}@ and the DC @<True; False>@ denote IFC_BOT; the
+-- comparison is semantic, so the library @bot@ (@<#null-confidentiality; #root-integrity>@),
+-- a distinct principal label, is correctly not matched.
+isBottomLabelLit :: Core.Lit -> Bool
+isBottomLabelLit lit = case lit of
+  Core.LLabel s   -> dcLabelEq (v1LabelToDCLabelExp s) ifcBot
+  Core.LDCLabel d -> dcLabelEq d ifcBot
+  _               -> False
+  where ifcBot = v1LabelToDCLabelExp ""
+
 guessType :: RawExpr -> Maybe RawType
 guessType = \case
   Const lit -> typeOfLit lit
@@ -303,15 +320,28 @@ pevalInst li = do
           Just r' -> _omit $ addSubst r r' -- The state can already be found in r', therefore the assignment to r can be omitted, and we have to remember to substitute r with r'.
           Nothing -> _keep $ monInsert p r -- remember that PC/block can be found in variable r
       AssignRaw r (Bin Basics.LatticeJoin (UseNativeBinop False) x y) -> do
-        if x == y then _omit (addSubst r x) -- trivial join
-        else do
-          case Map.lookup (x,y) (stateJoins pstate) of
+        renv <- ask
+        -- Normalize the join to a canonical set of atoms under the semilattice laws.
+        -- An operand that is itself a join-defined var contributes its atoms
+        -- (associativity: (a ⊔ b) ⊔ c = a ⊔ b ⊔ c); a set collapses repeats
+        -- (idempotence: a ⊔ a = a) and is order-insensitive (commutativity: a ⊔ b = b ⊔ a).
+        let atomsOf v = Map.findWithDefault (Set.singleton v) v (stateJoinSets pstate)
+            -- unit: a ⊔ ⊥ = a, so a statically-known bottom-label constant drops out.
+            isBot v   = maybe False isBottomLabelLit (Map.lookup v (readConsts renv))
+            joined    = Set.union (atomsOf x) (atomsOf y)
+            pruned    = Set.filter (not . isBot) joined
+            -- a join of only bottoms must still name a value: keep the set in that case.
+            atoms     = if Set.null pruned then joined else pruned
+        case Set.toList atoms of
+          -- singleton: the join is the identity on its atom; copy-propagate to it.
+          [v] -> _omit $ addSubst r v
+          _   -> case Map.lookup atoms (stateJoins pstate) of
+            -- an already-live var holds exactly this atom set; alias to it.
             Just r' -> _omit $ addSubst r r'
-            Nothing -> case Map.lookup (y,x) (stateJoins pstate) of
-              Just r' -> _omit $ addSubst r r'
-              Nothing -> _keep $ do
-                markUsed [x,y]
-                put $ pstate { stateJoins = Map.insert (x,y) r (stateJoins pstate) }
+            Nothing -> _keep $ do
+              markUsed [x,y]
+              put $ pstate { stateJoins    = Map.insert atoms r (stateJoins pstate)
+                           , stateJoinSets = Map.insert r atoms (stateJoinSets pstate) }
 
       AssignLVal v (ConstructLVal r1 r2 r3) -> _keep $ do
         markUsed [r1, r2, r3]
@@ -441,6 +471,7 @@ instance PEval LRawTerminator where
         put $ s { stateMon = stateMon s
                 , stateLVals = stateLVals s
                 , stateJoins = stateJoins s
+                , stateJoinSets = stateJoinSets s
                 }
         bb2' <- peval bb2
         return $ Loc pos (If x bb1' bb2')
@@ -450,6 +481,7 @@ instance PEval LRawTerminator where
         put $ s { stateMon = Map.empty
                 , stateLVals = stateLVals s
                 , stateJoins = stateJoins s
+                , stateJoinSets = stateJoinSets s
                 } -- reset the monitor state
         bb2' <- peval bb2
         return $ Loc pos (StackExpand bb1' bb2')
@@ -601,6 +633,7 @@ funopt (FunDef hfn consts bb ir) =
       pstate = PState {stateMon = Map.empty,
                        stateLVals = Map.empty,
                        stateJoins = Map.empty,
+                       stateJoinSets = Map.empty,
                        stateSubst = Subst (m_subst),
                        stateChange = False,
                        stateRawVarTypes = constTypes,

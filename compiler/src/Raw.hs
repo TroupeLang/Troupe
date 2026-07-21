@@ -173,7 +173,11 @@ data RawTerminator
 -- TODO: 2025-09-19; AA -- this is a bit too hacky 
                         -- we should not be referencing runtime functions 
                         -- by concatenating their names 
-ppRTAssertionCode f a = f (text $ "rt.rawAssert" ++ rtFun) args
+-- | Emit an assertion call. @extraArgs@ are appended after the assertion's own
+-- arguments; the code generator uses this to pass the operation's source
+-- position, which the runtime records for error reporting on a failed
+-- assertion (see 'ppRTAssertion' for the position-free debug rendering).
+ppRTAssertionCode f extraArgs a = f (text $ "rt.rawAssert" ++ rtFun) (args ++ extraArgs)
   where (rtFun, args) = case a of
           AssertType x t -> (case t of
             RawNumber -> "IsNumber"
@@ -194,7 +198,7 @@ ppRTAssertionCode f a = f (text $ "rt.rawAssert" ++ rtFun) args
 
 
 ppRTAssertion :: RTAssertion -> PP.Doc
-ppRTAssertion = ppRTAssertionCode ppFunCall
+ppRTAssertion = ppRTAssertionCode ppFunCall []
 
 type Consts = [(RawVar, C.Lit )]
 

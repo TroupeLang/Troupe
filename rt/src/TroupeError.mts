@@ -4,149 +4,11 @@ import chalk from 'chalk'
 import { SchedulerInterface } from "./SchedulerInterface.mjs";
 import { configureColors } from './colorConfig.mjs';
 import { getCliArgs, TroupeCliArg } from './TroupeCliArgs.mjs';
-import { lookupPosition, type EncodedSourceMap } from './SourceMapResolver.mjs';
 import { readFileSync, statSync } from 'fs';
 import { resolve, isAbsolute } from 'path';
 
 // Ensure colors are configured when this module is loaded
 configureColors();
-
-/**
- * Represents a single stack frame captured via V8's structured stack trace API.
- */
-interface CallSite {
-    getFileName(): string | null;
-    getLineNumber(): number | null;
-    getColumnNumber(): number | null;
-    getFunctionName(): string | null;
-    isEval(): boolean;
-}
-
-/**
- * Capture structured call sites from the current stack.
- * Uses V8's Error.prepareStackTrace API to get CallSite objects
- * with direct access to file/line/column info.
- */
-function captureCallSites(): CallSite[] {
-    const originalPrepare = Error.prepareStackTrace;
-    const err = { stack: [] as CallSite[] };
-    Error.prepareStackTrace = (_err, callSites) => callSites;
-    Error.captureStackTrace(err);
-    const sites = err.stack;
-    Error.prepareStackTrace = originalPrepare;
-    return sites;
-}
-
-/**
- * Classification of runtime error kinds.
- * Used to distinguish error origins for better error reporting.
- */
-export enum ErrorKind {
-    /** Type mismatch in built-in function arguments (e.g., passing string to numeric operation) */
-    BuiltInArgsTypeMismatch,
-    /** Information flow control violation (e.g., declassification without authority) */
-    IFCCheck,
-    /** Dynamic type error in user code (e.g., pattern match failure) */
-    DynTypeError
-}
-
-/**
- * Known Troupe runtime file suffixes.
- * Stack frames ending with these are from the runtime, not user code.
- */
-const RUNTIME_FILE_SUFFIXES = [
-    '/rt/built/TroupeError.mjs',
-    '/rt/built/Thread.mjs',
-    '/rt/built/Asserts.mjs',
-    '/rt/built/Scheduler.mjs',
-    '/rt/built/runtimeMonitored.mjs',
-    '/rt/built/builtins/runtimeassert.mjs',
-    '/rt/built/builtins/UserRuntimeZero.mjs',
-];
-
-/**
- * Check if a file path is from the Troupe runtime.
- */
-function isRuntimeFile(fileName: string): boolean {
-    return RUNTIME_FILE_SUFFIXES.some(suffix => fileName.endsWith(suffix));
-}
-
-/**
- * Translate source position using structured call sites.
- * Finds the first stack frame that is NOT from the runtime,
- * then uses the source map to translate that position to Troupe source.
- */
-function translateWithCallSites(callSites: CallSite[], sourceMap: EncodedSourceMap | null): string | null {
-    // Check for valid source map (must have 'sources' property to be usable for translation)
-    // Note: sourceMap may be { __isDynamic: true } for restored code, which isn't a valid source map
-    const hasValidSourceMap = sourceMap && 'sources' in sourceMap;
-    if (!hasValidSourceMap) return null;
-
-    for (const site of callSites) {
-        const fileName = site.getFileName();
-        if (!fileName) continue;
-
-        // Skip runtime frames - we want user code
-        if (isRuntimeFile(fileName)) continue;
-
-        // Check if this frame is already translated to .trp (Node.js --enable-source-maps)
-        if (fileName.endsWith('.trp')) {
-            const line = site.getLineNumber();
-            const col = site.getColumnNumber();
-            if (line !== null && col !== null) {
-                return cleanSourcePath(`${fileName}:${line}:${col}`);
-            }
-        }
-
-        // This is a frame from user code (generated JS) - translate it
-        const line = site.getLineNumber();
-        const col = site.getColumnNumber();
-        if (line !== null && col !== null) {
-            const pos = lookupPosition(sourceMap, line, col);
-            if (pos) {
-                // Source maps use 0-based columns; convert to 1-based for display
-                return cleanSourcePath(`${pos.source}:${pos.line}:${pos.column + 1}`);
-            }
-        }
-
-        // If we found a non-runtime frame but couldn't translate it, stop looking
-        break;
-    }
-    return null;
-}
-
-/**
- * Clean up a source path to show a relative path.
- * If the path is already relative (doesn't start with /), use it as-is.
- * If absolute, try to extract a relative portion.
- */
-function cleanSourcePath(fullPath: string): string {
-    // Split into path and position (line:col)
-    const match = fullPath.match(/^(.+\.trp):(\d+:\d+)$/);
-    if (!match) return fullPath;
-
-    const [, filePath, position] = match;
-
-    // If already a relative path, use as-is
-    if (!filePath.startsWith('/')) {
-        return fullPath;
-    }
-
-    // For absolute paths, try to find the TROUPE project root and make relative
-    // Look for common project markers in the path
-    const troupeRootMatch = filePath.match(/.*\/Troupe\/(.+)$/);
-    if (troupeRootMatch) {
-        return `${troupeRootMatch[1]}:${position}`;
-    }
-
-    // Fallback: just use the filename
-    const filenameMatch = filePath.match(/\/([^/]+\.trp)$/);
-    if (filenameMatch) {
-        return `${filenameMatch[1]}:${position}`;
-    }
-
-    return fullPath;
-}
 
 // ============================================================================
 // Source Code Display Functions
@@ -309,19 +171,36 @@ function formatSourceContext(sourceLocation: string): SourceContextResult {
     };
 }
 
+/**
+ * Classification of runtime error kinds.
+ * A semantic taxonomy, declared at every raise site: it records WHY a thread
+ * error exists, independently of how it is reported. In particular, IFCCheck
+ * marks a verdict of the security monitor — and on the HandlerError path
+ * (errors inside receive patterns, guards, and sandboxes, which resume the
+ * trapper instead of stopping the thread) the kind is the hook for the open
+ * policy question of whether monitor verdicts should be recoverable at all.
+ * Do not remove on the grounds that nothing reads it; the declaration is the
+ * point.
+ */
+export enum ErrorKind {
+    /** Type mismatch in built-in function arguments (e.g., passing string to numeric operation) */
+    BuiltInArgsTypeMismatch,
+    /** Information flow control violation (e.g., declassification without authority) */
+    IFCCheck,
+    /** Dynamic type error in user code (e.g., pattern match failure) */
+    DynTypeError
+}
+
 export abstract class TroupeError extends Error {
-    abstract handleError (sched: SchedulerInterface) : void 
+    abstract handleError (sched: SchedulerInterface) : void
 }
 
 export abstract class ThreadError extends TroupeError {
     abstract errorMessage: string
     thread: Thread
-    callSites: CallSite[]
     constructor (thread:Thread) {
         super ()
         this.thread = thread;
-        // Capture structured call sites for source map translation
-        this.callSites = captureCallSites();
     }
 }
 
@@ -331,23 +210,11 @@ export abstract class StopThreadError extends ThreadError {
     handleError (sched) {
         let console = this.thread.rtObj.xconsole
 
-        // Determine source location based on error kind:
-        // - BuiltInArgsTypeMismatch/IFCCheck: error in runtime code, use lastCallSourcePos
-        // - DynTypeError: error in user code, use stack trace translation
-        let sourceLocation: string | null = null;
-        if (this.errorKind === ErrorKind.BuiltInArgsTypeMismatch || this.errorKind === ErrorKind.IFCCheck) {
-            // Error occurred in runtime code (built-in or IFC check); use the saved call position
-            sourceLocation = this.thread.lastCallSourcePos;
-        } else {
-            // Error occurred in user code; translate using structured call sites
-            sourceLocation = translateWithCallSites(this.callSites, this.thread.currentSourceMap);
-            // Fall back to lastCallSourcePos if stack trace translation fails.
-            // This handles cases like prelude/library code where assertions fail
-            // but the stack trace doesn't contain user code with source positions.
-            if (!sourceLocation && this.thread.lastCallSourcePos) {
-                sourceLocation = this.thread.lastCallSourcePos;
-            }
-        }
+        // The reported position is the machine's own position state: the source
+        // position of the responsible user-level call (set on tail calls and on
+        // failing user-code assertions). It is never derived from the host JS
+        // stack. Where the machine has no position, none is printed.
+        let sourceLocation: string | null = this.thread.lastCallSourcePos;
 
         // Format error with source context (visually consistent with compiler errors)
         console.log(chalk.red("Runtime error in thread " + this.thread.tidErrorStringRep()));

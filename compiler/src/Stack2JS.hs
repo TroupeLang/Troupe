@@ -580,8 +580,18 @@ ir2jsWithPos _pos (SetState c x) = return $ semi $ monStateToJs c <+> "=" <+> pp
 
 ir2jsWithPos pos (RTAssertion a) = do
   marker <- emitMarker pos
-  let debugComment = text $ "/* RTAssertion pos=" ++ show pos ++ " */"
-  return $ debugComment PP.<> marker PP.<> ppRTAssertionCode jsFunCall a
+  opts <- ask
+  -- Pass the operation's source position to the assertion so that, on failure,
+  -- the runtime records it as the machine's position for error reporting.
+  -- Emit it only when source maps are enabled and the position is meaningful
+  -- (not NoPos), mirroring the tail-call position write; otherwise omit it so
+  -- prelude/library operations do not carry a position. This is passed on every
+  -- assertion, but the runtime only writes it to the thread on the failure path.
+  let hasPos = case pos of
+        NoPos -> False
+        _     -> True
+  let posArgs = if cgoSourceMapEnabled opts && hasPos then [ppPosInfo pos] else []
+  return $ marker PP.<> ppRTAssertionCode jsFunCall posArgs a
 
 -- Note: LabelGroup now contains [LStackInst] (Located instructions)
 ir2jsWithPos _pos (LabelGroup lii) = do

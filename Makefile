@@ -33,12 +33,19 @@ trp-rt: check-compiler
 notebook:
 	cd notebook; npm install; npm run build
 
-# Publish the Savina benchmark and report modules as SimpleModule blobs
-# (required by examples/savina/runall.trp and the per-benchmark drivers).
-savina-modules:
+# Publish every benchmark descriptor module and the report renderer as
+# SimpleModule blobs (required by the suites' runall.trp drivers and the
+# per-benchmark drivers). Blobs are compiled artifacts: republish after any
+# compiler change, or a comparison silently measures stale code.
+benchmark-modules:
 	mkdir -p out
 	./local.sh examples/savina/Savina.mod.trp
 	./local.sh examples/savina/SavinaReport.mod.trp
+	./local.sh examples/benchmarks/awfy/Awfy.mod.trp
+	./local.sh examples/benchmarks/datastructures/DataStructures.mod.trp
+	./local.sh examples/benchmarks/clbg/Clbg.mod.trp
+
+savina-modules: benchmark-modules
 
 clean: clean/compiler clean/rt clean/trp-rt clean/p2p-tools clean/lib
 clean/compiler:

@@ -1,0 +1,417 @@
+(* Awfy — the Are-We-Fast-Yet MICRO benchmarks as benchmark descriptors
+ * ({name, bench : size -> result, check : size -> result -> bool,
+ * sizes : default size list}), published as a SimpleModule blob for
+ * consumers to `load "Awfy"` (runall.trp). Re-run this producer after
+ * changing a benchmark or rebuilding the compiler:
+ *
+ *   mkdir -p out && ./local.sh examples/benchmarks/awfy/Awfy.mod.trp
+ *
+ * (or `make awfy-modules` from the repository root).
+ *
+ * Source suite: Marr, Daloze, Mössenböck, "Cross-Language Compiler
+ * Benchmarking: Are We Fast Yet?" (DLS 2016), the AWFY micro set. Each
+ * benchmark is a small, deterministic kernel with a canonical expected
+ * result taken from the suite's own `verifyResult`. Every canonical
+ * value below was additionally cross-checked by an independent
+ * Java-faithful recomputation (a Node transcription of the AWFY sources);
+ * per-benchmark comments record which values are canonical (from the
+ * suite) versus self-derived.
+ *
+ * Sizing convention. Each AWFY micro has a FIXED problem configuration
+ * that pins its canonical result (e.g. Permute always permutes 6
+ * elements -> 8660). To give the timer a scaling knob without disturbing
+ * that result, `size` is the number of times the fixed kernel is run
+ * (the outer repetition AWFY's own harness applies), and `check`
+ * compares the deterministic kernel value against the canonical constant.
+ * Mandelbrot is the one exception: AWFY defines canonical checksums for
+ * several grid sizes, so there `size` IS the grid size and `check` looks
+ * it up in the canonical table.
+ *
+ * Data representation. Troupe has no mutable arrays; AWFY "arrays" are
+ * modelled per benchmark by lib/Vector (immutable, O(log n) indexed
+ * update) where the algorithm indexes/updates in place, or by a native
+ * list where the array is only built and traversed sequentially. Each
+ * benchmark comment states its choice and why.
+ *
+ * Numbers are JS doubles (as in Troupe generally): Bounce and the AWFY
+ * PRNG are integer-exact; Mandelbrot iterates in floating point but its
+ * result is an integer XOR checksum, so every `check` here is exact
+ * equality — no tolerance is needed or used.
+ *
+ * Default `sizes` are provisional: they were NOT tuned against wall-clock
+ * (the authoring machine carried background load, so no timing was
+ * trusted). Retune the smallest size upward to exceed tens of ms per run
+ * on a quiet machine before recording a baseline.
+ *)
+
+import List
+import Vector
+import SimpleModule
+
+let
+    (*==================== shared helpers ====================*)
+
+    (* AWFY's shared reproducible PRNG (seed 74755). `nextRand` advances
+     * the seed and returns the new seed, which is also the drawn value;
+     * `& 65535` is `mod 65536` since the seed stays non-negative. *)
+    fun nextRand seed = (seed * 1309 + 13849) mod 65536
+
+    fun absI x = if x < 0 then 0 - x else x
+
+    (* 8-bit XOR via bit decomposition (Troupe has no native bitwise op);
+     * both arguments are bytes in 0..255, as Mandelbrot's checksum uses. *)
+    fun xor8 (a, b) =
+        let fun go (bit, acc) =
+                if bit >= 256 then acc
+                else let val ab = (a div bit) mod 2
+                         val bb = (b div bit) mod 2
+                         val d  = if ab = bb then 0 else 1
+                     in go (bit * 2, acc + d * bit) end
+        in go (1, 0) end
+
+    (* 2^k for non-negative k (the `<<` shift Mandelbrot needs). *)
+    fun pow2 k = let fun go (j, acc) = if j <= 0 then acc else go (j - 1, acc * 2)
+                 in go (k, 1) end
+
+    (* Run `f` exactly `n` times (n >= 1), returning the last result. The
+     * kernels are deterministic, so the last result is representative;
+     * `n` is only the timer's scaling knob. *)
+    fun repeat (f, n) =
+        let fun go (k, last) = if k <= 1 then last else go (k - 1, f ())
+        in go (n, f ()) end
+
+    (*==================== bounce ====================*)
+    (* AWFY Bounce: 100 balls, 50 steps, count wall bounces. Ported
+     * faithfully; integer arithmetic throughout (AWFY Bounce is integer,
+     * not float). Array-of-balls modelled as a native list: the step
+     * sweep traverses every ball in order and rebuilds the set, with no
+     * random indexing, so a list is the natural array stand-in.
+     * Canonical result 1331 (AWFY verifyResult); cross-checked by
+     * independent recomputation. *)
+    val bounce =
+        let fun mkBalls (n, seed, acc) =
+                if n <= 0 then (List.reverse acc, seed)
+                else let val s1 = nextRand seed
+                         val s2 = nextRand s1
+                         val s3 = nextRand s2
+                         val s4 = nextRand s3
+                         val ball = (s1 mod 500, s2 mod 500,
+                                     (s3 mod 300) - 150, (s4 mod 300) - 150)
+                     in mkBalls (n - 1, s4, ball :: acc) end
+
+            fun bounceBall (x0, y0, xVel0, yVel0) =
+                let val x1 = x0 + xVel0
+                    val y1 = y0 + yVel0
+                    val (x2, xv1, b1) = if x1 > 500 then (500, 0 - absI xVel0, true)
+                                        else (x1, xVel0, false)
+                    val (x3, xv2, b2) = if x2 < 0 then (0, absI xv1, true)
+                                        else (x2, xv1, b1)
+                    val (y2, yv1, b3) = if y1 > 500 then (500, 0 - absI yVel0, true)
+                                        else (y1, yVel0, b2)
+                    val (y3, yv2, b4) = if y2 < 0 then (0, absI yv1, true)
+                                        else (y2, yv1, b3)
+                in ((x3, y3, xv2, yv2), b4) end
+
+            fun kernel () =
+                let val (balls0, _) = mkBalls (100, 74755, [])
+                    fun sweep ([], nb, bs)       = (List.reverse nb, bs)
+                      | sweep (b :: rest, nb, bs) =
+                          let val (b', bounced) = bounceBall b
+                          in sweep (rest, b' :: nb, if bounced then bs + 1 else bs) end
+                    fun step (balls, bounces, i) =
+                        if i >= 50 then bounces
+                        else let val (balls', bounces') = sweep (balls, [], bounces)
+                             in step (balls', bounces', i + 1) end
+                in step (balls0, 0, 0) end
+        in { name  = "bounce"
+           , bench = fn n => repeat (kernel, n)
+           , check = fn _ => fn r => r = 1331
+           , sizes = [50, 200, 800]
+           } end
+
+    (*==================== list ====================*)
+    (* AWFY List: the recursive three-list `tail` kernel over lengths
+     * 15/10/6; result is the length of the returned list. AWFY's
+     * `Element` linked list is modelled by Troupe's native list (itself a
+     * linked list of cons cells) -- the faithful representation, and the
+     * benchmark only walks `.next`/prefixes, never indexes. Canonical
+     * result 10 (AWFY verifyResult); cross-checked by recomputation. *)
+    val list =
+        let fun mkChain 0 = []
+              | mkChain len = len :: mkChain (len - 1)
+
+            (* true iff xs runs out strictly before ys *)
+            fun chainShorter (_, [])            = false
+              | chainShorter ([], _)            = true
+              | chainShorter (_ :: xs, _ :: ys) = chainShorter (xs, ys)
+
+            fun chainTail (x, y, z) =
+                if chainShorter (y, x)
+                then chainTail (chainTail (List.tail x, y, z),
+                                chainTail (List.tail y, z, x),
+                                chainTail (List.tail z, x, y))
+                else z
+
+            fun kernel () =
+                List.length (chainTail (mkChain 15, mkChain 10, mkChain 6))
+        in { name  = "list"
+           , bench = fn n => repeat (kernel, n)
+           , check = fn _ => fn r => r = 10
+           , sizes = [10, 50, 200]
+           } end
+
+    (*==================== mandelbrot ====================*)
+    (* AWFY Mandelbrot: escape-time checksum over a size*size grid. `size`
+     * IS the grid size here (AWFY pins canonical checksums per size), and
+     * `check` looks it up. Iterates in floating point (JS doubles, same
+     * IEEE-754 as AWFY's Java doubles); the result is an integer XOR
+     * checksum, so the check is exact equality. No array representation:
+     * the kernel is pure numeric folding. Canonical checksums 128@1,
+     * 191@500, 50@750 (AWFY verifyResult); all cross-checked by an
+     * independent recomputation (which also anchors this port -- the
+     * runtime sanity run confirms 128@1). *)
+    val mandelbrot =
+        let val expected = [ (1, 128), (500, 191), (750, 50) ]
+
+            fun kernel size =
+                let fun iter (zr, zi, zrzr, zizi, z, notDone, escape, cr, ci) =
+                        if (not notDone) orelse z >= 50 then escape
+                        else let val zr' = zrzr - zizi + cr
+                                 val zi' = 2.0 * zr' * zi + ci
+                                 val zrzr' = zr' * zr'
+                                 val zizi' = zi' * zi'
+                                 val (nd, esc) = if zrzr' + zizi' > 4.0 then (false, 1)
+                                                 else (notDone, escape)
+                             in iter (zr', zi', zrzr', zizi', z + 1, nd, esc, cr, ci) end
+                    fun colLoop (x, y, sum, byteAcc, bitNum) =
+                        if x >= size then sum
+                        else let val cr = (2.0 * x / size) - 1.5
+                                 val ci = (2.0 * y / size) - 1.0
+                                 val escape = iter (0.0, 0.0, 0.0, 0.0, 0, true, 0, cr, ci)
+                                 val byteAcc1 = byteAcc * 2 + escape
+                                 val bitNum1  = bitNum + 1
+                                 val (sum', ba', bn') =
+                                     if bitNum1 = 8
+                                     then (xor8 (sum, byteAcc1), 0, 0)
+                                     else if x = size - 1
+                                     then (xor8 (sum, byteAcc1 * pow2 (8 - bitNum1)), 0, 0)
+                                     else (sum, byteAcc1, bitNum1)
+                             in colLoop (x + 1, y, sum', ba', bn') end
+                    fun rowLoop (y, sum) =
+                        if y >= size then sum
+                        else rowLoop (y + 1, colLoop (0, y, sum, 0, 0))
+                in rowLoop (0, 0) end
+        in { name  = "mandelbrot"
+           , bench = fn size => kernel size
+           , check = fn size => fn r =>
+                       (case List.filter (fn (s, _) => s = size) expected of
+                          [(_, e)] => r = e
+                        | _        => false)   (* no canonical value for this size *)
+           , sizes = [1, 500, 750]
+           } end
+
+    (*==================== permute ====================*)
+    (* AWFY Permute: count recursive permute() calls while permuting a
+     * 6-element array. The swaps do not affect the count (it is purely
+     * structural), but are performed faithfully. Array modelled by a
+     * size-6 lib/Vector, indexed and updated in place (swap = two
+     * updates) -- the algorithm reads/writes by index, so Vector is the
+     * faithful array. Canonical result 8660 (AWFY verifyResult);
+     * cross-checked by recomputation. *)
+    val permute =
+        let fun swap (v, i, j) =
+                let val vi = Vector.sub (v, i)
+                    val vj = Vector.sub (v, j)
+                in Vector.update (Vector.update (v, i, vj), j, vi) end
+
+            fun perm (v, count, n) =
+                let val count1 = count + 1
+                in if n = 0 then (v, count1)
+                   else let val (v1, c1) = perm (v, count1, n - 1)
+                            fun loop (i, v, c) =
+                                if i < 0 then (v, c)
+                                else let val vs = swap (v, n - 1, i)
+                                         val (v2, c2) = perm (vs, c, n - 1)
+                                         val v3 = swap (v2, n - 1, i)
+                                     in loop (i - 1, v3, c2) end
+                        in loop (n - 1, v1, c1) end
+                end
+
+            fun kernel () =
+                let val v0 = Vector.tabulate 6 (fn i => i)
+                    val (_, count) = perm (v0, 0, 6)
+                in count end
+        in { name  = "permute"
+           , bench = fn n => repeat (kernel, n)
+           , check = fn _ => fn r => r = 8660
+           , sizes = [20, 80, 320]
+           } end
+
+    (*==================== queens ====================*)
+    (* AWFY Queens: solve 8-queens 10 times, AND the results. The three
+     * constraint arrays (rows, and the two diagonal families) are
+     * boolean lib/Vectors, indexed and updated in place -- the faithful
+     * array model. Backtracking exploits immutability: placing a queen
+     * threads a fresh Vector triple downward, and on failure the caller
+     * simply reuses the pre-placement triple, so no explicit un-set is
+     * needed. Canonical result `true` (AWFY verifyResult: a solution
+     * exists, so any correct solver passes); cross-checked by
+     * recomputation. *)
+    val queens =
+        let fun getRC (fr, fm, fd, r, c) =
+                Vector.sub (fr, r)
+                andalso Vector.sub (fm, c + r)
+                andalso Vector.sub (fd, c - r + 7)
+
+            fun setRC (fr, fm, fd, r, c, v) =
+                (Vector.update (fr, r, v),
+                 Vector.update (fm, c + r, v),
+                 Vector.update (fd, c - r + 7, v))
+
+            fun placeQueen (fr, fm, fd, c) =
+                let fun tryRow r =
+                        if r >= 8 then false
+                        else if getRC (fr, fm, fd, r, c)
+                             then let val (fr1, fm1, fd1) = setRC (fr, fm, fd, r, c, false)
+                                  in if c = 7 then true
+                                     else if placeQueen (fr1, fm1, fd1, c + 1) then true
+                                     else tryRow (r + 1)
+                                  end
+                             else tryRow (r + 1)
+                in tryRow 0 end
+
+            fun solve () =
+                let val fr = Vector.tabulate 8  (fn _ => true)
+                    val fm = Vector.tabulate 15 (fn _ => true)
+                    val fd = Vector.tabulate 15 (fn _ => true)
+                in placeQueen (fr, fm, fd, 0) end
+
+            fun kernel () =
+                let fun ten (i, acc) =
+                        if i >= 10 then acc else ten (i + 1, acc andalso solve ())
+                in ten (0, true) end
+        in { name  = "queens"
+           , bench = fn n => repeat (kernel, n)
+           , check = fn _ => fn r => r = true
+           , sizes = [5, 20, 80]
+           } end
+
+    (*==================== sieve ====================*)
+    (* AWFY Sieve: Sieve of Eratosthenes over 5000, count primes. The
+     * boolean flag array is a size-5000 lib/Vector, cleared in place as
+     * multiples are crossed out -- the algorithm updates by index, so
+     * Vector is the faithful array. Canonical result 669 (AWFY
+     * verifyResult); independently confirmed as pi(5000) = 669 (matching
+     * the Savina sieve reference table) and cross-checked by
+     * recomputation. *)
+    val sieve =
+        let val limit = 5000
+
+            fun kernel () =
+                let val flags0 = Vector.tabulate limit (fn _ => true)
+                    fun outer (i, flags, count) =
+                        if i > limit then count
+                        else if Vector.sub (flags, i - 1)
+                             then let fun crossOut (k, fl) =
+                                          if k > limit then fl
+                                          else crossOut (k + i, Vector.update (fl, k - 1, false))
+                                      val flags1 = crossOut (i + i, flags)
+                                  in outer (i + 1, flags1, count + 1) end
+                             else outer (i + 1, flags, count)
+                in outer (2, flags0, 0) end
+        in { name  = "sieve"
+           , bench = fn n => repeat (kernel, n)
+           , check = fn _ => fn r => r = 669
+           , sizes = [1, 3, 10]
+           } end
+
+    (*==================== storage ====================*)
+    (* AWFY Storage: build a depth-7 tree of arrays, count nodes
+     * allocated. Leaf array sizes are drawn from the AWFY PRNG (threaded
+     * for fidelity) but never read, so they do not affect the count. Each
+     * array is modelled by a native list: arrays here are only allocated
+     * and traversed by construction, never indexed, so a list is the
+     * faithful and idiomatic stand-in. Canonical result 5461 (AWFY
+     * verifyResult); independently confirmed as the node total
+     * sum_{d=0..6} 4^d = (4^7 - 1)/3 = 5461 and cross-checked by
+     * recomputation. *)
+    val storage =
+        let fun build (depth, seed, count) =
+                let val count1 = count + 1
+                in if depth = 1
+                   then let val s = nextRand seed
+                            val sz = s mod 10 + 1
+                        in (List.range sz, s, count1) end   (* leaf: allocate sz cells *)
+                   else let fun kids (i, seed, count, acc) =
+                                if i >= 4 then (List.reverse acc, seed, count)
+                                else let val (node, seed1, count1') =
+                                             build (depth - 1, seed, count)
+                                     in kids (i + 1, seed1, count1', node :: acc) end
+                            val (children, seed1, count2) = kids (0, seed, count1, [])
+                        in (children, seed1, count2) end
+                end
+
+            fun kernel () =
+                let val (_, _, count) = build (7, 74755, 0)
+                in count end
+        in { name  = "storage"
+           , bench = fn n => repeat (kernel, n)
+           , check = fn _ => fn r => r = 5461
+           , sizes = [10, 40, 160]
+           } end
+
+    (*==================== towers ====================*)
+    (* AWFY Towers: Towers of Hanoi, 13 disks moved, count moves. The
+     * three piles are a size-3 lib/Vector of stacks (each stack a native
+     * list, top = head): the algorithm addresses piles by index (from/to/
+     * other), so Vector is the faithful "array of piles", and each pile's
+     * push/pop is naturally a list cons/tail. Canonical result 8191 (AWFY
+     * verifyResult); independently confirmed as 2^13 - 1 = 8191 and
+     * cross-checked by recomputation. *)
+    val towers =
+        let fun pushDisk (piles, size, pile) =
+                Vector.update (piles, pile, size :: Vector.sub (piles, pile))
+
+            fun moveTop (piles, moves, from, to) =
+                let val fromStack = Vector.sub (piles, from)
+                    val d = List.head fromStack
+                    val piles1 = Vector.update (piles, from, List.tail fromStack)
+                    val piles2 = Vector.update (piles1, to, d :: Vector.sub (piles1, to))
+                in (piles2, moves + 1) end
+
+            fun moveDisks (piles, moves, disks, from, to) =
+                if disks = 1 then moveTop (piles, moves, from, to)
+                else let val other = 3 - from - to
+                         val (p1, m1) = moveDisks (piles, moves, disks - 1, from, other)
+                         val (p2, m2) = moveTop (p1, m1, from, to)
+                     in moveDisks (p2, m2, disks - 1, other, to) end
+
+            fun buildTower (piles, pile, disks) =
+                let fun go (i, ps) = if i < 0 then ps
+                                     else go (i - 1, pushDisk (ps, i, pile))
+                in go (disks, piles) end
+
+            fun kernel () =
+                let val piles0 = Vector.tabulate 3 (fn _ => [])
+                    val piles1 = buildTower (piles0, 0, 13)
+                    val (_, moves) = moveDisks (piles1, 0, 13, 0, 1)
+                in moves end
+        in { name  = "towers"
+           , bench = fn n => repeat (kernel, n)
+           , check = fn _ => fn r => r = 8191
+           , sizes = [10, 40, 160]
+           } end
+
+    (** All AWFY micro benchmarks, in suite order. *)
+    val all = [ bounce
+              , list
+              , mandelbrot
+              , permute
+              , queens
+              , sieve
+              , storage
+              , towers ]
+
+in (SimpleModule.publish (authority, "Awfy", {all = all});
+    print ("published Awfy module:", List.length all, "benchmarks"))
+end

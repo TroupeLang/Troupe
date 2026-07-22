@@ -1,5 +1,6 @@
 import Number
 import List
+import Option
 
 let (* TODO: The map is implemented as an unbalanced binary search tree. This opens up the
      *       possibility for an adversary to induce a denial of service by choosing a bad
@@ -29,24 +30,22 @@ let (* TODO: The map is implemented as an unbalanced binary search tree. This op
     fun null (_, ()) = true
       | null _       = false
 
-    (** Returns the `[value]` associated with the `key` if it exists; otherwise, `[]`. *)
-    (* HACK (#53): Use option type instead of list. *)
+    (** Returns `Option.some value` for the `key` if it is present; otherwise
+     *  `Option.none`. *)
     fun findOpt (cmp,t) key =
-        let fun findRec ()            = []
-              | findRec (l, (k,v), r) = if key = k then [v]
+        let fun findRec ()            = Option.none
+              | findRec (l, (k,v), r) = if key = k then Option.some v
                                         else if cmp key k then findRec l else findRec r
         in findRec t end
 
-    (** Returns the value associated with the `key`. *)
-    fun find m key = case findOpt m key of [v] => v
+    (** Returns the value associated with the `key`. Fails if there is none. *)
+    fun find m key = Option.unwrap (findOpt m key)
 
     (** Returns the value associated with the `key`; otherwise `default`. *)
-    fun findOrDefault m key default = case findOpt m key of [v] => v
-                                                          | []  => default
+    fun findOrDefault m key default = Option.getOrElse (findOpt m key) default
 
     (** Returns `true` if the given key is associated with a value. *)
-    fun mem m key = case findOpt m key of [] => false
-                                        | _  => true
+    fun mem m key = Option.isSome (findOpt m key)
 
     (** Number of key-value pairs stored in the given map. *)
     (* TODO (Optimisation): Store size at root to make this O(1)? *)

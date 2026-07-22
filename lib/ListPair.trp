@@ -1,4 +1,5 @@
 import List
+import Option
 
 let (* -- ListPair Generation -- *)
 
@@ -37,24 +38,21 @@ let (* -- ListPair Generation -- *)
 
     (* -- ListPair as an Associated List -- *)
 
-    (** Returns the first `[value]` associated with the `key` if it exists; otherwise, `[]`.
-     *  Tail-recursive. *)
-    (* HACK (#53): Use option type instead of list. *)
-    fun findOpt []     _   = []
+    (** Returns `Option.some value` for the first association of the `key` if
+     *  it exists; otherwise `Option.none`. Tail-recursive. *)
+    fun findOpt []     _   = Option.none
       | findOpt (x,v)::xs key = if x = key
-                                then [v]
+                                then Option.some v
                                 else findOpt xs key
 
-    (** Returns the first value associated with the `key`. *)
-    fun find xs key = case findOpt xs key of [v] => v
+    (** Returns the first value associated with the `key`. Fails if there is none. *)
+    fun find xs key = Option.unwrap (findOpt xs key)
 
     (** Returns the first value associated with the `key`; otherwise `default`. *)
-    fun findOrDefault xs key default = case findOpt xs key of [v] => v
-                                                            | []  => default
+    fun findOrDefault xs key default = Option.getOrElse (findOpt xs key) default
 
     (** Returns `true` if the given key is associated with at least one value. *)
-    fun mem m key = case findOpt m key of [] => false
-                                        | _  => true
+    fun mem m key = Option.isSome (findOpt m key)
 
     (* -- List Iterators -- *)
 

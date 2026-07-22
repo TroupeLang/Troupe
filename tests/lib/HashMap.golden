@@ -1,13 +1,13 @@
-2025-12-23T11:09:34.077Z [RTM] [32minfo[39m: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+2026-07-22T12:45:05.182Z [RTM] [32minfo[39m: Skipping network creation. Observe that all external IO operations will yield a runtime error.
 [34mbegin [0mHashMap
   [34mbegin [0mempty
       [33m[ TEST ][0m it is null      [32m[ PASS ][0m it is null
       [33m[ TEST ][0m it has size 0      [32m[ PASS ][0m it has size 0
       [33m[ TEST ][0m it does not contain 0      [32m[ PASS ][0m it does not contain 0
-      [33m[ TEST ][0m it returns [] for findOpt 0      [32m[ PASS ][0m it returns [] for findOpt 0
+      [33m[ TEST ][0m it returns NONE for findOpt 0      [32m[ PASS ][0m it returns NONE for findOpt 0
       [33m[ TEST ][0m it returns '?' for findOrDefault 0 '?'      [32m[ PASS ][0m it returns '?' for findOrDefault 0 '?'
       [33m[ TEST ][0m it does not contain 1      [32m[ PASS ][0m it does not contain 1
-      [33m[ TEST ][0m it returns [] for findOpt 1      [32m[ PASS ][0m it returns [] for findOpt 1
+      [33m[ TEST ][0m it returns NONE for findOpt 1      [32m[ PASS ][0m it returns NONE for findOpt 1
       [33m[ TEST ][0m it returns '!' for findOrDefault 1 '!'      [32m[ PASS ][0m it returns '!' for findOrDefault 1 '!'
       [33m[ TEST ][0m it is not equal to 'empty Hash.hash'      [32m[ PASS ][0m it is not equal to 'empty Hash.hash'
   [34mend [0m
@@ -15,11 +15,11 @@
       [33m[ TEST ][0m it is not null      [32m[ PASS ][0m it is not null
       [33m[ TEST ][0m it has size 1      [32m[ PASS ][0m it has size 1
       [33m[ TEST ][0m it contains 0      [32m[ PASS ][0m it contains 0
-      [33m[ TEST ][0m it returns [42] for findOpt 0      [32m[ PASS ][0m it returns [42] for findOpt 0
+      [33m[ TEST ][0m it returns (SOME 42) for findOpt 0      [32m[ PASS ][0m it returns (SOME 42) for findOpt 0
       [33m[ TEST ][0m it returns 42 for find 0      [32m[ PASS ][0m it returns 42 for find 0
       [33m[ TEST ][0m it returns 42 for findOrDefault 0 '¡'      [32m[ PASS ][0m it returns 42 for findOrDefault 0 '¡'
       [33m[ TEST ][0m it does not contain 1      [32m[ PASS ][0m it does not contain 1
-      [33m[ TEST ][0m it returns [] for findOpt 1      [32m[ PASS ][0m it returns [] for findOpt 1
+      [33m[ TEST ][0m it returns NONE for findOpt 1      [32m[ PASS ][0m it returns NONE for findOpt 1
       [33m[ TEST ][0m it returns '@' for findOrDefault 1 '@'      [32m[ PASS ][0m it returns '@' for findOrDefault 1 '@'
   [34mend [0m
   [34mbegin [0msingleton 0 42
@@ -32,10 +32,10 @@
       [33m[ TEST ][0m it is not null      [32m[ PASS ][0m it is not null
       [33m[ TEST ][0m it has size 1      [32m[ PASS ][0m it has size 1
       [33m[ TEST ][0m it does not contain 0      [32m[ PASS ][0m it does not contain 0
-      [33m[ TEST ][0m it returns [] for findOpt 0      [32m[ PASS ][0m it returns [] for findOpt 0
+      [33m[ TEST ][0m it returns NONE for findOpt 0      [32m[ PASS ][0m it returns NONE for findOpt 0
       [33m[ TEST ][0m it returns '$' for findOrDefault 0 '$'      [32m[ PASS ][0m it returns '$' for findOrDefault 0 '$'
       [33m[ TEST ][0m it contains 1      [32m[ PASS ][0m it contains 1
-      [33m[ TEST ][0m it returns [42] for findOpt 1      [32m[ PASS ][0m it returns [42] for findOpt 1
+      [33m[ TEST ][0m it returns (SOME 42) for findOpt 1      [32m[ PASS ][0m it returns (SOME 42) for findOpt 1
       [33m[ TEST ][0m it returns 42 for find 1      [32m[ PASS ][0m it returns 42 for find 1
       [33m[ TEST ][0m it returns 42 for findOrDefault 1 '#'      [32m[ PASS ][0m it returns 42 for findOrDefault 1 '#'
   [34mend [0m
@@ -43,22 +43,22 @@
       [33m[ TEST ][0m it is not null      [32m[ PASS ][0m it is not null
       [33m[ TEST ][0m it has size 1      [32m[ PASS ][0m it has size 1
       [33m[ TEST ][0m it contains 0      [32m[ PASS ][0m it contains 0
-      [33m[ TEST ][0m it returns ['a'] for findOpt 0      [32m[ PASS ][0m it returns ['a'] for findOpt 0
+      [33m[ TEST ][0m it returns (SOME 'a') for findOpt 0      [32m[ PASS ][0m it returns (SOME 'a') for findOpt 0
       [33m[ TEST ][0m it returns 'a' for find 0      [32m[ PASS ][0m it returns 'a' for find 0
       [33m[ TEST ][0m it returns 'a' for findOrDefault 0 ''      [32m[ PASS ][0m it returns 'a' for findOrDefault 0 ''
       [33m[ TEST ][0m it does not contain 1      [32m[ PASS ][0m it does not contain 1
-      [33m[ TEST ][0m it returns [] for findOpt 1      [32m[ PASS ][0m it returns [] for findOpt 1
+      [33m[ TEST ][0m it returns NONE for findOpt 1      [32m[ PASS ][0m it returns NONE for findOpt 1
       [33m[ TEST ][0m it returns '' for findOrDefault 1 ''      [32m[ PASS ][0m it returns '' for findOrDefault 1 ''
   [34mend [0m
   [34mbegin [0mfromList [(1,42), (0,21)]
       [33m[ TEST ][0m it is not null      [32m[ PASS ][0m it is not null
       [33m[ TEST ][0m it has size 2      [32m[ PASS ][0m it has size 2
       [33m[ TEST ][0m it contains 0      [32m[ PASS ][0m it contains 0
-      [33m[ TEST ][0m it returns [21] for findOpt 0      [32m[ PASS ][0m it returns [21] for findOpt 0
+      [33m[ TEST ][0m it returns (SOME 21) for findOpt 0      [32m[ PASS ][0m it returns (SOME 21) for findOpt 0
       [33m[ TEST ][0m it returns 21 for find 0      [32m[ PASS ][0m it returns 21 for find 0
       [33m[ TEST ][0m it returns 21 for findOrDefault 0 '!'      [32m[ PASS ][0m it returns 21 for findOrDefault 0 '!'
       [33m[ TEST ][0m it contains 1      [32m[ PASS ][0m it contains 1
-      [33m[ TEST ][0m it returns [42] for findOpt 1      [32m[ PASS ][0m it returns [42] for findOpt 1
+      [33m[ TEST ][0m it returns (SOME 42) for findOpt 1      [32m[ PASS ][0m it returns (SOME 42) for findOpt 1
       [33m[ TEST ][0m it returns 42 for find 1      [32m[ PASS ][0m it returns 42 for find 1
       [33m[ TEST ][0m it returns 42 for findOrDefault 1 '@'      [32m[ PASS ][0m it returns 42 for findOrDefault 1 '@'
   [34mend [0m
@@ -66,11 +66,11 @@
       [33m[ TEST ][0m it is not null      [32m[ PASS ][0m it is not null
       [33m[ TEST ][0m it has size 2      [32m[ PASS ][0m it has size 2
       [33m[ TEST ][0m it contains 0      [32m[ PASS ][0m it contains 0
-      [33m[ TEST ][0m it returns [21] for findOpt 0      [32m[ PASS ][0m it returns [21] for findOpt 0
+      [33m[ TEST ][0m it returns (SOME 21) for findOpt 0      [32m[ PASS ][0m it returns (SOME 21) for findOpt 0
       [33m[ TEST ][0m it returns 21 for find 0      [32m[ PASS ][0m it returns 21 for find 0
       [33m[ TEST ][0m it returns 21 for findOrDefault 0 0      [32m[ PASS ][0m it returns 21 for findOrDefault 0 0
       [33m[ TEST ][0m it contains 1      [32m[ PASS ][0m it contains 1
-      [33m[ TEST ][0m it returns [42] for findOpt 1      [32m[ PASS ][0m it returns [42] for findOpt 1
+      [33m[ TEST ][0m it returns (SOME 42) for findOpt 1      [32m[ PASS ][0m it returns (SOME 42) for findOpt 1
       [33m[ TEST ][0m it returns 42 for find 1      [32m[ PASS ][0m it returns 42 for find 1
       [33m[ TEST ][0m it returns 42 for findOrDefault 1 0      [32m[ PASS ][0m it returns 42 for findOrDefault 1 0
   [34mend [0m
@@ -78,14 +78,14 @@
       [33m[ TEST ][0m it is not null      [32m[ PASS ][0m it is not null
       [33m[ TEST ][0m it has size 3      [32m[ PASS ][0m it has size 3
       [33m[ TEST ][0m it contains 0      [32m[ PASS ][0m it contains 0
-      [33m[ TEST ][0m it returns [21] for findOpt 0      [32m[ PASS ][0m it returns [21] for findOpt 0
+      [33m[ TEST ][0m it returns (SOME 21) for findOpt 0      [32m[ PASS ][0m it returns (SOME 21) for findOpt 0
       [33m[ TEST ][0m it returns 21 for find 0      [32m[ PASS ][0m it returns 21 for find 0
       [33m[ TEST ][0m it returns 21 for findOrDefault 0 -1      [32m[ PASS ][0m it returns 21 for findOrDefault 0 -1
       [33m[ TEST ][0m it contains 1024      [32m[ PASS ][0m it contains 1024
-      [33m[ TEST ][0m it returns [42] for findOpt 1024      [32m[ PASS ][0m it returns [42] for findOpt 1024
+      [33m[ TEST ][0m it returns (SOME 42) for findOpt 1024      [32m[ PASS ][0m it returns (SOME 42) for findOpt 1024
       [33m[ TEST ][0m it returns 42 for find 1024      [32m[ PASS ][0m it returns 42 for find 1024
       [33m[ TEST ][0m it contains 2048      [32m[ PASS ][0m it contains 2048
-      [33m[ TEST ][0m it returns ['a'] for findOpt 2048      [32m[ PASS ][0m it returns ['a'] for findOpt 2048
+      [33m[ TEST ][0m it returns (SOME 'a') for findOpt 2048      [32m[ PASS ][0m it returns (SOME 'a') for findOpt 2048
       [33m[ TEST ][0m it returns 'a' for find 2048      [32m[ PASS ][0m it returns 'a' for find 2048
       [33m[ TEST ][0m it returns 'a' for findOrDefault 2048 -1      [32m[ PASS ][0m it returns 'a' for findOrDefault 2048 -1
   [34mend [0m
@@ -93,42 +93,42 @@
       [33m[ TEST ][0m it is not null      [32m[ PASS ][0m it is not null
       [33m[ TEST ][0m it has size 4      [32m[ PASS ][0m it has size 4
       [33m[ TEST ][0m it contains 0      [32m[ PASS ][0m it contains 0
-      [33m[ TEST ][0m it returns [21] for findOpt 0      [32m[ PASS ][0m it returns [21] for findOpt 0
+      [33m[ TEST ][0m it returns (SOME 21) for findOpt 0      [32m[ PASS ][0m it returns (SOME 21) for findOpt 0
       [33m[ TEST ][0m it returns 21 for find 0      [32m[ PASS ][0m it returns 21 for find 0
       [33m[ TEST ][0m it returns 21 for findOrDefault 0 '42'      [32m[ PASS ][0m it returns 21 for findOrDefault 0 '42'
       [33m[ TEST ][0m it contains 1      [32m[ PASS ][0m it contains 1
-      [33m[ TEST ][0m it returns ['b'] for findOpt 1      [32m[ PASS ][0m it returns ['b'] for findOpt 1
+      [33m[ TEST ][0m it returns (SOME 'b') for findOpt 1      [32m[ PASS ][0m it returns (SOME 'b') for findOpt 1
       [33m[ TEST ][0m it returns 'b' for find 1      [32m[ PASS ][0m it returns 'b' for find 1
       [33m[ TEST ][0m it returns 'b' for findOrDefault 1 '!'      [32m[ PASS ][0m it returns 'b' for findOrDefault 1 '!'
       [33m[ TEST ][0m it contains 1024      [32m[ PASS ][0m it contains 1024
-      [33m[ TEST ][0m it returns [42] for findOpt 1024      [32m[ PASS ][0m it returns [42] for findOpt 1024
+      [33m[ TEST ][0m it returns (SOME 42) for findOpt 1024      [32m[ PASS ][0m it returns (SOME 42) for findOpt 1024
       [33m[ TEST ][0m it returns 42 for find 1024      [32m[ PASS ][0m it returns 42 for find 1024
       [33m[ TEST ][0m it returns 42 for findOrDefault 1024 '?'      [32m[ PASS ][0m it returns 42 for findOrDefault 1024 '?'
       [33m[ TEST ][0m it contains 1025      [32m[ PASS ][0m it contains 1025
-      [33m[ TEST ][0m it returns ['b'] for findOpt 1025      [32m[ PASS ][0m it returns ['b'] for findOpt 1025
+      [33m[ TEST ][0m it returns (SOME 'b') for findOpt 1025      [32m[ PASS ][0m it returns (SOME 'b') for findOpt 1025
       [33m[ TEST ][0m it returns 'b' for find 1025      [32m[ PASS ][0m it returns 'b' for find 1025
       [33m[ TEST ][0m it returns 'b' for findOrDefault 1025 -1      [32m[ PASS ][0m it returns 'b' for findOrDefault 1025 -1
       [33m[ TEST ][0m it does not contains 2      [32m[ PASS ][0m it does not contains 2
-      [33m[ TEST ][0m it returns [] for findOpt 2      [32m[ PASS ][0m it returns [] for findOpt 2
+      [33m[ TEST ][0m it returns NONE for findOpt 2      [32m[ PASS ][0m it returns NONE for findOpt 2
       [33m[ TEST ][0m it returns -1 for findOrDefault 2 -1      [32m[ PASS ][0m it returns -1 for findOrDefault 2 -1
   [34mend [0m
   [34mbegin [0mfromList [(0,'a'), (1,'b'), (32,'c')] (trie of depth 2)
       [33m[ TEST ][0m it is not null      [32m[ PASS ][0m it is not null
       [33m[ TEST ][0m it has size 3      [32m[ PASS ][0m it has size 3
       [33m[ TEST ][0m it contains 0      [32m[ PASS ][0m it contains 0
-      [33m[ TEST ][0m it returns ['a'] for findOpt 0      [32m[ PASS ][0m it returns ['a'] for findOpt 0
+      [33m[ TEST ][0m it returns (SOME 'a') for findOpt 0      [32m[ PASS ][0m it returns (SOME 'a') for findOpt 0
       [33m[ TEST ][0m it returns 'a' for find 0      [32m[ PASS ][0m it returns 'a' for find 0
       [33m[ TEST ][0m it returns 'a' for findOrDefault 0 ''      [32m[ PASS ][0m it returns 'a' for findOrDefault 0 ''
       [33m[ TEST ][0m it contains 1      [32m[ PASS ][0m it contains 1
-      [33m[ TEST ][0m it returns ['b'] for findOpt 1      [32m[ PASS ][0m it returns ['b'] for findOpt 1
+      [33m[ TEST ][0m it returns (SOME 'b') for findOpt 1      [32m[ PASS ][0m it returns (SOME 'b') for findOpt 1
       [33m[ TEST ][0m it returns 'b' for find 1      [32m[ PASS ][0m it returns 'b' for find 1
       [33m[ TEST ][0m it returns 'b' for findOrDefault 1 ''      [32m[ PASS ][0m it returns 'b' for findOrDefault 1 ''
       [33m[ TEST ][0m it contains 32      [32m[ PASS ][0m it contains 32
-      [33m[ TEST ][0m it returns ['c'] for findOpt 32      [32m[ PASS ][0m it returns ['c'] for findOpt 32
+      [33m[ TEST ][0m it returns (SOME 'c') for findOpt 32      [32m[ PASS ][0m it returns (SOME 'c') for findOpt 32
       [33m[ TEST ][0m it returns 'c' for find 32      [32m[ PASS ][0m it returns 'c' for find 32
       [33m[ TEST ][0m it returns 'c' for findOrDefault 32 ''      [32m[ PASS ][0m it returns 'c' for findOrDefault 32 ''
       [33m[ TEST ][0m it does not contains 2      [32m[ PASS ][0m it does not contains 2
-      [33m[ TEST ][0m it returns [] for findOpt 2      [32m[ PASS ][0m it returns [] for findOpt 2
+      [33m[ TEST ][0m it returns NONE for findOpt 2      [32m[ PASS ][0m it returns NONE for findOpt 2
       [33m[ TEST ][0m it returns '' for findOrDefault 2 ''      [32m[ PASS ][0m it returns '' for findOrDefault 2 ''
   [34mend [0m
   [34mbegin [0mremove (fromList [(0,42)]) 0

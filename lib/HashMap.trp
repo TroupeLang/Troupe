@@ -1,6 +1,7 @@
 import List
 import ListPair
 import StencilVector
+import Option
 
 let (* NOTE: The map is implemented as a Hash Array Mapped Trie (HAMT), i.e. a prefix(ish) trie over
      *       the hash of the keys. We represent the trie as follows:
@@ -141,30 +142,28 @@ let (* NOTE: The map is implemented as a Hash Array Mapped Trie (HAMT), i.e. a p
     (** Returns `true` if the map is empty. *)
     fun null (_,t) = leaf_isEmpty t
 
-    (** Returns the `[value]` associated with the `key` if it exists; otherwise, `[]`. *)
-    (* HACK (#53): Use option type instead of list. *)
+    (** Returns `Option.some value` for the `key` if it is present; otherwise
+     *  `Option.none`. *)
     fun findOpt (hf,t) key =
         let val h = hf key
             fun findOptRec t' d =
                 if leaf_isEmpty t'
-                then [] else
+                then Option.none else
                 if leaf_isLeaf t'
                 then if h <> (leaf_hash hf t')
-                     then []
+                     then Option.none
                      else leaf_findOpt t' key
                 else findOptRec (node_getChild t' (node_hashToIdx h d)) (d+1)
         in findOptRec t 0 end
 
-    (** Returns the value associated with the `key`. *)
-    fun find m key = case findOpt m key of [v] => v
+    (** Returns the value associated with the `key`. Fails if there is none. *)
+    fun find m key = Option.unwrap (findOpt m key)
 
     (** Returns the value associated with the `key`; otherwise `default`. *)
-    fun findOrDefault m key default = case findOpt m key of [v] => v
-                                                          | []  => default
+    fun findOrDefault m key default = Option.getOrElse (findOpt m key) default
 
     (** Returns `true` if the given key is associated with a value. *)
-    fun mem m key = case findOpt m key of [] => false
-                                        | _  => true
+    fun mem m key = Option.isSome (findOpt m key)
 
     (** Number of key-value pairs stored in the given map. *)
     (* TODO (Optimisation): Store size at root to make this O(1)? *)

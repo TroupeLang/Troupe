@@ -1,0 +1,430 @@
+(* LabeledSavina — the message-heavy Savina benchmarks reimplemented as a
+ * parameterized IFC-monitoring study, published as a SimpleModule blob for
+ * consumers to `load "LabeledSavina"` (runall.trp). Re-run this producer after
+ * changing a benchmark or rebuilding the compiler:
+ *
+ *   mkdir -p out && ./local.sh examples/benchmarks/labeled-savina/LabeledSavina.mod.trp
+ *
+ * ============================ What this measures ============================
+ *
+ * The overhead of the information-flow monitor is not a single number: it is a
+ * curve in how much *label activity* a workload generates. This module turns
+ * six Savina message-passing benchmarks (pingpong, counting, threadring,
+ * prodcons, chameneos, banking) into that curve by threading a labeled payload
+ * through each protocol under a three-knob label configuration, and measuring
+ * the same computation across the knob settings. Every run is also a *semantics
+ * test* of the monitor: labels never change values, so each labeled run must
+ * produce exactly the k=0 (unlabeled) result — `check` enforces this.
+ *
+ * ------------------------------ The three knobs ----------------------------
+ *
+ * Knob 1 — label diversity k in {0, 1, 2, 4, 8}.
+ *   k = 0  : the honest unlabeled baseline. No `raisedTo`, no `blockdownto`, no
+ *            `declassify` anywhere on the path — the *same driver code* with all
+ *            labeling disabled, so the baseline pays nothing for IFC.
+ *   k >= 1 : each message's payload is labeled by one of k distinct
+ *            confidentiality principals, assigned round-robin by message index.
+ *            Aggregating across messages therefore joins the principals'
+ *            labels. With k = 1 every payload shares the one principal, so each
+ *            join is p ⊔ p = p — the lattice short-circuits and monitoring is
+ *            nearly free; k = 1 is the *degenerate* case. Real monitoring cost
+ *            appears at k >= 2, where the joins combine *incomparable* labels
+ *            (p_i ⋢ p_j and p_j ⋢ p_i) and the lattice must do genuine work; k
+ *            = 4 and k = 8 widen that work.
+ *
+ * Knob 2 — branch-on-secret (on/off).
+ *   on  : the receiver's accumulation branches on the labeled payload content
+ *         (`if v > 0 then a + v else a`), so the blocking label is raised by
+ *         the branch and every value computed afterwards carries the payload's
+ *         label by implicit flow. This exercises the monitor's control-flow
+ *         tracking.
+ *   off : payloads are carried and summed by a pure label-join
+ *         (`a + v`), never branched on — value labeling with no blocking-label
+ *         raise.
+ *
+ * Knob 3 — declassification (on/off).
+ *   on  : the final aggregate is declassified to public with the root authority
+ *         at the collection point, inside the timed region, before it is
+ *         returned — exercising the downgrade machinery on the monitored path.
+ *   off : the aggregate keeps its joined confidentiality label; only the
+ *         untimed one-bit verdict inside `check` is declassified so the harness
+ *         can read an ok/not-ok result.
+ *
+ * ============================ Monitor-legality =============================
+ *
+ * Every variant runs to completion with ok = true under the IFC monitor. Two
+ * adjustments were required and are worth stating precisely, because they are
+ * the crux of making branch-on-secret and declassify legal at once:
+ *
+ * 1. Principals are HIGH-INTEGRITY confidentiality labels `<p_i;#root-integrity>`,
+ *    not flat tagset literals `{p_i}`. A tagset `{p_i}` carries *low* integrity,
+ *    so the joined data is simultaneously high-confidentiality and
+ *    low-integrity: under non-malleable IFC it can be neither declassified
+ *    (robustness needs high integrity) nor endorsed (transparency needs low
+ *    confidentiality). It is therefore permanently non-downgradable — the
+ *    declassify knob would be impossible, and even the branch-on-secret cleanup
+ *    below could not run. The `<p_i;#root-integrity>` form keeps p_i as the
+ *    confidentiality principal (round-robin joins are still incomparable — the
+ *    lattice work is unchanged) while being downgradable with authority.
+ *
+ * 2. Branch-on-secret raises an actor's BLOCKING label (not its pc), and a
+ *    message inherits the sender's blocking label; a raised one exceeds a plain
+ *    point `receive`r's clearance, so the send would leak presence and the
+ *    receive stalls. Rather than raise every actor's mailbox clearance (which
+ *    leaves each terminating actor with an un-restored clearance and a
+ *    non-fatal warning, and would make the driver's own self-drain
+ *    undeliverable), each branching actor settles its blocking label back to
+ *    the pc with `blockdown authority` immediately before it sends onward
+ *    (helper `tell`). Value labels are preserved by the settle, so the
+ *    accumulator keeps its joined label; only the presence channel is cleared.
+ *    `blockdown` targets the *current pc* rather than a fixed `{}`, so it is
+ *    correct at any baseline — in particular inside the loaded blob, whose code
+ *    runs above the top-level baseline. The driver (`main`) thus receives every
+ *    result through ordinary point receives, keeping the between-benchmark
+ *    drain and the file writes legal. `check` likewise settles the blocking
+ *    label after forming the labeled verdict.
+ *
+ * None of the six protocols was structurally distorted: message topologies
+ * match the Savina originals. The results were re-pointed to a
+ * label-transparent aggregate where the original result did not carry the
+ * payload (noted per descriptor): threadring reports the accumulated hop count
+ * (the token now carries a labeled accumulator) rather than the holder index,
+ * and pingpong/counting/chameneos aggregate a labeled unit contribution per
+ * message. prodcons keeps the item-value sum and banking keeps money
+ * conservation.
+ *
+ * --------------------------------- Matrix ----------------------------------
+ *
+ * Per benchmark: the k-sweep at branch=on, declass=off (5 descriptors,
+ * `<base>-k<K>`); one branch=off contrast at k=2 (`<base>-k2-nobranch`); one
+ * declass=on variant at k=2 (`<base>-k2-declass`). 7 per benchmark * 6
+ * benchmarks = 42 descriptors. Each descriptor carries one size (the smallest
+ * Savina default) — the interesting axis is k, not n.
+ *)
+
+import List
+import SimpleModule
+
+datatype Atoms = PING | PONG | STOP | INC | GET | RESULT | TOKEN | WIRE | DONE
+              | ITEM | CREDIT | DATA | SUM | SHUTDOWN | MEET | CHANGE | EXIT
+              | TRANSFER | CREDITMSG | CONFIRM | GETBALANCE | BALANCE
+
+let
+    (*======================= shared labeling harness =======================*)
+
+    (* Eight distinct high-integrity confidentiality principals; a labeled
+     * value uses `<p_i;#root-integrity>` so joins are incomparable yet the
+     * result is downgradable with authority (see the header). *)
+    val principals = [ `<p1;#root-integrity>`, `<p2;#root-integrity>`
+                     , `<p3;#root-integrity>`, `<p4;#root-integrity>`
+                     , `<p5;#root-integrity>`, `<p6;#root-integrity>`
+                     , `<p7;#root-integrity>`, `<p8;#root-integrity>` ]
+
+    (* Declassification target: bottom confidentiality, kept at root integrity
+     * (the data is high-integrity, so declassify only lowers confidentiality). *)
+    val pub = `<; #root-integrity>`
+
+    (* The principal for message index `idx` under diversity `k`, round-robin. *)
+    fun labelAt (cfg, idx) = List.nth principals (idx mod cfg.k)
+
+    (* Label value `v` for message `idx`. At k = 0 the value is left untouched —
+     * the honest baseline emits no `raisedTo`. *)
+    fun tag (cfg, idx, v) =
+        if cfg.k = 0 then v else v raisedTo (labelAt (cfg, idx))
+
+    (* Fold payload `v` into accumulator `a`. With branch=on the fold branches on
+     * the labeled content (raising the pc); with branch=off it is a pure join.
+     * For every payload v >= 0 both arms compute a + v, so the value is
+     * label-transparent — only the label/pc behavior differs. *)
+    fun combine (cfg, a, v) =
+        if cfg.branch then (if v > 0 then a + v else a) else a + v
+
+    (* Like combine, but for a signed delta that must always be applied (bank
+     * balances move both ways). branch=on branches on the labeled amount's sign
+     * purely to raise the pc; both arms apply the full delta, so the balance is
+     * label-transparent. *)
+    fun applyAmount (cfg, balance, delta) =
+        if cfg.branch
+        then (if delta > 0 then balance + delta else balance + delta)
+        else balance + delta
+
+    (* Restore the blocking label to the pc before an onward send, so a
+     * branch-raised actor delivers to a plain point receive (a message inherits
+     * the sender's blocking label; a raised one exceeds a plain receiver's
+     * clearance). Branching raises the blocking label, not the pc, so
+     * `blockdown authority` settles it back to the pc baseline — whatever that
+     * baseline is (`{}` at top level, the module's own baseline inside the
+     * loaded blob). Value labels are unaffected. A no-op unless the actor
+     * actually branches. *)
+    fun settle cfg =
+        if cfg.branch andalso cfg.k > 0 then blockdown authority else ()
+
+    (* Settle-then-send: the only send form used by actors that branch. *)
+    fun tell cfg (dst, msg) = (settle cfg; send (dst, msg))
+
+    (* The collection point. With declass=on the aggregate is declassified to
+     * public inside the timed region; otherwise it keeps its joined label. *)
+    fun collect (cfg, a) =
+        if cfg.declass andalso cfg.k > 0
+        then declassify (a, authority, pub) else a
+
+    (* Turn a (possibly labeled) verdict bool into a public bool for the harness,
+     * restoring main's pc afterwards. At k = 0 the verdict is already public. *)
+    fun verdict (cfg, b) =
+        if cfg.k = 0 then b
+        else let val v = declassify (b, authority, pub)
+                 val _ = blockdown authority
+             in v end
+
+    (*============================== pingpong ===============================*)
+    (* Ponger echoes a labeled unit contribution derived (branch=on: via a
+     * content branch) from each ping's payload; main sums the replies. Result:
+     * n, matching the Savina original's pong count. *)
+    fun ppMake cfg =
+        let fun ponger () =
+                receive [ hn (PING, v, p) =>
+                            (tell cfg (p, (PONG, combine (cfg, 0, v))); ponger ())
+                        , hn STOP => () ]
+            fun bench n =
+                let val pong = spawn ponger
+                    fun loop (0, acc) = (send (pong, STOP); collect (cfg, acc))
+                      | loop (k, acc) =
+                          (send (pong, (PING, tag (cfg, k, 1), self ()));
+                           receive [ hn (PONG, r) => loop (k - 1, acc + r) ])
+                in loop (n, 0) end
+        in { bench = bench, check = fn n => fn r => verdict (cfg, r = n) } end
+
+    (*============================== counting ===============================*)
+    (* The counter folds a labeled unit per INC; GET returns the count. Result:
+     * n, matching the Savina original. *)
+    fun ctMake cfg =
+        let fun counter c =
+                receive [ hn (INC, v)  => counter (combine (cfg, c, v))
+                        , hn (GET, p)  => tell cfg (p, (RESULT, c)) ]
+            fun bench n =
+                let val cnt = spawn (fn () => counter 0)
+                    fun produce k =
+                        if k = 0 then ()
+                        else (send (cnt, (INC, tag (cfg, k, 1))); produce (k - 1))
+                    val _ = produce n
+                    val _ = send (cnt, (GET, self ()))
+                in receive [ hn (RESULT, c) => collect (cfg, c) ] end
+        in { bench = bench, check = fn n => fn r => verdict (cfg, r = n) } end
+
+    (*============================= threadring ==============================*)
+    (* The token carries a labeled accumulator alongside its hop countdown; each
+     * actor folds a labeled unit (branch=on: on the payload) and forwards. After
+     * n hops the holder reports the accumulator. Result: n (re-pointed from the
+     * Savina original's holder index, so the result carries the payload). *)
+    fun trMake cfg =
+        let val ringSize = 100
+            fun ringActor main =
+                receive [ hn (WIRE, next, idx) =>
+                    let fun loop () =
+                            receive
+                              [ hn (TOKEN, 0, acc) =>
+                                  (tell cfg (main, (DONE, acc));
+                                   send (next, (STOP, ringSize - 1)))
+                              , hn (TOKEN, k, acc) =>
+                                  (tell cfg (next,
+                                     (TOKEN, k - 1, combine (cfg, acc, tag (cfg, k, 1))));
+                                   loop ())
+                              , hn (STOP, k) =>
+                                  if k > 1 then send (next, (STOP, k - 1)) else () ]
+                    in loop () end ]
+            fun bench n =
+                let val main = self ()
+                    val pids = List.map (fn _ => spawn (fn () => ringActor main))
+                                        (List.range ringSize)
+                    fun wire (i, rest) =
+                        case rest of
+                          []      => ()
+                        | p :: ps =>
+                            let val next = if i = ringSize - 1
+                                           then List.nth pids 0
+                                           else List.nth pids (i + 1)
+                                val _ = send (p, (WIRE, next, i))
+                            in wire (i + 1, ps) end
+                    val _ = wire (0, pids)
+                    val _ = send (List.nth pids 0, (TOKEN, n, 0))
+                in receive [ hn (DONE, acc) => collect (cfg, acc) ] end
+        in { bench = bench, check = fn n => fn r => verdict (cfg, r = n) } end
+
+    (*============================== prodcons ===============================*)
+    (* Producers tag item values; the consumer folds them (branch=on: on the
+     * item) into a sum. Result: 2n(4n-1), the Savina original's item-value sum. *)
+    fun pcMake cfg =
+        let val numProd = 4
+            val numCons = 4
+            val capacity = 10
+            fun buffer (q, qLen, waitingCons, owedProd) =
+                receive
+                  [ hn (ITEM, v, prod) =>
+                      (case waitingCons of
+                         c :: cs =>
+                           (send (c, (DATA, v)); send (prod, CREDIT);
+                            buffer (q, qLen, cs, owedProd))
+                       | [] =>
+                           if qLen + 1 < capacity
+                           then (send (prod, CREDIT);
+                                 buffer (List.append q [v], qLen + 1, [], owedProd))
+                           else buffer (List.append q [v], qLen + 1, [],
+                                        List.append owedProd [prod]))
+                  , hn (GET, c) =>
+                      (case q of
+                         v :: vs =>
+                           (send (c, (DATA, v));
+                            (case owedProd of
+                               p :: ps => (send (p, CREDIT);
+                                           buffer (vs, qLen - 1, waitingCons, ps))
+                             | []      => buffer (vs, qLen - 1, waitingCons, [])))
+                       | [] => buffer ([], 0, List.append waitingCons [c], owedProd))
+                  , hn SHUTDOWN => () ]
+            fun producer (buf, i, k) =
+                let fun loop j =
+                        if j = k then ()
+                        else (send (buf, (ITEM, tag (cfg, i * k + j, i * k + j), self ()));
+                              receive [ hn CREDIT => loop (j + 1) ])
+                in loop 0 end
+            fun consumer (buf, main, k) =
+                let fun loop (j, acc) =
+                        if j = k then tell cfg (main, (SUM, acc))
+                        else (tell cfg (buf, (GET, self ()));
+                              receive [ hn (DATA, v) => loop (j + 1, combine (cfg, acc, v)) ])
+                in loop (0, 0) end
+            fun bench n =
+                let val main = self ()
+                    val buf = spawn (fn () => buffer ([], 0, [], []))
+                    val _ = List.map (fn i => spawn (fn () => producer (buf, i, n)))
+                                     (List.range numProd)
+                    val _ = List.map (fn _ => spawn (fn () => consumer (buf, main, n)))
+                                     (List.range numCons)
+                    fun collectSums (k, total) =
+                        if k = 0 then (send (buf, SHUTDOWN); collect (cfg, total))
+                        else receive [ hn (SUM, s) => collectSums (k - 1, total + s) ]
+                in collectSums (numCons, 0) end
+        in { bench = bench, check = fn n => fn t => verdict (cfg, t = 2 * n * (4 * n - 1)) } end
+
+    (*============================== chameneos ==============================*)
+    (* The mall labels each meeting's CHANGE payload; each creature folds a
+     * labeled unit (branch=on: on the payload) into its meeting count. Result:
+     * 2n, the Savina original's total meeting count. *)
+    fun chMake cfg =
+        let val numChameneos = 10
+            fun complement (c1, c2) = if c1 = c2 then c1 else 3 - c1 - c2
+            fun creature (mall, main, color, count) =
+                (tell cfg (mall, (MEET, color, self ()));
+                 receive [ hn (CHANGE, c, u) =>
+                             creature (mall, main, c, combine (cfg, count, u))
+                         , hn EXIT => tell cfg (main, (DONE, count)) ])
+            fun mall meetings =
+                let fun loop (waiting, m, exited) =
+                        if exited = numChameneos then ()
+                        else receive [ hn (MEET, c, p) =>
+                            if m = 0
+                            then (send (p, EXIT); loop (waiting, m, exited + 1))
+                            else case waiting of
+                                   [] => loop ([(c, p)], m, exited)
+                                 | (c2, p2) :: _ =>
+                                     let val nc = complement (c, c2)
+                                         val u  = tag (cfg, m, 1)
+                                         val _  = send (p,  (CHANGE, nc, u))
+                                         val _  = send (p2, (CHANGE, nc, u))
+                                     in loop ([], m - 1, exited) end ]
+                in loop ([], meetings, 0) end
+            fun bench n =
+                let val main = self ()
+                    val mallPid = spawn (fn () => mall n)
+                    val _ = List.map
+                              (fn i => spawn (fn () =>
+                                  creature (mallPid, main, i mod 3, 0)))
+                              (List.range numChameneos)
+                    fun collectCounts (k, total) =
+                        if k = 0 then collect (cfg, total)
+                        else receive [ hn (DONE, c) => collectCounts (k - 1, total + c) ]
+                in collectCounts (numChameneos, 0) end
+        in { bench = bench, check = fn n => fn t => verdict (cfg, t = 2 * n) } end
+
+    (*=============================== banking ===============================*)
+    (* Transfer amounts are labeled; each account folds the amount (branch=on: on
+     * the amount) into its balance. Result: (sum of balances, transfers done);
+     * ok iff money is conserved (20 * 10000) and all n transfers completed. *)
+    fun bkMake cfg =
+        let val numAccounts = 20
+            val initialBalance = 10000
+            fun account balance =
+                receive
+                  [ hn (TRANSFER, amount, dst, teller) =>
+                      (tell cfg (dst, (CREDITMSG, amount, teller));
+                       account (applyAmount (cfg, balance, 0 - amount)))
+                  , hn (CREDITMSG, amount, teller) =>
+                      (tell cfg (teller, CONFIRM);
+                       account (applyAmount (cfg, balance, amount)))
+                  , hn (GETBALANCE, p) =>
+                      (tell cfg (p, (BALANCE, balance)); account balance)
+                  , hn STOP => () ]
+            fun bench n =
+                let val main = self ()
+                    val accounts =
+                        List.map (fn _ => spawn (fn () => account initialBalance))
+                                 (List.range numAccounts)
+                    fun pick () = floor (random () * numAccounts)
+                    fun transfers (k, done) =
+                        if k = 0 then done
+                        else let val src = pick ()
+                                 val dstRaw = pick ()
+                                 val dst = if dstRaw = src
+                                           then (dstRaw + 1) mod numAccounts
+                                           else dstRaw
+                                 val amount = tag (cfg, k, floor (random () * 100))
+                                 val _ = send (List.nth accounts src,
+                                               (TRANSFER, amount, List.nth accounts dst, main))
+                             in receive [ hn CONFIRM => transfers (k - 1, done + 1) ]
+                             end
+                    val completed = transfers (n, 0)
+                    fun sumBalances ([], acc) = acc
+                      | sumBalances (a :: rest, acc) =
+                          (send (a, (GETBALANCE, main));
+                           receive [ hn (BALANCE, b) =>
+                                       (send (a, STOP);
+                                        sumBalances (rest, combine (cfg, acc, b))) ])
+                    val total = sumBalances (accounts, 0)
+                in (collect (cfg, total), completed) end
+        in { bench = bench
+           , check = fn n => fn (total, completed) =>
+                       verdict (cfg, total = numAccounts * initialBalance)
+                       andalso completed = n } end
+
+    (*========================= descriptor matrix ==========================*)
+
+    (* Each benchmark: (base name, cfg -> {bench, check}, single size). Sizes are
+     * the smallest Savina defaults. *)
+    val benchmarks =
+        [ ("pingpong",   ppMake, 1000)
+        , ("counting",   ctMake, 10000)
+        , ("threadring", trMake, 10000)
+        , ("prodcons",   pcMake, 200)
+        , ("chameneos",  chMake, 2000)
+        , ("banking",    bkMake, 2000) ]
+
+    fun descriptorsFor (base, makeFn, size) =
+        let fun mk (suffix, cfg) =
+                let val d = makeFn cfg
+                in { name = base ^ suffix, bench = d.bench, check = d.check,
+                     sizes = [size] } end
+            val kSweep =
+                List.map (fn k => mk ("-k" ^ toString k,
+                                      { k = k, branch = true, declass = false }))
+                         [0, 1, 2, 4, 8]
+        in List.append kSweep
+             [ mk ("-k2-nobranch", { k = 2, branch = false, declass = false })
+             , mk ("-k2-declass",  { k = 2, branch = true,  declass = true }) ]
+        end
+
+    val all =
+        List.foldl (fn (b, acc) => List.append acc (descriptorsFor b))
+                   [] benchmarks
+
+in (SimpleModule.publish (authority, "LabeledSavina", { all = all });
+    print "published LabeledSavina module")
+end

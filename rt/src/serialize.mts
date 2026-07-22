@@ -44,6 +44,28 @@ export class UnserializableObjectError extends StopThreadError {
 }
 
 /**
+ * Error thrown when attempting to serialize a closure that depends on a
+ * program-local module (a "module:" entry in its libdeps). The receiver-side
+ * re-linking contract resolves library dependencies against the local
+ * standard library; it has no meaning for program-local modules.
+ */
+export class ModuleDependentClosureError extends StopThreadError {
+    moduleKey: string;
+    explainstr: string = null;
+    errorKind: ErrorKind = ErrorKind.DynTypeError;
+
+    get errorMessage() {
+        return `Cannot serialize a closure that depends on module '${this.moduleKey}'; ` +
+               `only closures whose dependencies are standard libraries can be serialized`;
+    }
+
+    constructor(moduleKey: string) {
+        super(getRuntimeObject().$t);
+        this.moduleKey = moduleKey;
+    }
+}
+
+/**
  * Error thrown when attempting to locally serialize quarantined data (e.g., persist to disk).
  * Quarantined labels require a target node for restoration.
  */
@@ -223,9 +245,20 @@ export function serialize(w:LVal, pclev:Level, targetNodeId?: string) {
 
                             namespace.set(ff, x.fun.serialized)
 
+                            function checkModuleDeps(fn) {
+                                for (const l of (fn.libdeps ?? [])) {
+                                    if (typeof l === 'string' && l.startsWith("module:")) {
+                                        throw new ModuleDependentClosureError(l);
+                                    }
+                                }
+                            }
+
+                            checkModuleDeps(x.fun);
+
                             function dfs(deps) {
                                 for (let depName of deps) {
                                     if (!namespace.has(depName)) {
+                                        checkModuleDeps(x.namespace[depName]);
                                         namespace.set(depName, x.namespace[depName].serialized);
                                         dfs(x.namespace[depName].deps);
                                     }

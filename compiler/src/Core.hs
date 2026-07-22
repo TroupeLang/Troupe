@@ -346,20 +346,26 @@ mapFromImports (Imports imports) =
       Just alias -> alias
       Nothing -> importLib imp
 
+    -- The name codegen addresses the import by: the library name, or the
+    -- module key ("module:<root-relative-path>") for a module import.
+    codegenName imp = case importPath imp of
+      Just key -> LibName ("module:" ++ key)
+      Nothing  -> importLib imp
+
     -- Build unqualified environment (only unqualified imports)
     -- Maps each exported function name to the original library
     unqualifiedImports = [imp | imp <- imports, importMode imp == Unqualified]
     unqualEnv = foldl insLib Map.empty unqualifiedImports
       where
         insLib m imp =
-          let lib = importLib imp
+          let lib = codegenName imp
               defs = effectiveExports imp
           in foldl (\m' def -> Map.insert def lib m') m defs
 
     -- Build map from effective name (alias or original) to (original lib, effective exports)
     -- This is used for resolving and validating A.foo() syntax
     libExports = Map.fromList
-      [ (effectiveName imp, (importLib imp, Set.fromList (effectiveExports imp)))
+      [ (effectiveName imp, (codegenName imp, Set.fromList (effectiveExports imp)))
       | imp <- imports
       ]
   in

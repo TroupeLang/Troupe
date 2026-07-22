@@ -33,6 +33,9 @@ import System.IO
 import TroupeSourceMap (buildSourceMap)
 import System.Exit
 import ProcessImports
+import Direct (Prog(..))
+import Basics (Imports(..), importPath)
+import System.Directory (createDirectoryIfMissing)
 import AddAmbientMethods
 import ShowIndent
 import Exports
@@ -86,8 +89,10 @@ options =
 --------------------------------------------------------------------------------
 ----- PIPELINE FROM FLAGS TO IR AND JS -----------------------------------------
 
-process :: [Flag] -> Maybe String -> String -> IO ExitCode
-process flags fname input = do
+-- | Compile one file. `root` is the project root (the main file's directory)
+-- against which module imports are resolved and displayed.
+process :: FilePath -> [Flag] -> Maybe String -> String -> IO ExitCode
+process root flags fname input = do
   let ast    = parseProg (maybe "" id fname) input
 
   let compileMode = if LibMode `elem` flags then Library else Normal
@@ -119,7 +124,7 @@ process flags fname input = do
       let prog_without_dependencies = case compileMode of Normal -> addAmbientMethods prog_parsed
                                                           _      -> prog_parsed
 
-      prog <- (processImports) prog_without_dependencies
+      prog <- processImports root (maybe "" id fname) prog_without_dependencies
 
       exports <- case compileMode of Library -> case runExcept (extractExports prog) of
                                                      Right es -> return (Just (es))
@@ -205,9 +210,17 @@ process flags fname input = do
       when verbose $ writeFileD "out/out.stack" (PP.render $ PPrint.runPP ppConfig $ Stack.ppProg stack)
 
       ----- JAVASCRIPT -------------------------------------
+      -- Record the project root in the program when it (transitively) uses
+      -- modules, so the runtime can locate their compiled artifacts.
+      let usesModules = let Prog (Imports imps) _ _ = prog
+                        in any (\imp -> importPath imp /= Nothing) imps
+          moduleRoot = if usesModules && not (LibMode `elem` flags)
+                       then Just root
+                       else Nothing
       let (stackjs, mappings) = Stack2JS.stack2JSWithMappings compileMode
                                                               debugJS
                                                               sourceMapEnabled
+                                                              moduleRoot
                                                               (Stack.ProgramStackUnit stack)
 
       ----- SOURCE MAP EMBEDDING ---------------------------
@@ -236,7 +249,7 @@ process flags fname input = do
 
       ----- EPILOGUE --------------------------------------
       when verbose printHr
-      exitSuccess
+      return ExitSuccess
 
 isOutputFile :: Flag -> Bool
 isOutputFile (OutputFile _) = True
@@ -259,7 +272,7 @@ ingestIRSexp flags file input =
           rawopt   = if noRawOpt then raw else RawOpt.rawopt raw
           stack    = Raw2Stack.rawProg2Stack rawopt
           (stackjs, _mappings) =
-            Stack2JS.stack2JSWithMappings CompileMode.Normal debugJS False
+            Stack2JS.stack2JSWithMappings CompileMode.Normal debugJS False Nothing
                                           (Stack.ProgramStackUnit stack)
       writeFile outPath stackjs
       exitSuccess
@@ -356,7 +369,19 @@ main = do
       input <- readFile file
       if IngestIRSexp `elem` o
         then ingestIRSexp o file input
-        else process o (Just file) input
+        else do
+          let root = takeDirectory file
+          -- Compile the module import graph first (dependencies before
+          -- consumers), then the file itself. Modules compile as libraries;
+          -- per-module dumps are not written (Verbose stays top-level only).
+          when (not (LibMode `elem` o)) $ do
+            mods <- discoverModules file
+            let moduleFlags = LibMode : filter (`elem` [NoRawOpt, Debug]) o
+            mapM_ (\m -> do createDirectoryIfMissing True (takeDirectory m </> "out")
+                            minput <- readFile m
+                            _ <- process root moduleFlags (Just m) minput
+                            return ()) mods
+          process root o (Just file) input
 
     (_,_, errs) -> die $ concat errs ++ compilerUsage
  where

@@ -93,8 +93,12 @@ let (* TODO: The map is implemented as an unbalanced binary search tree. This op
     (** Returns the map without the given `key` and its value removed. *)
     fun remove (cmp,t) key =
         let fun removeRec ()              = ()
-              | removeRec (l,  (k,v), ()) = if key = k then l else (l,  (k,v), ())
-              | removeRec ((), (k,v), r)  = if key = k then r else ((), (k,v), r)
+              | removeRec (l,  (k,v), ()) = if key = k then l
+                                            else if cmp key k then (removeRec l, (k,v), ())
+                                            else (l, (k,v), ())
+              | removeRec ((), (k,v), r)  = if key = k then r
+                                            else if cmp key k then ((), (k,v), r)
+                                            else ((), (k,v), removeRec r)
               | removeRec (l,  (k,v), r)  =
                 if key = k
                 then let val ((k',v'), (_,r')) = extractMin (cmp, r)

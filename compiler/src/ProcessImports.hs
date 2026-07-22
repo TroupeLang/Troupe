@@ -87,16 +87,22 @@ processModuleImport root file imp = do
     die $ "module " ++ show lit ++ " imported from " ++ displayPath root file
         ++ " is not compiled (no " ++ displayPath root expFile ++ ")"
   input <- readFile expFile
-  let exports = lines input
+  -- A module's .exports has the same shape as a library's: one value name per
+  -- line, plus zero or more @datatype ...@ lines. Partition them exactly as
+  -- processLibImport does, so a module's datatype interface reaches the
+  -- syntactic-variant resolver (importer-side constructor resolution) and never
+  -- leaks into the value namespace. Selection restricts value imports only.
+  let (dtLines, nameLines) = partition isDatatypeLine (lines input)
+      datatypes = map parseDatatypeLine dtLines
   case importSelected imp of
     Just selected -> do
-      let missing = filter (`notElem` exports) selected
+      let missing = filter (`notElem` nameLines) selected
       unless (null missing) $
         die $ "Module " ++ show lit ++ " does not export: " ++ unwords missing
     Nothing -> return ()
   -- Canonicalize the stored path to the root-relative key; codegen and the
   -- runtime address the module as "module:<key>".
-  return imp { importExports = Just exports, importPath = Just key }
+  return imp { importExports = Just nameLines, importDatatypes = datatypes, importPath = Just key }
 
 --------------------------------------------------------------------------------
 -- Library imports (import Lib)

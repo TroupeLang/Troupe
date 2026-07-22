@@ -7,11 +7,14 @@ build:
 	$(COMPILER) ./SimpleModule.trp -l
 	$(COMPILER) ./BigInt.trp -l
 	$(COMPILER) ./Number.trp -l
-	$(COMPILER) ./List.trp -l
+	$(COMPILER) ./Option.trp -l
 	$(COMPILER) ./ThreadUtil.trp -l
 	$(COMPILER) ./timeout.trp -l
 	$(COMPILER) ./Result.trp -l
 	$(COMPILER) ./VariantsDemo.trp -l
+
+  # Dependency on `Option`
+	$(COMPILER) ./List.trp -l
 
   # Dependency on `Number`
 	$(COMPILER) ./Duration.trp -l

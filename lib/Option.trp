@@ -1,0 +1,75 @@
+(** Option - A type for representing an optional value.
+ *
+ *  Option is encoded as tagged records:
+ *    - Present: {tag = "Some", value = v}
+ *    - Absent:  {tag = "None"}
+ *
+ *  This provides a standard way to represent partial results without
+ *  sentinel encodings per type; it replaces the zero-or-one-element
+ *  list idiom formerly used by the findOpt functions (#53).
+ *)
+
+let (*--- Construction ---*)
+
+    (** Wrap a value in a present option. *)
+    fun some v = {tag = "Some", value = v}
+
+    (** The absent option. *)
+    val none = {tag = "None"}
+
+    (*--- Predicates ---*)
+
+    (** Returns true if the option is Some. *)
+    fun isSome {tag = "Some", value = _} = true
+      | isSome _ = false
+
+    (** Returns true if the option is None. *)
+    fun isNone {tag = "None"} = true
+      | isNone _ = false
+
+    (*--- Extraction ---*)
+
+    (** Extract the value from a Some option. Fails if None. *)
+    fun unwrap {tag = "Some", value = v} = v
+
+    (** Extract the value from a Some option, or return default if None. *)
+    fun getOrElse {tag = "Some", value = v} _ = v
+      | getOrElse _ default = default
+
+    (*--- Transformations ---*)
+
+    (** Apply f to the value if Some, leave None unchanged. *)
+    fun map f {tag = "Some", value = v} = {tag = "Some", value = f v}
+      | map _ opt = opt
+
+    (** Chain operations: if Some, apply f (which returns an option). *)
+    fun andThen f {tag = "Some", value = v} = f v
+      | andThen _ opt = opt
+
+    (** If None, produce a fallback option with f (); leave Some unchanged. *)
+    fun orElse f {tag = "None"} = f ()
+      | orElse _ opt = opt
+
+    (*--- Conversion ---*)
+
+    (** `[v]` for Some v; `[]` for None. *)
+    fun toList {tag = "Some", value = v} = [v]
+      | toList _ = []
+
+    (** Some x for `[x]`; None for `[]`. *)
+    fun fromList [x] = {tag = "Some", value = x}
+      | fromList [] = {tag = "None"}
+
+in [ ("some", some)
+   , ("none", none)
+   , ("isSome", isSome)
+   , ("isNone", isNone)
+   , ("unwrap", unwrap)
+   , ("getOrElse", getOrElse)
+   , ("map", map)
+   , ("andThen", andThen)
+   , ("orElse", orElse)
+   , ("toList", toList)
+   , ("fromList", fromList)
+   ]
+end

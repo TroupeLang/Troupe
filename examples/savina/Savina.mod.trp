@@ -1181,8 +1181,8 @@ let
         | (nb, c) :: rest =>
             let val nd = g + c
                 val better = case Map.findOpt best nb of
-                               []  => true
-                             | [d] => nd < d
+                               {tag = "None"}            => true
+                             | {tag = "Some", value = d} => nd < d
             in if better
                then relaxAll (w, g, rest,
                               Map.insert open (pqKey (w, nd, nb)) (nb, nd),
@@ -1196,8 +1196,8 @@ let
                   ([], _) => best
                 | ([(k, (id, dist))], open2) =>
                     let val stale = case Map.findOpt best id of
-                                      [d] => d < dist
-                                    | []  => false
+                                      {tag = "Some", value = d} => d < dist
+                                    | {tag = "None"}            => false
                     in if stale then go (open2, best)
                        else let val (open3, best2) =
                                     relaxAll (w, dist, expand (w, id), open2, best)
@@ -1217,8 +1217,8 @@ let
                     (case Map.extractMinOpt open of
                        ([(k, (id, dist))], open2) =>
                          let val stale = case Map.findOpt best id of
-                                           [d] => d < dist
-                                         | []  => false
+                                           {tag = "Some", value = d} => d < dist
+                                         | {tag = "None"}            => false
                          in if stale then loop (open2, best, idle, inFlight)
                             else (send (wk, (EXPAND, id, dist, main));
                                   loop (open2, best, idles, inFlight + 1))

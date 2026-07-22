@@ -44,6 +44,7 @@ benchmark-modules:
 	./local.sh examples/benchmarks/awfy/Awfy.mod.trp
 	./local.sh examples/benchmarks/datastructures/DataStructures.mod.trp
 	./local.sh examples/benchmarks/clbg/Clbg.mod.trp
+	./local.sh examples/benchmarks/labeled-savina/LabeledSavina.mod.trp
 
 savina-modules: benchmark-modules
 

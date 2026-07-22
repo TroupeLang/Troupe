@@ -125,7 +125,8 @@ instance Serialize ImportMode
 --   - Selective imports: import List (head, tail)
 
 data ImportDecl = ImportDecl
-  { importLib      :: LibName          -- Original library name
+  { importLib      :: LibName          -- Bound name: the library name, or the module's last path segment
+  , importPath     :: Maybe String     -- Just the literal path for a module import (import "./..."); Nothing for a library
   , importAlias    :: Maybe LibName    -- Optional alias (from "as X")
   , importExports  :: Maybe [VarName]  -- Value exports from .exports file (filled by ProcessImports)
   , importSelected :: Maybe [VarName]  -- Selective imports (user-specified)

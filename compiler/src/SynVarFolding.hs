@@ -189,6 +189,20 @@ buildImportEnv (Imports imports) = foldM addImport emptyEnv imports
       let LibName lib = importLib imp
           qual        = importQualifier imp
           bareVisible = importMode imp == Unqualified
+          -- The load-time datatype version-skew check (spec §10) is a *library*
+          -- mechanism: a library is a separately distributed artifact, so the
+          -- importer records the group hashes it consumed and the runtime
+          -- re-checks them against the library's embedded exported-hash list.
+          -- A module (import "./Path", importPath = Just) has no such standalone
+          -- artifact to skew-check — it is recompiled from source alongside the
+          -- importer in one build, and a module artifact carries no
+          -- __datatypeHashes list to check against. Recording a module here
+          -- would key the consumed record by the bare module name and make the
+          -- runtime try to load it as a library (lib/out/<Name>.js); its
+          -- constructors are inline tagged tuples and introduce no runtime
+          -- dependency on the provider at all. So only libraries feed the
+          -- skew record.
+          isLibraryImport = importPath imp == Nothing
       -- Each interface line is one group's (stored hash, canonical form); parse
       -- the canonical form, recompute the group's hash, and verify the stored
       -- hash matches it before building the datatype entries.
@@ -208,8 +222,10 @@ buildImportEnv (Imports imports) = foldM addImport emptyEnv imports
           hashes  = [ deGroupHash e | (_, e) <- entries ]
           env1 = env
             { envImportedHashes = foldr Set.insert (envImportedHashes env) hashes
-            , envHashToLib = foldr (\h -> Map.insertWith (\_ old -> old) h lib)
-                                   (envHashToLib env) hashes
+            , envHashToLib = if isLibraryImport
+                             then foldr (\h -> Map.insertWith (\_ old -> old) h lib)
+                                        (envHashToLib env) hashes
+                             else envHashToLib env
             , envMod = Map.insertWith Map.union qual (Map.fromList entries) (envMod env)
             , envModCtors = Map.insertWith (Map.unionWith (++)) qual
                               (ctorMapOf entries) (envModCtors env)

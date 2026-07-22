@@ -160,7 +160,9 @@ Prog : ImportDecl TopDecls Expr
          { Prog (Imports $1) $2 $3 }
 
 ImportDecl: import OptQualified OptSelection VAR OptAlias ImportDecl
-              { (ImportDecl (LibName (varTok $4)) $5 Nothing $3 $2 []) : $6 }
+              { (ImportDecl (LibName (varTok $4)) Nothing $5 Nothing $3 $2 []) : $6 }
+          | import OptQualified OptSelection STRING OptAlias ImportDecl
+              { (ImportDecl (LibName (moduleBindName (strTok $4))) (Just (strTok $4)) $5 Nothing $3 $2 []) : $6 }
           | { [] }
 
 OptQualified : qualified  { Qualified }
@@ -714,6 +716,10 @@ floatTok (L _ (TokenFloat x)) = x
 strTok (L _ (TokenString x)) = x
 varTok (L _ (TokenSym x ))   = x
 tyvarTok (L _ (TokenTyVar x)) = x
+
+-- The name a module import binds when no alias is given: the last path segment.
+moduleBindName :: String -> String
+moduleBindName = reverse . takeWhile (/= '/') . reverse
 lblTok (L _ (TokenLabel x))  = x
 
 pos :: L Token -> ParseM PosInf

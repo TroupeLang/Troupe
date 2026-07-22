@@ -1,0 +1,6 @@
+(* Half of an import cycle with ModuleCycleB. *)
+import "./ModuleCycleB"
+
+let fun a () = ModuleCycleB.b ()
+in [ ("a", a) ]
+end

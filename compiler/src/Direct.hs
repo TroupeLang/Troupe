@@ -198,7 +198,10 @@ ppProg (Prog (Imports imports) groups term) =
         if null imports then PP.empty
         else
           let ppLibName imp =
-                let LibName s = importLib imp
+                let LibName ln = importLib imp
+                    s = case importPath imp of
+                          Just p  -> "\"" ++ p ++ "\""
+                          Nothing -> ln
                     modeText = case importMode imp of
                       Qualified -> text "import qualified" <+> text s
                       Unqualified -> text "import" <+> text s

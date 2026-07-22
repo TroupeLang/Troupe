@@ -1,0 +1,5 @@
+(* Importing a module whose source file does not exist is a compile error. *)
+import "./ModuleNoSuchFile"
+
+let val _ = ()
+in () end

@@ -1,0 +1,6 @@
+(* Selective import from a module: only `bang` is brought into scope,
+ * and (as with libraries) selective imports are usable unqualified. *)
+import { bang } "./modsrc/util/ModuleDiamondFmt"
+
+let val _ = fwrite (stdout authority, bang "selected" ^ "\n")
+in () end

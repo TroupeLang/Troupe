@@ -1,0 +1,9 @@
+(* Leaf module of the diamond tests; imports a standard library. *)
+import String
+
+let fun bang s = s ^ "!"
+    fun shout s = String.map (fn c => c) s ^ "!!"
+in [ ("bang", bang)
+   , ("shout", shout)
+   ]
+end

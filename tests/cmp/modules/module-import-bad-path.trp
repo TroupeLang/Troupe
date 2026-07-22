@@ -1,0 +1,5 @@
+(* A module import path must start with "./". *)
+import "../ModuleEscape"
+
+let val _ = ()
+in () end

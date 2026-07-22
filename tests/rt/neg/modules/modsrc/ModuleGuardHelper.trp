@@ -1,0 +1,4 @@
+(* Module whose exported function the serialization-guard test tries to save. *)
+let fun stamp s = "[" ^ s ^ "]"
+in [ ("stamp", stamp) ]
+end

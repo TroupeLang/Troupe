@@ -1,0 +1,5 @@
+(* Selectively importing a name the module does not export is a compile error. *)
+import { nosuchexport } "./modsrc/ModuleCollideHelper"
+
+let val _ = ()
+in () end

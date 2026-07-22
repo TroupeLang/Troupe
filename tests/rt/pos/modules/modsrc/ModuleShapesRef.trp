@@ -1,0 +1,10 @@
+(* Module for the cross-module Ext-reference test: declares `shape` and a
+ * function over it. Separate from ModuleShapes so each module source is
+ * compiled by exactly one test (the suite's 1:1 convention -- two tests sharing
+ * one module source race to rewrite its compiled output under parallel runs). *)
+datatype shape = CIRCLE of int | RECT of int * int
+
+let fun area (CIRCLE r)    = 3 * r * r
+      | area (RECT (w, h)) = w * h
+in [ ("area", area) ]
+end

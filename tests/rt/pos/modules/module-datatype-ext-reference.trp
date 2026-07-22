@@ -3,7 +3,7 @@
    built and matched here interoperate with the module's `area`. Exercises the
    cross-module `of`-clause (Ext) reference path. *)
 import List
-import "./modsrc/ModuleShapes"
+import "./modsrc/ModuleShapesRef"
 
 datatype tagged = LABELED of string * shape | BLANK
 

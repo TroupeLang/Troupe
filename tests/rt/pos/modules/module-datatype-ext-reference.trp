@@ -1,0 +1,20 @@
+(* A local datatype whose payload references a datatype imported from a module.
+   The `of ... shape` reference must resolve to the module's group, so values
+   built and matched here interoperate with the module's `area`. Exercises the
+   cross-module `of`-clause (Ext) reference path. *)
+import List
+import "./modsrc/ModuleShapes"
+
+datatype tagged = LABELED of string * shape | BLANK
+
+let val items = [ LABELED ("disc", CIRCLE 4), BLANK, LABELED ("box", RECT (2, 3)) ]
+
+    fun report (LABELED (name, _)) = name
+      | report BLANK               = "blank"
+
+    fun measure (LABELED (_, sh)) = area sh   (* area is the module's function *)
+      | measure BLANK             = 0
+in print (LABELED ("x", CIRCLE 1));   (* a nested module-constructor value *)
+   print (map report items);
+   print (map measure items)
+end

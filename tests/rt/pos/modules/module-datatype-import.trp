@@ -1,0 +1,26 @@
+(* A module declares datatypes and functions over them; this program imports it
+   unqualified and uses its constructors bare, datatype-qualified (t.c),
+   module-qualified (M.c), and module-and-datatype-qualified (M.t.c), in both
+   expression and pattern position. The core property: `sample` is built by the
+   module's compiled constructor and matched here by the importer's own pattern,
+   so the content-addressed tag agrees across the module boundary. *)
+import "./modsrc/ModuleShapes"
+
+let fun kind (CIRCLE _)            = "circle"     (* bare pattern *)
+      | kind (ModuleShapes.RECT _) = "rect"       (* module-qualified pattern *)
+
+    val s1 = CIRCLE 3                       (* bare expression *)
+    val s2 = ModuleShapes.RECT (2, 5)       (* module-qualified expression *)
+    val s3 = ModuleShapes.shape.CIRCLE 1    (* module + datatype qualified *)
+    val s4 = shape.CIRCLE 2                  (* datatype-qualified expression *)
+    val c  = ModuleShapes.colour.BLUE
+in print (area s1);
+   print (area s2);
+   print (kind s1);
+   print (kind s2);
+   print (kind s3);
+   print (kind s4);
+   print (kind sample);                     (* value built inside the module *)
+   print (area sample);
+   print (describe c)
+end

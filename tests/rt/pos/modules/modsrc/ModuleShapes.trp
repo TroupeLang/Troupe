@@ -1,0 +1,18 @@
+(* Module declaring datatype groups and functions over them, plus a value built
+ * with its own constructor, for the cross-module syntactic-variant tests. *)
+datatype colour = RED | GREEN | BLUE
+datatype shape  = CIRCLE of int | RECT of int * int
+
+let fun describe RED   = "red"
+      | describe GREEN = "green"
+      | describe BLUE  = "blue"
+
+    fun area (CIRCLE r)    = 3 * r * r
+      | area (RECT (w, h)) = w * h
+
+    val sample = RECT (2, 3)
+in [ ("describe", describe)
+   , ("area", area)
+   , ("sample", sample)
+   ]
+end

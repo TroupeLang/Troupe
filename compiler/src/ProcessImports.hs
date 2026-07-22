@@ -38,6 +38,9 @@ getTroupeHome = do
 
 processImport :: ImportDecl -> IO ImportDecl
 processImport imp = do
+  case importPath imp of
+    Just p -> die $ "module imports are not implemented yet: import \"" ++ p ++ "\""
+    Nothing -> return ()
   troupeEnv <- getTroupeHome
   let LibName lib = importLib imp
   let fname = troupeEnv ++ defaultLibFolder ++ lib ++ ".exports"

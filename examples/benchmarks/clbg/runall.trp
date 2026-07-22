@@ -9,12 +9,13 @@
  *   clbg-report.md     per-benchmark medians and per-unit costs
  *   clbg-charts.svg    small-multiple scaling charts
  *
- * The benchmark descriptors are distributed as a SimpleModule blob and
- * the report renderer is reused from the Savina study (rows are generic
- * (name, size, ms, ok) tuples); publish both first (once, and after
- * changes):
+ * The benchmark descriptors are a program-relative module imported below
+ * (recompiled with the whole import graph on every run). The report
+ * renderer is reused from the Savina study (rows are generic
+ * (name, size, ms, ok) tuples) and is still a shared SimpleModule blob;
+ * publish it once:
  *
- *   make clbg-modules savina-modules
+ *   make benchmark-modules
  *   ./local.sh examples/benchmarks/clbg/runall.trp --io-root out
  *   ./local.sh examples/benchmarks/clbg/runall.trp --io-root out -- fannkuchredux
  *
@@ -28,22 +29,22 @@ import List
 import String
 import Bench
 import SimpleModule
+import "./Clbg"
 
 datatype Atoms = FLUSHMARK
 
 let val args = getCliArgs authority
-    val clbg = SimpleModule.load "Clbg"
     val report = SimpleModule.load "SavinaReport"
 
     val selected =
-        if List.length args = 0 then clbg.all
+        if List.length args = 0 then Clbg.all
         else List.filter (fn d => List.length
                                     (List.filter (fn a => a = d.name) args) > 0)
-                         clbg.all
+                         Clbg.all
 
     val unknown =
         List.filter (fn a => List.length
-                               (List.filter (fn d => d.name = a) clbg.all) = 0)
+                               (List.filter (fn d => d.name = a) Clbg.all) = 0)
                     args
 
     fun flushMailbox () =
@@ -76,7 +77,7 @@ in if List.length unknown > 0
      let val rows = runAll (selected, [])
          val summaries = report.summarize rows
          val _ = save ("clbg-results.txt", report.resultLines rows ^ "\n")
-         val _ = save ("clbg-report.md", report.markdown summaries ^ "\n")
+         val _ = save ("clbg-report.md", report.markdown ("CLBG results", summaries) ^ "\n")
          val _ = save ("clbg-charts.svg", report.svg summaries)
          val failed = List.filter (fn (_, ok, _) => not ok) summaries
      in print (List.length summaries, "benchmarks run,",

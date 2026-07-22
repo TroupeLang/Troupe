@@ -9,12 +9,12 @@
  *   datastructures-report.md     per-benchmark medians and per-unit costs
  *   datastructures-charts.svg    small-multiple scaling charts
  *
- * The descriptors are distributed as a SimpleModule blob; the report
- * renderer is reused from the Savina study (the row shape (name, size, ms,
- * ok) is identical). Publish both first (once, and after changes):
+ * The descriptors are a program-relative module imported below (recompiled
+ * with the whole import graph on every run). The report renderer is reused
+ * from the Savina study (the row shape (name, size, ms, ok) is identical)
+ * and is still a shared SimpleModule blob; publish it once:
  *
- *   make savina-modules          (publishes SavinaReport)
- *   ./local.sh examples/benchmarks/datastructures/DataStructures.mod.trp
+ *   make benchmark-modules       (publishes SavinaReport)
  *   ./local.sh examples/benchmarks/datastructures/runall.trp --io-root out
  *   ./local.sh examples/benchmarks/datastructures/runall.trp --io-root out -- map-insert set-iterate
  *
@@ -22,32 +22,28 @@
  * main mailbox is drained (a self-sent marker behind FIFO delivery bounds
  * the drain), so a benchmark that leaked a message cannot confuse the next
  * one — a nonzero drain count is reported.
- *
- * Note: SavinaReport's markdown header reads "Savina results"; the row
- * rendering and charts are structure-agnostic, so the numbers are correct
- * for this set — only that one title line is inherited.
  *)
 
 import List
 import String
 import Bench
 import SimpleModule
+import "./DataStructures"
 
 datatype Atoms = FLUSHMARK
 
 let val args = getCliArgs authority
-    val suite = SimpleModule.load "DataStructures"
     val report = SimpleModule.load "SavinaReport"
 
     val selected =
-        if List.length args = 0 then suite.all
+        if List.length args = 0 then DataStructures.all
         else List.filter (fn d => List.length
                                     (List.filter (fn a => a = d.name) args) > 0)
-                         suite.all
+                         DataStructures.all
 
     val unknown =
         List.filter (fn a => List.length
-                               (List.filter (fn d => d.name = a) suite.all) = 0)
+                               (List.filter (fn d => d.name = a) DataStructures.all) = 0)
                     args
 
     fun flushMailbox () =
@@ -80,7 +76,7 @@ in if List.length unknown > 0
      let val rows = runAll (selected, [])
          val summaries = report.summarize rows
          val _ = save ("datastructures-results.txt", report.resultLines rows ^ "\n")
-         val _ = save ("datastructures-report.md", report.markdown summaries ^ "\n")
+         val _ = save ("datastructures-report.md", report.markdown ("Data structures", summaries) ^ "\n")
          val _ = save ("datastructures-charts.svg", report.svg summaries)
          val failed = List.filter (fn (_, ok, _) => not ok) summaries
      in print (List.length summaries, "benchmarks run,",

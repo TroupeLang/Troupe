@@ -1,9 +1,20 @@
 (* SavinaReport — markdown and SVG rendering over collected benchmark
- * rows (a row is (name, size, ms, ok)), published as a SimpleModule
- * blob for runall.trp and analysis/mkreport.trp to `load
- * "SavinaReport"`. Re-run after changes:
+ * rows (a row is (name, size, ms, ok)), shared by the runall drivers of
+ * every suite and by analysis/mkreport.trp. `markdown` takes the suite
+ * title so each suite renders under its own name.
+ *
+ * This is the one renderer shared across suites that live in DIFFERENT
+ * directories (examples/savina/, examples/benchmarks/{datastructures,
+ * clbg,labeled-savina}/). The v1 module system resolves imports only to
+ * descendants of the importing program (no `../`), so a single module
+ * file cannot be imported by runners in sibling directories. Rather than
+ * duplicate the renderer into each suite, it stays a SimpleModule blob (one
+ * of two remaining after the descriptor migration — see LabeledSavina for
+ * the other). Publish it once, and after any change to this file or a
+ * compiler rebuild:
  *
  *   mkdir -p out && ./local.sh examples/savina/SavinaReport.mod.trp
+ *   (or `make benchmark-modules` from the repository root).
  *)
 
 import List
@@ -50,11 +61,11 @@ let fun uniq xs =
            ^ " | " ^ (if allOk then "yes" else "NO") ^ " |"
         end
 
-    (** Markdown report over summaries. *)
-    fun markdown summaries =
+    (** Markdown report over summaries, titled with the suite name. *)
+    fun markdown (title, summaries) =
         String.concatWith "\n"
           (List.append
-             [ "# Savina results (generated)"
+             [ "# " ^ title ^ " (generated)"
              , ""
              , "Medians over the repetitions of each run; per-unit cost is"
              , "at the largest size (microseconds per size unit)."

@@ -9,17 +9,19 @@
  *   labeled-savina-report.md     per-descriptor medians and per-unit costs
  *   labeled-savina-charts.svg    small-multiple charts
  *
- * The descriptors and the report renderer are distributed as SimpleModule
- * blobs; publish them first (once, and after changes):
+ * The descriptors stay a SimpleModule blob (unlike the other suites): the
+ * harness closes over the root `authority`, which is bound only in main-mode
+ * compilation, so the descriptors cannot be a library-mode module. The report
+ * renderer is likewise a shared SimpleModule blob. Publish both once:
  *
- *   make labeled-savina-modules            (or the two ./local.sh publishes)
+ *   make benchmark-modules
+ *   ./local.sh examples/benchmarks/labeled-savina/LabeledSavina.mod.trp
  *   ./local.sh examples/benchmarks/labeled-savina/runall.trp --io-root out
  *   ./local.sh examples/benchmarks/labeled-savina/runall.trp --io-root out -- \
  *       pingpong-k0 pingpong-k1 pingpong-k2 pingpong-k4 pingpong-k8
  *
- * The report renderer is Savina's SavinaReport blob, reused verbatim (its
- * "Savina results" title is a known misfit here, as the other benchmark suites
- * that reuse it also note).
+ * The report renderer is Savina's SavinaReport blob, reused verbatim; its
+ * title is passed in, so this suite renders under its own name.
  *
  * The whole suite runs in a single Troupe process; between descriptors the main
  * mailbox is drained (a self-sent marker behind FIFO delivery bounds the
@@ -79,7 +81,7 @@ in if List.length unknown > 0
      let val rows = runAll (selected, [])
          val summaries = report.summarize rows
          val _ = save ("labeled-savina-results.txt", report.resultLines rows ^ "\n")
-         val _ = save ("labeled-savina-report.md", report.markdown summaries ^ "\n")
+         val _ = save ("labeled-savina-report.md", report.markdown ("Labeled Savina results", summaries) ^ "\n")
          val _ = save ("labeled-savina-charts.svg", report.svg summaries)
          val failed = List.filter (fn (_, ok, _) => not ok) summaries
      in print (List.length summaries, "descriptors run,",

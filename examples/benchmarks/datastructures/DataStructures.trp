@@ -1,15 +1,15 @@
 (* DataStructures — micro-benchmarks for the stock container libraries
  * (lib/Map, lib/HashMap, lib/Set, lib/HashSet, lib/Vector) as benchmark
  * descriptors ({name, sizes, bench : size -> result,
- * check : size -> result -> bool}), published as a SimpleModule blob for
- * consumers to `load "DataStructures"` (runall.trp). Re-run this producer
- * after changing a benchmark or rebuilding the compiler:
- *
- *   mkdir -p out && ./local.sh examples/benchmarks/datastructures/DataStructures.mod.trp
+ * check : size -> result -> bool}). This is a program-relative module: it
+ * exports `all`, the descriptor list, and is imported by runall.trp via
+ * `import "./DataStructures"`. The whole import graph is recompiled on
+ * every run, so there is no artifact to republish after a benchmark or
+ * compiler change.
  *
  * Four operation profiles per structure — insert-heavy, lookup-heavy,
  * mixed, and iteration — mirroring the Savina descriptor architecture
- * (examples/savina/Savina.mod.trp).
+ * (examples/savina/Savina.trp).
  *
  * Determinism. Every key/index stream is produced by an in-language MINSTD
  * LCG (no randomness primitive), so a `check` can reproduce the exact
@@ -32,7 +32,6 @@ import HashMap
 import Set
 import HashSet
 import Vector
-import SimpleModule
 
 let (*==================== shared helpers ====================*)
 
@@ -524,6 +523,5 @@ let (*==================== shared helpers ====================*)
               , hashsetInsert, hashsetLookup, hashsetMixed, hashsetIterate
               , vectorUpdate,  vectorSub,     vectorRmw,    vectorIterate ]
 
-in (SimpleModule.publish (authority, "DataStructures", {all = all});
-    print ("published DataStructures module:", List.length all, "benchmarks"))
+in [ ("all", all) ]
 end

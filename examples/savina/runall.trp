@@ -9,10 +9,12 @@
  *   savina-report.md     per-benchmark medians and per-unit costs
  *   savina-charts.svg    small-multiple scaling charts
  *
- * The benchmark descriptors and the report renderer are distributed as
- * SimpleModule blobs; publish them first (once, and after changes):
+ * The benchmark descriptors are a program-relative module imported below
+ * (recompiled with the whole import graph on every run). The report
+ * renderer is still a SimpleModule blob shared across suites; publish it
+ * once with `make benchmark-modules`:
  *
- *   make savina-modules
+ *   make benchmark-modules
  *   ./local.sh examples/savina/runall.trp --io-root out
  *   ./local.sh examples/savina/runall.trp --io-root out -- pingpong sieve
  *
@@ -26,22 +28,22 @@ import List
 import String
 import Bench
 import SimpleModule
+import "./Savina"
 
 datatype Atoms = FLUSHMARK
 
 let val args = getCliArgs authority
-    val savina = SimpleModule.load "Savina"
     val report = SimpleModule.load "SavinaReport"
 
     val selected =
-        if List.length args = 0 then savina.all
+        if List.length args = 0 then Savina.all
         else List.filter (fn d => List.length
                                     (List.filter (fn a => a = d.name) args) > 0)
-                         savina.all
+                         Savina.all
 
     val unknown =
         List.filter (fn a => List.length
-                               (List.filter (fn d => d.name = a) savina.all) = 0)
+                               (List.filter (fn d => d.name = a) Savina.all) = 0)
                     args
 
     fun flushMailbox () =
@@ -74,7 +76,7 @@ in if List.length unknown > 0
      let val rows = runAll (selected, [])
          val summaries = report.summarize rows
          val _ = save ("savina-results.txt", report.resultLines rows ^ "\n")
-         val _ = save ("savina-report.md", report.markdown summaries ^ "\n")
+         val _ = save ("savina-report.md", report.markdown ("Savina results", summaries) ^ "\n")
          val _ = save ("savina-charts.svg", report.svg summaries)
          val failed = List.filter (fn (_, ok, _) => not ok) summaries
      in print (List.length summaries, "benchmarks run,",

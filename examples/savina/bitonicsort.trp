@@ -17,10 +17,9 @@
 
 import List
 import Bench
-import SimpleModule
+import "./Savina"
 
-let val m = SimpleModule.load "Savina"
-    val d = case List.filter (fn d => d.name = "bitonicsort") m.all of [d] => d
+let val d = case List.filter (fn d => d.name = "bitonicsort") Savina.all of [d] => d
     val sizes = Bench.sizesFromArgs (getCliArgs authority) d.sizes
 in Bench.run authority d.name sizes 3 d.bench d.check
 end

@@ -1,36 +1,34 @@
 (* runall — run the Are-We-Fast-Yet micro evaluation from one place.
  *
- * Runs every benchmark in the published Awfy module (or a subset named
- * on the command line) at its default sizes, one untimed warmup plus
- * three timed repetitions per size, and prints the Bench measurement
- * lines as it goes. Structured after examples/savina/runall.trp; the
- * AWFY micros are sequential kernels, so there is no inter-benchmark
- * mailbox to drain.
+ * Runs every benchmark in the Awfy module (or a subset named on the
+ * command line) at its default sizes, one untimed warmup plus three
+ * timed repetitions per size, and prints the Bench measurement lines as
+ * it goes. Structured after examples/savina/runall.trp; the AWFY micros
+ * are sequential kernels, so there is no inter-benchmark mailbox to drain.
  *
- * The benchmark descriptors are distributed as a SimpleModule blob;
- * publish it first (once, and after changes):
+ * The benchmark descriptors are a program-relative module imported below;
+ * the compiler recompiles the whole import graph on every run, so there
+ * is nothing to publish first:
  *
- *   make awfy-modules
  *   ./local.sh examples/benchmarks/awfy/runall.trp
  *   ./local.sh examples/benchmarks/awfy/runall.trp -- sieve towers
  *)
 
 import List
 import Bench
-import SimpleModule
+import "./Awfy"
 
 let val args = getCliArgs authority
-    val awfy = SimpleModule.load "Awfy"
 
     val selected =
-        if List.length args = 0 then awfy.all
+        if List.length args = 0 then Awfy.all
         else List.filter (fn d => List.length
                                     (List.filter (fn a => a = d.name) args) > 0)
-                         awfy.all
+                         Awfy.all
 
     val unknown =
         List.filter (fn a => List.length
-                               (List.filter (fn d => d.name = a) awfy.all) = 0)
+                               (List.filter (fn d => d.name = a) Awfy.all) = 0)
                     args
 
     fun runOne d =

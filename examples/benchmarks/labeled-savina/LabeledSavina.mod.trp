@@ -4,6 +4,14 @@
  * changing a benchmark or rebuilding the compiler:
  *
  *   mkdir -p out && ./local.sh examples/benchmarks/labeled-savina/LabeledSavina.mod.trp
+ *   (or `make benchmark-modules` from the repository root).
+ *
+ * Unlike the other suites' descriptor sets, this one stays a blob rather than
+ * a program-relative module: its harness closes over the root `authority`
+ * (for `declassify` and `blockdown`), which is bound only in main-mode
+ * compilation. A module compiled in library mode has no `authority`, so the
+ * descriptors are captured here — where `authority` is in scope — and shipped
+ * as a saved value. See the harness comments on the pc/blocking-label baseline.
  *
  * ============================ What this measures ============================
  *

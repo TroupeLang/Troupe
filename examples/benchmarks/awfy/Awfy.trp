@@ -1,12 +1,10 @@
 (* Awfy — the Are-We-Fast-Yet MICRO benchmarks as benchmark descriptors
  * ({name, bench : size -> result, check : size -> result -> bool,
- * sizes : default size list}), published as a SimpleModule blob for
- * consumers to `load "Awfy"` (runall.trp). Re-run this producer after
- * changing a benchmark or rebuilding the compiler:
- *
- *   mkdir -p out && ./local.sh examples/benchmarks/awfy/Awfy.mod.trp
- *
- * (or `make awfy-modules` from the repository root).
+ * sizes : default size list}). This is a program-relative module: it
+ * exports `all`, the descriptor list, and is imported by runall.trp via
+ * `import "./Awfy"`. The whole import graph is recompiled on every run,
+ * so there is no artifact to republish after a benchmark or compiler
+ * change.
  *
  * Source suite: Marr, Daloze, Mössenböck, "Cross-Language Compiler
  * Benchmarking: Are We Fast Yet?" (DLS 2016), the AWFY micro set. Each
@@ -46,7 +44,6 @@
 
 import List
 import Vector
-import SimpleModule
 
 let
     (*==================== shared helpers ====================*)
@@ -412,6 +409,5 @@ let
               , storage
               , towers ]
 
-in (SimpleModule.publish (authority, "Awfy", {all = all});
-    print ("published Awfy module:", List.length all, "benchmarks"))
+in [ ("all", all) ]
 end

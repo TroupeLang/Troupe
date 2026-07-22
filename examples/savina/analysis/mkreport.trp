@@ -61,7 +61,7 @@ in case readFile (authority, inputFile) of
        let val report = SimpleModule.load "SavinaReport"
            val summaries = report.summarize (parseAll text)
            val _ = save ("savina-report.md",
-                         report.markdown summaries ^ "\n")
+                         report.markdown ("Savina results", summaries) ^ "\n")
            val _ = save ("savina-charts.svg", report.svg summaries)
        in print (List.length summaries, "benchmarks summarized")
        end

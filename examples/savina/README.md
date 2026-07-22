@@ -1,29 +1,36 @@
 # Savina benchmarks ported to Troupe
 
 The complete 30-benchmark Savina actor suite (Imam & Sarkar, AGERE 2014)
-ported to Troupe. The benchmarks are defined in `Savina.mod.trp` as
+ported to Troupe. The benchmarks are defined in `Savina.trp` as
 descriptors (name, benchmark function, correctness check, default
 sizes), built on the core actor primitives (`spawn`, `send`, `receive`,
-`self`), and distributed as a `SimpleModule` blob (a saved value —
-Troupe has no program-relative imports yet, and this keeps the suite
-out of the standard library). Each benchmark file here is a thin driver
-loading one descriptor, with that benchmark's semantics, deviations,
-and check documented in its header comment.
+`self`). `Savina.trp` is a program-relative module exporting `all`, the
+descriptor list; `runall.trp` and each thin per-benchmark driver import
+it with `import "./Savina"`. The whole import graph is recompiled on
+every run, so there is no artifact to publish or keep fresh. Each
+benchmark file here is a thin driver selecting one descriptor, with that
+benchmark's semantics, deviations, and check documented in its header
+comment.
 
 ## Running the whole evaluation
 
 ```bash
-make savina-modules   # publish the benchmark + report modules (once,
-                      # and after changing them or rebuilding the compiler)
+make benchmark-modules   # publish the shared SavinaReport renderer once
+                         # (and after changing it or rebuilding the compiler)
 ./local.sh examples/savina/runall.trp --io-root out              # all 30
 ./local.sh examples/savina/runall.trp --io-root out -- sieve uct # a subset
 ```
+
+Only the report renderer (`SavinaReport.mod.trp`) is still a `SimpleModule`
+blob: it is shared by suite runners in different directories, and the module
+system resolves imports to descendants only (no `../`), so a single module
+file cannot be imported across sibling directories.
 
 `runall.trp` runs the selected benchmarks, prints measurement lines as
 it goes, and writes `savina-results.txt`, `savina-report.md`, and
 `savina-charts.svg` (small-multiple scaling charts) under the io-root —
 the whole pipeline, including chart rendering, is Troupe
-(`lib/SavinaReport.trp`). `analysis/mkreport.trp` regenerates the report
+(`SavinaReport.mod.trp`). `analysis/mkreport.trp` regenerates the report
 and charts from a previously collected results file.
 
 ## Running one benchmark

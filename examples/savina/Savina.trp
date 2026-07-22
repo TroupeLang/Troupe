@@ -1,13 +1,10 @@
 (* Savina — the 30 Savina actor benchmarks as benchmark descriptors
  * ({name, bench : size -> result, check : size -> result -> bool,
- * sizes : default size list}), published as a SimpleModule blob for
- * consumers to `load "Savina"` (runall.trp, the thin per-benchmark
- * drivers). Re-run this producer after changing a benchmark or
- * rebuilding the compiler:
- *
- *   mkdir -p out && ./local.sh examples/savina/Savina.mod.trp
- *
- * (or `make savina-modules` from the repository root).
+ * sizes : default size list}). This is a program-relative module: it
+ * exports `all`, the descriptor list, and is imported by runall.trp and
+ * the thin per-benchmark drivers via `import "./Savina"`. The whole
+ * import graph is recompiled on every run, so there is no artifact to
+ * republish after a benchmark or compiler change.
  *)
 
 import BigInt
@@ -15,7 +12,6 @@ import List
 import ListPair
 import Map
 import Vector
-import SimpleModule
 
 datatype Atoms = ADD | ADDED | ALLOC | BALANCE | BARBERDONE | BRANCHDONE | BSORT
               | BSORTED | CAND | CHAINDONE | CHANGE | COMPUTE | CONFIRM | COUNT
@@ -1641,6 +1637,5 @@ let
               , sor
               , piprecision ]
 
-in (SimpleModule.publish (authority, "Savina", {all = all});
-    print ("published Savina module:", List.length all, "benchmarks"))
+in [ ("all", all) ]
 end

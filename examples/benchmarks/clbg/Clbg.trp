@@ -1,12 +1,10 @@
 (* Clbg — the allocation/GC-stress subset of the Computer Language
  * Benchmarks Game (CLBG) as benchmark descriptors ({name, bench, check,
- * sizes}), published as a SimpleModule blob for consumers to `load
- * "Clbg"` (runall.trp, per-benchmark drivers). Structured exactly like
- * examples/savina/Savina.mod.trp. Re-run this producer after changing a
- * benchmark or rebuilding the compiler:
- *
- *   mkdir -p out && ./local.sh examples/benchmarks/clbg/Clbg.mod.trp
- *   (or `make clbg-modules` from the repository root).
+ * sizes}). This is a program-relative module: it exports `all`, the
+ * descriptor list, and is imported by runall.trp via `import "./Clbg"`.
+ * Structured exactly like examples/savina/Savina.trp. The whole import
+ * graph is recompiled on every run, so there is no artifact to republish
+ * after a benchmark or compiler change.
  *
  * These are the single-process (sequential) CLBG problems; the parallel
  * variants are out of scope. Each descriptor cites its CLBG benchmark and
@@ -16,7 +14,6 @@
  *)
 
 import List
-import SimpleModule
 
 datatype tree = LEAF | NODE of tree * tree
 
@@ -251,6 +248,5 @@ let
               , fannkuchredux
               , spectralnorm ]
 
-in (SimpleModule.publish (authority, "Clbg", {all = all});
-    print ("published Clbg module:", List.length all, "benchmarks"))
+in [ ("all", all) ]
 end

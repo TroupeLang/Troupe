@@ -1,0 +1,89 @@
+(* runall — run the data-structure benchmark set from one place.
+ *
+ * Runs every benchmark in the published DataStructures module (or a subset
+ * named on the command line) at its default sizes, one untimed warmup plus
+ * three timed repetitions per size, prints the Bench measurement lines as
+ * it goes, and writes three artifacts via SimpleFileIO:
+ *
+ *   datastructures-results.txt   the raw measurement rows
+ *   datastructures-report.md     per-benchmark medians and per-unit costs
+ *   datastructures-charts.svg    small-multiple scaling charts
+ *
+ * The descriptors are distributed as a SimpleModule blob; the report
+ * renderer is reused from the Savina study (the row shape (name, size, ms,
+ * ok) is identical). Publish both first (once, and after changes):
+ *
+ *   make savina-modules          (publishes SavinaReport)
+ *   ./local.sh examples/benchmarks/datastructures/DataStructures.mod.trp
+ *   ./local.sh examples/benchmarks/datastructures/runall.trp --io-root out
+ *   ./local.sh examples/benchmarks/datastructures/runall.trp --io-root out -- map-insert set-iterate
+ *
+ * The whole suite runs in a single Troupe process; between benchmarks the
+ * main mailbox is drained (a self-sent marker behind FIFO delivery bounds
+ * the drain), so a benchmark that leaked a message cannot confuse the next
+ * one — a nonzero drain count is reported.
+ *
+ * Note: SavinaReport's markdown header reads "Savina results"; the row
+ * rendering and charts are structure-agnostic, so the numbers are correct
+ * for this set — only that one title line is inherited.
+ *)
+
+import List
+import String
+import Bench
+import SimpleModule
+
+datatype Atoms = FLUSHMARK
+
+let val args = getCliArgs authority
+    val suite = SimpleModule.load "DataStructures"
+    val report = SimpleModule.load "SavinaReport"
+
+    val selected =
+        if List.length args = 0 then suite.all
+        else List.filter (fn d => List.length
+                                    (List.filter (fn a => a = d.name) args) > 0)
+                         suite.all
+
+    val unknown =
+        List.filter (fn a => List.length
+                               (List.filter (fn d => d.name = a) suite.all) = 0)
+                    args
+
+    fun flushMailbox () =
+        let val _ = send (self (), FLUSHMARK)
+            fun drain n =
+                receive [ hn FLUSHMARK => n
+                        , hn _         => drain (n + 1) ]
+        in drain 0 end
+
+    fun runOne d =
+        let val rows = Bench.collectRows authority d.name d.sizes 3 d.bench d.check
+            val leaked = flushMailbox ()
+            val _ = if leaked > 0
+                    then print (d.name, "leaked messages into main mailbox:", leaked)
+                    else ()
+        in List.map (fn (n, _, ms, ok) => (d.name, n, ms, ok)) rows end
+
+    fun runAll ([], acc)      = List.reverse acc
+      | runAll (d :: ds, acc) =
+          runAll (ds, List.append (List.reverse (runOne d)) acc)
+
+    fun save (path, content) =
+        case writeFile (authority, path, content) of
+          {tag = "Ok", value = _}  => print ("wrote", path)
+        | {tag = "Err", error = e} => print ("write error", path, e.reason)
+
+in if List.length unknown > 0
+   then print ("unknown benchmarks:", unknown)
+   else
+     let val rows = runAll (selected, [])
+         val summaries = report.summarize rows
+         val _ = save ("datastructures-results.txt", report.resultLines rows ^ "\n")
+         val _ = save ("datastructures-report.md", report.markdown summaries ^ "\n")
+         val _ = save ("datastructures-charts.svg", report.svg summaries)
+         val failed = List.filter (fn (_, ok, _) => not ok) summaries
+     in print (List.length summaries, "benchmarks run,",
+               List.length failed, "with failures")
+     end
+end

@@ -317,7 +317,7 @@ main = defaultMain $ testGroup "SynVarHash exact vectors"
 -- through the real whole-program codegen entry point (source maps off).
 genJS :: CompileMode -> Stack2JS.DatatypeRecords -> String
 genJS mode records =
-  fst (Stack2JS.stack2JSWithMappings mode False False records
+  fst (Stack2JS.stack2JSWithMappings mode False False records Nothing
          (Stack.ProgramStackUnit (Stack.StackProgram [])))
 
 -- | Parsing the canonical string and re-rendering must reproduce it exactly,

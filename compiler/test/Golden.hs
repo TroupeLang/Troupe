@@ -5,14 +5,14 @@ import Test.Tasty (defaultMain, TestTree, testGroup, defaultMainWithIngredients,
 import Test.Tasty.Golden (goldenVsStringDiff,  goldenVsString, findByExtension)
 import Test.Tasty.Options (IsOption(..), OptionDescription(..), safeRead, flagCLParser)
 import Data.Typeable (Typeable)
-import Data.List (isInfixOf)
+
 import Data.Tagged
 import Data.Proxy
 import Options.Applicative
 import System.Directory
 import System.Process
 import System.Exit 
-import System.FilePath (takeBaseName, replaceExtension, takeDirectory)
+import System.FilePath (takeBaseName, replaceExtension, takeDirectory, splitDirectories)
 import qualified Data.ByteString.Lazy as LBS 
 import qualified Data.ByteString.Char8
 import System.Info
@@ -268,8 +268,9 @@ goldenTests tc = do
     let extensions = [".trp"]
     -- Module sources of multi-file test programs live under a modsrc
     -- directory; they are compiled by the test that imports them, not
-    -- collected as tests themselves.
-    let notModuleSource = filter (not . ("modsrc" `isInfixOf`))
+    -- collected as tests themselves. The match is on the exact directory
+    -- component, so a test merely named *modsrc* is still collected.
+    let notModuleSource = filter (not . elem "modsrc" . splitDirectories)
     negativeTestsForCompiler <- notModuleSource <$> findByExtension extensions "tests/cmp"
     positiveTestsForRuntime  <- notModuleSource <$> findByExtension extensions "tests/rt/pos"
     negativeTestsForRuntime  <- notModuleSource <$> findByExtension extensions "tests/rt/neg"

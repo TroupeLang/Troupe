@@ -1,0 +1,5 @@
+(* A cycle in the module import graph is a compile error showing the cycle. *)
+import "./modsrc/ModuleCycleA"
+
+let val _ = ()
+in () end

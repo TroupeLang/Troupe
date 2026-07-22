@@ -90,3 +90,7 @@ _dev_planning/
 _troupe_notebook_planning
 .notebook-storage
 .claude/
+
+# generated artifacts of module-source directories in the test corpus
+tests/**/modsrc/**/out/
+tests/**/modsrc/out/

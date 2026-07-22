@@ -1,0 +1,1 @@
+module import cycle: modsrc/ModuleCycleA.trp -> modsrc/ModuleCycleB.trp -> modsrc/ModuleCycleA.trp

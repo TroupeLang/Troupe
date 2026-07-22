@@ -1,0 +1,4 @@
+(* Module used by the name-collision and selective-import error tests. *)
+let fun f () = ()
+in [ ("f", f) ]
+end

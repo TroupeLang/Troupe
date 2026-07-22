@@ -5,6 +5,7 @@ import Test.Tasty (defaultMain, TestTree, testGroup, defaultMainWithIngredients,
 import Test.Tasty.Golden (goldenVsStringDiff,  goldenVsString, findByExtension)
 import Test.Tasty.Options (IsOption(..), OptionDescription(..), safeRead, flagCLParser)
 import Data.Typeable (Typeable)
+import Data.List (isInfixOf)
 import Data.Tagged
 import Data.Proxy
 import Options.Applicative
@@ -265,9 +266,13 @@ main = do
 goldenTests :: TestConfig -> IO TestTree
 goldenTests tc = do
     let extensions = [".trp"]
-    negativeTestsForCompiler <- findByExtension extensions "tests/cmp"
-    positiveTestsForRuntime  <- findByExtension extensions "tests/rt/pos"
-    negativeTestsForRuntime  <- findByExtension extensions "tests/rt/neg"
+    -- Module sources of multi-file test programs live under a modsrc
+    -- directory; they are compiled by the test that imports them, not
+    -- collected as tests themselves.
+    let notModuleSource = filter (not . ("modsrc" `isInfixOf`))
+    negativeTestsForCompiler <- notModuleSource <$> findByExtension extensions "tests/cmp"
+    positiveTestsForRuntime  <- notModuleSource <$> findByExtension extensions "tests/rt/pos"
+    negativeTestsForRuntime  <- notModuleSource <$> findByExtension extensions "tests/rt/neg"
     warningTestsForRuntime   <- findByExtension extensions "tests/rt/warn"
     timeoutTestsForRuntime   <- findByExtension extensions "tests/rt/timeout/blocking"
     divergingTestsForRuntime <- findByExtension extensions "tests/rt/timeout/diverging"

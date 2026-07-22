@@ -1,0 +1,6 @@
+(* Qualified import of a module: exports are only reachable through the
+ * bound name, none are injected unqualified. *)
+import qualified "./modsrc/util/ModuleDiamondFmt" as Fmt
+
+let val _ = fwrite (stdout authority, Fmt.bang "qualified" ^ "\n")
+in () end

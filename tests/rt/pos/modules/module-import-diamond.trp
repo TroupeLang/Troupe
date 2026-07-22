@@ -1,0 +1,9 @@
+(* Diamond import graph: this program uses ModuleDiamondGreet and
+ * ModuleDiamondFmt; ModuleDiamondGreet also uses ModuleDiamondFmt.
+ * ModuleDiamondFmt lives in a subdirectory and is bound with `as`. *)
+import "./modsrc/ModuleDiamondGreet"
+import "./modsrc/util/ModuleDiamondFmt" as Fmt
+
+let val _ = fwrite (stdout authority, ModuleDiamondGreet.greet "world" ^ "\n")
+    val _ = fwrite (stdout authority, Fmt.shout "direct" ^ "\n")
+in () end

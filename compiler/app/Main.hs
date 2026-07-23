@@ -33,6 +33,8 @@ import System.IO
 import TroupeSourceMap (buildSourceMap)
 import System.Exit
 import ProcessImports
+import qualified ModuleHash
+import DepsFile (DepEntry(..), depsFilePath, readDepsFile, writeDepsFile, lookupPinByPath)
 import Direct (Prog(..))
 import Basics (Imports(..), importPath)
 import System.Directory (createDirectoryIfMissing)
@@ -44,6 +46,7 @@ import Control.Monad.Except
 import Control.Monad (when)
 import System.Console.GetOpt
 import Data.List as List
+import Data.Function (on)
 import Data.Maybe (fromJust)
 import System.FilePath
 import qualified Data.Text as T
@@ -66,6 +69,14 @@ data Flag
   | EmitIRSexp
   | IngestIRSexp
   | VerifyIRSexp
+  -- | Establish/update the dependencies file for a program (the maintenance
+  -- utility): resolve and hash the module graph and record actual hashes as
+  -- pins, instead of enforcing existing pins. A driver-facing subcommand.
+  | UpdateDeps
+  -- | Internal (not a CLI option): mark a compile as a program-module artifact,
+  -- so its @.exports@ carries the module's own content hash. Injected by the
+  -- driver for module compiles; absent for stdlib library compiles.
+  | ModuleArtifact
   deriving (Show, Eq)
 
 options :: [OptDescr Flag]
@@ -84,15 +95,19 @@ options =
   , Option []    ["emit-ir-sexp"]   (NoArg EmitIRSexp)   "compile a .trp and emit the IR as troupe-ir-sexp text (to -o FILE, else stdout)"
   , Option []    ["ingest-ir-sexp"] (NoArg IngestIRSexp) "read a troupe-ir-sexp file and compile it to JS (program must be self-contained; no ambient methods are injected)"
   , Option []    ["verify-ir-sexp"] (NoArg VerifyIRSexp) "compile a .trp, print its IR as troupe-ir-sexp, re-parse, and check the position-erased ASTs match (R1 self-check)"
+  , Option []    ["update-deps"]    (NoArg UpdateDeps)   "establish/update the program's dependencies file (<main>.deps.json) with actual module hashes, instead of enforcing pins"
   ]
 
 --------------------------------------------------------------------------------
 ----- PIPELINE FROM FLAGS TO IR AND JS -----------------------------------------
 
 -- | Compile one file. `root` is the project root (the main file's directory)
--- against which module imports are resolved and displayed.
-process :: FilePath -> [Flag] -> Maybe String -> String -> IO ExitCode
-process root flags fname input = do
+-- against which module imports are resolved and displayed. `pin` selects
+-- whether the frontend enforces the dependencies file or establishes it.
+-- Returns the module dependency entries this file resolved (for the maintenance
+-- utility to record; ignored on a normal enforcing compile).
+process :: PinCheck -> FilePath -> [Flag] -> Maybe String -> String -> IO ([DepEntry], ExitCode)
+process pin root flags fname input = do
   let ast    = parseProg (maybe "" id fname) input
 
   let compileMode = if LibMode `elem` flags then Library else Normal
@@ -125,7 +140,7 @@ process root flags fname input = do
       -- (see the fold block below); processImports therefore runs on the raw
       -- parsed program. Module imports resolve relative to this file, displayed
       -- relative to the project root.
-      prog <- processImports root (maybe "" id fname) prog_parsed
+      (prog, resolvedDeps) <- processImports pin root (maybe "" id fname) prog_parsed
 
       exports <- case compileMode of Library -> case runExcept (extractExports prog) of
                                                      Right es -> return (Just (es))
@@ -227,18 +242,20 @@ process root flags fname input = do
       let records = Stack2JS.DatatypeRecords
                       { Stack2JS.drExported = map fst localGroups
                       , Stack2JS.drConsumed = consumedRecord }
-      -- Record the project root in the program when it (transitively) uses
-      -- modules, so the runtime can locate their compiled artifacts.
+      -- Record the project root and the dependencies file in the program when
+      -- it (transitively) uses modules, so the runtime can seed its
+      -- hash -> (location, name) resolver and locate compiled artifacts.
       let usesModules = let Prog (Imports imps) _ _ = prog
                         in any (\imp -> importPath imp /= Nothing) imps
-          moduleRoot = if usesModules && not (LibMode `elem` flags)
-                       then Just root
-                       else Nothing
+          isProgram = usesModules && not (LibMode `elem` flags)
+          moduleRoot     = if isProgram then Just root else Nothing
+          moduleDepsFile = if isProgram then Just (depsFilePath (fromJust fname)) else Nothing
       let (stackjs, mappings) = Stack2JS.stack2JSWithMappings compileMode
                                                               debugJS
                                                               sourceMapEnabled
                                                               records
                                                               moduleRoot
+                                                              moduleDepsFile
                                                               (Stack.ProgramStackUnit stack)
 
       ----- SOURCE MAP EMBEDDING ---------------------------
@@ -261,13 +278,18 @@ process root flags fname input = do
                     else stackjs
       writeFile outPath finalJs
 
-      -- case compileMode of Library -> ...
+      -- A program-module artifact records its own content hash in its
+      -- @.exports@ (the identity its consumers pick up); a stdlib library
+      -- carries no such line.
+      let moduleHashVal = if ModuleArtifact `elem` flags
+                          then Just (ModuleHash.moduleHash iropt)
+                          else Nothing
       case exports of Nothing -> return ()
-                      Just es -> writeExports outPath (exportsFileContent es localGroups)
+                      Just es -> writeExports outPath (exportsFileContent moduleHashVal es localGroups)
 
       ----- EPILOGUE --------------------------------------
       when verbose printHr
-      return ExitSuccess
+      return (resolvedDeps, ExitSuccess)
 
 isOutputFile :: Flag -> Bool
 isOutputFile (OutputFile _) = True
@@ -293,9 +315,76 @@ ingestIRSexp flags file input =
             Stack2JS.stack2JSWithMappings CompileMode.Normal debugJS False
                                           Stack2JS.noDatatypeRecords
                                           Nothing
+                                          Nothing
                                           (Stack.ProgramStackUnit stack)
       writeFile outPath stackjs
       exitSuccess
+
+--------------------------------------------------------------------------------
+----- DEPENDENCIES FILE: enforce (normal compile) and establish (utility) -------
+
+-- | Load the pins a program compile enforces against. An absent dependencies
+-- file yields no pins (each module import then reports its own missing pin, a
+-- compile error pointing at the utility); a malformed file is fatal here.
+loadPinsIfPresent :: FilePath -> IO [DepEntry]
+loadPinsIfPresent path = do
+  r <- readDepsFile path
+  case r of
+    Nothing         -> return []
+    Just (Left err) -> die $ "malformed dependencies file " ++ path ++ ": " ++ err
+    Just (Right es) -> return es
+
+-- | The maintenance utility: (re)establish the program's dependencies file.
+-- Runs the same dependencies-first resolution and hashing as a normal compile
+-- but in 'Establish' mode (recording actual hashes rather than checking pins),
+-- then writes @<main>.deps.json@ and reports which pins moved.
+updateDeps :: [Flag] -> FilePath -> String -> IO ExitCode
+updateDeps o file input = do
+  when (LibMode `elem` o) $ die "--update-deps applies to a program, not a library"
+  let root        = takeDirectory file
+      moduleFlags = LibMode : ModuleArtifact : filter (`elem` [NoRawOpt, Debug]) o
+  mods <- discoverModules file
+  -- Deps-first compiles refresh each module's .exports (with its current hash)
+  -- and yield the actuals each consumer resolved.
+  moduleDeps <- mapM (\m -> do createDirectoryIfMissing True (takeDirectory m </> "out")
+                               minput <- readFile m
+                               (ds, _) <- process Establish root moduleFlags (Just m) minput
+                               return ds) mods
+  -- Resolve the main file's own direct imports too. Direct the main compile's
+  -- JS to the program's out/ dir (created here) so the utility is independent of
+  -- the working directory (the default output is out/out.stack.js under CWD).
+  let mainOut = takeDirectory file </> "out" </> takeBaseName file <.> "js"
+  createDirectoryIfMissing True (takeDirectory mainOut)
+  (mainDeps, _) <- process Establish root (OutputFile mainOut : o) (Just file) input
+  let entries  = dedupByPath (concat moduleDeps ++ mainDeps)
+      depsPath = depsFilePath file
+  prev <- readDepsFile depsPath
+  let prevEntries = case prev of Just (Right es) -> es; _ -> []
+  reportPinChanges prevEntries entries
+  writeDepsFile depsPath entries
+  putStrLn $ "wrote " ++ show (length entries) ++ " module pin(s) to " ++ depsPath
+  return ExitSuccess
+
+-- | Keep the first entry per path (all occurrences of a path resolve to the
+-- same hash — the module is compiled once — so first-wins is deterministic).
+dedupByPath :: [DepEntry] -> [DepEntry]
+dedupByPath = List.nubBy ((==) `on` depPath)
+
+-- | Report added, changed, and removed pins relative to the previous file.
+reportPinChanges :: [DepEntry] -> [DepEntry] -> IO ()
+reportPinChanges prev new = do
+  mapM_ report new
+  mapM_ reportRemoved prev
+  where
+    report e = case lookupPinByPath (depPath e) prev of
+      Nothing -> putStrLn $ "  + " ++ depPath e ++ "  " ++ depHash e ++ " (new)"
+      Just p
+        | depHash p == depHash e -> return ()
+        | otherwise -> putStrLn $ "  ~ " ++ depPath e ++ "  " ++ depHash p ++ " -> " ++ depHash e
+    reportRemoved e =
+      case lookupPinByPath (depPath e) new of
+        Just _  -> return ()
+        Nothing -> putStrLn $ "  - " ++ depPath e ++ " (removed)"
 
 -- TODO: 'where' for all helper functions below?
 outFile :: [Flag] -> String -> String
@@ -392,19 +481,32 @@ main = do
       input <- readFile file
       if IngestIRSexp `elem` o
         then ingestIRSexp o file input
+        else if UpdateDeps `elem` o
+        then updateDeps o file input
         else do
           let root = takeDirectory file
+          -- Resolve the module graph and load the pins the compile enforces
+          -- against. A stdlib library compile (-l) has no module graph; a
+          -- program that uses modules must have a dependencies file (a hard
+          -- error otherwise, pointing at --update-deps).
+          (pin, mods) <-
+            if LibMode `elem` o
+              then return (Enforce [], [])
+              else do
+                mods <- discoverModules file
+                pins <- loadPinsIfPresent (depsFilePath file)
+                return (Enforce pins, mods)
           -- Compile the module import graph first (dependencies before
-          -- consumers), then the file itself. Modules compile as libraries;
-          -- per-module dumps are not written (Verbose stays top-level only).
-          when (not (LibMode `elem` o)) $ do
-            mods <- discoverModules file
-            let moduleFlags = LibMode : filter (`elem` [NoRawOpt, Debug]) o
-            mapM_ (\m -> do createDirectoryIfMissing True (takeDirectory m </> "out")
-                            minput <- readFile m
-                            _ <- process root moduleFlags (Just m) minput
-                            return ()) mods
-          process root o (Just file) input
+          -- consumers), then the file itself. Modules compile as content-hashed
+          -- library artifacts (LibMode + ModuleArtifact); per-module dumps are
+          -- not written (Verbose stays top-level only).
+          let moduleFlags = LibMode : ModuleArtifact : filter (`elem` [NoRawOpt, Debug]) o
+          mapM_ (\m -> do createDirectoryIfMissing True (takeDirectory m </> "out")
+                          minput <- readFile m
+                          _ <- process pin root moduleFlags (Just m) minput
+                          return ()) mods
+          (_, ec) <- process pin root o (Just file) input
+          return ec
 
     (_,_, errs) -> die $ concat errs ++ compilerUsage
  where

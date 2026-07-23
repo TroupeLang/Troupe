@@ -1,7 +1,8 @@
-module ProcessImports (processImports, discoverModules) where
+module ProcessImports (PinCheck(..), processImports, discoverModules) where
 import Basics
 import Direct
-import Exports (isDatatypeLine, parseDatatypeLine)
+import DepsFile (DepEntry(..), lookupPinByPath)
+import Exports (isDatatypeLine, parseDatatypeLine, isModuleHashLine, parseModuleHashLine)
 import Parser (parseProg)
 import Control.Monad (unless, foldM)
 import System.Environment
@@ -10,6 +11,14 @@ import System.Directory (doesFileExist)
 import System.FilePath
 import Data.List (partition, intercalate)
 import Data.String.Utils
+
+-- | Whether the frontend enforces the dependencies file (a normal compile) or
+-- establishes it (the maintenance utility). Under 'Enforce', a dependency's
+-- actual hash (read from its @.exports@) is checked against its pin and a
+-- missing or mismatched pin is fatal; under 'Establish', no check is made and
+-- the resolved actuals are returned for the utility to record. See
+-- @_dev_planning/module-system/content-addressed-identity.md@ §5.
+data PinCheck = Enforce [DepEntry] | Establish
 
 defaultLibFolder="/lib/out/"
 defaultBin="/bin/troupec"
@@ -69,8 +78,8 @@ resolveModule root importingFile lit =
 displayPath :: FilePath -> FilePath -> String
 displayPath root f = makeRelative root f
 
-processModuleImport :: FilePath -> FilePath -> ImportDecl -> IO ImportDecl
-processModuleImport root file imp = do
+processModuleImport :: PinCheck -> FilePath -> FilePath -> ImportDecl -> IO (ImportDecl, DepEntry)
+processModuleImport pin root file imp = do
   let Just lit = importPath imp
   case checkModulePath lit of
     Left reason -> die $ "invalid module import " ++ show lit ++ " in "
@@ -88,21 +97,58 @@ processModuleImport root file imp = do
         ++ " is not compiled (no " ++ displayPath root expFile ++ ")"
   input <- readFile expFile
   -- A module's .exports has the same shape as a library's: one value name per
-  -- line, plus zero or more @datatype ...@ lines. Partition them exactly as
-  -- processLibImport does, so a module's datatype interface reaches the
-  -- syntactic-variant resolver (importer-side constructor resolution) and never
-  -- leaks into the value namespace. Selection restricts value imports only.
-  let (dtLines, nameLines) = partition isDatatypeLine (lines input)
-      datatypes = map parseDatatypeLine dtLines
+  -- line and zero or more @datatype ...@ lines, plus (for a module) its own
+  -- @module-hash <hash>@ line. Strip the module-hash line first, then partition
+  -- the rest exactly as processLibImport does, so a module's datatype interface
+  -- reaches the syntactic-variant resolver (importer-side constructor
+  -- resolution) and neither the datatype lines nor the module-hash line leak
+  -- into the value namespace. Selection restricts value imports only.
+  let (mhLines, rest)      = partition isModuleHashLine (lines input)
+      (dtLines, nameLines) = partition isDatatypeLine rest
+      datatypes            = map parseDatatypeLine dtLines
+  actualHash <- case mhLines of
+    [l] -> return (parseModuleHashLine l)
+    []  -> die $ "module " ++ show lit ++ " imported from " ++ displayPath root file
+               ++ " has no content hash in " ++ displayPath root expFile
+               ++ " (recompile it)"
+    _   -> die $ "module " ++ show lit ++ " has multiple content-hash lines in "
+               ++ displayPath root expFile
+  -- The user-visible name is, today, the root-relative path; the dependencies
+  -- file carries it as its own field so runtime diagnostics stay human-readable.
+  let entry = DepEntry { depPath = key, depHash = actualHash, depName = key }
+  -- Structural interface check first (does the module export the selected
+  -- names?), so a malformed program reports its own error regardless of the
+  -- pin state.
   case importSelected imp of
     Just selected -> do
       let missing = filter (`notElem` nameLines) selected
       unless (null missing) $
         die $ "Module " ++ show lit ++ " does not export: " ++ unwords missing
     Nothing -> return ()
-  -- Canonicalize the stored path to the root-relative key; codegen and the
-  -- runtime address the module as "module:<key>".
-  return imp { importExports = Just nameLines, importDatatypes = datatypes, importPath = Just key }
+  -- Then enforce the pin (a normal compile) or record the actual (the utility).
+  -- The integrity point: the frontend never links a dependency whose content
+  -- diverges from what the project pinned. A missing pin (no dependencies file,
+  -- or an entry absent from it) is a compile error pointing at the utility.
+  case pin of
+    Establish -> return ()
+    Enforce pins -> case lookupPinByPath key pins of
+      Nothing ->
+        die $ "no pin for module " ++ show lit ++ " (" ++ key ++ ") imported from "
+            ++ displayPath root file
+            ++ "; run 'troupec --update-deps' on the main program to establish it"
+      Just p
+        | depHash p == actualHash -> return ()
+        | otherwise ->
+            die $ "module " ++ show lit ++ " (" ++ key ++ ") imported from "
+                ++ displayPath root file ++ " has content hash " ++ actualHash
+                ++ " but the dependencies file pins " ++ depHash p
+                ++ "; re-run 'troupec --update-deps' if this change is intended"
+  -- Replace the stored path with the module's content hash; codegen and the
+  -- runtime address the module as "module:<hash>".
+  return ( imp { importExports = Just nameLines
+               , importDatatypes = datatypes
+               , importPath = Just actualHash }
+         , entry )
 
 --------------------------------------------------------------------------------
 -- Library imports (import Lib)
@@ -139,11 +185,16 @@ processLibImport imp = do
 
 --------------------------------------------------------------------------------
 
-processImport :: FilePath -> FilePath -> ImportDecl -> IO ImportDecl
-processImport root file imp =
+-- | Process one import, returning the resolved declaration and, for a module
+-- import, the dependency entry it resolved (its @(path, hash, name)@); a library
+-- import yields 'Nothing'.
+processImport :: PinCheck -> FilePath -> FilePath -> ImportDecl -> IO (ImportDecl, Maybe DepEntry)
+processImport pin root file imp =
   case importPath imp of
-    Just _  -> processModuleImport root file imp
-    Nothing -> processLibImport imp
+    Just _  -> do (imp', entry) <- processModuleImport pin root file imp
+                  return (imp', Just entry)
+    Nothing -> do imp' <- processLibImport imp
+                  return (imp', Nothing)
 
 -- | The name an import binds (alias if present, otherwise the library name or
 -- the module's last path segment).
@@ -170,12 +221,16 @@ checkDuplicateBinds imports = mapM_ checkOne (zip [(0::Int)..] imports)
 
 -- | Process the imports of the program in file `file`, with module imports
 -- resolved relative to it and displayed relative to `root` (the directory of
--- the main file).
-processImports :: FilePath -> FilePath -> Prog -> IO Prog
-processImports root file (Prog (Imports imports) groups term) = do
+-- the main file). Returns the program with resolved imports and the module
+-- dependency entries it resolved (the module @(path, hash, name)@ triples,
+-- for the maintenance utility to record; ignored on a normal enforcing compile).
+processImports :: PinCheck -> FilePath -> FilePath -> Prog -> IO (Prog, [DepEntry])
+processImports pin root file (Prog (Imports imports) groups term) = do
   checkDuplicateBinds imports
-  imports' <- mapM (processImport root file) imports
-  return $ Prog (Imports imports') groups term
+  results <- mapM (processImport pin root file) imports
+  let imports' = map fst results
+      deps     = [ d | (_, Just d) <- results ]
+  return (Prog (Imports imports') groups term, deps)
 
 --------------------------------------------------------------------------------
 -- Module graph discovery for the compilation driver.

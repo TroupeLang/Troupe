@@ -16,6 +16,7 @@ import { LVal } from './Lval.mjs';
 import { Level } from './Level.mjs';
 import { StopThreadError, ThreadError, ErrorKind } from './TroupeError.mjs';
 import { getRuntimeObject } from './SysState.mjs';
+import { moduleDisplayName } from './moduleResolver.mjs';
 
 import { getCliArgs, TroupeCliArg } from './TroupeCliArgs.mjs';
 const argv = getCliArgs();
@@ -55,7 +56,11 @@ export class ModuleDependentClosureError extends StopThreadError {
     errorKind: ErrorKind = ErrorKind.DynTypeError;
 
     get errorMessage() {
-        return `Cannot serialize a closure that depends on module '${this.moduleKey}'; ` +
+        // Render the module's user-visible name (module:<name>), resolved from
+        // the dependencies-file seed, so the message stays human-readable under
+        // content-addressed identity. This is diagnostic rendering only; the
+        // rejection policy (checkModuleDeps) is unchanged.
+        return `Cannot serialize a closure that depends on module '${moduleDisplayName(this.moduleKey)}'; ` +
                `only closures whose dependencies are standard libraries can be serialized`;
     }
 

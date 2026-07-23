@@ -133,6 +133,7 @@ data CodeGenOpts = CodeGenOpts
   { cgoDebugMode      :: Bool  -- ^ Emit debug statements
   , cgoSourceMapEnabled :: Bool  -- ^ Emit source position tracking for error messages
   , cgoModuleRoot     :: Maybe String  -- ^ Project root recorded in the program for module linking
+  , cgoModuleDepsFile :: Maybe String  -- ^ Dependencies file recorded in the program; the runtime seeds its hash->(location,name) resolver from it
   } deriving (Show, Eq)
 
 type WData = ([LibAccess], [RetKontText], [MarkerData])
@@ -222,10 +223,14 @@ stack2PPDoc compileMode opts records (ProgramStackUnit sp) =
       moduleRootAttachment = case cgoModuleRoot opts of
         Just r  -> PP.text ("this.__moduleRoot = " ++ show r)
         Nothing -> PP.empty
+      moduleDepsAttachment = case cgoModuleDepsFile opts of
+        Just r  -> PP.text ("this.__moduleDepsFile = " ++ show r)
+        Nothing -> PP.empty
       inner = vcat $
         datatypeRecordDecls compileMode records ++
         [ sourceMapAttachment
         , moduleRootAttachment
+        , moduleDepsAttachment
         , jsLoadLibs
         , addLibs libs
         ]
@@ -249,7 +254,7 @@ stack2PPDoc _           opts _ su =
 
 stack2JSString :: CompileMode -> Bool -> StackUnit -> String
 stack2JSString compileMode debugMode su =
-  let opts = CodeGenOpts { cgoDebugMode = debugMode, cgoSourceMapEnabled = False, cgoModuleRoot = Nothing }
+  let opts = CodeGenOpts { cgoDebugMode = debugMode, cgoSourceMapEnabled = False, cgoModuleRoot = Nothing, cgoModuleDepsFile = Nothing }
       (ppDoc, _) = stack2PPDoc compileMode opts noDatatypeRecords su
       rendered = PP.render ppDoc
       -- Remove lines that contain only whitespace
@@ -258,9 +263,9 @@ stack2JSString compileMode debugMode su =
 
 -- | Generate JS string and source map mappings
 -- Returns (JS code with markers stripped, list of source map mappings)
-stack2JSWithMappings :: CompileMode -> Bool -> Bool -> DatatypeRecords -> Maybe String -> StackUnit -> (String, [Mapping])
-stack2JSWithMappings compileMode debugMode sourceMapEnabled records moduleRoot su =
-  let opts = CodeGenOpts { cgoDebugMode = debugMode, cgoSourceMapEnabled = sourceMapEnabled, cgoModuleRoot = moduleRoot }
+stack2JSWithMappings :: CompileMode -> Bool -> Bool -> DatatypeRecords -> Maybe String -> Maybe String -> StackUnit -> (String, [Mapping])
+stack2JSWithMappings compileMode debugMode sourceMapEnabled records moduleRoot moduleDepsFile su =
+  let opts = CodeGenOpts { cgoDebugMode = debugMode, cgoSourceMapEnabled = sourceMapEnabled, cgoModuleRoot = moduleRoot, cgoModuleDepsFile = moduleDepsFile }
       (ppDoc, (_, _, markerData)) = stack2PPDoc compileMode opts records su
       rendered = PP.render ppDoc
       -- processMarkers handles marker stripping and merging whitespace-only lines
@@ -339,7 +344,7 @@ parseMarker s
 
 stack2JSON :: CompileMode -> Bool -> StackUnit -> ByteString
 stack2JSON compileMode debugMode su =
-  let opts = CodeGenOpts { cgoDebugMode = debugMode, cgoSourceMapEnabled = True, cgoModuleRoot = Nothing }
+  let opts = CodeGenOpts { cgoDebugMode = debugMode, cgoSourceMapEnabled = True, cgoModuleRoot = Nothing, cgoModuleDepsFile = Nothing }
       (ppDoc, (libs, konts, markers)) = stack2PPDoc compileMode opts noDatatypeRecords su
       rendered = PP.render ppDoc
       -- Process markers to generate source map mappings

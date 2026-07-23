@@ -1,0 +1,5 @@
+{
+  "deps": [
+    {"path": "modsrc/util/ModuleDiamondFmt", "hash": "u815g7g8gr5djvts42h35qq81o9f0qbdre4q6n9tgveuuju5mm70", "name": "modsrc/util/ModuleDiamondFmt"}
+  ]
+}

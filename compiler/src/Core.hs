@@ -329,10 +329,13 @@ mapFromImports (Imports imports) =
       Nothing -> importLib imp
 
     -- The name codegen addresses the import by: the library name, or the
-    -- module key ("module:<root-relative-path>") for a module import.
+    -- content-addressed module identity ("module:<hash>") for a module import.
+    -- ProcessImports has, by this point, resolved a module import's path to its
+    -- IR hash and stored it in importPath, so the reference is location-free and
+    -- Merkle (it carries the dependency's hash inline).
     codegenName imp = case importPath imp of
-      Just key -> LibName ("module:" ++ key)
-      Nothing  -> importLib imp
+      Just hash -> LibName ("module:" ++ hash)
+      Nothing   -> importLib imp
 
     -- Build unqualified environment (only unqualified imports)
     -- Maps each exported function name to the original library

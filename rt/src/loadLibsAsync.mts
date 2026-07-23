@@ -5,6 +5,7 @@ import * as levels from './Level.mjs';
 const { readFile } = fs.promises
 
 import { getTroupeRoot } from './troupeRoot.mjs'
+import { seedModuleResolver, resolveModuleFile, moduleDisplayName } from './moduleResolver.mjs'
 import { mkLogger } from './logger.mjs'
 const logger = mkLogger('lib')
 
@@ -30,15 +31,16 @@ function loadLib(libname: string, rtObj, root): Promise<LoadedLib> {
     }
     const p = (async (): Promise<LoadedLib> => {
         // Find the file. Libraries load from the standard location; a "module:"
-        // key names a compiled module of the running program, at
-        // <root>/<dir>/out/<Base>.js next to its source.
+        // identity names a compiled module of the running program, addressed by
+        // its content hash and resolved to <root>/<dir>/out/<Base>.js through
+        // the dependencies-file seed (its path cannot be reconstructed from the
+        // hash alone).
         let filename
         if (libname.startsWith("module:")) {
             if (root == null) {
-                throw new Error(`cannot link module '${libname}': no module root is recorded for this program`)
+                throw new Error(`cannot link module '${moduleDisplayName(libname)}': no module root is recorded for this program`)
             }
-            const rel = libname.slice("module:".length)
-            filename = path.join(root, path.dirname(rel), "out", path.basename(rel) + ".js")
+            filename = resolveModuleFile(root, libname)
         } else {
             filename = getTroupeRoot() + "/lib/out/" + libname + ".js"
         }
@@ -72,9 +74,12 @@ function loadLib(libname: string, rtObj, root): Promise<LoadedLib> {
 export async function loadLibsAsync(obj, rtObj, moduleRoot = null) {
     let libs = obj.libs
     obj.libs = {}
-    // The main program records its project root when it uses modules; module
-    // artifacts inherit it through the recursion.
+    // The main program records its project root and dependencies file when it
+    // uses modules; module artifacts inherit the root through the recursion, and
+    // the resolver map (a process-level singleton) is seeded once from the
+    // dependencies file the main program points at.
     const root = obj.__moduleRoot ?? moduleRoot
+    if (obj.__moduleDepsFile) seedModuleResolver(obj.__moduleDepsFile)
     for (let n = 0; n < libs.length; n++) {
         let lib = libs[n].lib
         let decl = libs[n].decl
@@ -100,10 +105,11 @@ async function checkConsumedDatatypes(obj, rtObj, root) {
         let exported = (await loadLib(libname, rtObj, root)).datatypeHashes
         for (let h of consumed[libname]) {
             if (!exported.includes(h)) {
+                const disp = moduleDisplayName(libname)
                 throw new Error(
-                    "datatype version skew: library '" + libname + "' no longer exports a "
+                    "datatype version skew: library '" + disp + "' no longer exports a "
                     + "datatype group that was consumed at compile time (group hash " + h
-                    + "). The importer was compiled against a different version of '" + libname
+                    + "). The importer was compiled against a different version of '" + disp
                     + "'; recompile it against the current library.")
             }
         }

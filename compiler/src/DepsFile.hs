@@ -23,6 +23,7 @@ import qualified Data.ByteString.Lazy  as BL
 import           Data.List             (find, sortOn)
 import           System.Directory      (doesFileExist)
 import           System.FilePath       (replaceExtension)
+import           Util.FileUtil         (atomicWriteFileD)
 
 -- | One pinned dependency: its root-relative source path (the resolution key),
 -- its content hash (bare base32hex), and its user-visible name (today always
@@ -92,6 +93,7 @@ jsonStr s = '"' : concatMap esc s ++ "\""
     esc '\\' = "\\\\"
     esc c    = [c]
 
--- | Write the dependencies file.
+-- | Write the dependencies file (atomically, so a concurrent enforcing compile
+-- never reads a torn pin set).
 writeDepsFile :: FilePath -> [DepEntry] -> IO ()
-writeDepsFile path entries = writeFile path (renderDepsFile entries)
+writeDepsFile path entries = atomicWriteFileD path (renderDepsFile entries)

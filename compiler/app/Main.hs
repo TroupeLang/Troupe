@@ -276,7 +276,9 @@ process pin root flags fname input = do
                                              ++ BS.unpack mapBase64 ++ "\n"
                          in jsWithMap ++ inlineComment
                     else stackjs
-      writeFile outPath finalJs
+      -- Atomic: a module artifact's .js may be read by another program's
+      -- runtime while a parallel build rewrites it.
+      atomicWriteFileD outPath finalJs
 
       -- A program-module artifact records its own content hash in its
       -- @.exports@ (the identity its consumers pick up); a stdlib library
@@ -406,7 +408,7 @@ outFile flags fname = case List.find isOutFlag flags of
 writeExports :: FilePath -> String -> IO ()
 writeExports path content =
   let path' = if takeExtension path == ".js" then dropExtension path else path
-  in writeFileD (path' ++ ".exports") content
+  in atomicWriteFileD (path' ++ ".exports") content
 
 -- Utility functions for printing things out
 hrWidth = 70

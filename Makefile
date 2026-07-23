@@ -53,6 +53,16 @@ benchmark-modules:
 	./local.sh examples/savina/SavinaReport.mod.trp
 	./local.sh examples/benchmarks/labeled-savina/LabeledSavina.mod.trp
 
+# Regenerate the per-program dependencies files (<main>.deps.json) that pin each
+# benchmark suite's descriptor module by content hash. The hash is over the
+# module's codegened IR, so re-run after changing a descriptor module or
+# rebuilding the compiler, then commit the updated pins (a normal build enforces
+# them). Each consumer is a program that imports a program-relative module.
+benchmark-deps: check-compiler
+	@for f in `grep -rlE '^import "\./' --include='*.trp' examples/`; do \
+		echo "  pinning $$f"; ./bin/troupec --update-deps "$$f" >/dev/null; \
+	done
+
 clean: clean/compiler clean/rt clean/trp-rt clean/p2p-tools clean/lib
 clean/compiler:
 	cd compiler; $(MAKE) clean

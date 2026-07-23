@@ -1,27 +1,26 @@
 (* runall — run the LabeledSavina IFC-monitoring study from one place.
  *
- * Runs every descriptor in the published LabeledSavina module (or a subset
- * named on the command line) at its single size, one untimed warmup plus three
- * timed repetitions, prints the Bench measurement lines as it goes, and writes
- * three artifacts via SimpleFileIO under --io-root:
+ * Runs every descriptor in the LabeledSavina module (or a subset named on the
+ * command line) at its single size, one untimed warmup plus three timed
+ * repetitions, prints the Bench measurement lines as it goes, and writes three
+ * artifacts via SimpleFileIO under --io-root:
  *
  *   labeled-savina-results.txt   the raw measurement rows
  *   labeled-savina-report.md     per-descriptor medians and per-unit costs
  *   labeled-savina-charts.svg    small-multiple charts
  *
- * The descriptors stay a SimpleModule blob (unlike the other suites): the
- * harness closes over the root `authority`, which is bound only in main-mode
- * compilation, so the descriptors cannot be a library-mode module. The report
- * renderer is likewise a shared SimpleModule blob. Publish both once:
+ * The descriptors and the report renderer are both program-relative modules
+ * (recompiled with the whole import graph on every run), so nothing needs
+ * publishing first:
  *
- *   make benchmark-modules
- *   ./local.sh examples/benchmarks/labeled-savina/LabeledSavina.mod.trp
  *   ./local.sh examples/benchmarks/labeled-savina/runall.trp --io-root out
  *   ./local.sh examples/benchmarks/labeled-savina/runall.trp --io-root out -- \
  *       pingpong-k0 pingpong-k1 pingpong-k2 pingpong-k4 pingpong-k8
  *
- * The report renderer is Savina's SavinaReport blob, reused verbatim; its
- * title is passed in, so this suite renders under its own name.
+ * LabeledSavina.all is a function of authority (a library-mode module has no
+ * ambient authority); this main-mode program applies it with its own root
+ * authority. The report renderer is Savina's SavinaReport module, reused
+ * verbatim; its title is passed in, so this suite renders under its own name.
  *
  * The whole suite runs in a single Troupe process; between descriptors the main
  * mailbox is drained (a self-sent marker behind FIFO delivery bounds the
@@ -32,23 +31,25 @@
 import List
 import String
 import Bench
-import SimpleModule
 import "../../savina/SavinaReport"
+import "./LabeledSavina"
 
 datatype Atoms = FLUSHMARK
 
 let val args = getCliArgs authority
-    val labeled = SimpleModule.load "LabeledSavina"
+    (* LabeledSavina.all is a function of authority (the module holds no ambient
+     * authority); apply it with this program's root authority. *)
+    val descriptors = LabeledSavina.all authority
 
     val selected =
-        if List.length args = 0 then labeled.all
+        if List.length args = 0 then descriptors
         else List.filter (fn d => List.length
                                     (List.filter (fn a => a = d.name) args) > 0)
-                         labeled.all
+                         descriptors
 
     val unknown =
         List.filter (fn a => List.length
-                               (List.filter (fn d => d.name = a) labeled.all) = 0)
+                               (List.filter (fn d => d.name = a) descriptors) = 0)
                     args
 
     fun flushMailbox () =

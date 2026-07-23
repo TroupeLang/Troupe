@@ -11,10 +11,10 @@
  *
  * The descriptors are a program-relative module imported below (recompiled
  * with the whole import graph on every run). The report renderer is reused
- * from the Savina study (the row shape (name, size, ms, ok) is identical)
- * and is still a shared SimpleModule blob; publish it once:
+ * from the Savina study (the row shape (name, size, ms, ok) is identical),
+ * imported directly as a module across directories via
+ * "../../savina/SavinaReport", so nothing needs publishing first:
  *
- *   make benchmark-modules       (publishes SavinaReport)
  *   ./local.sh examples/benchmarks/datastructures/runall.trp --io-root out
  *   ./local.sh examples/benchmarks/datastructures/runall.trp --io-root out -- map-insert set-iterate
  *

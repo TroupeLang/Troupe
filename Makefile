@@ -33,20 +33,6 @@ trp-rt: check-compiler
 notebook:
 	cd notebook; npm install; npm run build
 
-# Publish the one remaining SimpleModule blob. The benchmark descriptors and the
-# shared report renderer are now program-relative modules (imported directly and
-# recompiled with the whole import graph on every run), so they need no
-# publishing. One blob remains:
-#   - LabeledSavina: its harness closes over the root `authority` (for
-#     `declassify`/`blockdown`), which is bound only in main-mode compilation;
-#     a library-mode module has no `authority`, so its descriptors are captured
-#     here and shipped as a saved value.
-# Republish after changing the producer or rebuilding the compiler, or a run
-# silently measures through stale code.
-benchmark-modules:
-	mkdir -p out
-	./local.sh examples/benchmarks/labeled-savina/LabeledSavina.mod.trp
-
 # Regenerate the per-program dependencies files (<main>.deps.json) that pin each
 # benchmark suite's descriptor module by content hash. The hash is over the
 # module's codegened IR, so re-run after changing a descriptor module or

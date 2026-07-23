@@ -1,17 +1,17 @@
 (* LabeledSavina — the message-heavy Savina benchmarks reimplemented as a
- * parameterized IFC-monitoring study, published as a SimpleModule blob for
- * consumers to `load "LabeledSavina"` (runall.trp). Re-run this producer after
- * changing a benchmark or rebuilding the compiler:
+ * parameterized IFC-monitoring study, a program-relative module imported by
+ * runall.trp with `import "./LabeledSavina"`.
  *
- *   mkdir -p out && ./local.sh examples/benchmarks/labeled-savina/LabeledSavina.mod.trp
- *   (or `make benchmark-modules` from the repository root).
- *
- * Unlike the other suites' descriptor sets, this one stays a blob rather than
- * a program-relative module: its harness closes over the root `authority`
- * (for `declassify` and `blockdown`), which is bound only in main-mode
- * compilation. A module compiled in library mode has no `authority`, so the
- * descriptors are captured here — where `authority` is in scope — and shipped
- * as a saved value. See the harness comments on the pc/blocking-label baseline.
+ * The harness uses the root `authority` (for `declassify` and `blockdown`),
+ * which is bound only in main-mode compilation; a module compiled in library
+ * mode has no ambient `authority` (the property the module system relies on for
+ * mobility soundness). So the module does not close over an ambient authority:
+ * it exports `all` as a *function of authority*, and the main-mode consumer
+ * (runall.trp) applies it with its own root authority. Authority arrives only
+ * as that explicit argument — the module never has ambient authority. That
+ * authority is the same root authority any main-mode program holds, so the
+ * study's downgrades behave exactly as intended. See the harness comments on
+ * the pc/blocking-label baseline.
  *
  * ============================ What this measures ============================
  *
@@ -86,8 +86,8 @@
  *    (helper `tell`). Value labels are preserved by the settle, so the
  *    accumulator keeps its joined label; only the presence channel is cleared.
  *    `blockdown` targets the *current pc* rather than a fixed `{}`, so it is
- *    correct at any baseline — in particular inside the loaded blob, whose code
- *    runs above the top-level baseline. The driver (`main`) thus receives every
+ *    correct at whatever baseline the descriptor is invoked under (here the
+ *    main-mode runall's top-level `{}`). The driver (`main`) thus receives every
  *    result through ordinary point receives, keeping the between-benchmark
  *    drain and the file writes legal. `check` likewise settles the blocking
  *    label after forming the labeled verdict.
@@ -111,13 +111,17 @@
  *)
 
 import List
-import SimpleModule
 
 datatype Atoms = PING | PONG | STOP | INC | GET | RESULT | TOKEN | WIRE | DONE
               | ITEM | CREDIT | DATA | SUM | SHUTDOWN | MEET | CHANGE | EXIT
               | TRANSFER | CREDITMSG | CONFIRM | GETBALANCE | BALANCE
 
 let
+  (* `authority` is a parameter, not the ambient root authority (a library-mode
+   * module has none): the consumer applies `all` with its own root authority,
+   * and every `declassify`/`blockdown` below closes over this argument. *)
+  fun mkAll authority =
+    let
     (*======================= shared labeling harness =======================*)
 
     (* Eight distinct high-integrity confidentiality principals; a labeled
@@ -161,8 +165,8 @@ let
      * the sender's blocking label; a raised one exceeds a plain receiver's
      * clearance). Branching raises the blocking label, not the pc, so
      * `blockdown authority` settles it back to the pc baseline — whatever that
-     * baseline is (`{}` at top level, the module's own baseline inside the
-     * loaded blob). Value labels are unaffected. A no-op unless the actor
+     * baseline is where the descriptor is invoked (`{}` for the main-mode
+     * runall). Value labels are unaffected. A no-op unless the actor
      * actually branches. *)
     fun settle cfg =
         if cfg.branch andalso cfg.k > 0 then blockdown authority else ()
@@ -433,6 +437,6 @@ let
         List.foldl (fn (b, acc) => List.append acc (descriptorsFor b))
                    [] benchmarks
 
-in (SimpleModule.publish (authority, "LabeledSavina", { all = all });
-    print "published LabeledSavina module")
+    in all end
+in [ ("all", mkAll) ]
 end

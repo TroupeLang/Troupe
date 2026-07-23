@@ -10,12 +10,11 @@
  *   clbg-charts.svg    small-multiple scaling charts
  *
  * The benchmark descriptors are a program-relative module imported below
- * (recompiled with the whole import graph on every run). The report
- * renderer is reused from the Savina study (rows are generic
- * (name, size, ms, ok) tuples) and is still a shared SimpleModule blob;
- * publish it once:
+ * (recompiled with the whole import graph on every run). The report renderer
+ * is reused from the Savina study (rows are generic (name, size, ms, ok)
+ * tuples), imported directly as a module across directories via
+ * "../../savina/SavinaReport", so nothing needs publishing first:
  *
- *   make benchmark-modules
  *   ./local.sh examples/benchmarks/clbg/runall.trp --io-root out
  *   ./local.sh examples/benchmarks/clbg/runall.trp --io-root out -- fannkuchredux
  *

@@ -15,22 +15,22 @@ comment.
 ## Running the whole evaluation
 
 ```bash
-make benchmark-modules   # publish the shared SavinaReport renderer once
-                         # (and after changing it or rebuilding the compiler)
 ./local.sh examples/savina/runall.trp --io-root out              # all 30
 ./local.sh examples/savina/runall.trp --io-root out -- sieve uct # a subset
 ```
 
-Only the report renderer (`SavinaReport.mod.trp`) is still a `SimpleModule`
-blob: it is shared by suite runners in different directories, and the module
-system resolves imports to descendants only (no `../`), so a single module
-file cannot be imported across sibling directories.
+Nothing needs publishing first: the descriptors (`Savina.trp`) and the shared
+report renderer (`SavinaReport.trp`) are both program-relative modules,
+recompiled with the whole import graph on every run. The renderer is shared
+across suites in different directories through an upward path (e.g.
+`import "../../savina/SavinaReport"`), which content-addressed identity makes
+sound — a module's identity is the hash of its code, not its location.
 
 `runall.trp` runs the selected benchmarks, prints measurement lines as
 it goes, and writes `savina-results.txt`, `savina-report.md`, and
 `savina-charts.svg` (small-multiple scaling charts) under the io-root —
 the whole pipeline, including chart rendering, is Troupe
-(`SavinaReport.mod.trp`). `analysis/mkreport.trp` regenerates the report
+(`SavinaReport.trp`). `analysis/mkreport.trp` regenerates the report
 and charts from a previously collected results file.
 
 ## Running one benchmark

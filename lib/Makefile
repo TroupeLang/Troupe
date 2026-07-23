@@ -4,7 +4,6 @@ build:
 	mkdir -p out
 
   # No dependencies
-	$(COMPILER) ./SimpleModule.trp -l
 	$(COMPILER) ./BigInt.trp -l
 	$(COMPILER) ./Number.trp -l
 	$(COMPILER) ./Option.trp -l

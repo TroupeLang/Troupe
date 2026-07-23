@@ -1,0 +1,9 @@
+(* Lives in modsrc/util/ and imports its parent-directory sibling
+ * ModuleParentBase via "../ModuleParentBase" — the upward path the module
+ * system allows now that a module's identity is its content hash, not its
+ * location. *)
+import "../ModuleParentBase"
+
+let fun child s = "child[" ^ ModuleParentBase.base s ^ "]"
+in [ ("child", child) ]
+end

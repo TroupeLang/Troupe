@@ -13,7 +13,7 @@
  *)
 
 import List
-import SimpleModule
+import "../SavinaReport"
 
 let val args = getCliArgs authority
     val inputFile = case args of f :: _ => f | [] => "savina-results.txt"
@@ -58,11 +58,10 @@ let val args = getCliArgs authority
 in case readFile (authority, inputFile) of
      {tag = "Err", error = e} => print ("cannot read input: ", e.reason)
    | {tag = "Ok", value = text} =>
-       let val report = SimpleModule.load "SavinaReport"
-           val summaries = report.summarize (parseAll text)
+       let val summaries = SavinaReport.summarize (parseAll text)
            val _ = save ("savina-report.md",
-                         report.markdown ("Savina results", summaries) ^ "\n")
-           val _ = save ("savina-charts.svg", report.svg summaries)
+                         SavinaReport.markdown ("Savina results", summaries) ^ "\n")
+           val _ = save ("savina-charts.svg", SavinaReport.svg summaries)
        in print (List.length summaries, "benchmarks summarized")
        end
 end

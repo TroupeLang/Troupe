@@ -1,1 +1,1 @@
-invalid module import "../ModuleEscape" in module-import-bad-path.trp: the path must start with "./"
+invalid module import "ModuleEscape" in module-import-bad-path.trp: the path must start with "./" or "../"

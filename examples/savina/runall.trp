@@ -9,12 +9,10 @@
  *   savina-report.md     per-benchmark medians and per-unit costs
  *   savina-charts.svg    small-multiple scaling charts
  *
- * The benchmark descriptors are a program-relative module imported below
- * (recompiled with the whole import graph on every run). The report
- * renderer is still a SimpleModule blob shared across suites; publish it
- * once with `make benchmark-modules`:
+ * The benchmark descriptors and the report renderer are both
+ * program-relative modules imported below (recompiled with the whole import
+ * graph on every run), so nothing needs publishing first:
  *
- *   make benchmark-modules
  *   ./local.sh examples/savina/runall.trp --io-root out
  *   ./local.sh examples/savina/runall.trp --io-root out -- pingpong sieve
  *
@@ -27,13 +25,12 @@
 import List
 import String
 import Bench
-import SimpleModule
 import "./Savina"
+import "./SavinaReport"
 
 datatype Atoms = FLUSHMARK
 
 let val args = getCliArgs authority
-    val report = SimpleModule.load "SavinaReport"
 
     val selected =
         if List.length args = 0 then Savina.all
@@ -74,10 +71,10 @@ in if List.length unknown > 0
    then print ("unknown benchmarks:", unknown)
    else
      let val rows = runAll (selected, [])
-         val summaries = report.summarize rows
-         val _ = save ("savina-results.txt", report.resultLines rows ^ "\n")
-         val _ = save ("savina-report.md", report.markdown ("Savina results", summaries) ^ "\n")
-         val _ = save ("savina-charts.svg", report.svg summaries)
+         val summaries = SavinaReport.summarize rows
+         val _ = save ("savina-results.txt", SavinaReport.resultLines rows ^ "\n")
+         val _ = save ("savina-report.md", SavinaReport.markdown ("Savina results", summaries) ^ "\n")
+         val _ = save ("savina-charts.svg", SavinaReport.svg summaries)
          val failed = List.filter (fn (_, ok, _) => not ok) summaries
      in print (List.length summaries, "benchmarks run,",
                List.length failed, "with failures")

@@ -1,0 +1,8 @@
+(* A subdirectory module (modsrc/util/ModuleParentChild) imports one in its
+ * parent directory (modsrc/ModuleParentBase) via "../". Exercises the relaxed
+ * path resolution end to end: identity is content-addressed, so an upward path
+ * is a pure resolution concern and never becomes identity. *)
+import "./modsrc/util/ModuleParentChild"
+
+let val _ = fwrite (stdout authority, ModuleParentChild.child "x" ^ "\n")
+in () end

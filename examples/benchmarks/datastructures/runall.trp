@@ -27,13 +27,12 @@
 import List
 import String
 import Bench
-import SimpleModule
 import "./DataStructures"
+import "../../savina/SavinaReport"
 
 datatype Atoms = FLUSHMARK
 
 let val args = getCliArgs authority
-    val report = SimpleModule.load "SavinaReport"
 
     val selected =
         if List.length args = 0 then DataStructures.all
@@ -74,10 +73,10 @@ in if List.length unknown > 0
    then print ("unknown benchmarks:", unknown)
    else
      let val rows = runAll (selected, [])
-         val summaries = report.summarize rows
-         val _ = save ("datastructures-results.txt", report.resultLines rows ^ "\n")
-         val _ = save ("datastructures-report.md", report.markdown ("Data structures", summaries) ^ "\n")
-         val _ = save ("datastructures-charts.svg", report.svg summaries)
+         val summaries = SavinaReport.summarize rows
+         val _ = save ("datastructures-results.txt", SavinaReport.resultLines rows ^ "\n")
+         val _ = save ("datastructures-report.md", SavinaReport.markdown ("Data structures", summaries) ^ "\n")
+         val _ = save ("datastructures-charts.svg", SavinaReport.svg summaries)
          val failed = List.filter (fn (_, ok, _) => not ok) summaries
      in print (List.length summaries, "benchmarks run,",
                List.length failed, "with failures")

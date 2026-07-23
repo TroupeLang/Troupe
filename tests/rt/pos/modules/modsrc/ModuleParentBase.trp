@@ -1,0 +1,6 @@
+(* Leaf module in modsrc/, imported from the deeper modsrc/util/ directory via
+ * "../ModuleParentBase" by ModuleParentChild — the upward (parent-directory)
+ * import that content-addressed identity makes sound. *)
+let fun base s = "base(" ^ s ^ ")"
+in [ ("base", base) ]
+end

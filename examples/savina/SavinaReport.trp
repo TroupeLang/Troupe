@@ -5,22 +5,17 @@
  *
  * This is the one renderer shared across suites that live in DIFFERENT
  * directories (examples/savina/, examples/benchmarks/{datastructures,
- * clbg,labeled-savina}/). The v1 module system resolves imports only to
- * descendants of the importing program (no `../`), so a single module
- * file cannot be imported by runners in sibling directories. Rather than
- * duplicate the renderer into each suite, it stays a SimpleModule blob (one
- * of two remaining after the descriptor migration — see LabeledSavina for
- * the other). Publish it once, and after any change to this file or a
- * compiler rebuild:
- *
- *   mkdir -p out && ./local.sh examples/savina/SavinaReport.mod.trp
- *   (or `make benchmark-modules` from the repository root).
+ * clbg,labeled-savina}/). It is imported through a program-relative path
+ * that walks up out of the importing suite — `import "./SavinaReport"` from
+ * this directory, `import "../../savina/SavinaReport"` from a sibling suite —
+ * which content-addressed identity makes sound: the path is only a resolution
+ * concern, and the module's identity is the hash of its code, so every suite
+ * that reaches this file links the same module.
  *)
 
 import List
 import String
 import Svg
-import SimpleModule
 
 let fun uniq xs =
         let fun go ([], acc) = List.reverse acc
@@ -147,11 +142,9 @@ let fun uniq xs =
                ^ " ok=" ^ toString ok)
              rows)
 
-in (SimpleModule.publish (authority, "SavinaReport",
-        { summarize = summarize
-        , markdown = markdown
-        , svg = svgSheet
-        , resultLines = resultLines
-        });
-    print "published SavinaReport module")
+in [ ("summarize", summarize)
+   , ("markdown", markdown)
+   , ("svg", svgSheet)
+   , ("resultLines", resultLines)
+   ]
 end

@@ -54,24 +54,57 @@ getTroupeHome = do
 -- under $TROUPE/lib/out); a *module* is what a quoted-path import names (a
 -- program-local .trp file, resolved relative to the importing file).
 
--- | Check the literal path of a module import: must start with "./", must not
--- contain "..", must not end in "/", and every segment must be nonempty.
+-- | Check the literal path of a module import: must start with "./" or "../",
+-- must not end in "/", and every segment must be nonempty. With identity
+-- decoupled from location (content-addressed hashes), a "../" path is a pure
+-- resolution concern — the path never becomes identity — so the descendant-only
+-- restriction is gone; the remaining requirement (resolves to a real .trp file)
+-- is checked at resolution.
 checkModulePath :: String -> Either String ()
 checkModulePath p
-  | not (startswith "./" p) = Left "the path must start with \"./\""
-  | endswith "/" p          = Left "the path must not end with \"/\""
-  | any (== "..") segs      = Left "the path must not contain \"..\""
-  | any null segs           = Left "the path must not contain empty segments"
-  | otherwise               = Right ()
-  where segs = split "/" (drop 2 p)
+  | not (startswith "./" p || startswith "../" p)
+                     = Left "the path must start with \"./\" or \"../\""
+  | endswith "/" p   = Left "the path must not end with \"/\""
+  | any null segs    = Left "the path must not contain empty segments"
+  | otherwise        = Right ()
+  where segs = split "/" p
+
+-- | Lexically collapse @seg/..@ and @.@ from a path, without touching the
+-- filesystem (so it never resolves symlinks or requires the file to exist).
+-- 'System.FilePath.normalise' does not drop @..@; this does, so the same file
+-- reached via different spellings canonicalizes to one path and one module. A
+-- leading @..@ (the path escapes above its base) is preserved.
+collapseDotDot :: FilePath -> FilePath
+collapseDotDot p = joinPath (go [] (splitDirectories p))
+  where
+    go acc []                    = reverse acc
+    go acc ("." : rest)          = go acc rest
+    go (top : acc) (".." : rest)
+      | top /= ".."              = go acc rest          -- pop a real segment
+    go acc (".." : rest)         = go (".." : acc) rest -- leading ".." stays
+    go acc (seg : rest)          = go (seg : acc) rest
 
 -- | Resolve a module import literal against the importing file's directory.
--- Returns (source file path, root-relative key without extension).
--- The key is what codegen and the runtime use, prefixed with "module:".
+-- Returns (source file path, root-relative key without extension). Only a "./"
+-- prefix is stripped; a "../" is kept so resolution walks up from the importing
+-- file's directory. Two canonicalizations, each of a different form:
+--
+--   * the source file path is 'collapseDotDot'-canonicalized, so different
+--     spellings of one file dedup to a single module in 'discoverModules' and
+--     one compiled artifact;
+--   * the key is @makeRelative@ against the *uncollapsed* target (so it comes
+--     out relative to the program root, keeping any leading "..") and then
+--     'collapseDotDot'-cleaned of interior "seg/.." — the runtime joins it onto
+--     the root, so it must stay root-relative.
+--
+-- The key is a resolution/display path (it may begin with "..") — never the
+-- identity, which is the content hash.
 resolveModule :: FilePath -> FilePath -> String -> (FilePath, String)
 resolveModule root importingFile lit =
-  let target = normalise (takeDirectory importingFile </> drop 2 lit)
-      key    = makeRelative root target
+  let rel       = if startswith "./" lit then drop 2 lit else lit
+      rawTarget = normalise (takeDirectory importingFile </> rel)
+      target    = collapseDotDot rawTarget
+      key       = collapseDotDot (makeRelative root rawTarget)
   in (target ++ ".trp", key)
 
 -- | Root-relative display name of a file, for diagnostics.

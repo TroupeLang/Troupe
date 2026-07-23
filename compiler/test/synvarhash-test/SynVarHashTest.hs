@@ -19,7 +19,7 @@ import           SynVarHash
 import qualified Stack2JS
 import qualified Stack
 import           CompileMode (CompileMode(..))
-import           Exports (exportsFileContent, isDatatypeLine, parseDatatypeLine)
+import           Exports (exportsFileContent, isDatatypeLine, parseDatatypeLine, datatypeHashReport)
 import           SynVarFolding (foldProg)
 import           Direct (Prog(..), Term(List))
 import           Basics (Imports(..), ImportDecl(..), ImportMode(..), LibName(..))
@@ -276,10 +276,20 @@ main = defaultMain $ testGroup "SynVarHash exact vectors"
             groups = [ (optionHash, optionCanon)
                      , (hBox, boxCanon)
                      , (mutualHash, mutualCanon) ]
-            content = exportsFileContent names groups
+            content = exportsFileContent Nothing names groups
             (dtLines, nameLines) = partition isDatatypeLine (lines content)
         nameLines               @?= names
         map parseDatatypeLine dtLines @?= groups
+    ]
+  , testGroup "datatype-hashes diagnostic report format"
+    -- The --datatype-hashes flag prints this: one line per group, "<hash>  <canon>"
+    -- (two-space separated), in the given order, trailing newline per line.
+    [ testCase "one line per group: hash, two spaces, canonical form" $
+        datatypeHashReport [(optionHash, optionCanon), (hBinop, binopCanon)]
+          @?= optionHash ++ "  " ++ optionCanon ++ "\n"
+            ++ hBinop ++ "  " ++ binopCanon ++ "\n"
+    , testCase "no datatype groups yields empty output" $
+        datatypeHashReport [] @?= ""
     ]
   , testGroup "imported interface checksum (spec 10)"
     -- Identity comes from the recomputed hash; the stored hash is verified
@@ -317,7 +327,7 @@ main = defaultMain $ testGroup "SynVarHash exact vectors"
 -- through the real whole-program codegen entry point (source maps off).
 genJS :: CompileMode -> Stack2JS.DatatypeRecords -> String
 genJS mode records =
-  fst (Stack2JS.stack2JSWithMappings mode False False records Nothing
+  fst (Stack2JS.stack2JSWithMappings mode False False records Nothing Nothing
          (Stack.ProgramStackUnit (Stack.StackProgram [])))
 
 -- | Parsing the canonical string and re-rendering must reproduce it exactly,

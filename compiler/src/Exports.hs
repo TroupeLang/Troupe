@@ -78,6 +78,14 @@ exportsFileContent moduleHash names groups =
       ++ names
       ++ map renderDatatypeLine groups)
 
+-- | The @--datatype-hashes@ diagnostic report: one line per datatype group
+-- declared in a file, its content hash followed by its canonical form, in
+-- declaration order. The hash is the group's global identity (compare it across
+-- files or nodes to see whether two declarations agree); the canonical form
+-- shows the structure the hash commits to (why two differing hashes differ).
+datatypeHashReport :: [(String, String)] -> String
+datatypeHashReport groups = unlines [ h ++ "  " ++ c | (h, c) <- groups ]
+
 -- | Extract the main term from let bindings (now works with LTerm)
 extractMain :: LTerm -> LTerm
 extractMain (Loc _ (Let _ term)) = extractMain term

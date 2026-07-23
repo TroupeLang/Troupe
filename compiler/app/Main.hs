@@ -77,6 +77,7 @@ data Flag
   -- so its @.exports@ carries the module's own content hash. Injected by the
   -- driver for module compiles; absent for stdlib library compiles.
   | ModuleArtifact
+  | DatatypeHashes
   deriving (Show, Eq)
 
 options :: [OptDescr Flag]
@@ -96,6 +97,7 @@ options =
   , Option []    ["ingest-ir-sexp"] (NoArg IngestIRSexp) "read a troupe-ir-sexp file and compile it to JS (program must be self-contained; no ambient methods are injected)"
   , Option []    ["verify-ir-sexp"] (NoArg VerifyIRSexp) "compile a .trp, print its IR as troupe-ir-sexp, re-parse, and check the position-erased ASTs match (R1 self-check)"
   , Option []    ["update-deps"]    (NoArg UpdateDeps)   "establish/update the program's dependencies file (<main>.deps.json) with actual module hashes, instead of enforcing pins"
+  , Option []    ["datatype-hashes"] (NoArg DatatypeHashes) "print the content hash and canonical form of each datatype group declared in the file, then stop"
   ]
 
 --------------------------------------------------------------------------------
@@ -161,6 +163,11 @@ process pin root flags fname input = do
           consumedRecord = SVF.frConsumed foldRes   -- [(library, consumed hashes)]
           folded = case compileMode of Normal -> addAmbientMethods (SVF.frProg foldRes)
                                        _      -> SVF.frProg foldRes
+
+      when (DatatypeHashes `elem` flags) $ do
+        putStr (datatypeHashReport localGroups)
+        exitSuccess
+
       prog' <- case runExcept (C.trans compileMode folded) of
         Right p -> return p
         Left s -> die s

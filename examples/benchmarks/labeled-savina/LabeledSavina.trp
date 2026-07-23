@@ -112,9 +112,20 @@
 
 import List
 
-datatype Atoms = PING | PONG | STOP | INC | GET | RESULT | TOKEN | WIRE | DONE
-              | ITEM | CREDIT | DATA | SUM | SHUTDOWN | MEET | CHANGE | EXIT
-              | TRANSFER | CREDITMSG | CONFIRM | GETBALANCE | BALANCE
+(* Per-benchmark message protocols as syntactic-variant datatypes (as in
+ * examples/savina/Savina.trp). Payloads here are labeled values and reply pids,
+ * both opaque, so they ride the datatype's type variable; constructors are
+ * prefixed per benchmark to stay clear of the module's one flat namespace. *)
+datatype 'a lppMsg = lppPing of 'a * 'a | lppPong of 'a | lppStop
+datatype 'a lctMsg = lctInc of 'a | lctGet of 'a | lctResult of 'a
+datatype 'a ltrMsg = ltrWire of 'a * int | ltrToken of int * 'a
+                   | ltrDone of 'a | ltrStop of int
+datatype 'a lpcMsg = lpcItem of 'a * 'a | lpcData of 'a | lpcCredit
+                   | lpcGet of 'a | lpcShutdown | lpcSum of 'a
+datatype 'a lchMsg = lchMeet of 'a * 'a | lchChange of 'a * 'a
+                   | lchExit | lchDone of 'a
+datatype 'a lbkMsg = lbkTransfer of 'a * 'a * 'a | lbkCredit of 'a * 'a
+                   | lbkConfirm | lbkGetBalance of 'a | lbkBalance of 'a | lbkStop
 
 let
   (* `authority` is a parameter, not the ambient root authority (a library-mode
@@ -194,15 +205,15 @@ let
      * n, matching the Savina original's pong count. *)
     fun ppMake cfg =
         let fun ponger () =
-                receive [ hn (PING, v, p) =>
-                            (tell cfg (p, (PONG, combine (cfg, 0, v))); ponger ())
-                        , hn STOP => () ]
+                receive [ hn (lppPing (v, p)) =>
+                            (tell cfg (p, lppPong (combine (cfg, 0, v))); ponger ())
+                        , hn lppStop => () ]
             fun bench n =
                 let val pong = spawn ponger
-                    fun loop (0, acc) = (send (pong, STOP); collect (cfg, acc))
+                    fun loop (0, acc) = (send (pong, lppStop); collect (cfg, acc))
                       | loop (k, acc) =
-                          (send (pong, (PING, tag (cfg, k, 1), self ()));
-                           receive [ hn (PONG, r) => loop (k - 1, acc + r) ])
+                          (send (pong, lppPing (tag (cfg, k, 1), self ()));
+                           receive [ hn (lppPong r) => loop (k - 1, acc + r) ])
                 in loop (n, 0) end
         in { bench = bench, check = fn n => fn r => verdict (cfg, r = n) } end
 
@@ -211,16 +222,16 @@ let
      * n, matching the Savina original. *)
     fun ctMake cfg =
         let fun counter c =
-                receive [ hn (INC, v)  => counter (combine (cfg, c, v))
-                        , hn (GET, p)  => tell cfg (p, (RESULT, c)) ]
+                receive [ hn (lctInc v)  => counter (combine (cfg, c, v))
+                        , hn (lctGet p)  => tell cfg (p, lctResult c) ]
             fun bench n =
                 let val cnt = spawn (fn () => counter 0)
                     fun produce k =
                         if k = 0 then ()
-                        else (send (cnt, (INC, tag (cfg, k, 1))); produce (k - 1))
+                        else (send (cnt, lctInc (tag (cfg, k, 1))); produce (k - 1))
                     val _ = produce n
-                    val _ = send (cnt, (GET, self ()))
-                in receive [ hn (RESULT, c) => collect (cfg, c) ] end
+                    val _ = send (cnt, lctGet (self ()))
+                in receive [ hn (lctResult c) => collect (cfg, c) ] end
         in { bench = bench, check = fn n => fn r => verdict (cfg, r = n) } end
 
     (*============================= threadring ==============================*)
@@ -231,18 +242,18 @@ let
     fun trMake cfg =
         let val ringSize = 100
             fun ringActor main =
-                receive [ hn (WIRE, next, idx) =>
+                receive [ hn (ltrWire (next, idx)) =>
                     let fun loop () =
                             receive
-                              [ hn (TOKEN, 0, acc) =>
-                                  (tell cfg (main, (DONE, acc));
-                                   send (next, (STOP, ringSize - 1)))
-                              , hn (TOKEN, k, acc) =>
+                              [ hn (ltrToken (0, acc)) =>
+                                  (tell cfg (main, ltrDone acc);
+                                   send (next, ltrStop (ringSize - 1)))
+                              , hn (ltrToken (k, acc)) =>
                                   (tell cfg (next,
-                                     (TOKEN, k - 1, combine (cfg, acc, tag (cfg, k, 1))));
+                                     ltrToken (k - 1, combine (cfg, acc, tag (cfg, k, 1))));
                                    loop ())
-                              , hn (STOP, k) =>
-                                  if k > 1 then send (next, (STOP, k - 1)) else () ]
+                              , hn (ltrStop k) =>
+                                  if k > 1 then send (next, ltrStop (k - 1)) else () ]
                     in loop () end ]
             fun bench n =
                 let val main = self ()
@@ -255,11 +266,11 @@ let
                             let val next = if i = ringSize - 1
                                            then List.nth pids 0
                                            else List.nth pids (i + 1)
-                                val _ = send (p, (WIRE, next, i))
+                                val _ = send (p, ltrWire (next, i))
                             in wire (i + 1, ps) end
                     val _ = wire (0, pids)
-                    val _ = send (List.nth pids 0, (TOKEN, n, 0))
-                in receive [ hn (DONE, acc) => collect (cfg, acc) ] end
+                    val _ = send (List.nth pids 0, ltrToken (n, 0))
+                in receive [ hn (ltrDone acc) => collect (cfg, acc) ] end
         in { bench = bench, check = fn n => fn r => verdict (cfg, r = n) } end
 
     (*============================== prodcons ===============================*)
@@ -271,38 +282,38 @@ let
             val capacity = 10
             fun buffer (q, qLen, waitingCons, owedProd) =
                 receive
-                  [ hn (ITEM, v, prod) =>
+                  [ hn (lpcItem (v, prod)) =>
                       (case waitingCons of
                          c :: cs =>
-                           (send (c, (DATA, v)); send (prod, CREDIT);
+                           (send (c, lpcData v); send (prod, lpcCredit);
                             buffer (q, qLen, cs, owedProd))
                        | [] =>
                            if qLen + 1 < capacity
-                           then (send (prod, CREDIT);
+                           then (send (prod, lpcCredit);
                                  buffer (List.append q [v], qLen + 1, [], owedProd))
                            else buffer (List.append q [v], qLen + 1, [],
                                         List.append owedProd [prod]))
-                  , hn (GET, c) =>
+                  , hn (lpcGet c) =>
                       (case q of
                          v :: vs =>
-                           (send (c, (DATA, v));
+                           (send (c, lpcData v);
                             (case owedProd of
-                               p :: ps => (send (p, CREDIT);
+                               p :: ps => (send (p, lpcCredit);
                                            buffer (vs, qLen - 1, waitingCons, ps))
                              | []      => buffer (vs, qLen - 1, waitingCons, [])))
                        | [] => buffer ([], 0, List.append waitingCons [c], owedProd))
-                  , hn SHUTDOWN => () ]
+                  , hn lpcShutdown => () ]
             fun producer (buf, i, k) =
                 let fun loop j =
                         if j = k then ()
-                        else (send (buf, (ITEM, tag (cfg, i * k + j, i * k + j), self ()));
-                              receive [ hn CREDIT => loop (j + 1) ])
+                        else (send (buf, lpcItem (tag (cfg, i * k + j, i * k + j), self ()));
+                              receive [ hn lpcCredit => loop (j + 1) ])
                 in loop 0 end
             fun consumer (buf, main, k) =
                 let fun loop (j, acc) =
-                        if j = k then tell cfg (main, (SUM, acc))
-                        else (tell cfg (buf, (GET, self ()));
-                              receive [ hn (DATA, v) => loop (j + 1, combine (cfg, acc, v)) ])
+                        if j = k then tell cfg (main, lpcSum acc)
+                        else (tell cfg (buf, lpcGet (self ()));
+                              receive [ hn (lpcData v) => loop (j + 1, combine (cfg, acc, v)) ])
                 in loop (0, 0) end
             fun bench n =
                 let val main = self ()
@@ -312,8 +323,8 @@ let
                     val _ = List.map (fn _ => spawn (fn () => consumer (buf, main, n)))
                                      (List.range numCons)
                     fun collectSums (k, total) =
-                        if k = 0 then (send (buf, SHUTDOWN); collect (cfg, total))
-                        else receive [ hn (SUM, s) => collectSums (k - 1, total + s) ]
+                        if k = 0 then (send (buf, lpcShutdown); collect (cfg, total))
+                        else receive [ hn (lpcSum s) => collectSums (k - 1, total + s) ]
                 in collectSums (numCons, 0) end
         in { bench = bench, check = fn n => fn t => verdict (cfg, t = 2 * n * (4 * n - 1)) } end
 
@@ -325,23 +336,23 @@ let
         let val numChameneos = 10
             fun complement (c1, c2) = if c1 = c2 then c1 else 3 - c1 - c2
             fun creature (mall, main, color, count) =
-                (tell cfg (mall, (MEET, color, self ()));
-                 receive [ hn (CHANGE, c, u) =>
+                (tell cfg (mall, lchMeet (color, self ()));
+                 receive [ hn (lchChange (c, u)) =>
                              creature (mall, main, c, combine (cfg, count, u))
-                         , hn EXIT => tell cfg (main, (DONE, count)) ])
+                         , hn lchExit => tell cfg (main, lchDone count) ])
             fun mall meetings =
                 let fun loop (waiting, m, exited) =
                         if exited = numChameneos then ()
-                        else receive [ hn (MEET, c, p) =>
+                        else receive [ hn (lchMeet (c, p)) =>
                             if m = 0
-                            then (send (p, EXIT); loop (waiting, m, exited + 1))
+                            then (send (p, lchExit); loop (waiting, m, exited + 1))
                             else case waiting of
                                    [] => loop ([(c, p)], m, exited)
                                  | (c2, p2) :: _ =>
                                      let val nc = complement (c, c2)
                                          val u  = tag (cfg, m, 1)
-                                         val _  = send (p,  (CHANGE, nc, u))
-                                         val _  = send (p2, (CHANGE, nc, u))
+                                         val _  = send (p,  lchChange (nc, u))
+                                         val _  = send (p2, lchChange (nc, u))
                                      in loop ([], m - 1, exited) end ]
                 in loop ([], meetings, 0) end
             fun bench n =
@@ -353,7 +364,7 @@ let
                               (List.range numChameneos)
                     fun collectCounts (k, total) =
                         if k = 0 then collect (cfg, total)
-                        else receive [ hn (DONE, c) => collectCounts (k - 1, total + c) ]
+                        else receive [ hn (lchDone c) => collectCounts (k - 1, total + c) ]
                 in collectCounts (numChameneos, 0) end
         in { bench = bench, check = fn n => fn t => verdict (cfg, t = 2 * n) } end
 
@@ -366,15 +377,15 @@ let
             val initialBalance = 10000
             fun account balance =
                 receive
-                  [ hn (TRANSFER, amount, dst, teller) =>
-                      (tell cfg (dst, (CREDITMSG, amount, teller));
+                  [ hn (lbkTransfer (amount, dst, teller)) =>
+                      (tell cfg (dst, lbkCredit (amount, teller));
                        account (applyAmount (cfg, balance, 0 - amount)))
-                  , hn (CREDITMSG, amount, teller) =>
-                      (tell cfg (teller, CONFIRM);
+                  , hn (lbkCredit (amount, teller)) =>
+                      (tell cfg (teller, lbkConfirm);
                        account (applyAmount (cfg, balance, amount)))
-                  , hn (GETBALANCE, p) =>
-                      (tell cfg (p, (BALANCE, balance)); account balance)
-                  , hn STOP => () ]
+                  , hn (lbkGetBalance p) =>
+                      (tell cfg (p, lbkBalance balance); account balance)
+                  , hn lbkStop => () ]
             fun bench n =
                 let val main = self ()
                     val accounts =
@@ -390,15 +401,15 @@ let
                                            else dstRaw
                                  val amount = tag (cfg, k, floor (random () * 100))
                                  val _ = send (List.nth accounts src,
-                                               (TRANSFER, amount, List.nth accounts dst, main))
-                             in receive [ hn CONFIRM => transfers (k - 1, done + 1) ]
+                                               lbkTransfer (amount, List.nth accounts dst, main))
+                             in receive [ hn lbkConfirm => transfers (k - 1, done + 1) ]
                              end
                     val completed = transfers (n, 0)
                     fun sumBalances ([], acc) = acc
                       | sumBalances (a :: rest, acc) =
-                          (send (a, (GETBALANCE, main));
-                           receive [ hn (BALANCE, b) =>
-                                       (send (a, STOP);
+                          (send (a, lbkGetBalance main);
+                           receive [ hn (lbkBalance b) =>
+                                       (send (a, lbkStop);
                                         sumBalances (rest, combine (cfg, acc, b))) ])
                     val total = sumBalances (accounts, 0)
                 in (collect (cfg, total), completed) end

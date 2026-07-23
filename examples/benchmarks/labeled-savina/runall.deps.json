@@ -1,6 +1,6 @@
 {
   "deps": [
     {"path": "../../savina/SavinaReport", "hash": "nki815r3j6sde8eljkkqv84qfrtmitpfj6h2ng177nd2r4prf5n0", "name": "../../savina/SavinaReport"},
-    {"path": "LabeledSavina", "hash": "3mp3nqpnbpl1bv7uhrknjr5fot0uc75vh8augudt4qg3ou7bjegg", "name": "LabeledSavina"}
+    {"path": "LabeledSavina", "hash": "m89obd4c4mfpiphf6ki5fjlo65pm99cvbn7acadrr9ouf8e43100", "name": "LabeledSavina"}
   ]
 }

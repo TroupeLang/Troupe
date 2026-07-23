@@ -1,0 +1,54 @@
+(* Savina logmap: 10 series each iterate the logistic map n times, delegating
+ * each term to a rate worker; the sum is checked against a sequential reference.
+ * Exports `descriptor`. *)
+
+import List
+
+datatype 'a msg = Next of float * 'a | Term of float
+                | Stop | Done of int * float
+
+let val numSeries = 10
+    fun rate i = 3.46 + i * 0.0025
+    fun start i = 0.3 + i * 0.01
+    fun rateWorker r =
+        receive [ hn (Next (x, p)) =>
+                    (send (p, Term (r * x * (1.0 - x))); rateWorker r)
+                , hn Stop => () ]
+    fun series (i, n, main) =
+        let val me = self ()
+            val worker = spawn (fn () => rateWorker (rate i))
+            fun iterate (k, x) =
+                if k = 0 then (send (worker, Stop); x)
+                else (send (worker, Next (x, me));
+                      receive [ hn (Term x2) => iterate (k - 1, x2) ])
+            val final = iterate (n, start i)
+        in send (main, Done (i, final)) end
+    fun reference n =
+        let fun one i =
+                let val r = rate i
+                    fun go (k, x) = if k = 0 then x else go (k - 1, r * x * (1.0 - x))
+                in go (n, start i) end
+            fun sumUp (i, acc) =
+                if i = numSeries then acc else sumUp (i + 1, acc + one i)
+        in sumUp (0, 0.0) end
+    fun bench n =
+        let val main = self ()
+            val _ = List.map (fn i => spawn (fn () => series (i, n, main)))
+                             (List.range numSeries)
+            (* collect keyed by index, then sum in index order so float
+             * addition order matches the reference *)
+            fun collect (k, results) =
+                if k = 0 then results
+                else receive [ hn (Done (i, x)) => collect (k - 1, (i, x) :: results) ]
+            val results = collect (numSeries, [])
+            fun sumOrdered (i, acc) =
+                if i = numSeries then acc
+                else case List.filter (fn (j, _) => j = i) results of
+                       [(_, x)] => sumOrdered (i + 1, acc + x)
+        in sumOrdered (0, 0.0) end
+    val descriptor =
+        { name  = "logmap"
+        , bench = bench
+        , check = fn n => fn s => s = reference n
+        , sizes = [2000, 8000, 20000] }
+in [ ("descriptor", descriptor) ] end

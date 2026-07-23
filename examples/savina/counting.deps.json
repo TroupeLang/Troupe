@@ -1,5 +1,35 @@
 {
   "deps": [
-    {"path": "Savina", "hash": "qo2kgie1t71cagp1e3qse0p46mos8cacokqiu76epi5098t2ls30", "name": "Savina"}
+    {"path": "Savina", "hash": "b1iaj5hp4hi6he96uno9sj74936a8htuq4ou3cv16pj4dpa4f34g", "name": "Savina"},
+    {"path": "benchmarks/Apsp", "hash": "935eg3dbb8u5hukt9fm0sa6561jvvar66laf7nogcg4vru105f00", "name": "benchmarks/Apsp"},
+    {"path": "benchmarks/Astar", "hash": "75rqn58vf22bt8tro6mvih2408toj0umsc6gfhlmbn3mnlmm1ucg", "name": "benchmarks/Astar"},
+    {"path": "benchmarks/Banking", "hash": "hq1e9ebj6q9tagr88juvmthfvp3ktejmpjcoiuqhoaeia963s8s0", "name": "benchmarks/Banking"},
+    {"path": "benchmarks/Barber", "hash": "6n94eeltbnvkb3ppu0e4pf2nipg3mdivfdf1lt3mbker4017cnbg", "name": "benchmarks/Barber"},
+    {"path": "benchmarks/Big", "hash": "jr7v9cc3uj0somtath4m7rh5v407lsqhpq0lkevo7ui479l3cf6g", "name": "benchmarks/Big"},
+    {"path": "benchmarks/Bitonicsort", "hash": "rhamrnnj91gravkcqva841sab7dg4b9920h9g6gopka0ll0k8p10", "name": "benchmarks/Bitonicsort"},
+    {"path": "benchmarks/Chameneos", "hash": "dg8ujh0qo9hh87fq4pha4bakcaaseor56bda76m3e0j176l31s10", "name": "benchmarks/Chameneos"},
+    {"path": "benchmarks/Cigsmok", "hash": "mclugkl3qv77hd5kmlbthp5g89nja5bjbmr24248t9kb300jbkd0", "name": "benchmarks/Cigsmok"},
+    {"path": "benchmarks/Concdict", "hash": "8tt8cf14fflefb9r82446tnm76i90cqa16fhom0u5i0dd99vqe6g", "name": "benchmarks/Concdict"},
+    {"path": "benchmarks/Concsll", "hash": "fo9jg9sbclopmu1bejenaa3qmqnh68okngtc1i37aapvsr8u3ieg", "name": "benchmarks/Concsll"},
+    {"path": "benchmarks/Counting", "hash": "03ifl8ear1ipraeiq0usv3864unh92hvon49og7qjb47s64vm0n0", "name": "benchmarks/Counting"},
+    {"path": "benchmarks/Facloc", "hash": "ddp9o8cn1mvtn8bsnhgrm106cttd925hcn4fsp9vdtbcckdb41i0", "name": "benchmarks/Facloc"},
+    {"path": "benchmarks/Fibonacci", "hash": "o8cbf9a69pm3t10hri4gf6hf54mi70n2vk1mkn856u3263a9ort0", "name": "benchmarks/Fibonacci"},
+    {"path": "benchmarks/Filterbank", "hash": "vvc9166dcn26n42t80luevsaaqfad5279d092qihucslvesucrug", "name": "benchmarks/Filterbank"},
+    {"path": "benchmarks/Fjcreate", "hash": "c18q8mphtdo0d3ebbuub392e94amn8vj0ljsddiholvcsi87h6l0", "name": "benchmarks/Fjcreate"},
+    {"path": "benchmarks/Fjthrput", "hash": "7h6550u0uqprab3s2u319hceo1ra29519lcl1k1mh53mh52bbgh0", "name": "benchmarks/Fjthrput"},
+    {"path": "benchmarks/Logmap", "hash": "tbptf3ncmkkq1d517o1iqiia8bgdhatnl7lji9biurcbjodfh4ug", "name": "benchmarks/Logmap"},
+    {"path": "benchmarks/Nqueenk", "hash": "qduh7k0o9728o8gjluuc4hqb1qs5ut1bc6n0otqh6br0o65tvl3g", "name": "benchmarks/Nqueenk"},
+    {"path": "benchmarks/Philosophers", "hash": "tvargrj392s6p46k5g49jh0t86m8n7kjq3e3dvh5vq0j8m1k4q0g", "name": "benchmarks/Philosophers"},
+    {"path": "benchmarks/Pingpong", "hash": "jsf6cu9pa17estq4vo9m0ia1fedj5gcegr401hu96rc81q5qubk0", "name": "benchmarks/Pingpong"},
+    {"path": "benchmarks/Piprecision", "hash": "laem6ocnnadbp2qjv2cgspc0a5bq3p690idp8av65h2jliumhg90", "name": "benchmarks/Piprecision"},
+    {"path": "benchmarks/Prodcons", "hash": "bn0rcjs5abbh32fu7o2h573it6g3k6s5dbt7onrptbsfm6pr8b9g", "name": "benchmarks/Prodcons"},
+    {"path": "benchmarks/Quicksort", "hash": "71iehbj34p32oc4j1jthcfufijln01621uoe8dlmia7pnhhbutag", "name": "benchmarks/Quicksort"},
+    {"path": "benchmarks/Radixsort", "hash": "d2k7oovh6mlenkv9ehjvcvv3i6omqndb6hmhjbi3eqsgfh7fjc60", "name": "benchmarks/Radixsort"},
+    {"path": "benchmarks/Recmatmul", "hash": "kigp4nk98gajmndm8fdo5qjn6buuddvdclg6qao2t3f83rfnndkg", "name": "benchmarks/Recmatmul"},
+    {"path": "benchmarks/Sieve", "hash": "79j36pq8u08uepg1rh8md63844c2lkqoj7nj8d9fpv1tjhpogbk0", "name": "benchmarks/Sieve"},
+    {"path": "benchmarks/Sor", "hash": "0cqsgbsh6hm5m2ujv1j7e106tmi238rpoqdj1acd44nadufmed0g", "name": "benchmarks/Sor"},
+    {"path": "benchmarks/Threadring", "hash": "3t75kb6opvovvt9la508l5ogu76cff5k73klfgbacpmddjn1i78g", "name": "benchmarks/Threadring"},
+    {"path": "benchmarks/Trapezoid", "hash": "3sm5g598bo2fc3l4pmr6huuccvn1hd52vrhm5ovebdf89b1n1co0", "name": "benchmarks/Trapezoid"},
+    {"path": "benchmarks/Uct", "hash": "2q2lruu9i2lfbnh36c2i6ic9c4gnghb8idsoas7381i1psse1s00", "name": "benchmarks/Uct"}
   ]
 }

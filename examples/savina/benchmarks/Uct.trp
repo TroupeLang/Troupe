@@ -1,0 +1,78 @@
+(* Savina uct: an unbalanced tree grows to n nodes; a master hands out child
+ * indices and interleaves urgent probes. Result checks n nodes allocated and
+ * done, and every probe acked. Exports `descriptor`. *)
+
+import List
+import Option
+
+datatype 'a msg = Marker | Urgent of 'a | UrgentAck | Alloc of 'a
+                | Idx of int | Exhausted | Grow | NodeDone of 'a | Stop
+
+let fun hash i = (i * 2654435761) mod 4294967296
+    fun hasRight i = hash i mod 100 < 45
+    (* serve any Urgent messages already queued, without blocking: the
+     * self-sent marker arrives behind them in FIFO order *)
+    fun probeUrgent () =
+        let val _ = send (self (), Marker)
+            fun drain () =
+                receive [ hn (Urgent p) => (send (p, UrgentAck); drain ())
+                        , hn Marker     => () ]
+        in drain () end
+    (* request a child index; answer urgent probes while waiting. The reply is
+     * an Option: Some k for an allocated index, None when the tree is full. *)
+    fun allocIdx master =
+        (send (master, Alloc (self ()));
+         let fun await () =
+                 receive [ hn (Idx k)    => Option.some k
+                         , hn Exhausted  => Option.none
+                         , hn (Urgent p) => (send (p, UrgentAck); await ()) ]
+         in await () end)
+    fun node (i, master) =
+        receive [ hn Grow =>
+            let val _ = probeUrgent ()
+                fun spawnChild {tag = "None"}           = ()
+                  | spawnChild {tag = "Some", value = k} =
+                      send (spawn (fn () => node (k, master)), Grow)
+                val _ = spawnChild (allocIdx master)
+                val _ = probeUrgent ()
+                val _ = if hasRight i then spawnChild (allocIdx master) else ()
+                val _ = send (master, NodeDone (self ()))
+                fun idle () =
+                    receive [ hn (Urgent p) => (send (p, UrgentAck); idle ())
+                            , hn Stop        => () ]
+            in idle () end ]
+    fun bench n =
+        let val main = self ()
+            val root = spawn (fn () => node (0, main))
+            val _ = send (root, Grow)
+            fun master (next, done, known, knownLen, probes, acks) =
+                if done = next andalso acks = probes
+                then (List.map (fn p => send (p, Stop)) known;
+                      (next, done, probes, acks))
+                else receive
+                  [ hn (Alloc p) =>
+                      if next < n
+                      then let val _ = send (p, Idx next)
+                               val doProbe = next mod 97 = 0 andalso knownLen > 0
+                               val _ = if doProbe
+                                       then send (List.nth known
+                                                    (floor (random () * knownLen)),
+                                                  Urgent main)
+                                       else ()
+                           in master (next + 1, done, known, knownLen,
+                                      (if doProbe then probes + 1 else probes), acks)
+                           end
+                      else (send (p, Exhausted);
+                            master (next, done, known, knownLen, probes, acks))
+                  , hn (NodeDone p) =>
+                      master (next, done + 1, p :: known, knownLen + 1, probes, acks)
+                  , hn UrgentAck =>
+                      master (next, done, known, knownLen, probes, acks + 1) ]
+        in master (1, 0, [], 0, 0, 0) end
+    val descriptor =
+        { name  = "uct"
+        , bench = bench
+        , check = fn n => fn (allocated, done, probes, acks) =>
+            allocated = n andalso done = n andalso acks = probes
+        , sizes = [2000, 8000, 20000] }
+in [ ("descriptor", descriptor) ] end

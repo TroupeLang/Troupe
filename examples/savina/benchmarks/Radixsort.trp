@@ -1,0 +1,55 @@
+(* Savina radixsort: a chain of bit actors partitions values bit by bit; the
+ * sink checks the output is sorted and sums match. Exports `descriptor`. *)
+
+import List
+
+datatype msg = Value of int | Flush | Result of int * int * bool
+
+let val numBits = 16
+    val valueRange = 65536   (* 2^numBits *)
+    fun bitActor (divisor, next) =
+        let fun loop buffered =
+                receive
+                  [ hn (Value v) =>
+                      if ((v div divisor)) mod 2 = 0
+                      then (send (next, Value v); loop buffered)
+                      else loop (v :: buffered)
+                  , hn Flush =>
+                      (List.map (fn v => send (next, Value v))
+                                (List.reverse buffered);
+                       send (next, Flush)) ]
+        in loop [] end
+    fun sink main =
+        let fun loop (prev, count, total, sorted) =
+                receive
+                  [ hn (Value v) =>
+                      loop (v, count + 1, total + v, sorted andalso prev <= v)
+                  , hn Flush => send (main, Result (count, total, sorted)) ]
+        in loop (0 - 1, 0, 0, true) end
+    (* build the chain back to front: entry actor handles bit 0 *)
+    fun buildChain (bit, divisor, next) =
+        if bit < 0 then next
+        else buildChain (bit - 1, (divisor div 2),
+                         spawn (fn () => bitActor (divisor, next)))
+    fun bench n =
+        let val main = self ()
+            val input = List.map (fn _ => floor (random () * valueRange))
+                                 (List.range n)
+            val inputSum = List.foldl (fn (x, acc) => x + acc) 0 input
+            val sinkPid = spawn (fn () => sink main)
+            val topDivisor =
+                let fun pow (0, acc) = acc | pow (k, acc) = pow (k - 1, acc * 2)
+                in pow (numBits - 1, 1) end
+            val entry = buildChain (numBits - 1, topDivisor, sinkPid)
+            val _ = List.map (fn v => send (entry, Value v)) input
+            val _ = send (entry, Flush)
+        in receive [ hn (Result (count, total, sorted)) =>
+                       (count, total, sorted, inputSum) ]
+        end
+    val descriptor =
+        { name  = "radixsort"
+        , bench = bench
+        , check = fn n => fn (count, total, sorted, inputSum) =>
+            count = n andalso sorted andalso total = inputSum
+        , sizes = [2000, 8000, 20000] }
+in [ ("descriptor", descriptor) ] end

@@ -1,0 +1,39 @@
+(* Savina cigsmok: an arbiter picks one of 3 smokers per round for n rounds;
+ * each smoker counts its turns. Exports `descriptor`. *)
+
+import List
+
+datatype 'a msg = Smoke | Started | Exit of 'a
+                | Done of int | InitArb of 'a
+
+let val numSmokers = 3
+    fun smoker arb =
+        let fun loop c =
+                receive [ hn Smoke        => (send (arb, Started); loop (c + 1))
+                        , hn (Exit main)  => send (main, Done c) ]
+        in loop 0 end
+    fun arbiter (smokers, main, n) =
+        if n = 0
+        then (List.map (fn s => send (s, Exit main)) smokers; ())
+        else let val pick = List.nth smokers (floor (random () * numSmokers))
+                 val _ = send (pick, Smoke)
+             in receive [ hn Started => arbiter (smokers, main, n - 1) ]
+             end
+    fun bench n =
+        let val main = self ()
+            (* smokers and arbiter reference each other; wire in two phases *)
+            val smokers = List.map (fn _ => spawn (fn () =>
+                              receive [ hn (InitArb arb) => smoker arb ]))
+                            (List.range numSmokers)
+            val arb = spawn (fn () => arbiter (smokers, main, n))
+            val _ = List.map (fn s => send (s, InitArb arb)) smokers
+            fun collect (k, total) =
+                if k = 0 then total
+                else receive [ hn (Done c) => collect (k - 1, total + c) ]
+        in collect (numSmokers, 0) end
+    val descriptor =
+        { name  = "cigsmok"
+        , bench = bench
+        , check = fn n => fn t => t = n
+        , sizes = [2000, 10000, 30000] }
+in [ ("descriptor", descriptor) ] end

@@ -1,0 +1,51 @@
+(* Savina big: an all-to-all ping storm; each of w workers pings random peers
+ * 100 times, a sink tallies the total. Exports `descriptor`. *)
+
+import List
+
+datatype 'a msg = Init of 'a list * int * 'a * int
+                | Ping of 'a | Pong | Done of int | Exit | Total of int
+
+let val pingsPerWorker = 100
+    fun worker () =
+        receive [ hn (Init (peers, myIdx, sink, p)) =>
+            let val w = List.length peers
+                fun pickPeer () =
+                    let val j0 = floor (random () * (w - 1))
+                        val j  = if j0 >= myIdx then j0 + 1 else j0
+                    in List.nth peers j end
+                fun await () =
+                    receive [ hn (Ping q) => (send (q, Pong); await ())
+                            , hn Pong     => () ]
+                fun pinger (k, acc) =
+                    if k = 0 then acc
+                    else (send (pickPeer (), Ping (self ()));
+                          await ();
+                          pinger (k - 1, acc + 1))
+                val got = pinger (p, 0)
+                val _ = send (sink, Done got)
+                fun idle () =
+                    receive [ hn (Ping q) => (send (q, Pong); idle ())
+                            , hn Exit     => () ]
+            in idle () end ]
+    fun sink main workers =
+        let fun collect (k, total) =
+                if k = 0
+                then (List.map (fn p => send (p, Exit)) workers;
+                      send (main, Total total))
+                else receive [ hn (Done c) => collect (k - 1, total + c) ]
+        in collect (List.length workers, 0) end
+    fun bench w =
+        let val main = self ()
+            val workers = List.map (fn _ => spawn worker) (List.range w)
+            val snk = spawn (fn () => sink main workers)
+            val _ = List.mapi
+                      (fn (i, p) => send (p, Init (workers, i, snk, pingsPerWorker)))
+                      workers
+        in receive [ hn (Total t) => t ] end
+    val descriptor =
+        { name  = "big"
+        , bench = bench
+        , check = fn w => fn t => t = w * pingsPerWorker
+        , sizes = [10, 20, 40] }
+in [ ("descriptor", descriptor) ] end

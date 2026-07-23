@@ -1,0 +1,46 @@
+(* Savina nqueenk: n workers each count the n-queens solutions rooted at a
+ * distinct first-row column; the total is the solution count. Exports
+ * `descriptor`. *)
+
+import List
+
+datatype msg = Count of int
+
+let (* number of n-queens solutions, for the sizes this benchmark supports *)
+    val solutionCounts = [ (6, 4), (7, 40), (8, 92), (9, 352), (10, 724) ]
+    (* queens holds the columns of already-placed rows, nearest row first *)
+    fun safe (queens, col) =
+        let fun go ([], dist)      = true
+              | go (q :: qs, dist) =
+                  q <> col andalso q <> col + dist andalso q <> col - dist
+                  andalso go (qs, dist + 1)
+        in go (queens, 1) end
+    fun countFrom (queens, depth, n) =
+        if depth = n then 1
+        else let fun tryCol (c, acc) =
+                     if c = n then acc
+                     else tryCol (c + 1,
+                                  acc + (if safe (queens, c)
+                                         then countFrom (c :: queens, depth + 1, n)
+                                         else 0))
+             in tryCol (0, 0) end
+    fun worker (main, firstCol, n) =
+        send (main, Count (countFrom ([firstCol], 1, n)))
+    fun bench n =
+        let val main = self ()
+            val _ = List.map (fn c => spawn (fn () => worker (main, c, n)))
+                             (List.range n)
+            fun collect (k, total) =
+                if k = 0 then total
+                else receive [ hn (Count c) => collect (k - 1, total + c) ]
+        in collect (n, 0) end
+    fun check n found =
+        case List.filter (fn (m, _) => m = n) solutionCounts of
+          [(_, expected)] => found = expected
+        | _               => false
+    val descriptor =
+        { name  = "nqueenk"
+        , bench = bench
+        , check = check
+        , sizes = [8, 9, 10] }
+in [ ("descriptor", descriptor) ] end

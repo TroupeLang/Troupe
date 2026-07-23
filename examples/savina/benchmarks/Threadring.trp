@@ -1,0 +1,41 @@
+(* Savina threadring: a token hops around a 100-actor ring n times; the holder
+ * at hop 0 reports its index. Exports `descriptor`. *)
+
+import List
+
+datatype 'a msg = Wire of 'a * int | Token of int | Stop of int | Done of int
+
+let val ringSize = 100
+    fun ringActor main =
+        receive [ hn (Wire (next, idx)) =>
+            let fun loop () =
+                    receive [ hn (Token 0) =>
+                                (send (main, Done idx);
+                                 send (next, Stop (ringSize - 1)))
+                            , hn (Token k) =>
+                                (send (next, Token (k - 1)); loop ())
+                            , hn (Stop k) =>
+                                if k > 1 then send (next, Stop (k - 1)) else () ]
+            in loop () end ]
+    fun bench n =
+        let val main = self ()
+            val pids = List.map (fn _ => spawn (fn () => ringActor main))
+                                (List.range ringSize)
+            fun wire (i, rest) =
+                case rest of
+                  []        => ()
+                | p :: ps   =>
+                    let val next = if i = ringSize - 1
+                                   then List.nth pids 0
+                                   else List.nth pids (i + 1)
+                        val _ = send (p, Wire (next, i))
+                    in wire (i + 1, ps) end
+            val _ = wire (0, pids)
+            val _ = send (List.nth pids 0, Token n)
+        in receive [ hn (Done idx) => idx ] end
+    val descriptor =
+        { name  = "threadring"
+        , bench = bench
+        , check = fn n => fn r => r = n mod ringSize
+        , sizes = [10000, 50000, 100000] }
+in [ ("descriptor", descriptor) ] end

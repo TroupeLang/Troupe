@@ -1,0 +1,21 @@
+(* Savina counting: a counter folds one INC per message; GET returns the count.
+ * Exports `descriptor`. *)
+
+datatype 'a msg = Inc | Get of 'a | Result of int
+
+let fun counter c =
+        receive [ hn Inc     => counter (c + 1)
+                , hn (Get p) => send (p, Result c) ]
+    fun bench n =
+        let val cnt = spawn (fn () => counter 0)
+            fun produce k =
+                if k = 0 then () else (send (cnt, Inc); produce (k - 1))
+            val _ = produce n
+            val _ = send (cnt, Get (self ()))
+        in receive [ hn (Result c) => c ] end
+    val descriptor =
+        { name  = "counting"
+        , bench = bench
+        , check = fn n => fn r => r = n
+        , sizes = [10000, 50000, 100000] }
+in [ ("descriptor", descriptor) ] end

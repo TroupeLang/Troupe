@@ -1,0 +1,43 @@
+(* Savina quicksort: recursive parallel quicksort; each actor partitions and
+ * spawns two children below a cutoff. Exports `descriptor`. *)
+
+import List
+
+datatype 'a msg = Sort of int list * int * 'a | Sorted of int * int list
+
+let val cutoff = 32
+    fun lt a b = a < b
+    fun sorter () =
+        receive [ hn (Sort (xs, tag, parent)) =>
+            if List.length xs <= cutoff
+            then send (parent, Sorted (tag, List.sort lt xs))
+            else case xs of
+                   pivot :: rest =>
+                     let val me = self ()
+                         val smaller = List.filter (fn x => x < pivot) rest
+                         val bigger  = List.filter (fn x => not (x < pivot)) rest
+                         val _ = send (spawn sorter, Sort (smaller, 0, me))
+                         val _ = send (spawn sorter, Sort (bigger, 1, me))
+                     in receive [ hn (Sorted (0, a)) =>
+                          receive [ hn (Sorted (1, b)) =>
+                            send (parent, Sorted (tag, List.append a (pivot :: b))) ] ]
+                     end ]
+    fun bench n =
+        let val input = List.map (fn _ => floor (random () * 1000000))
+                                 (List.range n)
+            val inputSum = List.foldl (fn (x, acc) => x + acc) 0 input
+            val _ = send (spawn sorter, Sort (input, 0, self ()))
+            val result = receive [ hn (Sorted (0, xs)) => xs ]
+        in (result, inputSum) end
+    fun isSorted []             = true
+      | isSorted (x :: [])      = true
+      | isSorted (x :: y :: xs) = (x <= y) andalso isSorted (y :: xs)
+    val descriptor =
+        { name  = "quicksort"
+        , bench = bench
+        , check = fn n => fn (result, inputSum) =>
+            isSorted result
+            andalso List.length result = n
+            andalso List.foldl (fn (x, acc) => x + acc) 0 result = inputSum
+        , sizes = [2000, 8000, 20000] }
+in [ ("descriptor", descriptor) ] end

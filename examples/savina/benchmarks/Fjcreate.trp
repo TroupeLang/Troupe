@@ -1,0 +1,24 @@
+(* Savina fjcreate: spawn n short-lived actors, each replying once; sum the
+ * replies. Exports `descriptor`. *)
+
+datatype 'a msg = Compute of int | Done of int
+
+let fun shortLived main =
+        receive [ hn (Compute x) => send (main, Done x) ]
+    fun bench n =
+        let val main = self ()
+            fun spawnAll i =
+                if i = n then ()
+                else (send (spawn (fn () => shortLived main), Compute 1);
+                      spawnAll (i + 1))
+            val _ = spawnAll 0
+            fun collect (k, acc) =
+                if k = 0 then acc
+                else receive [ hn (Done x) => collect (k - 1, acc + x) ]
+        in collect (n, 0) end
+    val descriptor =
+        { name  = "fjcreate"
+        , bench = bench
+        , check = fn n => fn r => r = n
+        , sizes = [20000, 50000, 100000] }
+in [ ("descriptor", descriptor) ] end

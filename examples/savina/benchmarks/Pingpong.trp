@@ -1,0 +1,21 @@
+(* Savina pingpong: a pinger bounces n messages off a ponger and counts the
+ * replies. Exports `descriptor`. *)
+
+datatype 'a msg = Ping of 'a | Pong | Stop
+
+let fun ponger () =
+        receive [ hn (Ping p) => (send (p, Pong); ponger ())
+                , hn Stop     => () ]
+    fun bench n =
+        let val pong = spawn ponger
+            fun loop (0, acc) = (send (pong, Stop); acc)
+              | loop (k, acc) =
+                  (send (pong, Ping (self ()));
+                   receive [ hn Pong => loop (k - 1, acc + 1) ])
+        in loop (n, 0) end
+    val descriptor =
+        { name  = "pingpong"
+        , bench = bench
+        , check = fn n => fn r => r = n
+        , sizes = [1000, 5000, 20000] }
+in [ ("descriptor", descriptor) ] end

@@ -1,0 +1,57 @@
+(* Savina concdict: 10 workers hammer a shared dictionary server with reads and
+ * writes; result checks each worker read back its own write and counts ops.
+ * Exports `descriptor`. *)
+
+import List
+import Map
+
+datatype 'a msg = Write of int * int * 'a | Wrote | Read of int * 'a
+                | Value of int | GetCount of 'a | Count of int | WorkerDone of int
+
+let val numWorkers = 10
+    val keyRange = 100
+    fun server dict =
+        let fun loop (d, ops) =
+                receive
+                  [ hn (Write (k, v, p)) =>
+                      (send (p, Wrote); loop (Map.insert d k v, ops + 1))
+                  , hn (Read (k, p)) =>
+                      (send (p, Value (Map.findOrDefault d k 0)); loop (d, ops + 1))
+                  , hn (GetCount p) => send (p, Count ops) ]
+        in loop (dict, 0) end
+    fun worker (srv, main, i, n) =
+        let val me = self ()
+            val myKey = keyRange + i   (* private key, outside the shared range *)
+            fun doOp j =
+                if j = n then ()
+                else if j mod 10 = 0
+                then (send (srv, Write (myKey, j, me));
+                      receive [ hn Wrote => doOp (j + 1) ])
+                else (send (srv, Read (floor (random () * keyRange), me));
+                      receive [ hn (Value _) => doOp (j + 1) ])
+            val _ = doOp 0
+            val _ = send (srv, Write (myKey, 4242 + i, me))
+            val _ = receive [ hn Wrote => () ]
+            val _ = send (srv, Read (myKey, me))
+            val readBack = receive [ hn (Value v) => v ]
+        in send (main, WorkerDone (if readBack = 4242 + i then 1 else 0))
+        end
+    fun bench n =
+        let val main = self ()
+            val srv = spawn (fn () => server (Map.empty (fn a => fn b => a < b)))
+            val _ = List.map
+                      (fn i => spawn (fn () => worker (srv, main, i, n)))
+                      (List.range numWorkers)
+            fun collect (k, okCount) =
+                if k = 0
+                then let val _ = send (srv, GetCount main)
+                     in receive [ hn (Count c) => (okCount, c) ] end
+                else receive [ hn (WorkerDone w) => collect (k - 1, okCount + w) ]
+        in collect (numWorkers, 0) end
+    val descriptor =
+        { name  = "concdict"
+        , bench = bench
+        , check = fn n => fn (okCount, ops) =>
+            okCount = numWorkers andalso ops = numWorkers * n + 2 * numWorkers
+        , sizes = [1000, 4000, 10000] }
+in [ ("descriptor", descriptor) ] end

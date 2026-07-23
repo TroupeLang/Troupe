@@ -1,0 +1,54 @@
+(* Savina banking: 20 accounts perform n random transfers via a two-message
+ * transfer/credit protocol; result checks money is conserved and all transfers
+ * completed. Exports `descriptor`. *)
+
+import List
+
+datatype 'a msg = Transfer of int * 'a * 'a | Credit of int * 'a
+                | Confirm | GetBalance of 'a | Balance of int | Stop
+
+let val numAccounts = 20
+    val initialBalance = 10000
+    fun account balance =
+        receive
+          [ hn (Transfer (amount, dst, teller)) =>
+              (send (dst, Credit (amount, teller));
+               account (balance - amount))
+          , hn (Credit (amount, teller)) =>
+              (send (teller, Confirm);
+               account (balance + amount))
+          , hn (GetBalance p) =>
+              (send (p, Balance balance); account balance)
+          , hn Stop => () ]
+    fun bench n =
+        let val main = self ()
+            val accounts = List.map (fn _ => spawn (fn () => account initialBalance))
+                                    (List.range numAccounts)
+            fun pick () = floor (random () * numAccounts)
+            fun transfers (k, done) =
+                if k = 0 then done
+                else let val src = pick ()
+                         val dstRaw = pick ()
+                         val dst = if dstRaw = src
+                                   then (dstRaw + 1) mod numAccounts
+                                   else dstRaw
+                         val amount = floor (random () * 100)
+                         val _ = send (List.nth accounts src,
+                                       Transfer (amount, List.nth accounts dst, main))
+                     in receive [ hn Confirm => transfers (k - 1, done + 1) ]
+                     end
+            val completed = transfers (n, 0)
+            fun sumBalances ([], acc)      = acc
+              | sumBalances (a :: rest, acc) =
+                  (send (a, GetBalance main);
+                   receive [ hn (Balance b) =>
+                               (send (a, Stop); sumBalances (rest, acc + b)) ])
+            val total = sumBalances (accounts, 0)
+        in (total, completed) end
+    val descriptor =
+        { name  = "banking"
+        , bench = bench
+        , check = fn n => fn (total, completed) =>
+            total = numAccounts * initialBalance andalso completed = n
+        , sizes = [2000, 8000, 20000] }
+in [ ("descriptor", descriptor) ] end

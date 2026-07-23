@@ -1,8 +1,0 @@
-2026-07-22T11:51:42.452Z [RTM] [32minfo[39m: Skipping network creation. Observe that all external IO operations will yield a runtime error.
-Runtime error in thread 10f75646-a1dd-4d9a-b5e0-673de2c4c20a@{}%{}
-
-  8 |     val _ = save (authority, "guarded", wrap)
-    |             ^
-
->> Cannot serialize a closure that depends on module 'module:modsrc/ModuleGuardHelper'; only closures whose dependencies are standard libraries can be serialized
->> at tests/rt/neg/modules/module-import-serialize-guard.trp:8:13

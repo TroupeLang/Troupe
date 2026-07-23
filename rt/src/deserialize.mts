@@ -204,6 +204,7 @@ function constructCurrentUnchecked(compilerOutput: string) {
     __isCurrentlyUsingCompiler = false;
     let serobj = __currentDeserializedJson;
     let desercb = __currentCallback;
+    let deserErrback = __currentErrback;
 
     // 1. reconstruct the namespaces
     let snippets = compilerOutput.split("\n\n");
@@ -514,7 +515,14 @@ function constructCurrentUnchecked(compilerOutput: string) {
 
     function loadLib(i: number, cb) {
         if (i < ctxt.namespaces.length) {
-            __rtObj.linkLibs(ctxt.namespaces[i]).then(() => loadLib(i + 1, cb))
+            // Relinking a received closure's libraries can fail cleanly — most
+            // notably when it names a module the receiver does not have (not
+            // locally discoverable). Route that to the deserialization errback
+            // so it surfaces as a DeserializationError rather than an unhandled
+            // rejection that crashes the node.
+            __rtObj.linkLibs(ctxt.namespaces[i])
+                   .then(() => loadLib(i + 1, cb))
+                   .catch((e) => deserErrback(asDeserializationError(e)))
         } else {
             cb();
         }

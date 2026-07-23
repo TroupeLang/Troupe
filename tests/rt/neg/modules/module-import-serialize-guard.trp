@@ -1,9 +1,0 @@
-(* Serializing a closure that references a module export is a runtime
- * error naming the module key. (A self-contained function merely defined
- * in a module has no module dependencies and serializes fine; the guard
- * is about closures whose serialized graph references a module.) *)
-import "./modsrc/ModuleGuardHelper"
-
-let fun wrap s = ModuleGuardHelper.stamp s
-    val _ = save (authority, "guarded", wrap)
-in () end

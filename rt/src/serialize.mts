@@ -16,7 +16,6 @@ import { LVal } from './Lval.mjs';
 import { Level } from './Level.mjs';
 import { StopThreadError, ThreadError, ErrorKind } from './TroupeError.mjs';
 import { getRuntimeObject } from './SysState.mjs';
-import { moduleDisplayName } from './moduleResolver.mjs';
 
 import { getCliArgs, TroupeCliArg } from './TroupeCliArgs.mjs';
 const argv = getCliArgs();
@@ -41,32 +40,6 @@ export class UnserializableObjectError extends StopThreadError {
     constructor (obj:LVal) {
         super (getRuntimeObject().$t) ;
         this.obj = obj
-    }
-}
-
-/**
- * Error thrown when attempting to serialize a closure that depends on a
- * program-local module (a "module:" entry in its libdeps). The receiver-side
- * re-linking contract resolves library dependencies against the local
- * standard library; it has no meaning for program-local modules.
- */
-export class ModuleDependentClosureError extends StopThreadError {
-    moduleKey: string;
-    explainstr: string = null;
-    errorKind: ErrorKind = ErrorKind.DynTypeError;
-
-    get errorMessage() {
-        // Render the module's user-visible name (module:<name>), resolved from
-        // the dependencies-file seed, so the message stays human-readable under
-        // content-addressed identity. This is diagnostic rendering only; the
-        // rejection policy (checkModuleDeps) is unchanged.
-        return `Cannot serialize a closure that depends on module '${moduleDisplayName(this.moduleKey)}'; ` +
-               `only closures whose dependencies are standard libraries can be serialized`;
-    }
-
-    constructor(moduleKey: string) {
-        super(getRuntimeObject().$t);
-        this.moduleKey = moduleKey;
     }
 }
 
@@ -251,20 +224,14 @@ export function serialize(w:LVal, pclev:Level, targetNodeId?: string) {
 
                             namespace.set(ff, x.fun.serialized)
 
-                            function checkModuleDeps(fn) {
-                                for (const l of (fn.libdeps ?? [])) {
-                                    if (typeof l === 'string' && l.startsWith("module:")) {
-                                        throw new ModuleDependentClosureError(l);
-                                    }
-                                }
-                            }
-
-                            checkModuleDeps(x.fun);
-
+                            // A closure's module dependencies serialize as their
+                            // "module:<hash>" libdeps (the module code does not
+                            // travel); the receiver links its own module of that
+                            // hash, or cleanly rejects if it has none. So there is
+                            // no send-side restriction on module-bearing closures.
                             function dfs(deps) {
                                 for (let depName of deps) {
                                     if (!namespace.has(depName)) {
-                                        checkModuleDeps(x.namespace[depName]);
                                         namespace.set(depName, x.namespace[depName].serialized);
                                         dfs(x.namespace[depName].deps);
                                     }

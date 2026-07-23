@@ -17,6 +17,11 @@ type ResolverEntry = { path: string, name: string }
 const resolverMap: Record<string, ResolverEntry> = Object.create(null)
 const seededFiles: Set<string> = new Set()
 
+// The running program's module root: the directory holding its dependencies
+// file. A received module-bearing closure has no root of its own, so it resolves
+// its module references against this one.
+let resolverRoot: string | null = null
+
 // Seed the resolver from a dependencies file. Idempotent per file; entries from
 // several files merge into one map.
 export function seedModuleResolver(depsFile: string): void {
@@ -27,20 +32,23 @@ export function seedModuleResolver(depsFile: string): void {
     for (const e of (doc.deps ?? [])) {
         resolverMap[e.hash] = { path: e.path, name: e.name }
     }
+    if (resolverRoot === null) resolverRoot = path.dirname(depsFile)
 }
 
-// Resolve a "module:<hash>" identity to its compiled artifact, under the given
-// project root: <root>/<dir(path)>/out/<base(path)>.js, with the path taken
-// from the seeded map (the hash cannot reconstruct a path on its own).
-export function resolveModuleFile(root: string, libname: string): string {
+// Resolve a "module:<hash>" identity to its compiled artifact —
+// <root>/<dir(path)>/out/<base(path)>.js, the path taken from the seeded map
+// (the hash cannot reconstruct a path on its own) — or `null` when the hash is
+// not locally discoverable: this program has no dependencies file, or none of
+// its dependencies has this hash. `root` is the caller's own module root when it
+// has one (the main program); a received closure passes null and falls back to
+// the program root recorded at seed time.
+export function resolveModuleFile(root: string | null, libname: string): string | null {
+    const useRoot = root ?? resolverRoot
+    if (useRoot == null) return null
     const hash = libname.slice("module:".length)
     const entry = resolverMap[hash]
-    if (!entry) {
-        throw new Error(
-            `cannot resolve module ${moduleDisplayName(libname)}: no entry for hash `
-            + `${hash} in the dependencies file`)
-    }
-    return path.join(root, path.dirname(entry.path), "out", path.basename(entry.path) + ".js")
+    if (!entry) return null
+    return path.join(useRoot, path.dirname(entry.path), "out", path.basename(entry.path) + ".js")
 }
 
 // Render a "module:<hash>" identity as "module:<name>" for diagnostics, using

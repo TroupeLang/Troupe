@@ -31,16 +31,25 @@ function loadLib(libname: string, rtObj, root): Promise<LoadedLib> {
     }
     const p = (async (): Promise<LoadedLib> => {
         // Find the file. Libraries load from the standard location; a "module:"
-        // identity names a compiled module of the running program, addressed by
-        // its content hash and resolved to <root>/<dir>/out/<Base>.js through
-        // the dependencies-file seed (its path cannot be reconstructed from the
-        // hash alone).
+        // identity names a compiled module addressed by its content hash and
+        // resolved to <root>/<dir>/out/<Base>.js through the dependencies-file
+        // seed (its path cannot be reconstructed from the hash alone). This path
+        // serves both the running program's own modules and the modules a
+        // received closure references: the resolver answers against the
+        // receiver's dependencies, so a closure links only modules the receiver
+        // already has, matched by hash.
         let filename
         if (libname.startsWith("module:")) {
-            if (root == null) {
-                throw new Error(`cannot link module '${moduleDisplayName(libname)}': no module root is recorded for this program`)
-            }
             filename = resolveModuleFile(root, libname)
+            if (filename == null) {
+                // Not locally discoverable — this program records no
+                // dependencies, or none of them has this hash. A received
+                // module-bearing closure naming a module the receiver does not
+                // have is cleanly rejected here (all-or-nothing: it never links).
+                throw new Error(
+                    `cannot link module ${moduleDisplayName(libname)}: it is not `
+                    + `among this program's dependencies`)
+            }
         } else {
             filename = getTroupeRoot() + "/lib/out/" + libname + ".js"
         }

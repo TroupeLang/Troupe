@@ -1,0 +1,17 @@
+(* A closure that references a module export can be serialized: the module code
+ * does not travel — the closure carries a "module:<hash>" dependency, and the
+ * receiver relinks the module by content hash from its own dependencies. Here
+ * the same program saves such a closure, restores it, and calls it; the module
+ * function (ModuleGuardHelper.stamp) runs on the restored closure.
+ *
+ * (The complementary rejection — a receiver that does NOT have the referenced
+ * module cleanly fails the restore with "cannot link module ...: it is not
+ * among this program's dependencies" — is inherently a two-program scenario, so
+ * it is verified by hand rather than in this single-program test.)
+ *)
+import "./modsrc/ModuleGuardHelper"
+
+let fun wrap s = ModuleGuardHelper.stamp s
+    val _ = save (authority, "modclosure", wrap)
+    val f = restore "modclosure"
+in fwrite (stdout authority, f "hi" ^ "\n") end

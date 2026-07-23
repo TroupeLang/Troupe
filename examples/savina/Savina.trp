@@ -11,35 +11,106 @@ import BigInt
 import List
 import ListPair
 import Map
+import Option
 import Vector
 
-datatype Atoms = ADD | ADDED | ALLOC | BALANCE | BARBERDONE | BRANCHDONE | BSORT
-              | BSORTED | CAND | CHAINDONE | CHANGE | COMPUTE | CONFIRM | COUNT
-              | CREDIT | CUT | DATA | DENIED | DONE | DONEEAT | DOWN | EAT | ENTER
-              | EXHAUSTED | EXIT | EXPAND | EXPANDED | FACREPORT | FINAL | FINISHED
-              | FLUSH | FULL | GET | GETBALANCE | GETCOUNT | GETRESULT | GROW
-              | HAS | HASREPLY | HUNGRY | IDX | INC | INIT | INITARB | INITBARBER
-              | ITEM | LEFT | MARKER | MEET | MERGE | MERGED | MSG | MULT | NEXT
-              | NEXTTERM | NODEDONE | OUT | PART | PARTIAL | PING | POINT | PONG
-              | PRIME | READ | REPORT | RESULT | RIGHT | ROUND | ROWS | SAMPLE
-              | SERVED | SHUTDOWN | SMOKE | SNAP | SNAPSHOT | SORT | SORTED | STARTED
-              | STOP | STOPCHAIN | SUM | TASK | TERM | TOKEN | TOTAL | TRANSFER
-              | UP | URGENT | URGENTACK | VAL | VALUE | WIRE | WORK | WORKERDONE
-              | WRITE | WROTE
+(* fibonacci's message protocol as a syntactic-variant datatype (cf.
+ * examples/variants/actors.trp): `fibCompute` carries the argument and the
+ * reply-address pid, `fibResult` the computed value. Troupe has no `pid` type,
+ * so the datatype is parameterized over the reply-address type. A variant is
+ * indistinguishable from its desugared tuple, so this is exactly the tagged
+ * tuples the atom idiom builds by hand — same representation, typed surface.
+ * (Constructor names are benchmark-qualified because they share the module's
+ * flat namespace with the atom tags and with ordinary bindings like `result`.) *)
+datatype 'a fibMsg = fibCompute of int * 'a
+                   | fibResult of int
+
+(* Each benchmark's message protocol is its own syntactic-variant datatype
+ * (cf. examples/variants/actors.trp). A variant is indistinguishable from its
+ * desugared tuple, so a message is exactly a tagged tuple on the wire — the
+ * typing is free. Constructors are prefixed per benchmark because they share
+ * the module's one flat namespace, both with each other and with ordinary
+ * bindings (a bare `result`/`data`/`item` constructor would shadow same-named
+ * `val`s). A datatype that carries a reply-address pid is parameterized over it
+ * (Troupe has no `pid` type). Where a reply is genuinely optional — uct's child
+ * index — the standard-library Option is used instead of a bespoke variant. *)
+datatype 'a ppMsg  = ppPing of 'a | ppPong | ppStop
+datatype 'a cntMsg = cntInc | cntGet of 'a | cntResult of int
+datatype 'a trMsg  = trWire of 'a * int | trToken of int
+                   | trStop of int | trDone of int
+datatype 'a bigMsg = bigInit of 'a list * int * 'a * int
+                   | bigPing of 'a | bigPong | bigDone of int
+                   | bigExit | bigTotal of int
+datatype 'a phMsg  = phHungry of 'a * int | phEat | phDenied
+                   | phDoneEat of int | phFinished | phReport of int * int
+datatype 'a pcMsg  = pcItem of int * 'a | pcData of int | pcCredit
+                   | pcGet of 'a | pcShutdown | pcSum of int
+datatype 'a trapMsg = trapWork of float * float * int * 'a
+                    | trapPartial of float
+datatype ftMsg     = ftPing | ftDone of int
+datatype fcMsg     = fcCompute of int | fcDone of int
+datatype 'a chamMsg = chamMeet of int * 'a | chamChange of int
+                    | chamExit | chamDone of int
+datatype 'a cigMsg = cigSmoke | cigStarted | cigExit of 'a
+                   | cigDone of int | cigInitArb of 'a
+datatype 'a barbMsg = barbEnter of 'a | barbFull | barbCut | barbServed
+                    | barbNext of 'a | barbDone | barbStop | barbInit of 'a
+datatype 'a cdMsg  = cdWrite of int * int * 'a | cdWrote
+                   | cdRead of int * 'a | cdVal of int
+                   | cdGetCount of 'a | cdCount of int | cdWorkerDone of int
+datatype 'a csMsg  = csAdd of int * 'a | csAdded | csHas of int * 'a
+                   | csHasReply of bool | csSnapshot of 'a
+                   | csSnap of int list * int | csWorkerDone
+datatype sieveMsg  = sieveCand of int | sievePrime | sieveStopChain
+                   | sieveChainDone
+datatype 'a qsMsg  = qsSort of int list * int * 'a
+                   | qsSorted of int * int list
+datatype radixMsg  = radixValue of int | radixFlush
+                   | radixResult of int * int * bool
+datatype fbMsg     = fbSample of float | fbOut of float | fbFlush
+                   | fbBranchDone | fbResult of float
+datatype 'a bitMsg = bitMerge of int list * bool * int * 'a
+                   | bitMerged of int * int list
+                   | bitBsort of int list * bool * int * 'a
+                   | bitBsorted of int * int list
+datatype flMsg     = flPoint of float * float | flStopChain
+                   | flReport of float * float * int | flChainDone
+datatype nqMsg     = nqCount of int
+datatype 'a lmMsg  = lmNext of float * 'a | lmTerm of float
+                   | lmStop | lmDone of int * float
+datatype 'a bankMsg = bankTransfer of int * 'a * 'a | bankCredit of int * 'a
+                    | bankConfirm | bankGetBalance of 'a
+                    | bankBalance of int | bankStop
+datatype 'a astarMsg = astarExpand of int * int * 'a
+                     | astarExpanded of int * (int * int) list * 'a
+datatype 'a uctMsg = uctMarker | uctUrgent of 'a | uctUrgentAck
+                   | uctAlloc of 'a | uctIdx of int | uctExhausted
+                   | uctGrow | uctNodeDone of 'a | uctStop
+datatype 'a mmMsg  = mmMult of int * int * int * 'a
+                   | mmResult of int * int list list
+(* opaque payloads (the distance matrix, bigints) are structural-only, so they
+ * ride the datatype's type variable alongside the reply pids. *)
+datatype 'a apspMsg = apspRound of int * int * int * 'a * int * 'a
+                    | apspRows of int * int list list | apspStop
+datatype dir       = dUp | dDown | dLeft | dRight
+datatype 'a sorMsg = sorWire of int * float * 'a list * 'a list * 'a list * 'a list
+                   | sorVal of dir * float | sorFinal of int * float
+datatype 'a piMsg  = piTask of 'a * int * int * 'a * 'a
+                   | piPart of 'a | piStop
 
 let
     (*==================== pingpong ====================*)
     val pingpong =
         let fun ponger () =
-        receive [ hn (PING, p) => (send (p, PONG); ponger ())
-                , hn STOP      => () ]
+        receive [ hn (ppPing p) => (send (p, ppPong); ponger ())
+                , hn ppStop     => () ]
 
     fun bench n =
         let val pong = spawn ponger
-            fun loop (0, acc) = (send (pong, STOP); acc)
+            fun loop (0, acc) = (send (pong, ppStop); acc)
               | loop (k, acc) =
-                  (send (pong, (PING, self ()));
-                   receive [ hn PONG => loop (k - 1, acc + 1) ])
+                  (send (pong, ppPing (self ()));
+                   receive [ hn ppPong => loop (k - 1, acc + 1) ])
         in loop (n, 0)
         end
         in { name = "pingpong"
@@ -51,16 +122,16 @@ let
     (*==================== counting ====================*)
     val counting =
         let fun counter c =
-        receive [ hn INC      => counter (c + 1)
-                , hn (GET, p) => send (p, (RESULT, c)) ]
+        receive [ hn cntInc     => counter (c + 1)
+                , hn (cntGet p) => send (p, cntResult c) ]
 
     fun bench n =
         let val cnt = spawn (fn () => counter 0)
             fun produce k =
-                if k = 0 then () else (send (cnt, INC); produce (k - 1))
+                if k = 0 then () else (send (cnt, cntInc); produce (k - 1))
             val _ = produce n
-            val _ = send (cnt, (GET, self ()))
-        in receive [ hn (RESULT, c) => c ]
+            val _ = send (cnt, cntGet (self ()))
+        in receive [ hn (cntResult c) => c ]
         end
         in { name = "counting"
            , bench = bench
@@ -73,15 +144,15 @@ let
         let val ringSize = 100
 
     fun ringActor main =
-        receive [ hn (WIRE, next, idx) =>
+        receive [ hn (trWire (next, idx)) =>
             let fun loop () =
-                    receive [ hn (TOKEN, 0) =>
-                                (send (main, (DONE, idx));
-                                 send (next, (STOP, ringSize - 1)))
-                            , hn (TOKEN, k) =>
-                                (send (next, (TOKEN, k - 1)); loop ())
-                            , hn (STOP, k) =>
-                                if k > 1 then send (next, (STOP, k - 1)) else () ]
+                    receive [ hn (trToken 0) =>
+                                (send (main, trDone idx);
+                                 send (next, trStop (ringSize - 1)))
+                            , hn (trToken k) =>
+                                (send (next, trToken (k - 1)); loop ())
+                            , hn (trStop k) =>
+                                if k > 1 then send (next, trStop (k - 1)) else () ]
             in loop () end ]
 
     fun bench n =
@@ -95,11 +166,11 @@ let
                     let val next = if i = ringSize - 1
                                    then List.nth pids 0
                                    else List.nth pids (i + 1)
-                        val _ = send (p, (WIRE, next, i))
+                        val _ = send (p, trWire (next, i))
                     in wire (i + 1, ps) end
             val _ = wire (0, pids)
-            val _ = send (List.nth pids 0, (TOKEN, n))
-        in receive [ hn (DONE, idx) => idx ]
+            val _ = send (List.nth pids 0, trToken n)
+        in receive [ hn (trDone idx) => idx ]
         end
         in { name = "threadring"
            , bench = bench
@@ -110,19 +181,19 @@ let
     (*==================== fibonacci ====================*)
     val fibonacci =
         let fun fibActor () =
-        receive [ hn (COMPUTE, n, parent) =>
-            if n <= 2 then send (parent, (RESULT, 1))
+        receive [ hn (fibCompute (n, parent)) =>
+            if n <= 2 then send (parent, fibResult 1)
             else let val me = self ()
-                     val _ = send (spawn fibActor, (COMPUTE, n - 1, me))
-                     val _ = send (spawn fibActor, (COMPUTE, n - 2, me))
-                 in receive [ hn (RESULT, a) =>
-                      receive [ hn (RESULT, b) =>
-                        send (parent, (RESULT, a + b)) ] ]
+                     val _ = send (spawn fibActor, fibCompute (n - 1, me))
+                     val _ = send (spawn fibActor, fibCompute (n - 2, me))
+                 in receive [ hn (fibResult a) =>
+                      receive [ hn (fibResult b) =>
+                        send (parent, fibResult (a + b)) ] ]
                  end ]
 
     fun bench n =
-        let val _ = send (spawn fibActor, (COMPUTE, n, self ()))
-        in receive [ hn (RESULT, v) => v ]
+        let val _ = send (spawn fibActor, fibCompute (n, self ()))
+        in receive [ hn (fibResult v) => v ]
         end
 
     fun fibRef n =
@@ -140,33 +211,33 @@ let
         let val pingsPerWorker = 100
 
     fun worker () =
-        receive [ hn (INIT, peers, myIdx, sink, p) =>
+        receive [ hn (bigInit (peers, myIdx, sink, p)) =>
             let val w = List.length peers
                 fun pickPeer () =
                     let val j0 = floor (random () * (w - 1))
                         val j  = if j0 >= myIdx then j0 + 1 else j0
                     in List.nth peers j end
                 fun await () =
-                    receive [ hn (PING, q) => (send (q, PONG); await ())
-                            , hn PONG      => () ]
+                    receive [ hn (bigPing q) => (send (q, bigPong); await ())
+                            , hn bigPong     => () ]
                 fun pinger (k, acc) =
                     if k = 0 then acc
-                    else (send (pickPeer (), (PING, self ()));
+                    else (send (pickPeer (), bigPing (self ()));
                           await ();
                           pinger (k - 1, acc + 1))
                 val got = pinger (p, 0)
-                val _ = send (sink, (DONE, got))
+                val _ = send (sink, bigDone got)
                 fun idle () =
-                    receive [ hn (PING, q) => (send (q, PONG); idle ())
-                            , hn EXIT      => () ]
+                    receive [ hn (bigPing q) => (send (q, bigPong); idle ())
+                            , hn bigExit     => () ]
             in idle () end ]
 
     fun sink main workers =
         let fun collect (k, total) =
                 if k = 0
-                then (List.map (fn p => send (p, EXIT)) workers;
-                      send (main, (TOTAL, total)))
-                else receive [ hn (DONE, c) => collect (k - 1, total + c) ]
+                then (List.map (fn p => send (p, bigExit)) workers;
+                      send (main, bigTotal total))
+                else receive [ hn (bigDone c) => collect (k - 1, total + c) ]
         in collect (List.length workers, 0) end
 
     fun bench w =
@@ -174,9 +245,9 @@ let
             val workers = List.map (fn _ => spawn worker) (List.range w)
             val snk = spawn (fn () => sink main workers)
             val _ = List.mapi
-                      (fn (i, p) => send (p, (INIT, workers, i, snk, pingsPerWorker)))
+                      (fn (i, p) => send (p, bigInit (workers, i, snk, pingsPerWorker)))
                       workers
-        in receive [ hn (TOTAL, t) => t ]
+        in receive [ hn (bigTotal t) => t ]
         end
         in { name = "big"
            , bench = bench
@@ -193,31 +264,31 @@ let
     fun arbitrator (forks, finished) =
         if finished = numPhil then ()
         else receive
-          [ hn (HUNGRY, p, i) =>
+          [ hn (phHungry (p, i)) =>
               let val l = i
                   val r = (i + 1) mod numPhil
               in if List.nth forks l andalso List.nth forks r
-                 then (send (p, EAT);
+                 then (send (p, phEat);
                        arbitrator (setNth (setNth (forks, l, false), r, false),
                                    finished))
-                 else (send (p, DENIED); arbitrator (forks, finished))
+                 else (send (p, phDenied); arbitrator (forks, finished))
               end
-          , hn (DONEEAT, i) =>
+          , hn (phDoneEat i) =>
               let val l = i
                   val r = (i + 1) mod numPhil
               in arbitrator (setNth (setNth (forks, l, true), r, true), finished)
               end
-          , hn FINISHED => arbitrator (forks, finished + 1) ]
+          , hn phFinished => arbitrator (forks, finished + 1) ]
 
     fun philosopher (arb, main, i, rounds) =
         let fun loop (r, eaten, denied) =
                 if r = 0
-                then (send (arb, FINISHED); send (main, (REPORT, eaten, denied)))
-                else (send (arb, (HUNGRY, self (), i));
-                      receive [ hn EAT =>
-                                  (send (arb, (DONEEAT, i));
+                then (send (arb, phFinished); send (main, phReport (eaten, denied)))
+                else (send (arb, phHungry (self (), i));
+                      receive [ hn phEat =>
+                                  (send (arb, phDoneEat i);
                                    loop (r - 1, eaten + 1, denied))
-                              , hn DENIED => loop (r, eaten, denied + 1) ])
+                              , hn phDenied => loop (r, eaten, denied + 1) ])
         in loop (rounds, 0, 0) end
 
     fun bench n =
@@ -229,7 +300,7 @@ let
                       (List.range numPhil)
             fun collect (k, eaten) =
                 if k = 0 then eaten
-                else receive [ hn (REPORT, e, d) => collect (k - 1, eaten + e) ]
+                else receive [ hn (phReport (e, d)) => collect (k - 1, eaten + e) ]
         in collect (numPhil, 0)
         end
         in { name = "philosophers"
@@ -248,40 +319,40 @@ let
      * buffer, producers owed credit because the buffer was full. *)
     fun buffer (q, qLen, waitingCons, owedProd) =
         receive
-          [ hn (ITEM, v, prod) =>
+          [ hn (pcItem (v, prod)) =>
               (case waitingCons of
                  c :: cs =>
-                   (send (c, (DATA, v)); send (prod, CREDIT);
+                   (send (c, pcData v); send (prod, pcCredit);
                     buffer (q, qLen, cs, owedProd))
                | [] =>
                    if qLen + 1 < capacity
-                   then (send (prod, CREDIT);
+                   then (send (prod, pcCredit);
                          buffer (List.append q [v], qLen + 1, [], owedProd))
                    else buffer (List.append q [v], qLen + 1, [],
                                 List.append owedProd [prod]))
-          , hn (GET, c) =>
+          , hn (pcGet c) =>
               (case q of
                  v :: vs =>
-                   (send (c, (DATA, v));
+                   (send (c, pcData v);
                     (case owedProd of
-                       p :: ps => (send (p, CREDIT);
+                       p :: ps => (send (p, pcCredit);
                                    buffer (vs, qLen - 1, waitingCons, ps))
                      | []      => buffer (vs, qLen - 1, waitingCons, [])))
                | [] => buffer ([], 0, List.append waitingCons [c], owedProd))
-          , hn SHUTDOWN => () ]
+          , hn pcShutdown => () ]
 
     fun producer (buf, i, k) =
         let fun loop j =
                 if j = k then ()
-                else (send (buf, (ITEM, i * k + j, self ()));
-                      receive [ hn CREDIT => loop (j + 1) ])
+                else (send (buf, pcItem (i * k + j, self ()));
+                      receive [ hn pcCredit => loop (j + 1) ])
         in loop 0 end
 
     fun consumer (buf, main, k) =
         let fun loop (j, acc) =
-                if j = k then send (main, (SUM, acc))
-                else (send (buf, (GET, self ()));
-                      receive [ hn (DATA, v) => loop (j + 1, acc + v) ])
+                if j = k then send (main, pcSum acc)
+                else (send (buf, pcGet (self ()));
+                      receive [ hn (pcData v) => loop (j + 1, acc + v) ])
         in loop (0, 0) end
 
     fun bench n =
@@ -292,8 +363,8 @@ let
             val _ = List.map (fn _ => spawn (fn () => consumer (buf, main, n)))
                              (List.range numCons)
             fun collect (k, total) =
-                if k = 0 then (send (buf, SHUTDOWN); total)
-                else receive [ hn (SUM, s) => collect (k - 1, total + s) ]
+                if k = 0 then (send (buf, pcShutdown); total)
+                else receive [ hn (pcSum s) => collect (k - 1, total + s) ]
         in collect (numCons, 0)
         end
         in { name = "prodcons"
@@ -310,13 +381,13 @@ let
     fun f x = 4.0 / (1.0 + x * x)
 
     fun worker () =
-        receive [ hn (WORK, lo, h, count, master) =>
+        receive [ hn (trapWork (lo, h, count, master)) =>
             let fun go (i, acc) =
                     if i = count then acc
                     else let val x = lo + i * h
                          in go (i + 1, acc + (f x + f (x + h)) * h / 2.0)
                          end
-            in send (master, (PARTIAL, go (0, 0.0)))
+            in send (master, trapPartial (go (0, 0.0)))
             end ]
 
     fun bench n =
@@ -328,12 +399,12 @@ let
                                 then n - chunk * (numWorkers - 1)
                                 else chunk
                     val lo = i * chunk * h
-                in send (spawn worker, (WORK, lo, h, count, main))
+                in send (spawn worker, trapWork (lo, h, count, main))
                 end
             val _ = List.map assign (List.range numWorkers)
             fun collect (k, acc) =
                 if k = 0 then acc
-                else receive [ hn (PARTIAL, s) => collect (k - 1, acc + s) ]
+                else receive [ hn (trapPartial s) => collect (k - 1, acc + s) ]
         in collect (numWorkers, 0.0)
         end
 
@@ -350,8 +421,8 @@ let
 
     fun worker (main, n) =
         let fun loop c =
-                if c = n then send (main, (DONE, c))
-                else receive [ hn MSG => loop (c + 1) ]
+                if c = n then send (main, ftDone c)
+                else receive [ hn ftPing => loop (c + 1) ]
         in loop 0 end
 
     fun bench n =
@@ -360,11 +431,11 @@ let
                                    (List.range numWorkers)
             fun flood i =
                 if i = n then ()
-                else (List.map (fn w => send (w, MSG)) workers; flood (i + 1))
+                else (List.map (fn w => send (w, ftPing)) workers; flood (i + 1))
             val _ = flood 0
             fun collect (k, total) =
                 if k = 0 then total
-                else receive [ hn (DONE, c) => collect (k - 1, total + c) ]
+                else receive [ hn (ftDone c) => collect (k - 1, total + c) ]
         in collect (numWorkers, 0)
         end
         in { name = "fjthrput"
@@ -376,18 +447,18 @@ let
     (*==================== fjcreate ====================*)
     val fjcreate =
         let fun shortLived main =
-        receive [ hn (COMPUTE, x) => send (main, (DONE, x)) ]
+        receive [ hn (fcCompute x) => send (main, fcDone x) ]
 
     fun bench n =
         let val main = self ()
             fun spawnAll i =
                 if i = n then ()
-                else (send (spawn (fn () => shortLived main), (COMPUTE, 1));
+                else (send (spawn (fn () => shortLived main), fcCompute 1);
                       spawnAll (i + 1))
             val _ = spawnAll 0
             fun collect (k, acc) =
                 if k = 0 then acc
-                else receive [ hn (DONE, x) => collect (k - 1, acc + x) ]
+                else receive [ hn (fcDone x) => collect (k - 1, acc + x) ]
         in collect (n, 0)
         end
         in { name = "fjcreate"
@@ -403,21 +474,21 @@ let
     fun complement (c1, c2) = if c1 = c2 then c1 else 3 - c1 - c2
 
     fun chameneos (mall, main, color, count) =
-        (send (mall, (MEET, color, self ()));
-         receive [ hn (CHANGE, c) => chameneos (mall, main, c, count + 1)
-                 , hn EXIT        => send (main, (DONE, count)) ])
+        (send (mall, chamMeet (color, self ()));
+         receive [ hn (chamChange c) => chameneos (mall, main, c, count + 1)
+                 , hn chamExit        => send (main, chamDone count) ])
 
     fun mall meetings =
         let fun loop (waiting, m, exited) =
                 if exited = numChameneos then ()
-                else receive [ hn (MEET, c, p) =>
-                    if m = 0 then (send (p, EXIT); loop (waiting, m, exited + 1))
+                else receive [ hn (chamMeet (c, p)) =>
+                    if m = 0 then (send (p, chamExit); loop (waiting, m, exited + 1))
                     else case waiting of
                            [] => loop ([(c, p)], m, exited)
                          | (c2, p2) :: _ =>
                              let val nc = complement (c, c2)
-                                 val _ = send (p, (CHANGE, nc))
-                                 val _ = send (p2, (CHANGE, nc))
+                                 val _ = send (p, chamChange nc)
+                                 val _ = send (p2, chamChange nc)
                              in loop ([], m - 1, exited) end ]
         in loop ([], meetings, 0) end
 
@@ -430,7 +501,7 @@ let
                       (List.range numChameneos)
             fun collect (k, total) =
                 if k = 0 then total
-                else receive [ hn (DONE, c) => collect (k - 1, total + c) ]
+                else receive [ hn (chamDone c) => collect (k - 1, total + c) ]
         in collect (numChameneos, 0)
         end
         in { name = "chameneos"
@@ -445,29 +516,29 @@ let
 
     fun smoker arb =
         let fun loop c =
-                receive [ hn SMOKE        => (send (arb, STARTED); loop (c + 1))
-                        , hn (EXIT, main) => send (main, (DONE, c)) ]
+                receive [ hn cigSmoke       => (send (arb, cigStarted); loop (c + 1))
+                        , hn (cigExit main) => send (main, cigDone c) ]
         in loop 0 end
 
     fun arbiter (smokers, main, n) =
         if n = 0
-        then (List.map (fn s => send (s, (EXIT, main))) smokers; ())
+        then (List.map (fn s => send (s, cigExit main)) smokers; ())
         else let val pick = List.nth smokers (floor (random () * numSmokers))
-                 val _ = send (pick, SMOKE)
-             in receive [ hn STARTED => arbiter (smokers, main, n - 1) ]
+                 val _ = send (pick, cigSmoke)
+             in receive [ hn cigStarted => arbiter (smokers, main, n - 1) ]
              end
 
     fun bench n =
         let val main = self ()
             (* smokers and arbiter reference each other; wire in two phases *)
             val smokers = List.map (fn _ => spawn (fn () =>
-                              receive [ hn (INITARB, arb) => smoker arb ]))
+                              receive [ hn (cigInitArb arb) => smoker arb ]))
                             (List.range numSmokers)
             val arb = spawn (fn () => arbiter (smokers, main, n))
-            val _ = List.map (fn s => send (s, (INITARB, arb))) smokers
+            val _ = List.map (fn s => send (s, cigInitArb arb)) smokers
             fun collect (k, total) =
                 if k = 0 then total
-                else receive [ hn (DONE, c) => collect (k - 1, total + c) ]
+                else receive [ hn (cigDone c) => collect (k - 1, total + c) ]
         in collect (numSmokers, 0)
         end
         in { name = "cigsmok"
@@ -481,44 +552,44 @@ let
         let val capacity = 4
 
     fun customer (room, main) =
-        (send (room, (ENTER, self ()));
-         receive [ hn FULL => (sleep 1; customer (room, main))
-                 , hn CUT  => send (main, SERVED) ])
+        (send (room, barbEnter (self ()));
+         receive [ hn barbFull => (sleep 1; customer (room, main))
+                 , hn barbCut  => send (main, barbServed) ])
 
     fun barber room =
-        receive [ hn (NEXT, p) =>
-                    (send (p, CUT); send (room, BARBERDONE); barber room)
-                , hn STOP => () ]
+        receive [ hn (barbNext p) =>
+                    (send (p, barbCut); send (room, barbDone); barber room)
+                , hn barbStop => () ]
 
     fun room barberPid =
         let fun loop (queue, qLen, busy) =
                 receive
-                  [ hn (ENTER, p) =>
+                  [ hn (barbEnter p) =>
                       if qLen >= capacity
-                      then (send (p, FULL); loop (queue, qLen, busy))
+                      then (send (p, barbFull); loop (queue, qLen, busy))
                       else if busy
                       then loop (List.append queue [p], qLen + 1, true)
-                      else (send (barberPid, (NEXT, p)); loop (queue, qLen, true))
-                  , hn BARBERDONE =>
+                      else (send (barberPid, barbNext p); loop (queue, qLen, true))
+                  , hn barbDone =>
                       (case queue of
                          []      => loop ([], 0, false)
-                       | p :: ps => (send (barberPid, (NEXT, p));
+                       | p :: ps => (send (barberPid, barbNext p);
                                      loop (ps, qLen - 1, true)))
-                  , hn STOP => send (barberPid, STOP) ]
+                  , hn barbStop => send (barberPid, barbStop) ]
         in loop ([], 0, false) end
 
     fun bench n =
         let val main = self ()
             (* room and barber reference each other; wire the room second *)
             val roomPid = spawn (fn () =>
-                receive [ hn (INITBARBER, b) => room b ])
+                receive [ hn (barbInit b) => room b ])
             val barberPid = spawn (fn () => barber roomPid)
-            val _ = send (roomPid, (INITBARBER, barberPid))
+            val _ = send (roomPid, barbInit barberPid)
             val _ = List.map (fn _ => spawn (fn () => customer (roomPid, main)))
                              (List.range n)
             fun collect k =
-                if k = 0 then (send (roomPid, STOP); n)
-                else receive [ hn SERVED => collect (k - 1) ]
+                if k = 0 then (send (roomPid, barbStop); n)
+                else receive [ hn barbServed => collect (k - 1) ]
         in collect n
         end
         in { name = "barber"
@@ -535,11 +606,11 @@ let
     fun server dict =
         let fun loop (d, ops) =
                 receive
-                  [ hn (WRITE, k, v, p) =>
-                      (send (p, WROTE); loop (Map.insert d k v, ops + 1))
-                  , hn (READ, k, p) =>
-                      (send (p, (VAL, Map.findOrDefault d k 0)); loop (d, ops + 1))
-                  , hn (GETCOUNT, p) => send (p, (COUNT, ops)) ]
+                  [ hn (cdWrite (k, v, p)) =>
+                      (send (p, cdWrote); loop (Map.insert d k v, ops + 1))
+                  , hn (cdRead (k, p)) =>
+                      (send (p, cdVal (Map.findOrDefault d k 0)); loop (d, ops + 1))
+                  , hn (cdGetCount p) => send (p, cdCount ops) ]
         in loop (dict, 0) end
 
     fun worker (srv, main, i, n) =
@@ -548,16 +619,16 @@ let
             fun doOp j =
                 if j = n then ()
                 else if j mod 10 = 0
-                then (send (srv, (WRITE, myKey, j, me));
-                      receive [ hn WROTE => doOp (j + 1) ])
-                else (send (srv, (READ, floor (random () * keyRange), me));
-                      receive [ hn (VAL, _) => doOp (j + 1) ])
+                then (send (srv, cdWrite (myKey, j, me));
+                      receive [ hn cdWrote => doOp (j + 1) ])
+                else (send (srv, cdRead (floor (random () * keyRange), me));
+                      receive [ hn (cdVal _) => doOp (j + 1) ])
             val _ = doOp 0
-            val _ = send (srv, (WRITE, myKey, 4242 + i, me))
-            val _ = receive [ hn WROTE => () ]
-            val _ = send (srv, (READ, myKey, me))
-            val readBack = receive [ hn (VAL, v) => v ]
-        in send (main, (WORKERDONE, if readBack = 4242 + i then 1 else 0))
+            val _ = send (srv, cdWrite (myKey, 4242 + i, me))
+            val _ = receive [ hn cdWrote => () ]
+            val _ = send (srv, cdRead (myKey, me))
+            val readBack = receive [ hn (cdVal v) => v ]
+        in send (main, cdWorkerDone (if readBack = 4242 + i then 1 else 0))
         end
 
     fun bench n =
@@ -568,9 +639,9 @@ let
                       (List.range numWorkers)
             fun collect (k, okCount) =
                 if k = 0
-                then let val _ = send (srv, (GETCOUNT, main))
-                     in receive [ hn (COUNT, c) => (okCount, c) ] end
-                else receive [ hn (WORKERDONE, w) => collect (k - 1, okCount + w) ]
+                then let val _ = send (srv, cdGetCount main)
+                     in receive [ hn (cdCount c) => (okCount, c) ] end
+                else receive [ hn (cdWorkerDone w) => collect (k - 1, okCount + w) ]
         in collect (numWorkers, 0)
         end
         in { name = "concdict"
@@ -601,26 +672,26 @@ let
     fun server () =
         let fun loop (xs, inserts) =
                 receive
-                  [ hn (ADD, v, p) =>
+                  [ hn (csAdd (v, p)) =>
                       let val (xs2, novel) = insertSorted (xs, v)
-                      in send (p, ADDED);
+                      in send (p, csAdded);
                          loop (xs2, if novel then inserts + 1 else inserts)
                       end
-                  , hn (HAS, v, p) =>
-                      (send (p, (HASREPLY, member (xs, v))); loop (xs, inserts))
-                  , hn (SNAPSHOT, p) => send (p, (SNAP, xs, inserts)) ]
+                  , hn (csHas (v, p)) =>
+                      (send (p, csHasReply (member (xs, v))); loop (xs, inserts))
+                  , hn (csSnapshot p) => send (p, csSnap (xs, inserts)) ]
         in loop ([], 0) end
 
     fun worker (srv, main, n) =
         let val me = self ()
             fun doOp j =
-                if j = n then send (main, WORKERDONE)
+                if j = n then send (main, csWorkerDone)
                 else let val v = floor (random () * valueRange)
                      in if j mod 2 = 0
-                        then (send (srv, (ADD, v, me));
-                              receive [ hn ADDED => doOp (j + 1) ])
-                        else (send (srv, (HAS, v, me));
-                              receive [ hn (HASREPLY, _) => doOp (j + 1) ])
+                        then (send (srv, csAdd (v, me));
+                              receive [ hn csAdded => doOp (j + 1) ])
+                        else (send (srv, csHas (v, me));
+                              receive [ hn (csHasReply _) => doOp (j + 1) ])
                      end
         in doOp 0 end
 
@@ -635,10 +706,10 @@ let
                              (List.range numWorkers)
             fun collect k =
                 if k = 0
-                then (send (srv, (SNAPSHOT, main));
-                      receive [ hn (SNAP, xs, inserts) =>
+                then (send (srv, csSnapshot main);
+                      receive [ hn (csSnap (xs, inserts)) =>
                                   (isSorted xs, List.length xs, inserts) ])
-                else receive [ hn WORKERDONE => collect (k - 1) ]
+                else receive [ hn csWorkerDone => collect (k - 1) ]
         in collect numWorkers
         end
         in { name = "concsll"
@@ -655,30 +726,30 @@ let
     fun filterActor (p, counter) =
         let fun loop next =
                 receive
-                  [ hn (CAND, c) =>
+                  [ hn (sieveCand c) =>
                       if c mod p = 0 then loop next
                       else (case next of
                               [] =>
-                                let val _ = send (counter, PRIME)
+                                let val _ = send (counter, sievePrime)
                                     val nf = spawn (fn () => filterActor (c, counter))
                                 in loop [nf] end
-                            | nf :: _ => (send (nf, (CAND, c)); loop next))
-                  , hn STOPCHAIN =>
+                            | nf :: _ => (send (nf, sieveCand c); loop next))
+                  , hn sieveStopChain =>
                       (case next of
-                         []      => send (counter, CHAINDONE)
-                       | nf :: _ => send (nf, STOPCHAIN)) ]
+                         []      => send (counter, sieveChainDone)
+                       | nf :: _ => send (nf, sieveStopChain)) ]
         in loop [] end
 
     fun bench n =
         let val main = self ()
             val first = spawn (fn () => filterActor (2, main))
             fun stream c =
-                if c > n then send (first, STOPCHAIN)
-                else (send (first, (CAND, c)); stream (c + 2))
+                if c > n then send (first, sieveStopChain)
+                else (send (first, sieveCand c); stream (c + 2))
             val _ = stream 3
             fun collect primes =
-                receive [ hn PRIME     => collect (primes + 1)
-                        , hn CHAINDONE => primes ]
+                receive [ hn sievePrime     => collect (primes + 1)
+                        , hn sieveChainDone => primes ]
         in 1 + collect 0   (* the first filter's prime, 2, is not counted via PRIME *)
         end
 
@@ -699,27 +770,27 @@ let
     fun lt a b = a < b
 
     fun sorter () =
-        receive [ hn (SORT, xs, tag, parent) =>
+        receive [ hn (qsSort (xs, tag, parent)) =>
             if List.length xs <= cutoff
-            then send (parent, (SORTED, tag, List.sort lt xs))
+            then send (parent, qsSorted (tag, List.sort lt xs))
             else case xs of
                    pivot :: rest =>
                      let val me = self ()
                          val smaller = List.filter (fn x => x < pivot) rest
                          val bigger  = List.filter (fn x => not (x < pivot)) rest
-                         val _ = send (spawn sorter, (SORT, smaller, 0, me))
-                         val _ = send (spawn sorter, (SORT, bigger, 1, me))
-                     in receive [ hn (SORTED, 0, a) =>
-                          receive [ hn (SORTED, 1, b) =>
-                            send (parent, (SORTED, tag, List.append a (pivot :: b))) ] ]
+                         val _ = send (spawn sorter, qsSort (smaller, 0, me))
+                         val _ = send (spawn sorter, qsSort (bigger, 1, me))
+                     in receive [ hn (qsSorted (0, a)) =>
+                          receive [ hn (qsSorted (1, b)) =>
+                            send (parent, qsSorted (tag, List.append a (pivot :: b))) ] ]
                      end ]
 
     fun bench n =
         let val input = List.map (fn _ => floor (random () * 1000000))
                                  (List.range n)
             val inputSum = List.foldl (fn (x, acc) => x + acc) 0 input
-            val _ = send (spawn sorter, (SORT, input, 0, self ()))
-            val result = receive [ hn (SORTED, 0, xs) => xs ]
+            val _ = send (spawn sorter, qsSort (input, 0, self ()))
+            val result = receive [ hn (qsSorted (0, xs)) => xs ]
         in (result, inputSum)
         end
 
@@ -743,22 +814,22 @@ let
     fun bitActor (divisor, next) =
         let fun loop buffered =
                 receive
-                  [ hn (VALUE, v) =>
+                  [ hn (radixValue v) =>
                       if ((v div divisor)) mod 2 = 0
-                      then (send (next, (VALUE, v)); loop buffered)
+                      then (send (next, radixValue v); loop buffered)
                       else loop (v :: buffered)
-                  , hn FLUSH =>
-                      (List.map (fn v => send (next, (VALUE, v)))
+                  , hn radixFlush =>
+                      (List.map (fn v => send (next, radixValue v))
                                 (List.reverse buffered);
-                       send (next, FLUSH)) ]
+                       send (next, radixFlush)) ]
         in loop [] end
 
     fun sink main =
         let fun loop (prev, count, total, sorted) =
                 receive
-                  [ hn (VALUE, v) =>
+                  [ hn (radixValue v) =>
                       loop (v, count + 1, total + v, sorted andalso prev <= v)
-                  , hn FLUSH => send (main, (RESULT, count, total, sorted)) ]
+                  , hn radixFlush => send (main, radixResult (count, total, sorted)) ]
         in loop (0 - 1, 0, 0, true) end
 
     (* build the chain back to front: entry actor handles bit 0 *)
@@ -777,9 +848,9 @@ let
                 let fun pow (0, acc) = acc | pow (k, acc) = pow (k - 1, acc * 2)
                 in pow (numBits - 1, 1) end
             val entry = buildChain (numBits - 1, topDivisor, sinkPid)
-            val _ = List.map (fn v => send (entry, (VALUE, v))) input
-            val _ = send (entry, FLUSH)
-        in receive [ hn (RESULT, count, total, sorted) =>
+            val _ = List.map (fn v => send (entry, radixValue v)) input
+            val _ = send (entry, radixFlush)
+        in receive [ hn (radixResult (count, total, sorted)) =>
                        (count, total, sorted, inputSum) ]
         end
         in { name = "radixsort"
@@ -818,18 +889,18 @@ let
         let val cs = coeffs b
             fun loop (window, count) =
                 receive
-                  [ hn (SAMPLE, x) =>
+                  [ hn (fbSample x) =>
                       let val (w2, c2, out) = step (cs, x, window, count)
-                          val _ = List.map (fn y => send (comb, (OUT, y))) out
+                          val _ = List.map (fn y => send (comb, fbOut y)) out
                       in loop (w2, c2) end
-                  , hn FLUSH => send (comb, BRANCHDONE) ]
+                  , hn fbFlush => send (comb, fbBranchDone) ]
         in loop ([], 0) end
 
     fun combiner main =
         let fun loop (total, done) =
-                if done = numBranches then send (main, (RESULT, total))
-                else receive [ hn (OUT, y)     => loop (total + y, done)
-                             , hn BRANCHDONE  => loop (total, done + 1) ]
+                if done = numBranches then send (main, fbResult total)
+                else receive [ hn (fbOut y)     => loop (total + y, done)
+                             , hn fbBranchDone  => loop (total, done + 1) ]
         in loop (0.0, 0) end
 
     fun sampleAt i = (i mod 97) / 7.0
@@ -854,11 +925,11 @@ let
             val branches = List.map (fn b => spawn (fn () => branch (b, comb)))
                                     (List.range numBranches)
             fun stream i =
-                if i = n then List.map (fn p => send (p, FLUSH)) branches
-                else (List.map (fn p => send (p, (SAMPLE, sampleAt i))) branches;
+                if i = n then List.map (fn p => send (p, fbFlush)) branches
+                else (List.map (fn p => send (p, fbSample (sampleAt i))) branches;
                       stream (i + 1))
             val _ = stream 0
-        in receive [ hn (RESULT, total) => total ]
+        in receive [ hn (fbResult total) => total ]
         end
 
     fun abs x = if x < 0.0 then 0.0 - x else x
@@ -883,45 +954,45 @@ let
           in if x <= y then (x :: ls, y :: hs) else (y :: ls, x :: hs) end
 
     fun merger () =
-        receive [ hn (MERGE, xs, up, tag, parent) =>
+        receive [ hn (bitMerge (xs, up, tag, parent)) =>
             let val len = List.length xs
-            in if len <= 1 then send (parent, (MERGED, tag, xs))
+            in if len <= 1 then send (parent, bitMerged (tag, xs))
                else let val half = (len div 2)
                         val (lo, hi) = pairMinMax (takeN (half, xs), dropN (half, xs))
                         val (first, second) = if up then (lo, hi) else (hi, lo)
                         val me = self ()
-                        val _ = send (spawn merger, (MERGE, first, up, 0, me))
-                        val _ = send (spawn merger, (MERGE, second, up, 1, me))
-                    in receive [ hn (MERGED, 0, a) =>
-                         receive [ hn (MERGED, 1, b) =>
-                           send (parent, (MERGED, tag, List.append a b)) ] ]
+                        val _ = send (spawn merger, bitMerge (first, up, 0, me))
+                        val _ = send (spawn merger, bitMerge (second, up, 1, me))
+                    in receive [ hn (bitMerged (0, a)) =>
+                         receive [ hn (bitMerged (1, b)) =>
+                           send (parent, bitMerged (tag, List.append a b)) ] ]
                     end
             end ]
 
     fun bsorter () =
-        receive [ hn (BSORT, xs, up, tag, parent) =>
+        receive [ hn (bitBsort (xs, up, tag, parent)) =>
             let val len = List.length xs
-            in if len <= 1 then send (parent, (BSORTED, tag, xs))
+            in if len <= 1 then send (parent, bitBsorted (tag, xs))
                else let val half = (len div 2)
                         val me = self ()
                         val _ = send (spawn bsorter,
-                                      (BSORT, takeN (half, xs), true, 0, me))
+                                      bitBsort (takeN (half, xs), true, 0, me))
                         val _ = send (spawn bsorter,
-                                      (BSORT, dropN (half, xs), false, 1, me))
-                    in receive [ hn (BSORTED, 0, asc) =>
-                         receive [ hn (BSORTED, 1, desc) =>
+                                      bitBsort (dropN (half, xs), false, 1, me))
+                    in receive [ hn (bitBsorted (0, asc)) =>
+                         receive [ hn (bitBsorted (1, desc)) =>
                            (send (spawn merger,
-                                  (MERGE, List.append asc desc, up, 0, me));
-                            receive [ hn (MERGED, 0, merged) =>
-                              send (parent, (BSORTED, tag, merged)) ]) ] ]
+                                  bitMerge (List.append asc desc, up, 0, me));
+                            receive [ hn (bitMerged (0, merged)) =>
+                              send (parent, bitBsorted (tag, merged)) ]) ] ]
                     end
             end ]
 
     fun bench n =
         let val input = List.map (fn _ => floor (random () * 1000000))
                                  (List.range n)
-            val _ = send (spawn bsorter, (BSORT, input, true, 0, self ()))
-            val result = receive [ hn (BSORTED, 0, xs) => xs ]
+            val _ = send (spawn bsorter, bitBsort (input, true, 0, self ()))
+            val result = receive [ hn (bitBsorted (0, xs)) => xs ]
         in (result, input)
         end
 
@@ -943,7 +1014,7 @@ let
     fun facility (cx, cy, main) =
         let fun loop (next, accepted) =
                 receive
-                  [ hn (POINT, x, y) =>
+                  [ hn (flPoint (x, y)) =>
                       let val dx = x - cx
                           val dy = y - cy
                       in if dx * dx + dy * dy <= radius2
@@ -951,14 +1022,14 @@ let
                          else case next of
                                 [] => loop ([spawn (fn () => facility (x, y, main))],
                                             accepted)
-                              | nf :: _ => (send (nf, (POINT, x, y));
+                              | nf :: _ => (send (nf, flPoint (x, y));
                                             loop (next, accepted))
                       end
-                  , hn STOPCHAIN =>
-                      (send (main, (FACREPORT, cx, cy, accepted));
+                  , hn flStopChain =>
+                      (send (main, flReport (cx, cy, accepted));
                        case next of
-                         []      => send (main, CHAINDONE)
-                       | nf :: _ => send (nf, STOPCHAIN)) ]
+                         []      => send (main, flChainDone)
+                       | nf :: _ => send (nf, flStopChain)) ]
         in loop ([], 1) end   (* the founding point counts as accepted *)
 
     fun bench n =
@@ -967,14 +1038,14 @@ let
                                   (List.range n)
             val (x0, y0) = List.head points
             val root = spawn (fn () => facility (x0, y0, main))
-            val _ = List.map (fn (x, y) => send (root, (POINT, x, y)))
+            val _ = List.map (fn (x, y) => send (root, flPoint (x, y)))
                              (List.tail points)
-            val _ = send (root, STOPCHAIN)
+            val _ = send (root, flStopChain)
             fun collect (centers, total) =
                 receive
-                  [ hn (FACREPORT, cx, cy, c) =>
+                  [ hn (flReport (cx, cy, c)) =>
                       collect ((cx, cy) :: centers, total + c)
-                  , hn CHAINDONE => (centers, total) ]
+                  , hn flChainDone => (centers, total) ]
             val (centers, total) = collect ([], 0)
             fun covered (x, y) =
                 let fun go [] = false
@@ -1017,7 +1088,7 @@ let
              in tryCol (0, 0) end
 
     fun worker (main, firstCol, n) =
-        send (main, (COUNT, countFrom ([firstCol], 1, n)))
+        send (main, nqCount (countFrom ([firstCol], 1, n)))
 
     fun bench n =
         let val main = self ()
@@ -1025,7 +1096,7 @@ let
                              (List.range n)
             fun collect (k, total) =
                 if k = 0 then total
-                else receive [ hn (COUNT, c) => collect (k - 1, total + c) ]
+                else receive [ hn (nqCount c) => collect (k - 1, total + c) ]
         in collect (n, 0)
         end
 
@@ -1047,19 +1118,19 @@ let
     fun start i = 0.3 + i * 0.01
 
     fun rateWorker r =
-        receive [ hn (NEXTTERM, x, p) =>
-                    (send (p, (TERM, r * x * (1.0 - x))); rateWorker r)
-                , hn DONE => () ]
+        receive [ hn (lmNext (x, p)) =>
+                    (send (p, lmTerm (r * x * (1.0 - x))); rateWorker r)
+                , hn lmStop => () ]
 
     fun series (i, n, main) =
         let val me = self ()
             val worker = spawn (fn () => rateWorker (rate i))
             fun iterate (k, x) =
-                if k = 0 then (send (worker, DONE); x)
-                else (send (worker, (NEXTTERM, x, me));
-                      receive [ hn (TERM, x2) => iterate (k - 1, x2) ])
+                if k = 0 then (send (worker, lmStop); x)
+                else (send (worker, lmNext (x, me));
+                      receive [ hn (lmTerm x2) => iterate (k - 1, x2) ])
             val final = iterate (n, start i)
-        in send (main, (DONE, i, final)) end
+        in send (main, lmDone (i, final)) end
 
     fun reference n =
         let fun one i =
@@ -1078,7 +1149,7 @@ let
              * addition order matches the reference *)
             fun collect (k, results) =
                 if k = 0 then results
-                else receive [ hn (DONE, i, x) => collect (k - 1, (i, x) :: results) ]
+                else receive [ hn (lmDone (i, x)) => collect (k - 1, (i, x) :: results) ]
             val results = collect (numSeries, [])
             fun sumOrdered (i, acc) =
                 if i = numSeries then acc
@@ -1099,15 +1170,15 @@ let
 
     fun account balance =
         receive
-          [ hn (TRANSFER, amount, dst, teller) =>
-              (send (dst, (CREDIT, amount, teller));
+          [ hn (bankTransfer (amount, dst, teller)) =>
+              (send (dst, bankCredit (amount, teller));
                account (balance - amount))
-          , hn (CREDIT, amount, teller) =>
-              (send (teller, CONFIRM);
+          , hn (bankCredit (amount, teller)) =>
+              (send (teller, bankConfirm);
                account (balance + amount))
-          , hn (GETBALANCE, p) =>
-              (send (p, (BALANCE, balance)); account balance)
-          , hn STOP => () ]
+          , hn (bankGetBalance p) =>
+              (send (p, bankBalance balance); account balance)
+          , hn bankStop => () ]
 
     fun bench n =
         let val main = self ()
@@ -1123,15 +1194,15 @@ let
                                    else dstRaw
                          val amount = floor (random () * 100)
                          val _ = send (List.nth accounts src,
-                                       (TRANSFER, amount, List.nth accounts dst, main))
-                     in receive [ hn CONFIRM => transfers (k - 1, done + 1) ]
+                                       bankTransfer (amount, List.nth accounts dst, main))
+                     in receive [ hn bankConfirm => transfers (k - 1, done + 1) ]
                      end
             val completed = transfers (n, 0)
             fun sumBalances ([], acc)      = acc
               | sumBalances (a :: rest, acc) =
-                  (send (a, (GETBALANCE, main));
-                   receive [ hn (BALANCE, b) =>
-                               (send (a, STOP); sumBalances (rest, acc + b)) ])
+                  (send (a, bankGetBalance main);
+                   receive [ hn (bankBalance b) =>
+                               (send (a, bankStop); sumBalances (rest, acc + b)) ])
             val total = sumBalances (accounts, 0)
         in (total, completed)
         end
@@ -1162,8 +1233,8 @@ let
            consider (x, y + 1, [])))) end
 
     fun worker w =
-        receive [ hn (EXPAND, id, g, p) =>
-                    (send (p, (EXPANDED, g, expand (w, id), self ())); worker w) ]
+        receive [ hn (astarExpand (id, g, p)) =>
+                    (send (p, astarExpanded (g, expand (w, id), self ())); worker w) ]
 
     val ltNum = fn a => fn b => a < b
 
@@ -1216,16 +1287,16 @@ let
                                            {tag = "Some", value = d} => d < dist
                                          | {tag = "None"}            => false
                          in if stale then loop (open2, best, idle, inFlight)
-                            else (send (wk, (EXPAND, id, dist, main));
+                            else (send (wk, astarExpand (id, dist, main));
                                   loop (open2, best, idles, inFlight + 1))
                          end
                      | ([], _) =>
                          if inFlight = 0 then best
-                         else receive [ hn (EXPANDED, g, nbs, wk2) =>
+                         else receive [ hn (astarExpanded (g, nbs, wk2)) =>
                                 let val (open2, best2) = relaxAll (w, g, nbs, open, best)
                                 in loop (open2, best2, wk2 :: idle, inFlight - 1) end ])
                 | [] =>
-                    receive [ hn (EXPANDED, g, nbs, wk2) =>
+                    receive [ hn (astarExpanded (g, nbs, wk2)) =>
                         let val (open2, best2) = relaxAll (w, g, nbs, open, best)
                         in loop (open2, best2, wk2 :: idle, inFlight - 1) end ]
             val open0 = Map.insert (Map.empty ltNum) (pqKey (w, 0, 0)) (0, 0)
@@ -1248,62 +1319,63 @@ let
     (* serve any URGENT messages already queued, without blocking: the
      * self-sent marker arrives behind them in FIFO order *)
     fun probeUrgent () =
-        let val _ = send (self (), MARKER)
+        let val _ = send (self (), uctMarker)
             fun drain () =
-                receive [ hn (URGENT, p) => (send (p, URGENTACK); drain ())
-                        , hn MARKER      => () ]
+                receive [ hn (uctUrgent p) => (send (p, uctUrgentAck); drain ())
+                        , hn uctMarker     => () ]
         in drain () end
 
-    (* request a child index; answer urgent probes while waiting *)
+    (* request a child index; answer urgent probes while waiting. The reply is
+     * an Option: Some k for an allocated index, None when the tree is full. *)
     fun allocIdx master =
-        (send (master, (ALLOC, self ()));
+        (send (master, uctAlloc (self ()));
          let fun await () =
-                 receive [ hn (IDX, k)     => [k]
-                         , hn EXHAUSTED    => []
-                         , hn (URGENT, p)  => (send (p, URGENTACK); await ()) ]
+                 receive [ hn (uctIdx k)    => Option.some k
+                         , hn uctExhausted  => Option.none
+                         , hn (uctUrgent p) => (send (p, uctUrgentAck); await ()) ]
          in await () end)
 
     fun node (i, master) =
-        receive [ hn GROW =>
+        receive [ hn uctGrow =>
             let val _ = probeUrgent ()
-                fun spawnChild [] = ()
-                  | spawnChild [k] =
-                      send (spawn (fn () => node (k, master)), GROW)
+                fun spawnChild {tag = "None"}           = ()
+                  | spawnChild {tag = "Some", value = k} =
+                      send (spawn (fn () => node (k, master)), uctGrow)
                 val _ = spawnChild (allocIdx master)
                 val _ = probeUrgent ()
                 val _ = if hasRight i then spawnChild (allocIdx master) else ()
-                val _ = send (master, (NODEDONE, self ()))
+                val _ = send (master, uctNodeDone (self ()))
                 fun idle () =
-                    receive [ hn (URGENT, p) => (send (p, URGENTACK); idle ())
-                            , hn STOP        => () ]
+                    receive [ hn (uctUrgent p) => (send (p, uctUrgentAck); idle ())
+                            , hn uctStop        => () ]
             in idle () end ]
 
     fun bench n =
         let val main = self ()
             val root = spawn (fn () => node (0, main))
-            val _ = send (root, GROW)
+            val _ = send (root, uctGrow)
             fun master (next, done, known, knownLen, probes, acks) =
                 if done = next andalso acks = probes
-                then (List.map (fn p => send (p, STOP)) known;
+                then (List.map (fn p => send (p, uctStop)) known;
                       (next, done, probes, acks))
                 else receive
-                  [ hn (ALLOC, p) =>
+                  [ hn (uctAlloc p) =>
                       if next < n
-                      then let val _ = send (p, (IDX, next))
+                      then let val _ = send (p, uctIdx next)
                                val doProbe = next mod 97 = 0 andalso knownLen > 0
                                val _ = if doProbe
                                        then send (List.nth known
                                                     (floor (random () * knownLen)),
-                                                  (URGENT, main))
+                                                  uctUrgent main)
                                        else ()
                            in master (next + 1, done, known, knownLen,
                                       (if doProbe then probes + 1 else probes), acks)
                            end
-                      else (send (p, EXHAUSTED);
+                      else (send (p, uctExhausted);
                             master (next, done, known, knownLen, probes, acks))
-                  , hn (NODEDONE, p) =>
+                  , hn (uctNodeDone p) =>
                       master (next, done + 1, p :: known, knownLen + 1, probes, acks)
-                  , hn URGENTACK =>
+                  , hn uctUrgentAck =>
                       master (next, done, known, knownLen, probes, acks + 1) ]
         in master (1, 0, [], 0, 0, 0)
         end
@@ -1336,18 +1408,18 @@ let
         List.map (fn i => productRow (a, b, n, r0 + i)) (List.range (r1 - r0))
 
     fun multiplier (a, b, n) =
-        receive [ hn (MULT, r0, r1, tag, parent) =>
+        receive [ hn (mmMult (r0, r1, tag, parent)) =>
             if r1 - r0 <= cutoff
-            then send (parent, (RESULT, tag, rows (a, b, n, r0, r1)))
+            then send (parent, mmResult (tag, rows (a, b, n, r0, r1)))
             else let val mid = r0 + ((r1 - r0) div 2)
                      val me = self ()
                      val _ = send (spawn (fn () => multiplier (a, b, n)),
-                                   (MULT, r0, mid, 0, me))
+                                   mmMult (r0, mid, 0, me))
                      val _ = send (spawn (fn () => multiplier (a, b, n)),
-                                   (MULT, mid, r1, 1, me))
-                 in receive [ hn (RESULT, 0, top) =>
-                      receive [ hn (RESULT, 1, bottom) =>
-                        send (parent, (RESULT, tag, List.append top bottom)) ] ]
+                                   mmMult (mid, r1, 1, me))
+                 in receive [ hn (mmResult (0, top)) =>
+                      receive [ hn (mmResult (1, bottom)) =>
+                        send (parent, mmResult (tag, List.append top bottom)) ] ]
                  end ]
 
     fun sameRows ([], [])           = true
@@ -1358,8 +1430,8 @@ let
         let val a = mkMatrix n (fn (i, j) => (i + j) mod 10)
             val b = mkMatrix n (fn (i, j) => (2 * i + j) mod 10)
             val _ = send (spawn (fn () => multiplier (a, b, n)),
-                          (MULT, 0, n, 0, self ()))
-            val result = receive [ hn (RESULT, 0, rs) => rs ]
+                          mmMult (0, n, 0, self ()))
+            val result = receive [ hn (mmResult (0, rs)) => rs ]
             val reference = rows (a, b, n, 0, n)
         in sameRows (result, reference)
         end
@@ -1392,12 +1464,12 @@ let
 
     fun worker () =
         receive
-          [ hn (ROUND, k, r0, r1, dist, n, p) =>
-              (send (p, (ROWS, r0,
+          [ hn (apspRound (k, r0, r1, dist, n, p)) =>
+              (send (p, apspRows (r0,
                          List.map (fn i => relaxRow (dist, n, k, r0 + i))
                                   (List.range (r1 - r0))));
                worker ())
-          , hn STOP => () ]
+          , hn apspStop => () ]
 
     fun bench n =
         let val main = self ()
@@ -1416,7 +1488,7 @@ let
                                    (fn (w, p) =>
                                       let val (r0, r1) = bounds w
                                       in if r0 < r1
-                                         then send (p, (ROUND, k, r0, r1, dist, n, main))
+                                         then send (p, apspRound (k, r0, r1, dist, n, main))
                                          else () end)
                                    workers
                          val active = List.length
@@ -1426,7 +1498,7 @@ let
                                           (List.range numWorkers))
                          fun collect (c, acc) =
                              if c = 0 then acc
-                             else receive [ hn (ROWS, r0, rows) =>
+                             else receive [ hn (apspRows (r0, rows)) =>
                                               collect (c - 1, (r0, rows) :: acc) ]
                          val pieces = collect (active, [])
                          fun rowAt i =
@@ -1440,7 +1512,7 @@ let
                      in round (k + 1, dist2) end
 
             val final = round (0, dist0)
-            val _ = List.map (fn p => send (p, STOP)) workers
+            val _ = List.map (fn p => send (p, apspStop)) workers
 
             fun refRound (k, dist) =
                 if k = n then dist
@@ -1469,29 +1541,29 @@ let
     fun initial (x, y) = ((x * 7 + y * 13) mod 100) / 10.0
 
     fun cell master =
-        receive [ hn (WIRE, myId, v0, ups, downs, lefts, rights) =>
+        receive [ hn (sorWire (myId, v0, ups, downs, lefts, rights)) =>
             let val deg = List.length ups + List.length downs
                           + List.length lefts + List.length rights
                 fun sendAll v =
-                    (List.map (fn p => send (p, (VAL, DOWN, v))) ups;
-                     List.map (fn p => send (p, (VAL, UP, v))) downs;
-                     List.map (fn p => send (p, (VAL, RIGHT, v))) lefts;
-                     List.map (fn p => send (p, (VAL, LEFT, v))) rights;
+                    (List.map (fn p => send (p, sorVal (dDown, v))) ups;
+                     List.map (fn p => send (p, sorVal (dUp, v))) downs;
+                     List.map (fn p => send (p, sorVal (dRight, v))) lefts;
+                     List.map (fn p => send (p, sorVal (dLeft, v))) rights;
                      ())
                 fun recvOr0 dir =
                     case dir of
                       [] => 0.0
-                    | [UP]    => receive [ hn (VAL, UP, x)    => x ]
-                    | [DOWN]  => receive [ hn (VAL, DOWN, x)  => x ]
-                    | [LEFT]  => receive [ hn (VAL, LEFT, x)  => x ]
-                    | [RIGHT] => receive [ hn (VAL, RIGHT, x) => x ]
+                    | [dUp]    => receive [ hn (sorVal (dUp, x))    => x ]
+                    | [dDown]  => receive [ hn (sorVal (dDown, x))  => x ]
+                    | [dLeft]  => receive [ hn (sorVal (dLeft, x))  => x ]
+                    | [dRight] => receive [ hn (sorVal (dRight, x)) => x ]
                 fun iterate (t, v) =
-                    if t = 0 then send (master, (FINAL, myId, v))
+                    if t = 0 then send (master, sorFinal (myId, v))
                     else let val _ = sendAll v
-                             val su = recvOr0 (case ups of [] => [] | _ => [UP])
-                             val sd = recvOr0 (case downs of [] => [] | _ => [DOWN])
-                             val sl = recvOr0 (case lefts of [] => [] | _ => [LEFT])
-                             val sr = recvOr0 (case rights of [] => [] | _ => [RIGHT])
+                             val su = recvOr0 (case ups of [] => [] | _ => [dUp])
+                             val sd = recvOr0 (case downs of [] => [] | _ => [dDown])
+                             val sl = recvOr0 (case lefts of [] => [] | _ => [dLeft])
+                             val sr = recvOr0 (case rights of [] => [] | _ => [dRight])
                              val sum = (su + sd) + (sl + sr)
                          in iterate (t - 1, (v + sum) / (1.0 + deg)) end
             in iterate (iterations, v0) end ]
@@ -1526,14 +1598,14 @@ let
                       (fn (id, p) =>
                          let val x = id mod g
                              val y = (id div g)
-                         in send (p, (WIRE, id, initial (x, y),
+                         in send (p, sorWire (id, initial (x, y),
                                       pidAt (x, y - 1), pidAt (x, y + 1),
                                       pidAt (x - 1, y), pidAt (x + 1, y)))
                          end)
                       cells
             fun collect (k, acc) =
                 if k = 0 then acc
-                else receive [ hn (FINAL, id, v) => collect (k - 1, (id, v) :: acc) ]
+                else receive [ hn (sorFinal (id, v)) => collect (k - 1, (id, v) :: acc) ]
             val finals = collect (g * g, [])
             val ref = reference g
             fun valueAt id =
@@ -1575,9 +1647,9 @@ let
         in go (k0, pow (x, 2 * k0 + 1), 0n) end
 
     fun worker () =
-        receive [ hn (TASK, x, k0, step, s, p) =>
-                    (send (p, (PART, partial (x, k0, step, s))); worker ())
-                , hn STOP => () ]
+        receive [ hn (piTask (x, k0, step, s, p)) =>
+                    (send (p, piPart (partial (x, k0, step, s))); worker ())
+                , hn piStop => () ]
 
     fun bench n =
         let val main = self ()
@@ -1585,15 +1657,15 @@ let
             val s = pow (10n, n + guardDigits)
             fun arctanInv x =
                 let val _ = List.mapi
-                              (fn (w, p) => send (p, (TASK, x, w, numWorkers, s, main)))
+                              (fn (w, p) => send (p, piTask (x, w, numWorkers, s, main)))
                               workers
                     fun collect (k, acc) =
                         if k = 0 then acc
-                        else receive [ hn (PART, t) => collect (k - 1, BigInt.add (acc, t)) ]
+                        else receive [ hn (piPart t) => collect (k - 1, BigInt.add (acc, t)) ]
                 in collect (numWorkers, 0n) end
             val a5 = arctanInv 5n
             val a239 = arctanInv 239n
-            val _ = List.map (fn p => send (p, STOP)) workers
+            val _ = List.map (fn p => send (p, piStop)) workers
             val piFixed = BigInt.sub (BigInt.mul (16n, a5), BigInt.mul (4n, a239))
         in substring (BigInt.show piFixed, 0, n + 1)
         end

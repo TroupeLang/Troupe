@@ -1,0 +1,19 @@
+(* Target for the SPAWN-path missing-module repro. Runs with --rspawn and does
+   NOT have the Stamp module. Its only intended exit is the timeout guard (124):
+   if the runtime dropped the unlinkable spawn cleanly the node would idle to
+   that guard. Without such handling the node crashes when spawnFromRemote's
+   deserialize rejects. *)
+
+let
+    val timeout_pid = spawn(fn () =>
+        let val _ = sleep 6000
+        in exit(authority, 124)
+        end)
+
+    fun target_node() =
+        let val _ = print "TARGET: ready, no Stamp module"
+        in receive [ hn _ => print "TARGET: unexpected message" ]
+        end
+
+in target_node()
+end

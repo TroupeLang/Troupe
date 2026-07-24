@@ -1,0 +1,5 @@
+(* Module shared by both nodes: each node has its own copy of this file,
+   compiled independently. *)
+let fun stamp s = "[" ^ s ^ "]"
+in [ ("stamp", stamp) ]
+end

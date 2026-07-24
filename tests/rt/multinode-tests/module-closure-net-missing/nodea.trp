@@ -1,0 +1,18 @@
+import "./Stamp"
+
+let fun wrap s = Stamp.stamp s
+    val timeout_pid = spawn (fn () =>
+        let val _ = sleep 10000
+        in exit (authority, 124)
+        end)
+in
+  let val _ = print "A: starting"
+      val _ = sleep 500
+      val sink = whereis ("@nodeb", "sink")
+      val _ = print "A: found sink service on node B"
+      val _ = send (sink, wrap)
+      val _ = print "A: sent a module-bearing closure"
+      val _ = sleep 1500
+  in exit (authority, 0)
+  end
+end

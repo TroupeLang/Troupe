@@ -1,0 +1,35 @@
+(* SPAWN-path analog of the SEND missing-module repro.
+
+   The spawner has the Stamp module; it spawns on the target a closure that
+   references Stamp.stamp. The serialized closure carries Stamp as a
+   module:<hash> libdep. The target does not have that module, so its
+   spawnFromRemote -> deserialize -> linkLibs rejects. Because the p2p read
+   pipeline calls inputHandler fire-and-forget (p2p.mts:595), that rejection is
+   unhandled and terminates the target node. The SEND fix in receiveFromRemote
+   does not cover this path. *)
+
+import "./Stamp"
+
+let
+    val timeout_pid = spawn(fn () =>
+        let val _ = sleep 8000
+        in exit(authority, 124)
+        end)
+
+    fun remote_task() =
+        let val s = Stamp.stamp "remote"
+        in print ("REMOTE_TASK: " ^ s)
+        end
+
+    fun spawner() =
+        let val _ = print "SPAWNER: starting"
+            val _ = sleep 500
+            val _ = print "SPAWNER: spawning a module-bearing closure on target"
+            val remote_pid = spawn("@target", remote_task)
+            val _ = print "SPAWNER: spawn issued"
+            val _ = sleep 2000
+        in exit(authority, 0)
+        end
+
+in spawner()
+end

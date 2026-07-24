@@ -1,0 +1,11 @@
+let val timeout_pid = spawn (fn () =>
+        let val _ = sleep 8000
+        in exit (authority, 124)
+        end)
+in
+  let val _ = register ("sink", self (), authority)
+      val _ = print "B: registered sink service (no module)"
+  in receive [ hn f => (print ("B: applied received closure -> " ^ f "net");
+                        exit (authority, 0)) ]
+  end
+end

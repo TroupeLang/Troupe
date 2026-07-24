@@ -1,0 +1,33 @@
+{
+  "test_name": "module-spawn-net-missing",
+  "timeout": 45,
+  "coordination": "parallel",
+  "network": {
+    "relay_port": 5573,
+    "use_relay": "relay-only"
+  },
+  "nodes": [
+    {
+      "id": "spawner",
+      "script": "spawner.trp",
+      "port": 6826,
+      "start_delay": 1,
+      "expected_exit_code": 124
+    },
+    {
+      "id": "target",
+      "script": "target.trp",
+      "port": 6827,
+      "expected_exit_code": 124,
+      "extra_argv": "--rspawn --stdiolev='{}'"
+    }
+  ],
+  "trust": [
+    {"from": "spawner", "to": "target", "level": "bot"},
+    {"from": "target", "to": "spawner", "level": "bot"}
+  ],
+  "output": {
+    "merge_strategy": "timestamp",
+    "filter_patterns": ["uuid", "timestamp", "peer_id"]
+  }
+}

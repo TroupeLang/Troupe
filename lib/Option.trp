@@ -56,9 +56,10 @@ let (*--- Predicates ---*)
     fun toList (SOME v) = [v]
       | toList NONE     = []
 
-    (** SOME x for `[x]`; NONE for `[]`. *)
-    fun fromList [x] = SOME x
-      | fromList []  = NONE
+    (** SOME of the first element for a non-empty list; NONE for `[]`.
+     *  Any elements after the first are ignored. *)
+    fun fromList (x::_) = SOME x
+      | fromList []     = NONE
 
 in [ ("isSome", isSome)
    , ("isNone", isNone)

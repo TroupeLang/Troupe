@@ -1,0 +1,5 @@
+# Per-run artifacts the runner normally removes; ignored so an interrupted run
+# does not leave the working tree dirty.
+*/victim-id.json
+*/victim.log
+*/out/

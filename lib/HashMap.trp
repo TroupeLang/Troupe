@@ -142,16 +142,16 @@ let (* NOTE: The map is implemented as a Hash Array Mapped Trie (HAMT), i.e. a p
     (** Returns `true` if the map is empty. *)
     fun null (_,t) = leaf_isEmpty t
 
-    (** Returns `Option.some value` for the `key` if it is present; otherwise
-     *  `Option.none`. *)
+    (** Returns `SOME value` for the `key` if it is present; otherwise
+     *  `NONE`. *)
     fun findOpt (hf,t) key =
         let val h = hf key
             fun findOptRec t' d =
                 if leaf_isEmpty t'
-                then Option.none else
+                then NONE else
                 if leaf_isLeaf t'
                 then if h <> (leaf_hash hf t')
-                     then Option.none
+                     then NONE
                      else leaf_findOpt t' key
                 else findOptRec (node_getChild t' (node_hashToIdx h d)) (d+1)
         in findOptRec t 0 end

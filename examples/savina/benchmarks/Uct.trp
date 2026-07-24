@@ -19,19 +19,19 @@ let fun hash i = (i * 2654435761) mod 4294967296
                         , hn Marker     => () ]
         in drain () end
     (* request a child index; answer urgent probes while waiting. The reply is
-     * an Option: Some k for an allocated index, None when the tree is full. *)
+     * an Option: SOME k for an allocated index, NONE when the tree is full. *)
     fun allocIdx master =
         (send (master, Alloc (self ()));
          let fun await () =
-                 receive [ hn (Idx k)    => Option.some k
-                         , hn Exhausted  => Option.none
+                 receive [ hn (Idx k)    => SOME k
+                         , hn Exhausted  => NONE
                          , hn (Urgent p) => (send (p, UrgentAck); await ()) ]
          in await () end)
     fun node (i, master) =
         receive [ hn Grow =>
             let val _ = probeUrgent ()
-                fun spawnChild {tag = "None"}           = ()
-                  | spawnChild {tag = "Some", value = k} =
+                fun spawnChild NONE     = ()
+                  | spawnChild (SOME k) =
                       send (spawn (fn () => node (k, master)), Grow)
                 val _ = spawnChild (allocIdx master)
                 val _ = probeUrgent ()

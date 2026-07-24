@@ -38,11 +38,11 @@ let (* -- ListPair Generation -- *)
 
     (* -- ListPair as an Associated List -- *)
 
-    (** Returns `Option.some value` for the first association of the `key` if
-     *  it exists; otherwise `Option.none`. Tail-recursive. *)
-    fun findOpt []     _   = Option.none
+    (** Returns `SOME value` for the first association of the `key` if
+     *  it exists; otherwise `NONE`. Tail-recursive. *)
+    fun findOpt []     _   = NONE
       | findOpt (x,v)::xs key = if x = key
-                                then Option.some v
+                                then SOME v
                                 else findOpt xs key
 
     (** Returns the first value associated with the `key`. Fails if there is none. *)

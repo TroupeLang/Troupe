@@ -126,17 +126,17 @@ let (* -- List Access -- *)
     fun filter f []    = []
       | filter f x::xs = let val xs' = filter f xs in if f x then x::xs' else xs' end
 
-    (** Returns `Option.some x` for the first element that satisfies `f`;
-        otherwise `Option.none`. Tail-recursive. *)
-    fun find f []    = Option.none
-      | find f x::xs = if f x then Option.some x else find f xs
+    (** Returns `SOME x` for the first element that satisfies `f`;
+        otherwise `NONE`. Tail-recursive. *)
+    fun find f []    = NONE
+      | find f x::xs = if f x then SOME x else find f xs
 
-    (** Map `f` over the list, keeping the values of the `Option.some` results
-        and dropping the `Option.none` ones. Not tail-recursive. *)
+    (** Map `f` over the list, keeping the values of the `SOME` results
+        and dropping the `NONE` ones. Not tail-recursive. *)
     fun mapPartial f []    = []
       | mapPartial f x::xs = case f x of
-                               {tag = "Some", value = v} => v :: mapPartial f xs
-                             | _                         => mapPartial f xs
+                               SOME v => v :: mapPartial f xs
+                             | NONE   => mapPartial f xs
 
     (** Same as `List.filter` but `f` is applied to the index of the element as first argument
         (counting from 0), and the element itself as second argument. Not tail-recursive. *)

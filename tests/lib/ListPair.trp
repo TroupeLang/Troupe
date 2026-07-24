@@ -43,11 +43,11 @@ let val tests = Unit.group "ListPair" [
               , Unit.it "appends [(0,1), (2,3)] []" (Unit.isEq [(2,3), (0,1)] (ListPair.revAppend [(0,1), (2,3)] []))
             ],
             Unit.group "findOpt" [
-                Unit.it "returns NONE for [] 42"           (Unit.isEq Option.none (ListPair.findOpt [] 42))
-              , Unit.it "returns NONE for [(0,42)] 42"     (Unit.isEq Option.none (ListPair.findOpt [(0,42)] 42))
-              , Unit.it "returns (SOME 42) for [(0,42)] 0" (Unit.isEq (Option.some 42) (ListPair.findOpt [(0,42)] 0))
+                Unit.it "returns NONE for [] 42"           (Unit.isEq NONE (ListPair.findOpt [] 42))
+              , Unit.it "returns NONE for [(0,42)] 42"     (Unit.isEq NONE (ListPair.findOpt [(0,42)] 42))
+              , Unit.it "returns (SOME 42) for [(0,42)] 0" (Unit.isEq (SOME 42) (ListPair.findOpt [(0,42)] 0))
               , Unit.it "returns (SOME 42) for [(1,'a'), (0,42), (2,3), (0,'no')] 0"
-                        (Unit.isEq (Option.some 42) (ListPair.findOpt [(1,"a"), (0,42), (2,3), (0,"no")] 0))
+                        (Unit.isEq (SOME 42) (ListPair.findOpt [(1,"a"), (0,42), (2,3), (0,"no")] 0))
             ],
             Unit.group "find" [
                 Unit.it "returns 42 for [(0,42)] 0" (Unit.isEq 42 (ListPair.find [(0,42)] 0))

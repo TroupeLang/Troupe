@@ -113,13 +113,13 @@ let
         in if n < sl then false else substring (s, n - sl, n) = suffix
         end
 
-    (** Returns `Option.some i` for the least `i` at which `needle` occurs in
-     *  `s`; otherwise `Option.none`. The empty needle matches at 0. *)
+    (** Returns `SOME i` for the least `i` at which `needle` occurs in
+     *  `s`; otherwise `NONE`. The empty needle matches at 0. *)
     fun indexOf needle s =
         let val nl = size needle
             val n  = size s
-            fun go i = if i + nl > n then Option.none
-                       else if substring (s, i, i + nl) = needle then Option.some i
+            fun go i = if i + nl > n then NONE
+                       else if substring (s, i, i + nl) = needle then SOME i
                        else go (i + 1)
         in go 0 end
 

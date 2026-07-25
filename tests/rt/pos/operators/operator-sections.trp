@@ -1,0 +1,17 @@
+(* Built-in operator sections: a parenthesized built-in is a curried
+   function; parenthesized negation is unaffected. *)
+import List
+let val a = ( + ) 1 2
+    val b = ( :: ) 1 [2, 3]
+    val c = ( - ) 10 3
+    val d = ( ^ ) "ab" "cd"
+    val e = List.foldl (fn (x, acc) => ( + ) x acc) 0 [1, 2, 3, 4]
+    val n = (- a)
+in
+    printString (toString a);
+    printString (toString b);
+    printString (toString c);
+    printString d;
+    printString (toString e);
+    printString (toString n)
+end

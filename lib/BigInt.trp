@@ -7,9 +7,10 @@
  * goes through this module (or the underlying built-ins). Labels
  * propagate through every operation as the join of the operand labels.
  *
- * Fallible conversions return `Result`-shaped records: `fromString` fails
- * on unparsable input; `toInt` fails for values outside the range that a
- * number can represent exactly (beyond 2^53 - 1 in magnitude).
+ * Fallible conversions return a tagged record built in the runtime,
+ * `{tag="Ok", value}` or `{tag="Err", error}`: `fromString` fails on unparsable
+ * input; `toInt` fails for values outside the range that a number can represent
+ * exactly (beyond 2^53 - 1 in magnitude).
  *)
 
 let (** Sum of two bigints. *)
@@ -46,11 +47,11 @@ let (** Sum of two bigints. *)
      *  integer; anything else is a runtime error. *)
     fun fromInt n = bigFromInt n
 
-    (** Number from a bigint. Returns `Result`: `Err` outside exact double
+    (** Number from a bigint. Returns a tagged record; `Err` outside exact double
      *  range. *)
     fun toInt a = bigToInt a
 
-    (** Bigint from a decimal string. Returns `Result`. *)
+    (** Bigint from a decimal string. Returns a tagged record. *)
     fun fromString s = bigFromString s
 
     (** Decimal string form of a bigint.

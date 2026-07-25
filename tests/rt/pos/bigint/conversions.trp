@@ -1,4 +1,4 @@
-(* bigint conversions: Result-shaped fromString/toInt, exact-double
+(* bigint conversions: tagged-record fromString/toInt, exact-double
  * boundary at 9007199254740991 *)
 import BigInt
 

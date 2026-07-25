@@ -100,8 +100,10 @@ support document-processing programs and is expected to be superseded by a label
   reach the filesystem at all, so per-write confidentiality checks and per-path levels are deferred
   rather than half-answered.
 - **Labeling.** Read content is labeled at ROOT ("we trust our own files"), exactly as `persist`
-  labels restored data. Each primitive returns a `Result` (`{tag="Ok",…}` / `{tag="Err",{reason,
-  path}}`), so a missing file or rejected path never crashes the thread.
+  labels restored data. Each primitive returns a tagged record (`{tag="Ok",…}` / `{tag="Err",
+  {reason, path}}`), so a missing file or rejected path never crashes the thread. The standard
+  library reports failure with `Option` and `Outcome`; these records are built in the runtime
+  and are the last place the tagged-record encoding survives.
 - **Sandbox.** `--io-root <dir>` (`rt/src/TroupeCliArgs.mts`) bounds path reachability, orthogonal
   to authority: `..`, absolute-outside, and symlink escapes are rejected before any filesystem
   access, so even a bug in ROOT code cannot write outside the subtree. When unset, a per-invocation
@@ -125,7 +127,7 @@ Bigints are a base value type backed by JavaScript BigInt, distinct from numbers
 - **Semantics.** `getType` reports `"bigint"`. Equality is kind-first: two bigints compare by
   value; a bigint never equals a number or a string. Bigints print in literal form (`5n`);
   `BigInt.show` yields the plain decimal digits. `BigInt.fromString` and `BigInt.toInt` return
-  `Result` records (`toInt` fails beyond exact double range).
+  tagged records built in the runtime (`toInt` fails beyond exact double range).
 - **Representation.** A bigint is boxed (`rt/src/TroupeBigInt.mts`) so it can carry the runtime
   type tag; the label rides the enclosing labeled value like every base type, and every built-in
   joins the current pc into its result label, matching the labeling of number literals. On the

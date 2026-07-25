@@ -357,12 +357,29 @@ mapFromImports (Imports imports) =
     (unqualEnv, libExports)
 
 
--- | Sanitize variable names to be JavaScript-compatible identifiers
+-- | Sanitize variable names to be JavaScript-compatible identifiers.
+-- Ordinary names only need their primes replaced. Operator names (and the
+-- generated names derived from them, like <+>_arg1) contain characters that
+-- are not legal in JavaScript identifiers; they are encoded under a "$op"
+-- prefix with one mnemonic per character. '$'-only operators ($, $$) need no
+-- encoding: '$' is a legal JavaScript identifier character, and the
+-- uniqueness counter appended by 'unique' keeps them distinct from
+-- compiler-internal '$'-prefixed names.
 sanitizeForJS :: VarName -> VarName
-sanitizeForJS = map sanitizeChar
+sanitizeForJS v
+  | any (`elem` jsHostileChars) v = "$op" ++ concatMap opCharCode v
+  | otherwise                     = map sanitizeChar v
   where
     sanitizeChar '\'' = '_'  -- Replace single quotes with underscores
     sanitizeChar c = c        -- Keep other characters as-is
+    jsHostileChars = "!%&*+-/:<=>?@^|~." :: String
+    opCharCode c = case c of
+      '<' -> "$lt";   '>' -> "$gt";    '=' -> "$eq";    '+' -> "$plus"
+      '-' -> "$minus";'*' -> "$star";  '/' -> "$slash"; '^' -> "$caret"
+      '@' -> "$at";   '|' -> "$bar";   '&' -> "$amp";   '$' -> "$dollar"
+      '%' -> "$pct";  '!' -> "$bang";  '~' -> "$tilde"; '?' -> "$quest"
+      ':' -> "$colon";'.' -> "$dot";   '\'' -> "_"
+      _   -> [c]
 
 unique :: VarName -> S VarName
 unique v = do
@@ -383,7 +400,24 @@ lookforgen v m =
           (unqualEnv, _) <- ask
           case Map.lookup v unqualEnv of
             Just lib' -> return $ LibVar lib' v
-            Nothing -> return  $ BaseName v
+            -- An unresolved ordinary name falls through to the ambient
+            -- builtins (BaseName). No builtin has an operator name, and the
+            -- fallthrough would emit the invalid JavaScript rt.<+>, so an
+            -- unresolved operator is an error here.
+            Nothing
+              | isOperatorName v ->
+                  lift $ throwError $
+                    "unbound operator '" ++ v ++ "': it is neither defined"
+                    ++ " in this file nor imported unqualified"
+              | otherwise -> return $ BaseName v
+  where
+    -- Operator names are all operator characters ('$'-only ones included);
+    -- compiler-internal '$'-prefixed names mix '$' with alphanumerics and
+    -- fall through to the ambient builtins as before.
+    isOperatorName x = not (null x)
+                       && (all (`elem` fullOpChars) x || any (`elem` hostile) x)
+    fullOpChars = "!$%&*+-/:<=>?@^|~." :: String
+    hostile     = "!%&*+-/:<=>?@^|~" :: String
 
 
 extend :: VarName -> VarName -> Env -> Env

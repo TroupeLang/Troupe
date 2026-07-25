@@ -12,7 +12,7 @@ import Basics
 import Direct
 import TroupePositionInfo (Located(..), unLoc)
 import Control.Monad.Except
-import Data.List (intercalate)
+import Data.List (intercalate, partition)
 import Data.String.Utils (startswith)
 
 type Exports = [(Basics.VarName, Basics.VarName)]
@@ -65,6 +65,29 @@ isModuleHashLine = startswith moduleHashPrefix
 -- | Parse the module-hash line into its hash (the token after the prefix).
 parseModuleHashLine :: String -> String
 parseModuleHashLine = dropWhile (== ' ') . drop (length moduleHashPrefix)
+
+-- | A parsed @.exports@ interface: the module-hash lines (none for a library,
+-- exactly one for a module artifact — the caller enforces the arity so its
+-- error can name the importing context), the exported value names, and the
+-- datatype-group lines. This is the one reader of the interface format; every
+-- consumer goes through it, so the writers above and the readers cannot drift.
+data ExportsInterface = ExportsInterface
+  { eiModuleHashes :: [String]
+  , eiNames        :: [Basics.VarName]
+  , eiDatatypes    :: [(String, String)]
+  }
+
+-- | Parse @.exports@ file content. Total: every line is classified by its
+-- prefix; unprefixed lines are value names.
+parseExportsFile :: String -> ExportsInterface
+parseExportsFile input =
+  let (mhLines, rest)      = partition isModuleHashLine (lines input)
+      (dtLines, nameLines) = partition isDatatypeLine rest
+  in ExportsInterface
+       { eiModuleHashes = map parseModuleHashLine mhLines
+       , eiNames        = nameLines
+       , eiDatatypes    = map parseDatatypeLine dtLines
+       }
 
 -- | Assemble the @.exports@ interface content: the module-hash line (present
 -- only for module artifacts, whose identity is content-addressed), then one

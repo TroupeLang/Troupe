@@ -2,14 +2,14 @@ module ProcessImports (PinCheck(..), processImports, discoverModules) where
 import Basics
 import Direct
 import DepsFile (DepEntry(..), lookupPinByPath)
-import Exports (isDatatypeLine, parseDatatypeLine, isModuleHashLine, parseModuleHashLine)
+import Exports (ExportsInterface(..), parseExportsFile)
 import Parser (parseProg)
 import Control.Monad (unless, foldM)
 import System.Environment
 import System.Exit
 import System.Directory (doesFileExist)
 import System.FilePath
-import Data.List (partition, intercalate)
+import Data.List (intercalate)
 import Data.String.Utils
 
 -- | Whether the frontend enforces the dependencies file (a normal compile) or
@@ -131,16 +131,16 @@ processModuleImport pin root file imp = do
   input <- readFile expFile
   -- A module's .exports has the same shape as a library's: one value name per
   -- line and zero or more @datatype ...@ lines, plus (for a module) its own
-  -- @module-hash <hash>@ line. Strip the module-hash line first, then partition
-  -- the rest exactly as processLibImport does, so a module's datatype interface
-  -- reaches the syntactic-variant resolver (importer-side constructor
-  -- resolution) and neither the datatype lines nor the module-hash line leak
-  -- into the value namespace. Selection restricts value imports only.
-  let (mhLines, rest)      = partition isModuleHashLine (lines input)
-      (dtLines, nameLines) = partition isDatatypeLine rest
-      datatypes            = map parseDatatypeLine dtLines
-  actualHash <- case mhLines of
-    [l] -> return (parseModuleHashLine l)
+  -- @module-hash <hash>@ line. 'parseExportsFile' (Exports) is the one reader
+  -- of the format, so a module's datatype interface reaches the
+  -- syntactic-variant resolver (importer-side constructor resolution) and
+  -- neither the datatype lines nor the module-hash line leak into the value
+  -- namespace. Selection restricts value imports only.
+  let iface     = parseExportsFile input
+      nameLines = eiNames iface
+      datatypes = eiDatatypes iface
+  actualHash <- case eiModuleHashes iface of
+    [h] -> return h
     []  -> die $ "module " ++ show lit ++ " imported from " ++ displayPath root file
                ++ " has no content hash in " ++ displayPath root expFile
                ++ " (recompile it)"
@@ -201,10 +201,12 @@ processLibImport imp = do
   -- The .exports file carries one value name per line, followed by zero or
   -- more @datatype <group-hash> <canonical-form>@ lines (normalization.md §10).
   -- Value names feed value-name scoping (Core); datatype lines feed the
-  -- syntactic-variant resolver (SynVarFolding) and are kept separate here so
-  -- they never leak into the value namespace.
-  let (dtLines, nameLines) = partition isDatatypeLine (lines input)
-      datatypes = map parseDatatypeLine dtLines
+  -- syntactic-variant resolver (SynVarFolding) and are kept separate by the
+  -- shared reader so they never leak into the value namespace. (A library
+  -- artifact carries no module-hash line; the reader would strip one anyway.)
+  let iface     = parseExportsFile input
+      nameLines = eiNames iface
+      datatypes = eiDatatypes iface
   -- Validate selective imports if specified. Selection restricts *value*
   -- imports only; datatypes are imported wholesale regardless (they are
   -- compile-time only), so selection is checked against the value names.

@@ -1,4 +1,4 @@
-2026-07-16T23:15:21.531Z [RTM] info: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+2026-07-25T11:35:37.432Z [RTM] info: Skipping network creation. Observe that all external IO operations will yield a runtime error.
 [34mbegin [0mJson
   [34mbegin [0mparse literals
       [33m[ TEST ][0m it true      [32m[ PASS ][0m it true
@@ -49,10 +49,11 @@
       [33m[ TEST ][0m it empty object      [32m[ PASS ][0m it empty object
       [33m[ TEST ][0m it object field access      [32m[ PASS ][0m it object field access
       [33m[ TEST ][0m it object second field      [32m[ PASS ][0m it object second field
-      [33m[ TEST ][0m it missing field is Err      [32m[ PASS ][0m it missing field is Err
-      [33m[ TEST ][0m it field on non-object is Err      [32m[ PASS ][0m it field on non-object is Err
+      [33m[ TEST ][0m it missing field is NONE      [32m[ PASS ][0m it missing field is NONE
+      [33m[ TEST ][0m it field on non-object is NONE      [32m[ PASS ][0m it field on non-object is NONE
       [33m[ TEST ][0m it index into array      [32m[ PASS ][0m it index into array
-      [33m[ TEST ][0m it index out of range is Err      [32m[ PASS ][0m it index out of range is Err
+      [33m[ TEST ][0m it index out of range is NONE      [32m[ PASS ][0m it index out of range is NONE
+      [33m[ TEST ][0m it negative index is NONE      [32m[ PASS ][0m it negative index is NONE
       [33m[ TEST ][0m it nested field then index      [32m[ PASS ][0m it nested field then index
   [34mend [0m
   [34mbegin [0maccessors
@@ -60,8 +61,9 @@
       [33m[ TEST ][0m it asNumber ok      [32m[ PASS ][0m it asNumber ok
       [33m[ TEST ][0m it asString ok      [32m[ PASS ][0m it asString ok
       [33m[ TEST ][0m it asArray ok      [32m[ PASS ][0m it asArray ok
-      [33m[ TEST ][0m it asBool on number is Err      [32m[ PASS ][0m it asBool on number is Err
+      [33m[ TEST ][0m it asBool on number is NONE      [32m[ PASS ][0m it asBool on number is NONE
       [33m[ TEST ][0m it asObject pairs      [32m[ PASS ][0m it asObject pairs
+      [33m[ TEST ][0m it asObject on non-object is NONE      [32m[ PASS ][0m it asObject on non-object is NONE
   [34mend [0m
   [34mbegin [0mstringify
       [33m[ TEST ][0m it null      [32m[ PASS ][0m it null
@@ -119,6 +121,6 @@
   [34mend [0m
 [34mend [0m
 
-Total:  99
-Passes: 99
+Total:  101
+Passes: 101
 >>> Main thread finished with value: true@{}%{}

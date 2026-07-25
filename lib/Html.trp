@@ -11,7 +11,7 @@
 
 import List
 import String
-import Result
+import Option
 
 let (* --- Helper Functions --- *)
 
@@ -46,11 +46,11 @@ let (* --- Helper Functions --- *)
            startsWith "data:text/html" lower
         end
 
-    (* Sanitize URL - returns Result. Callers must handle dangerous URLs explicitly. *)
+    (* Sanitize URL - `NONE` for a dangerous scheme. Callers must handle that case explicitly. *)
     fun sanitizeUrl url =
         if isDangerousUrl url
-        then Result.err {reason = "dangerous URL scheme", url = url}
-        else Result.ok url
+        then NONE
+        else SOME url
 
     (* List of attribute names that contain URLs *)
     val urlAttrs = ["href", "src", "action", "formaction", "poster", "data", "cite", "background"]
@@ -139,7 +139,7 @@ let (* --- Helper Functions --- *)
             fun renderPair (name, value) =
                 let val strVal = valueToString value
                     val safeVal = if isUrlAttr name
-                                  then Result.unwrapOr (sanitizeUrl strVal) ""
+                                  then Option.getOrElse (sanitizeUrl strVal) ""
                                   else strVal
                 in " " ^ name ^ "='" ^ escapeAttr safeVal ^ "'"
                 end

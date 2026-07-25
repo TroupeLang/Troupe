@@ -1,0 +1,33 @@
+import Outcome
+
+(** SimpleFileIO - file access reported as an Outcome rather than a tagged record.
+ *
+ *  The runtime builtins return `{tag = "Ok", value}` / `{tag = "Err", error = {reason, path}}`.
+ *  This wrapper converts that at the boundary, so no library-source hash has to be embedded in
+ *  the runtime to build a datatype value there.
+ *
+ *  Import it selectively to shadow the builtins, leaving call sites unchanged:
+ *
+ *    import { readFile, writeFile } SimpleFileIO
+ *
+ *    case readFile (authority, path) of OK src => ...
+ *                                     | ERR e  => report (e.reason, e.path)
+ *)
+
+let (* The builtins, captured before the definitions below shadow their names. *)
+    val rawReadFile  = readFile
+    val rawWriteFile = writeFile
+
+    fun toOutcome {tag = "Ok",  value = v} = OK v
+      | toOutcome {tag = "Err", error = e} = ERR e
+
+    (** Contents of `path`; `ERR {reason, path}` if it cannot be read. *)
+    fun readFile (auth, path) = toOutcome (rawReadFile (auth, path))
+
+    (** Write `contents` to `path`; `ERR {reason, path}` if it cannot be written. *)
+    fun writeFile (auth, path, contents) = toOutcome (rawWriteFile (auth, path, contents))
+
+in [ ("readFile", readFile)
+   , ("writeFile", writeFile)
+   ]
+end

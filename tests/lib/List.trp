@@ -131,6 +131,62 @@ let val tests = Unit.group "List" [
                             (Unit.isEq [] (List.sublist 42 2 xs))
                 ]
             end,
+            let val xs = [2,3,5,7,11,13]
+            in Unit.group "take" [
+                    Unit.it "takes 0 from []"       (Unit.isEq []        (List.take 0 []))
+                  , Unit.it "takes 3 from []"       (Unit.isEq []        (List.take 3 []))
+                  , Unit.it "takes 0 from xs"       (Unit.isEq []        (List.take 0 xs))
+                  , Unit.it "takes 3 from xs"       (Unit.isEq [2,3,5]   (List.take 3 xs))
+                  , Unit.it "takes all of xs"       (Unit.isEq xs        (List.take 6 xs))
+                  , Unit.it "takes more than xs has" (Unit.isEq xs       (List.take 42 xs))
+                  , Unit.it "takes a negative count" (Unit.isEq []       (List.take (0-1) xs))
+                ]
+            end,
+            let val xs = [2,3,5,7,11,13]
+            in Unit.group "drop" [
+                    Unit.it "drops 0 from []"        (Unit.isEq []           (List.drop 0 []))
+                  , Unit.it "drops 3 from []"        (Unit.isEq []           (List.drop 3 []))
+                  , Unit.it "drops 0 from xs"        (Unit.isEq xs           (List.drop 0 xs))
+                  , Unit.it "drops 3 from xs"        (Unit.isEq [7,11,13]    (List.drop 3 xs))
+                  , Unit.it "drops all of xs"        (Unit.isEq []           (List.drop 6 xs))
+                  , Unit.it "drops more than xs has" (Unit.isEq []           (List.drop 42 xs))
+                  , Unit.it "drops a negative count" (Unit.isEq xs           (List.drop (0-1) xs))
+                ]
+            end,
+            let val xs = [2,4,6,7,8,9]
+                fun isEven x = (x mod 2) = 0
+                fun isOdd  x = (x mod 2) = 1
+            in Unit.group "takeWhile" [
+                    Unit.it "isEven []"          (Unit.isEq []      (List.takeWhile isEven []))
+                  , Unit.it "isEven xs"          (Unit.isEq [2,4,6] (List.takeWhile isEven xs))
+                  , Unit.it "isOdd xs stops at once" (Unit.isEq []  (List.takeWhile isOdd  xs))
+                  , Unit.it "always true takes all"
+                            (Unit.isEq xs (List.takeWhile (fn _ => true) xs))
+                ]
+            end,
+            let val xs = [2,4,6,7,8,9]
+                fun isEven x = (x mod 2) = 0
+                fun isOdd  x = (x mod 2) = 1
+            in Unit.group "dropWhile" [
+                    Unit.it "isEven []"          (Unit.isEq []        (List.dropWhile isEven []))
+                  , Unit.it "isEven xs"          (Unit.isEq [7,8,9]   (List.dropWhile isEven xs))
+                  , Unit.it "isOdd xs drops none" (Unit.isEq xs       (List.dropWhile isOdd  xs))
+                  , Unit.it "always true drops all"
+                            (Unit.isEq [] (List.dropWhile (fn _ => true) xs))
+                ]
+            end,
+            let val xs = [2,4,6,7,8,9]
+                fun isEven x = (x mod 2) = 0
+                fun isOdd  x = (x mod 2) = 1
+            in Unit.group "span" [
+                    Unit.it "isEven []" (Unit.isEq ([],[])            (List.span isEven []))
+                  , Unit.it "isEven xs" (Unit.isEq ([2,4,6],[7,8,9])  (List.span isEven xs))
+                  , Unit.it "isOdd xs"  (Unit.isEq ([],xs)            (List.span isOdd  xs))
+                  , Unit.it "agrees with takeWhile and dropWhile"
+                            (Unit.isEq (List.takeWhile isEven xs, List.dropWhile isEven xs)
+                                       (List.span isEven xs))
+                ]
+            end,
             Unit.group "appendAt" [
                 Unit.it "appends [] [] 0"     (Unit.isEq []      (List.appendAt [] [] 0))
               , Unit.it "appends [1] [2] 0"   (Unit.isEq [2,1]   (List.appendAt [1] [2] 0))

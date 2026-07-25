@@ -8,32 +8,34 @@
  * every interpolation through Html. The result is written to the output file and
  * echoed. Paths resolve relative to --io-root. *)
 
+import { readFile, writeFile } SimpleFileIO
 import Template
 import Json
 import List
+import Outcome
 
 let val args = getCliArgs authority
 
     fun onRendered outPath out =
         case writeFile (authority, outPath, out) of
-          {tag = "Ok",  value = _} => print ("wrote " ^ outPath ^ ":\n" ^ out)
-        | {tag = "Err", error = e} => print ("write error: " ^ e.reason ^ " (" ^ e.path ^ ")")
+          OK _ => print ("wrote " ^ outPath ^ ":\n" ^ out)
+        | ERR e => print ("write error: " ^ e.reason ^ " (" ^ e.path ^ ")")
 
     fun onData outPath tmpl ctx =
         if Json.kindOf ctx <> "object"
         then print "data file must contain a JSON object to use as the context"
         else case Template.render tmpl ctx of
-               {tag = "Ok",  value = out} => onRendered outPath out
-             | {tag = "Err", error = e}   => print ("template error: " ^ e.reason)
+               OK out => onRendered outPath out
+             | ERR e  => print ("template error: " ^ e.reason)
 
     fun onTemplate dataPath outPath tmpl =
         case readFile (authority, dataPath) of
-          {tag = "Ok", value = dataSrc} =>
+          OK dataSrc =>
             (case Json.parse dataSrc of
-               {tag = "Ok",  value = ctx} => onData outPath tmpl ctx
-             | {tag = "Err", error = e}   =>
+               OK ctx => onData outPath tmpl ctx
+             | ERR e  =>
                  print ("data parse error at offset " ^ toString e.offset ^ ": " ^ e.reason))
-        | {tag = "Err", error = e} => print ("read error: " ^ e.reason ^ " (" ^ e.path ^ ")")
+        | ERR e => print ("read error: " ^ e.reason ^ " (" ^ e.path ^ ")")
 
 in if List.length args < 3
    then print "usage: render-template --io-root <dir> -- <template> <data.json> <output>"
@@ -41,7 +43,7 @@ in if List.length args < 3
             val dataPath = List.nth args 1
             val outPath  = List.nth args 2
         in case readFile (authority, tmplPath) of
-             {tag = "Ok",  value = tmpl} => onTemplate dataPath outPath tmpl
-           | {tag = "Err", error = e}    => print ("read error: " ^ e.reason ^ " (" ^ e.path ^ ")")
+             OK tmpl => onTemplate dataPath outPath tmpl
+           | ERR e => print ("read error: " ^ e.reason ^ " (" ^ e.path ^ ")")
         end
 end

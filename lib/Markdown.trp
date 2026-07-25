@@ -40,8 +40,9 @@ let (* =================================================================== *)
     (*  String / character utilities                                       *)
     (* =================================================================== *)
 
-    fun dropWhileSpace c::cs = if c = " " then dropWhileSpace cs else c::cs
-      | dropWhileSpace []    = []
+    fun isSpaceChar c = c = " "
+
+    fun dropWhileSpace cs = List.dropWhile isSpaceChar cs
 
     (* Remove leading spaces. *)
     fun trimLeft s = String.implode (dropWhileSpace (String.explode s))
@@ -53,15 +54,13 @@ let (* =================================================================== *)
     (* Remove leading and trailing spaces. *)
     fun trim s = trimRight (trimLeft s)
 
-    (* Number of leading space characters of a line. *)
-    fun leadingSpaces s =
-        let fun go i = if String.sub (s, i) = " " then go (i + 1) else i
-        in go 0 end
-
     (* Number of leading characters equal to `ch`. *)
     fun countLeading ch s =
         let fun go i = if String.sub (s, i) = ch then go (i + 1) else i
         in go 0 end
+
+    (* Number of leading space characters of a line. *)
+    fun leadingSpaces s = countLeading " " s
 
     (* Number of trailing characters equal to `ch`. *)
     fun countTrailing ch s =
@@ -106,12 +105,7 @@ let (* =================================================================== *)
                 in if n > 0 andalso String.sub (t, n - 1) = "\r"
                    then String.substring (t, 0, n - 1) else t
                 end
-            fun finish rev = stripCR (String.implode (List.reverse rev))
-            fun go []       cur acc = List.reverse ((finish cur) :: acc)
-              | go c::cs cur acc =
-                  if c = "\n" then go cs [] ((finish cur) :: acc)
-                  else go cs (c :: cur) acc
-        in go (String.explode s) [] [] end
+        in List.map stripCR (String.split "\n" s) end
 
     (* =================================================================== *)
     (*  Block classification                                               *)
@@ -204,11 +198,11 @@ let (* =================================================================== *)
                     val r  = fromIndex l i
                     val cl = countLeading fenceChar r
                 in cl >= fenceLen andalso trim (fromIndex r cl) = "" end
-            fun collect []       acc = (List.reverse acc, [])
-              | collect l::ls acc =
-                  if isClose l then (List.reverse acc, ls)
-                  else collect ls (l :: acc)
-            val (codeLines, rest) = collect (List.tail lines) []
+            (* Unlike the other block collectors, the closing fence is consumed rather than left
+             * for the caller, so it is dropped from the remainder. `drop 1 []` covers the
+             * unterminated case, where the span ran to the end of the input. *)
+            val (codeLines, afterCode) = List.span (fn l => not (isClose l)) (List.tail lines)
+            val rest = List.drop 1 afterCode
             val code = String.concat (List.map (fn l => l ^ "\n") codeLines)
         in ({tag = "CodeBlock", lang = lang, code = code}, rest) end
 
@@ -216,21 +210,16 @@ let (* =================================================================== *)
     (*  Inline parsing                                                     *)
     (* =================================================================== *)
 
-    fun dropN 0 xs      = xs
-      | dropN _ []      = []
-      | dropN n _::xs = dropN (n - 1) xs
+    val dropN = List.drop
 
     fun addChars 0 _  buf = buf
       | addChars n ch buf = addChars (n - 1) ch (ch :: buf)
 
-    fun countLeadingList ch x::xs = if x = ch then 1 + countLeadingList ch xs else 0
-      | countLeadingList _  []      = 0
+    fun countLeadingList ch xs = List.length (List.takeWhile (fn x => x = ch) xs)
 
-    fun dropLeadingSpacesL x::xs = if x = " " then dropLeadingSpacesL xs else x :: xs
-      | dropLeadingSpacesL []      = []
+    val dropLeadingSpacesL = dropWhileSpace
 
-    fun countLeadingSpacesL x::xs = if x = " " then 1 + countLeadingSpacesL xs else 0
-      | countLeadingSpacesL []      = 0
+    fun countLeadingSpacesL xs = countLeadingList " " xs
 
     (* Does the char list `cs` start with the char list `delim`? *)
     fun matchesAt []      _        = true
@@ -427,12 +416,8 @@ let (* =================================================================== *)
         let fun stops l =
                 isBlank l orelse isThematicBreak l orelse (parseHeadingLine l <> [])
                 orelse isFence l orelse isBlockquote l orelse (matchMarker l <> [])
-            fun collect []       acc = (List.reverse acc, [])
-              | collect l::ls acc =
-                  if stops l then (List.reverse acc, l :: ls)
-                  else collect ls ((trimLeft l) :: acc)
-            val (plines, rest) = collect lines []
-            val text = String.concatWith "\n" plines
+            val (body, rest) = List.span (fn l => not (stops l)) lines
+            val text = String.concatWith "\n" (List.map trimLeft body)
         in ({tag = "Paragraph", inline = parseInline text}, rest) end
 
     and parseBlockquote lines =
@@ -440,28 +425,27 @@ let (* =================================================================== *)
                 let val ind      = leadingSpaces l
                     val afterGt  = fromIndex l (ind + 1)
                 in if String.sub (afterGt, 0) = " " then fromIndex afterGt 1 else afterGt end
-            fun collect []       acc = (List.reverse acc, [])
-              | collect l::ls acc =
-                  if isBlockquote l then collect ls ((strip l) :: acc)
-                  else (List.reverse acc, l :: ls)
-            val (inner, rest) = collect lines []
+            val (quoted, rest) = List.span isBlockquote lines
+            val inner = List.map strip quoted
         in ({tag = "BlockQuote", blocks = parseBlocks inner}, rest) end
 
     and parseListBlock lines =
         let val ordered0 = (List.head (matchMarker (List.head lines))).ordered
-            fun collectItem _      []       acc = (List.reverse acc, [])
-              | collectItem indent l::ls acc =
-                  if isBlank l then collectItem indent ls ("" :: acc)
-                  else if leadingSpaces l >= indent
-                       then collectItem indent ls ((deindent indent l) :: acc)
-                       else (List.reverse acc, l :: ls)
+            (* A continuation line either is blank or is indented to the item's content column.
+             * Blank lines are kept, as empty lines, so a list item can hold several blocks. *)
+            fun collectItem indent lines =
+                let fun continues l = isBlank l orelse leadingSpaces l >= indent
+                    fun normalize l = if isBlank l then "" else deindent indent l
+                    val (body, rest) = List.span continues lines
+                in (List.map normalize body, rest)
+                end
             fun loop []          items = (List.reverse items, [])
               | loop (l::rest) items =
                   (case matchMarker l of
                        [] => (List.reverse items, l :: rest)
                      | mk::_ =>
                          if mk.ordered <> ordered0 then (List.reverse items, l :: rest)
-                         else let val (contLines, rest') = collectItem (mk.indent) rest []
+                         else let val (contLines, rest') = collectItem (mk.indent) rest
                                   val itemBlocks = parseBlocks ((mk.content) :: contLines)
                               in loop rest' ({blocks = itemBlocks} :: items) end)
             val (items, remaining) = loop lines []
@@ -470,9 +454,6 @@ let (* =================================================================== *)
     (* =================================================================== *)
     (*  AST -> Html nodes                                                  *)
     (* =================================================================== *)
-
-    (* Left-to-right flatten of a list of lists (order preserving). *)
-    fun flatten xss = List.foldl (fn (xs, acc) => List.append acc xs) [] xss
 
     fun headingNode level children =
         if level = 1 then Html.h1 {} children
@@ -520,7 +501,7 @@ let (* =================================================================== *)
            | "ListBlock"     => [ listNode b.ordered b.items ]
            | _               => [])
 
-    and blocksToNodes tight bs = flatten (List.map (blockToNodes tight) bs)
+    and blocksToNodes tight bs = List.concat (List.map (blockToNodes tight) bs)
 
     and listNode ordered items =
         let val liNodes = List.map (fn item => Html.li {} (blocksToNodes true item.blocks)) items

@@ -7,12 +7,21 @@
  * goes through this module (or the underlying built-ins). Labels
  * propagate through every operation as the join of the operand labels.
  *
- * Fallible conversions return `Result`-shaped records: `fromString` fails
- * on unparsable input; `toInt` fails for values outside the range that a
- * number can represent exactly (beyond 2^53 - 1 in magnitude).
+ * Fallible conversions return an option: `fromString` fails on unparsable input;
+ * `toInt` fails for values outside the range that a number can represent exactly
+ * (beyond 2^53 - 1 in magnitude). Each has a single cause, and the value that
+ * caused it is the argument the caller passed, so there is nothing to report
+ * beyond the failure itself.
  *)
 
-let (** Sum of two bigints. *)
+import Option
+
+let (* The runtime builds these conversions as tagged records; they are converted
+     * here so that the record never reaches a caller. *)
+    fun toOption {tag = "Ok",  value = v} = SOME v
+      | toOption {tag = "Err", error = _} = NONE
+
+    (** Sum of two bigints. *)
     fun add (a, b) = bigAdd (a, b)
 
     (** Difference of two bigints. *)
@@ -46,12 +55,11 @@ let (** Sum of two bigints. *)
      *  integer; anything else is a runtime error. *)
     fun fromInt n = bigFromInt n
 
-    (** Number from a bigint. Returns `Result`: `Err` outside exact double
-     *  range. *)
-    fun toInt a = bigToInt a
+    (** Number from a bigint; `NONE` outside exact double range. *)
+    fun toInt a = toOption (bigToInt a)
 
-    (** Bigint from a decimal string. Returns `Result`. *)
-    fun fromString s = bigFromString s
+    (** Bigint from a decimal string; `NONE` if it does not parse. *)
+    fun fromString s = toOption (bigFromString s)
 
     (** Decimal string form of a bigint.
      *

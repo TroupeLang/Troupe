@@ -1,0 +1,94 @@
+import Option
+
+(** Outcome - a result that is either a success or a failure carrying a diagnostic.
+ *
+ *  Outcome is a datatype with two constructors:
+ *    - Success: `OK v`
+ *    - Failure: `ERR e`
+ *
+ *  Use Outcome when the failure carries something the caller cannot work out for itself —
+ *  a source offset, a lookup path, a filesystem reason. When the failure is only the
+ *  absence of a value, use `Option` instead: `Err {reason = "not a JSON bool"}` tells a
+ *  caller of `asBool` nothing it did not already know.
+ *
+ *  Importing this library brings `OK` and `ERR` into scope. That is not transitive: a
+ *  client receiving an outcome from another library must import Outcome itself in order to
+ *  pattern-match on it.
+ *
+ *    case Json.parse src of OK v  => render v
+ *                         | ERR e => report (e.reason, e.offset)
+ *)
+
+datatype ('a, 'e) outcome = OK of 'a | ERR of 'e
+
+let (*--- Predicates ---*)
+
+    (** Returns true if the outcome is OK. *)
+    fun isOk (OK _)  = true
+      | isOk (ERR _) = false
+
+    (** Returns true if the outcome is ERR. *)
+    fun isErr (ERR _) = true
+      | isErr (OK _)  = false
+
+    (*--- Extraction ---*)
+
+    (** Extract the value from an OK outcome. Fails if ERR. *)
+    fun unwrap (OK v) = v
+
+    (** Extract the value from an OK outcome, or return default if ERR. *)
+    fun unwrapOr (OK v)  _       = v
+      | unwrapOr (ERR _) default = default
+
+    (** Extract the diagnostic from an ERR outcome. Fails if OK. *)
+    fun unwrapErr (ERR e) = e
+
+    (*--- Transformations ---*)
+
+    (** Apply f to the value if OK, leave ERR unchanged. *)
+    fun map f (OK v)  = OK (f v)
+      | map _ (ERR e) = ERR e
+
+    (** Apply f to the diagnostic if ERR, leave OK unchanged. *)
+    fun mapErr f (ERR e) = ERR (f e)
+      | mapErr _ (OK v)  = OK v
+
+    (** Chain operations: if OK, apply f (which returns an outcome). *)
+    fun andThen f (OK v)  = f v
+      | andThen _ (ERR e) = ERR e
+
+    (** If ERR, try recovery function f (which returns an outcome). *)
+    fun orElse f (ERR e) = f e
+      | orElse _ (OK v)  = OK v
+
+    (*--- Combination ---*)
+
+    (** Convert (outcome a, outcome b) to outcome (a, b). The first ERR wins. *)
+    fun both (OK a)  (OK b)  = OK (a, b)
+      | both (ERR e) _       = ERR e
+      | both _       (ERR e) = ERR e
+
+    (*--- Option bridge ---*)
+
+    (** `SOME v` for `OK v`; `NONE` for `ERR _`, discarding the diagnostic. *)
+    fun toOption (OK v)  = SOME v
+      | toOption (ERR _) = NONE
+
+    (** `OK v` for `SOME v`; `ERR e` for `NONE`, supplying the diagnostic. *)
+    fun fromOption _ (SOME v) = OK v
+      | fromOption e NONE     = ERR e
+
+in [ ("isOk", isOk)
+   , ("isErr", isErr)
+   , ("unwrap", unwrap)
+   , ("unwrapOr", unwrapOr)
+   , ("unwrapErr", unwrapErr)
+   , ("map", map)
+   , ("mapErr", mapErr)
+   , ("andThen", andThen)
+   , ("orElse", orElse)
+   , ("both", both)
+   , ("toOption", toOption)
+   , ("fromOption", fromOption)
+   ]
+end

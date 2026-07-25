@@ -4,16 +4,19 @@ build:
 	mkdir -p out
 
   # No dependencies
-	$(COMPILER) ./BigInt.trp -l
 	$(COMPILER) ./Number.trp -l
 	$(COMPILER) ./Option.trp -l
 	$(COMPILER) ./ThreadUtil.trp -l
 	$(COMPILER) ./timeout.trp -l
-	$(COMPILER) ./Result.trp -l
 	$(COMPILER) ./VariantsDemo.trp -l
 
   # Dependency on `Option`
+	$(COMPILER) ./BigInt.trp -l
 	$(COMPILER) ./List.trp -l
+	$(COMPILER) ./Outcome.trp -l
+
+  # Dependency on `Outcome`
+	$(COMPILER) ./SimpleFileIO.trp -l
 
   # Dependency on `Number`
 	$(COMPILER) ./Duration.trp -l
@@ -36,18 +39,20 @@ build:
   # Dependency on `Number` and `String` (and transitively `List`)
 	$(COMPILER) ./Hash.trp -l
 
-  # Dependency on `List`, `String`, and `Result`
+  # Dependency on `List`, `String`, and `Option`
 	$(COMPILER) ./Html.trp -l
+
+  # Dependency on `List`, `ListPair`, `String`, `Option`, and `Outcome`
 	$(COMPILER) ./Json.trp -l
 
   # Dependency on `Html`, `String`, and `List`
 	$(COMPILER) ./Svg.trp -l
 	$(COMPILER) ./Markdown.trp -l
 
-  # Dependency on `Html`, `String`, `List`, and `Result`
+  # Dependency on `Html`, `String`, `List`, and `Outcome`
 	$(COMPILER) ./Template.trp -l
 
-  # Dependency on `Number`, `String`, `List`, `Result`, and `Duration`
+  # Dependency on `Number`, `String`, `List`, `Option`, `Outcome`, and `Duration`
 	$(COMPILER) ./Time.trp -l
 
   # Dependency on `List`, `ListPair`, and `StencilVector`

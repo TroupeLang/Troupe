@@ -1,4 +1,4 @@
-2026-02-17T16:06:55.036Z [RTM] [32minfo[39m: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+2026-07-25T11:13:59.895Z [RTM] [32minfo[39m: Skipping network creation. Observe that all external IO operations will yield a runtime error.
 [34mbegin [0mList
   [34mbegin [0mhead
       [33m[ TEST ][0m it returns 42 for [42]      [32m[ PASS ][0m it returns 42 for [42]
@@ -110,6 +110,42 @@
       [33m[ TEST ][0m it ignores invalid indices, 1 42 [2,3,5,..,13]      [32m[ PASS ][0m it ignores invalid indices, 1 42 [2,3,5,..,13]
       [33m[ TEST ][0m it ignores invalid indices, 42 2 [2,3,5,..,13]      [32m[ PASS ][0m it ignores invalid indices, 42 2 [2,3,5,..,13]
   [34mend [0m
+  [34mbegin [0mtake
+      [33m[ TEST ][0m it takes 0 from []      [32m[ PASS ][0m it takes 0 from []
+      [33m[ TEST ][0m it takes 3 from []      [32m[ PASS ][0m it takes 3 from []
+      [33m[ TEST ][0m it takes 0 from xs      [32m[ PASS ][0m it takes 0 from xs
+      [33m[ TEST ][0m it takes 3 from xs      [32m[ PASS ][0m it takes 3 from xs
+      [33m[ TEST ][0m it takes all of xs      [32m[ PASS ][0m it takes all of xs
+      [33m[ TEST ][0m it takes more than xs has      [32m[ PASS ][0m it takes more than xs has
+      [33m[ TEST ][0m it takes a negative count      [32m[ PASS ][0m it takes a negative count
+  [34mend [0m
+  [34mbegin [0mdrop
+      [33m[ TEST ][0m it drops 0 from []      [32m[ PASS ][0m it drops 0 from []
+      [33m[ TEST ][0m it drops 3 from []      [32m[ PASS ][0m it drops 3 from []
+      [33m[ TEST ][0m it drops 0 from xs      [32m[ PASS ][0m it drops 0 from xs
+      [33m[ TEST ][0m it drops 3 from xs      [32m[ PASS ][0m it drops 3 from xs
+      [33m[ TEST ][0m it drops all of xs      [32m[ PASS ][0m it drops all of xs
+      [33m[ TEST ][0m it drops more than xs has      [32m[ PASS ][0m it drops more than xs has
+      [33m[ TEST ][0m it drops a negative count      [32m[ PASS ][0m it drops a negative count
+  [34mend [0m
+  [34mbegin [0mtakeWhile
+      [33m[ TEST ][0m it isEven []      [32m[ PASS ][0m it isEven []
+      [33m[ TEST ][0m it isEven xs      [32m[ PASS ][0m it isEven xs
+      [33m[ TEST ][0m it isOdd xs stops at once      [32m[ PASS ][0m it isOdd xs stops at once
+      [33m[ TEST ][0m it always true takes all      [32m[ PASS ][0m it always true takes all
+  [34mend [0m
+  [34mbegin [0mdropWhile
+      [33m[ TEST ][0m it isEven []      [32m[ PASS ][0m it isEven []
+      [33m[ TEST ][0m it isEven xs      [32m[ PASS ][0m it isEven xs
+      [33m[ TEST ][0m it isOdd xs drops none      [32m[ PASS ][0m it isOdd xs drops none
+      [33m[ TEST ][0m it always true drops all      [32m[ PASS ][0m it always true drops all
+  [34mend [0m
+  [34mbegin [0mspan
+      [33m[ TEST ][0m it isEven []      [32m[ PASS ][0m it isEven []
+      [33m[ TEST ][0m it isEven xs      [32m[ PASS ][0m it isEven xs
+      [33m[ TEST ][0m it isOdd xs      [32m[ PASS ][0m it isOdd xs
+      [33m[ TEST ][0m it agrees with takeWhile and dropWhile      [32m[ PASS ][0m it agrees with takeWhile and dropWhile
+  [34mend [0m
   [34mbegin [0mappendAt
       [33m[ TEST ][0m it appends [] [] 0      [32m[ PASS ][0m it appends [] [] 0
       [33m[ TEST ][0m it appends [1] [2] 0      [32m[ PASS ][0m it appends [1] [2] 0
@@ -205,6 +241,6 @@
   [34mend [0m
 [34mend [0m
 
-Total:  149
-Passes: 149
+Total:  175
+Passes: 175
 >>> Main thread finished with value: true@{}%{}

@@ -1,0 +1,98 @@
+import Unit
+import Option
+import Outcome
+
+let val e   = {reason = "unterminated string", offset = 42}
+    val okv = OK 41
+    val err = ERR e
+
+    val tests = Unit.group "Outcome" [
+
+        Unit.group "predicates" [
+            Unit.it "isOk on OK"    (Unit.isTrue  (Outcome.isOk okv))
+          , Unit.it "isOk on ERR"   (Unit.isFalse (Outcome.isOk err))
+          , Unit.it "isErr on ERR"  (Unit.isTrue  (Outcome.isErr err))
+          , Unit.it "isErr on OK"   (Unit.isFalse (Outcome.isErr okv))
+        ],
+
+        Unit.group "extraction" [
+            Unit.it "unwrap on OK"        (Unit.isEq 41 (Outcome.unwrap okv))
+          , Unit.it "unwrapOr on OK"      (Unit.isEq 41 (Outcome.unwrapOr okv 0))
+          , Unit.it "unwrapOr on ERR"     (Unit.isEq 0  (Outcome.unwrapOr err 0))
+          , Unit.it "unwrapErr keeps the whole payload"
+                    (Unit.isEq e (Outcome.unwrapErr err))
+          , Unit.it "the diagnostic survives field by field"
+                    (Unit.isEq ("unterminated string", 42)
+                               (let val d = Outcome.unwrapErr err in (d.reason, d.offset) end))
+        ],
+
+        Unit.group "map" [
+            Unit.it "maps the value of an OK"
+                    (Unit.isEq 42 (Outcome.unwrap (Outcome.map (fn x => x + 1) okv)))
+          , Unit.it "leaves an ERR alone"
+                    (Unit.isEq e (Outcome.unwrapErr (Outcome.map (fn x => x + 1) err)))
+          , Unit.it "an ERR stays an ERR"
+                    (Unit.isTrue (Outcome.isErr (Outcome.map (fn x => x + 1) err)))
+        ],
+
+        Unit.group "mapErr" [
+            Unit.it "maps the diagnostic of an ERR"
+                    (Unit.isEq "unterminated string"
+                               (Outcome.unwrapErr (Outcome.mapErr (fn d => d.reason) err)))
+          , Unit.it "leaves an OK alone"
+                    (Unit.isEq 41 (Outcome.unwrap (Outcome.mapErr (fn d => d.reason) okv)))
+        ],
+
+        Unit.group "andThen" [
+            Unit.it "chains through an OK"
+                    (Unit.isEq 42 (Outcome.unwrap (Outcome.andThen (fn x => OK (x + 1)) okv)))
+          , Unit.it "short-circuits on an ERR"
+                    (Unit.isEq e (Outcome.unwrapErr (Outcome.andThen (fn x => OK (x + 1)) err)))
+          , Unit.it "propagates an ERR produced by the chained function"
+                    (Unit.isTrue (Outcome.isErr (Outcome.andThen (fn _ => ERR "later") okv)))
+        ],
+
+        Unit.group "orElse" [
+            Unit.it "recovers from an ERR"
+                    (Unit.isEq 7 (Outcome.unwrap (Outcome.orElse (fn _ => OK 7) err)))
+          , Unit.it "leaves an OK alone"
+                    (Unit.isEq 41 (Outcome.unwrap (Outcome.orElse (fn _ => OK 7) okv)))
+        ],
+
+        Unit.group "both" [
+            Unit.it "pairs two OKs"
+                    (Unit.isEq (41, 2) (Outcome.unwrap (Outcome.both okv (OK 2))))
+          , Unit.it "the first ERR wins on the left"
+                    (Unit.isEq e (Outcome.unwrapErr (Outcome.both err (OK 2))))
+          , Unit.it "the first ERR wins on the right"
+                    (Unit.isEq e (Outcome.unwrapErr (Outcome.both okv err)))
+          , Unit.it "the left ERR wins over the right"
+                    (Unit.isEq e (Outcome.unwrapErr (Outcome.both err (ERR "other"))))
+        ],
+
+        Unit.group "option bridge" [
+            Unit.it "toOption of an OK"  (Unit.isEq (SOME 41) (Outcome.toOption okv))
+          , Unit.it "toOption of an ERR discards the diagnostic"
+                    (Unit.isEq NONE (Outcome.toOption err))
+          , Unit.it "fromOption of a SOME" (Unit.isEq 41 (Outcome.unwrap (Outcome.fromOption e (SOME 41))))
+          , Unit.it "fromOption of a NONE supplies the diagnostic"
+                    (Unit.isEq e (Outcome.unwrapErr (Outcome.fromOption e NONE)))
+          , Unit.it "round-trips a SOME"
+                    (Unit.isEq (SOME 41) (Outcome.toOption (Outcome.fromOption e (SOME 41))))
+          , Unit.it "round-trips a NONE"
+                    (Unit.isEq NONE (Outcome.toOption (Outcome.fromOption e NONE)))
+        ],
+
+        Unit.group "pattern matching" [
+            Unit.it "matches OK directly"
+                    (Unit.isEq "ok 41" (case okv of OK v  => "ok " ^ toString v
+                                                  | ERR _ => "err"))
+          , Unit.it "matches ERR directly"
+                    (Unit.isEq "err unterminated string @42"
+                               (case err of OK _  => "ok"
+                                          | ERR d => "err " ^ d.reason ^ " @" ^ toString d.offset))
+        ]
+
+    ]
+
+in Unit.run authority tests end

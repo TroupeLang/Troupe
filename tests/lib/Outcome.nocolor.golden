@@ -1,0 +1,56 @@
+2026-07-25T11:25:20.959Z [RTM] info: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+[34mbegin [0mOutcome
+  [34mbegin [0mpredicates
+      [33m[ TEST ][0m it isOk on OK      [32m[ PASS ][0m it isOk on OK
+      [33m[ TEST ][0m it isOk on ERR      [32m[ PASS ][0m it isOk on ERR
+      [33m[ TEST ][0m it isErr on ERR      [32m[ PASS ][0m it isErr on ERR
+      [33m[ TEST ][0m it isErr on OK      [32m[ PASS ][0m it isErr on OK
+  [34mend [0m
+  [34mbegin [0mextraction
+      [33m[ TEST ][0m it unwrap on OK      [32m[ PASS ][0m it unwrap on OK
+      [33m[ TEST ][0m it unwrapOr on OK      [32m[ PASS ][0m it unwrapOr on OK
+      [33m[ TEST ][0m it unwrapOr on ERR      [32m[ PASS ][0m it unwrapOr on ERR
+      [33m[ TEST ][0m it unwrapErr keeps the whole payload      [32m[ PASS ][0m it unwrapErr keeps the whole payload
+      [33m[ TEST ][0m it the diagnostic survives field by field      [32m[ PASS ][0m it the diagnostic survives field by field
+  [34mend [0m
+  [34mbegin [0mmap
+      [33m[ TEST ][0m it maps the value of an OK      [32m[ PASS ][0m it maps the value of an OK
+      [33m[ TEST ][0m it leaves an ERR alone      [32m[ PASS ][0m it leaves an ERR alone
+      [33m[ TEST ][0m it an ERR stays an ERR      [32m[ PASS ][0m it an ERR stays an ERR
+  [34mend [0m
+  [34mbegin [0mmapErr
+      [33m[ TEST ][0m it maps the diagnostic of an ERR      [32m[ PASS ][0m it maps the diagnostic of an ERR
+      [33m[ TEST ][0m it leaves an OK alone      [32m[ PASS ][0m it leaves an OK alone
+  [34mend [0m
+  [34mbegin [0mandThen
+      [33m[ TEST ][0m it chains through an OK      [32m[ PASS ][0m it chains through an OK
+      [33m[ TEST ][0m it short-circuits on an ERR      [32m[ PASS ][0m it short-circuits on an ERR
+      [33m[ TEST ][0m it propagates an ERR produced by the chained function      [32m[ PASS ][0m it propagates an ERR produced by the chained function
+  [34mend [0m
+  [34mbegin [0morElse
+      [33m[ TEST ][0m it recovers from an ERR      [32m[ PASS ][0m it recovers from an ERR
+      [33m[ TEST ][0m it leaves an OK alone      [32m[ PASS ][0m it leaves an OK alone
+  [34mend [0m
+  [34mbegin [0mboth
+      [33m[ TEST ][0m it pairs two OKs      [32m[ PASS ][0m it pairs two OKs
+      [33m[ TEST ][0m it the first ERR wins on the left      [32m[ PASS ][0m it the first ERR wins on the left
+      [33m[ TEST ][0m it the first ERR wins on the right      [32m[ PASS ][0m it the first ERR wins on the right
+      [33m[ TEST ][0m it the left ERR wins over the right      [32m[ PASS ][0m it the left ERR wins over the right
+  [34mend [0m
+  [34mbegin [0moption bridge
+      [33m[ TEST ][0m it toOption of an OK      [32m[ PASS ][0m it toOption of an OK
+      [33m[ TEST ][0m it toOption of an ERR discards the diagnostic      [32m[ PASS ][0m it toOption of an ERR discards the diagnostic
+      [33m[ TEST ][0m it fromOption of a SOME      [32m[ PASS ][0m it fromOption of a SOME
+      [33m[ TEST ][0m it fromOption of a NONE supplies the diagnostic      [32m[ PASS ][0m it fromOption of a NONE supplies the diagnostic
+      [33m[ TEST ][0m it round-trips a SOME      [32m[ PASS ][0m it round-trips a SOME
+      [33m[ TEST ][0m it round-trips a NONE      [32m[ PASS ][0m it round-trips a NONE
+  [34mend [0m
+  [34mbegin [0mpattern matching
+      [33m[ TEST ][0m it matches OK directly      [32m[ PASS ][0m it matches OK directly
+      [33m[ TEST ][0m it matches ERR directly      [32m[ PASS ][0m it matches ERR directly
+  [34mend [0m
+[34mend [0m
+
+Total:  31
+Passes: 31
+>>> Main thread finished with value: true@{}%{}

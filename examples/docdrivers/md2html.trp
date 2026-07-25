@@ -7,6 +7,8 @@
  * writes the HTML to the output file, and echoes the result to stdout. Paths are
  * resolved relative to --io-root. *)
 
+import Outcome
+import { readFile, writeFile } SimpleFileIO
 import Markdown
 import List
 
@@ -15,8 +17,8 @@ let val args = getCliArgs authority
     fun onRead outPath src =
         let val html = Markdown.toHtml src
         in case writeFile (authority, outPath, html) of
-             {tag = "Ok",  value = _} => print ("wrote " ^ outPath ^ ":\n" ^ html)
-           | {tag = "Err", error = e} => print ("write error: " ^ e.reason ^ " (" ^ e.path ^ ")")
+             OK _ => print ("wrote " ^ outPath ^ ":\n" ^ html)
+           | ERR e => print ("write error: " ^ e.reason ^ " (" ^ e.path ^ ")")
         end
 
 in if List.length args < 2
@@ -24,7 +26,7 @@ in if List.length args < 2
    else let val inPath  = List.nth args 0
             val outPath = List.nth args 1
         in case readFile (authority, inPath) of
-             {tag = "Ok",  value = src} => onRead outPath src
-           | {tag = "Err", error = e}   => print ("read error: " ^ e.reason ^ " (" ^ e.path ^ ")")
+             OK src => onRead outPath src
+           | ERR e => print ("read error: " ^ e.reason ^ " (" ^ e.path ^ ")")
         end
 end

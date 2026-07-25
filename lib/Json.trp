@@ -1,6 +1,8 @@
 import String
 import List
-import Result
+import ListPair
+import Option
+import Outcome
 
 (** Json - a JSON parser and printer (RFC 8259).
  *
@@ -31,7 +33,7 @@ import Result
  *    - `\uXXXX` escapes are decoded for the whole Unicode range via `String.strCode`: a lone escape
  *      denotes its code point, and a high/low surrogate pair (`😀`) is combined into the
  *      supplementary code point it encodes. A malformed escape (bad hex, a lone or mismatched
- *      surrogate) yields `Err {reason, offset}`. Characters written literally as UTF-8 also pass
+ *      surrogate) yields `ERR {reason, offset}`. Characters written literally as UTF-8 also pass
  *      through unchanged and round-trip faithfully.
  *
  *  Security / IFC: every leaf produced by `parse` carries the label of the input string, so the
@@ -101,59 +103,49 @@ let (*--- Character helpers ---*)
                                    | "record"  => "object"
                                    | other     => other
 
-    (** Look up a member of a JSON object by name. `Err` if `j` is not an object or has no such
+    (** Look up a member of a JSON object by name. `NONE` if `j` is not an object or has no such
      *  member. *)
     fun field name j =
-        if getType j <> "record"
-        then Result.err {reason = "not a JSON object"}
-        else let fun look []            = Result.err {reason = "field not found: " ^ name}
-                   | look ((k,v)::rest) = if k = name then Result.ok v else look rest
-             in look (recordToList j)
-             end
+        if kindOf j <> "object" then NONE
+        else ListPair.findOpt (recordToList j) name
 
-    (** Return the element at position `k` (counting from zero) of a JSON array. `Err` if `j` is not
-     *  an array or `k` is out of range. *)
+    (** The element at position `k` (counting from zero) of a JSON array. `NONE` if `j` is not an
+     *  array or `k` is out of range. *)
     fun index k j =
-        if getType j <> "list"
-        then Result.err {reason = "not a JSON array"}
-        else if k < 0
-        then Result.err {reason = "index out of range"}
-        else let fun go idx (x::xs) = if idx = 0 then Result.ok x else go (idx-1) xs
-                   | go _   []      = Result.err {reason = "index out of range"}
-             in go k j
-             end
+        if kindOf j <> "array" orelse k < 0 then NONE
+        else Option.fromList (List.sublist k (k+1) j)
 
-    (** The underlying bool of a JSON bool; `Err` otherwise. *)
-    fun asBool j =
-        if getType j = "boolean" then Result.ok j else Result.err {reason = "not a JSON bool"}
+    (* `SOME j` when `j` has the given JSON kind, `NONE` otherwise.
+     *
+     * The four accessors below are written out with their argument rather than as
+     * `val asBool = expect "bool"`. A library may not call one of its own functions at top
+     * level: the export table then fails to build and every consumer dies at load time. *)
+    fun expect kind j = if kindOf j = kind then SOME j else NONE
 
-    (** The underlying number of a JSON number; `Err` otherwise. *)
-    fun asNumber j =
-        if getType j = "number" then Result.ok j else Result.err {reason = "not a JSON number"}
+    (** The underlying bool of a JSON bool; `NONE` otherwise. *)
+    fun asBool j = expect "bool" j
 
-    (** The underlying string of a JSON string; `Err` otherwise. *)
-    fun asString j =
-        if getType j = "string" then Result.ok j else Result.err {reason = "not a JSON string"}
+    (** The underlying number of a JSON number; `NONE` otherwise. *)
+    fun asNumber j = expect "number" j
 
-    (** The elements of a JSON array as a `json list`; `Err` otherwise. *)
-    fun asArray j =
-        if getType j = "list" then Result.ok j else Result.err {reason = "not a JSON array"}
+    (** The underlying string of a JSON string; `NONE` otherwise. *)
+    fun asString j = expect "string" j
+
+    (** The elements of a JSON array as a `json list`; `NONE` otherwise. *)
+    fun asArray j = expect "array" j
 
     (** The members of a JSON object as a list of `(key, value)` pairs (via `recordToList`; order is
-     *  unspecified under Model N); `Err` otherwise. *)
-    fun asObject j =
-        if getType j = "record"
-        then Result.ok (recordToList j)
-        else Result.err {reason = "not a JSON object"}
+     *  unspecified under Model N); `NONE` otherwise. *)
+    fun asObject j = Option.map recordToList (expect "object" j)
 
     (*--- Parsing ---*)
 
-    (* The greatest nesting depth `parse` accepts; deeper input yields an `Err` rather than
+    (* The greatest nesting depth `parse` accepts; deeper input yields an `ERR` rather than
      * exhausting the stack. *)
     val maxDepth = 200
 
-    (** Parse a full JSON document into a Troupe value. On success returns `Ok value`; on malformed
-     *  input returns `Err {reason, offset}`, where `offset` is the character index of the offending
+    (** Parse a full JSON document into a Troupe value. On success returns `OK value`; on malformed
+     *  input returns `ERR {reason, offset}`, where `offset` is the character index of the offending
      *  character. Never crashes on malformed input. *)
     fun parse input =
         let val s = input
@@ -372,10 +364,10 @@ let (*--- Character helpers ---*)
         in case pValue 0 (skipWs 0) of
                ("ok", v, i) => let val i2 = skipWs i
                                in if i2 >= n
-                                  then Result.ok v
-                                  else Result.err {reason = "trailing characters after value", offset = i2}
+                                  then OK v
+                                  else ERR {reason = "trailing characters after value", offset = i2}
                                end
-             | ("err", msg, off) => Result.err {reason = msg, offset = off}
+             | ("err", msg, off) => ERR {reason = msg, offset = off}
         end
 
     (*--- Printing ---*)

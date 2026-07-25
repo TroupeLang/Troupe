@@ -12,6 +12,8 @@
  * gap: String has no split/lines/startsWith.
  *)
 
+import Outcome
+import { readFile, writeFile } SimpleFileIO
 import List
 import "../SavinaReport"
 
@@ -52,12 +54,12 @@ let val args = getCliArgs authority
 
     fun save (path, content) =
         case writeFile (authority, path, content) of
-          {tag = "Ok", value = _}  => print ("wrote", path)
-        | {tag = "Err", error = e} => print ("write error", path, e.reason)
+          OK _ => print ("wrote", path)
+        | ERR e => print ("write error", path, e.reason)
 
 in case readFile (authority, inputFile) of
-     {tag = "Err", error = e} => print ("cannot read input: ", e.reason)
-   | {tag = "Ok", value = text} =>
+     ERR e => print ("cannot read input: ", e.reason)
+   | OK text =>
        let val summaries = SavinaReport.summarize (parseAll text)
            val _ = save ("savina-report.md",
                          SavinaReport.markdown ("Savina results", summaries) ^ "\n")

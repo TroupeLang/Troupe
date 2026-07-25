@@ -7,7 +7,7 @@ module Parser (
 ) where
 
 import Lexer
-import Direct
+import Surface
 import DCLabels
 import Basics
 import TroupePositionInfo (Located(..), PosInf(..), noLoc, getLoc)
@@ -66,6 +66,7 @@ import Control.Monad.State
     VAR   { L _  (TokenSym _) }
     TYVAR { L _  (TokenTyVar _) }
     LABEL { L _  (TokenLabel _) }
+    OPSYM { L _  (TokenOperator _) }
     '@'   { L _  TokenAt }
     '=>'  { L _ TokenArrow }
     '='   { L _ TokenEq }
@@ -126,9 +127,14 @@ import Control.Monad.State
 %nonassoc TYAPP_LOW
 
 %nonassoc with
-%right '=>' 
+%right '=>'
 %right '|'
-%right else 
+%right else
+-- Chain-closing productions end in nonterminals and would have no precedence;
+-- CHAIN_DONE, declared below every operator token, tags them so that every
+-- close-vs-extend conflict resolves toward extending: chains are maximal.
+-- (Same device as TYAPP_LOW below.)
+%nonassoc CHAIN_DONE
 %right ';'
 %left andalso orelse
 %nonassoc '=' '<=' '>=' '<>' '<' '>' '@'
@@ -236,45 +242,72 @@ QTyName : VAR                     { [varTok $1] }
    | VAR '.' QTyName              { varTok $1 : $3 }
 
 
-Expr: Form                        { $1 }
+-- Expressions parse as flat operator chains: operands and operators recorded
+-- in source order with no grouping. The re-association pass (OpReassoc)
+-- rebuilds each chain from the fixity environment once imports are known.
+-- Design: _dev_planning/custom-operators/design.md §4.2.
+Expr: Chain                        { $1 }
     | catch                        { noLoc (Lit LUnit) }  -- Error recovery
-    | let pini Expr Decs in Expr end  {% atPos $1 (Let (piniDecl $3 $4) $6) }
-    | let Decs in Expr end        {% atPos $1 (Let $2 $4) }
-    | if Expr then Expr else Expr {% atPos $1 (If $2 $4 $6) }
+    | Expr ';' Expr               {% mkSeq $1 $3 $2 }
+
+Chain : ChainSeq                     %prec CHAIN_DONE  { mkChain (reverse $1) }
+      | ChainSeq InfixTok PrefixSeq TrailingForm
+          { mkChain (reverse (ChOperand $4 : ($3 ++ $2 : $1))) }
+      | PrefixSeq TrailingForm       %prec CHAIN_DONE
+          { mkChain (reverse (ChOperand $2 : $1)) }
+
+-- Built reversed; mkChain reverses back to source order.
+ChainSeq : PrefixSeq Operand                     { ChOperand $2 : $1 }
+         | ChainSeq InfixTok PrefixSeq Operand   { ChOperand $4 : ($3 ++ $2 : $1) }
+
+PrefixSeq : {- empty -}                          { [] }
+          | PrefixSeq PrefixKw                   { $2 : $1 }
+
+PrefixKw : 'isTuple'  {% chPrefix $1 IsTuple }
+         | 'isList'   {% chPrefix $1 IsList }
+         | 'isRecord' {% chPrefix $1 IsRecord }
+         | 'not'      {% chPrefix $1 Not }
+
+InfixTok : '+'   {% chInfix $1 (ChBin Plus) }
+         | '-'   {% chInfix $1 (ChBin Minus) }
+         | '*'   {% chInfix $1 (ChBin Mult) }
+         | '/'   {% chInfix $1 (ChBin Div) }
+         | div   {% chInfix $1 (ChBin IntDiv) }
+         | mod   {% chInfix $1 (ChBin Mod) }
+         | '^'   {% chInfix $1 (ChBin Concat) }
+         | '='   {% chInfix $1 (ChBin Eq) }
+         | '<>'  {% chInfix $1 (ChBin Neq) }
+         | '<'   {% chInfix $1 (ChBin Lt) }
+         | '>'   {% chInfix $1 (ChBin Gt) }
+         | '<='  {% chInfix $1 (ChBin Le) }
+         | '>='  {% chInfix $1 (ChBin Ge) }
+         | andalso {% chInfix $1 (ChBin And) }
+         | orelse  {% chInfix $1 (ChBin Or) }
+         | andb  {% chInfix $1 (ChBin BinAnd) }
+         | orb   {% chInfix $1 (ChBin BinOr) }
+         | xorb  {% chInfix $1 (ChBin BinXor) }
+         | '<<'  {% chInfix $1 (ChBin BinShiftLeft) }
+         | '>>'  {% chInfix $1 (ChBin BinShiftRight) }
+         | '~>>' {% chInfix $1 (ChBin BinZeroShiftRight) }
+         | '::'  {% chInfix $1 ChCons }
+         | 'raisedTo' {% chInfix $1 (ChBin RaisedTo) }
+         | OPSYM {% chInfix $1 (ChUser (opTok $1)) }
+
+-- Operands: application chains (Form), plus the let forms, which are closed
+-- by `end` and therefore legal mid-chain.
+Operand : Form                                   { $1 }
+        | let pini Expr Decs in Expr end  {% atPos $1 (Let (piniDecl $3 $4) $6) }
+        | let Decs in Expr end            {% atPos $1 (Let $2 $4) }
+
+-- Open special forms: everything to their right belongs to them, so they can
+-- only end a chain; as a left operand they need parentheses (as before).
+TrailingForm : if Expr then Expr else Expr {% atPos $1 (If $2 $4 $6) }
     | fn Pattern '=>' Expr        {% atPos $1 (Abs (Lambda [$2] $4)) }
     | hn Pattern '=>' Expr        {% atPos $1 (Hnd (Handler $2 Nothing Nothing $4)) }
     | hn Pattern '|' Pattern '=>' Expr      {% atPos $1 (Hnd (Handler $2 (Just $4) Nothing $6)) }
     | hn Pattern when Expr '=>' Expr        {% atPos $1 (Hnd (Handler $2 Nothing (Just $4) $6)) }
     | hn Pattern '|' Pattern when Expr '=>' Expr      {% atPos $1 (Hnd (Handler $2 (Just $4) (Just $6) $8)) }
     | case Expr of Match          {% atPos $1 (Case $2 $4) }
-    | Expr ';' Expr               {% mkSeq $1 $3 $2 }
-    | Expr '-' Expr               {% atPos $2 (Bin Minus $1 $3) }
-    | Expr '+' Expr               {% atPos $2 (Bin Plus $1 $3) }
-    | Expr '>=' Expr              {% atPos $2 (Bin Ge $1 $3) }
-    | Expr '*' Expr               {% atPos $2 (Bin Mult $1 $3) }
-    | Expr '/' Expr               {% atPos $2 (Bin Div $1 $3) }
-    | Expr div Expr               {% atPos $2 (Bin IntDiv $1 $3) }
-    | Expr mod Expr               {% atPos $2 (Bin Mod $1 $3) }
-    | Expr '^' Expr               {% atPos $2 (Bin Concat $1 $3) }
-    | Expr '=' Expr               {% atPos $2 (Bin Eq $1 $3) }
-    | Expr '<=' Expr              {% atPos $2 (Bin Le $1 $3) }
-    | Expr '<' Expr               {% atPos $2 (Bin Lt $1 $3) }
-    | Expr '>' Expr               {% atPos $2 (Bin Gt $1 $3) }
-    | Expr '<>' Expr              {% atPos $2 (Bin Neq $1 $3) }
-    | Expr andalso Expr           {% atPos $2 (Bin And $1 $3) }
-    | Expr orelse  Expr           {% atPos $2 (Bin Or $1 $3) }
-    | Expr andb Expr              {% atPos $2 (Bin BinAnd $1 $3) }
-    | Expr orb Expr               {% atPos $2 (Bin BinOr $1 $3) }
-    | Expr xorb Expr              {% atPos $2 (Bin BinXor $1 $3) }
-    | Expr '<<' Expr              {% atPos $2 (Bin BinShiftLeft $1 $3) }
-    | Expr '>>' Expr              {% atPos $2 (Bin BinShiftRight $1 $3) }
-    | Expr '~>>' Expr             {% atPos $2 (Bin BinZeroShiftRight $1 $3) }
-    | Expr '::' Expr              {% atPos $2 (ListCons $1 $3) }
-    | Expr 'raisedTo' Expr        {% atPos $2 (Bin RaisedTo $1 $3) }
-    | 'isTuple' Expr              {% atPos $1 (Un IsTuple $2) }
-    | 'isList' Expr               {% atPos $1 (Un IsList $2) }
-    | 'isRecord' Expr             {% atPos $1 (Un IsRecord $2) }
-    | 'not' Expr                  {% atPos $1 (Un Not $2) }
 
 
 Match : Pattern '=>' Expr                      { [($1,$3)] }
@@ -318,7 +351,7 @@ APat : VAR                                 {% atPos $1 (VarPattern (varTok $1)) 
 
 
 Form :: { LTerm }
-Form :  '-' Form                    {% atPos $1 (Un UnMinus $2) }
+Form :  '-' Form                    {% atPos $1 (Neg $2) }
      | Fact                        { fromFact $1 }
 
 
@@ -533,6 +566,25 @@ fromFact xs =
       p = getLoc y  -- Use position from the function term
   in Loc p (App y ys)
 
+-- | Wrap chain elements (in source order) into a term: a lone operand is
+-- itself; anything with an operator or prefix item becomes an OpChain for the
+-- re-association pass.
+mkChain :: [ChainElem] -> LTerm
+mkChain [ChOperand t] = t
+mkChain elems@(e : _) = Loc (elemPos e) (OpChain elems)
+  where elemPos (ChOperand t)  = getLoc t
+        elemPos (ChInfix p _)  = p
+        elemPos (ChPrefix p _) = p
+mkChain [] = Loc (RTGen "parser") (Lit LUnit)  -- unreachable: grammar yields >= 1 element
+
+chInfix :: L Token -> ChainOp -> ParseM ChainElem
+chInfix tok op = do p <- pos tok
+                    return (ChInfix p op)
+
+chPrefix :: L Token -> UnaryOp -> ParseM ChainElem
+chPrefix tok u = do p <- pos tok
+                    return (ChPrefix p u)
+
 
 -- | Get position from token list
 getTokenPosition :: [L Token] -> (Int, Int)
@@ -647,6 +699,7 @@ cleanExpectedToken "orelse" = "'orelse'"
 cleanExpectedToken "div" = "'div'"
 cleanExpectedToken "mod" = "'mod'"
 cleanExpectedToken "VAR" = "identifier"
+cleanExpectedToken "OPSYM" = "operator"
 cleanExpectedToken "NUM" = "number"
 cleanExpectedToken "BIGNUM" = "bigint literal"
 cleanExpectedToken "FLOAT" = "float"
@@ -715,6 +768,7 @@ bigTok (L _ (TokenBigInt x)) = x
 floatTok (L _ (TokenFloat x)) = x
 strTok (L _ (TokenString x)) = x
 varTok (L _ (TokenSym x ))   = x
+opTok (L _ (TokenOperator x)) = x
 tyvarTok (L _ (TokenTyVar x)) = x
 
 -- The name a module import binds when no alias is given: the last path segment.

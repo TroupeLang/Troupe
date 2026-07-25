@@ -1,6 +1,6 @@
 module ProcessImports (PinCheck(..), processImports, discoverModules) where
 import Basics
-import Direct
+import Surface
 import DepsFile (DepEntry(..), lookupPinByPath)
 import Exports (ExportsInterface(..), parseExportsFile)
 import Parser (parseProg)

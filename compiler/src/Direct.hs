@@ -16,6 +16,9 @@ module Direct ( Lambda (..)
               , SynDataDecl(..)
               , SynDataGroup(..)
               , ppLit
+              -- Printer helpers shared with the Surface (parse-phase) printer
+              , ppSynDataGroup
+              , ppLDeclPattern
               -- Located type aliases
               , LTerm
               , LDecl

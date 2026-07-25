@@ -1,5 +1,6 @@
 import Unit
-import Result
+import Option
+import Outcome
 import Json
 import List
 import String
@@ -8,9 +9,9 @@ let val q  = "\x22"   (* double quote *)
     val bs = "\x5c"   (* backslash *)
 
     (* Parse helpers *)
-    fun okv s     = Result.unwrap (Json.parse s)
-    fun isErr s   = Result.isErr (Json.parse s)
-    fun errOff s  = (Result.unwrapErr (Json.parse s)).offset
+    fun okv s     = Outcome.unwrap (Json.parse s)
+    fun isErr s   = Outcome.isErr (Json.parse s)
+    fun errOff s  = (Outcome.unwrapErr (Json.parse s)).offset
 
     (* A quoted JSON string literal from raw content. *)
     fun quoted content = q ^ content ^ q
@@ -73,35 +74,37 @@ let val q  = "\x22"   (* double quote *)
           , Unit.it "whitespace in array" (Unit.isEq [1,2] (okv "[ 1 , 2 ]"))
           , Unit.it "empty object"  (Unit.isEq {} (okv "{}"))
           , Unit.it "object field access"
-                    (Unit.isEq 1 (Result.unwrap (Json.field "a" (okv ("{" ^ quoted "a" ^ ":1,"
-                                                                             ^ quoted "b" ^ ":2}")))))
+                    (Unit.isEq (SOME 1) (Json.field "a" (okv ("{" ^ quoted "a" ^ ":1,"
+                                                                    ^ quoted "b" ^ ":2}"))))
           , Unit.it "object second field"
-                    (Unit.isEq 2 (Result.unwrap (Json.field "b" (okv ("{" ^ quoted "a" ^ ":1,"
-                                                                             ^ quoted "b" ^ ":2}")))))
-          , Unit.it "missing field is Err"
-                    (Unit.isTrue (Result.isErr (Json.field "z" (okv ("{" ^ quoted "a" ^ ":1}")))))
-          , Unit.it "field on non-object is Err"
-                    (Unit.isTrue (Result.isErr (Json.field "a" (okv "[1,2]"))))
+                    (Unit.isEq (SOME 2) (Json.field "b" (okv ("{" ^ quoted "a" ^ ":1,"
+                                                                    ^ quoted "b" ^ ":2}"))))
+          , Unit.it "missing field is NONE"
+                    (Unit.isEq NONE (Json.field "z" (okv ("{" ^ quoted "a" ^ ":1}"))))
+          , Unit.it "field on non-object is NONE"
+                    (Unit.isEq NONE (Json.field "a" (okv "[1,2]")))
           , Unit.it "index into array"
-                    (Unit.isEq 30 (Result.unwrap (Json.index 2 (okv "[10,20,30]"))))
-          , Unit.it "index out of range is Err"
-                    (Unit.isTrue (Result.isErr (Json.index 9 (okv "[10,20,30]"))))
+                    (Unit.isEq (SOME 30) (Json.index 2 (okv "[10,20,30]")))
+          , Unit.it "index out of range is NONE"
+                    (Unit.isEq NONE (Json.index 9 (okv "[10,20,30]")))
+          , Unit.it "negative index is NONE"
+                    (Unit.isEq NONE (Json.index (0-1) (okv "[10,20,30]")))
           , Unit.it "nested field then index"
-                    (Unit.isEq 7 (Result.unwrap
-                                     (Json.index 1
-                                        (Result.unwrap
-                                           (Json.field "xs"
-                                              (okv ("{" ^ quoted "xs" ^ ":[6,7,8]}")))))))
+                    (Unit.isEq (SOME 7)
+                               (Option.andThen (Json.index 1)
+                                               (Json.field "xs"
+                                                  (okv ("{" ^ quoted "xs" ^ ":[6,7,8]}")))))
         ],
 
         Unit.group "accessors" [
-            Unit.it "asBool ok"    (Unit.isEq true  (Result.unwrap (Json.asBool (okv "true"))))
-          , Unit.it "asNumber ok"  (Unit.isEq 3.5   (Result.unwrap (Json.asNumber (okv "3.5"))))
-          , Unit.it "asString ok"  (Unit.isEq "hi"  (Result.unwrap (Json.asString (okv (quoted "hi")))))
-          , Unit.it "asArray ok"   (Unit.isEq [1,2] (Result.unwrap (Json.asArray (okv "[1,2]"))))
-          , Unit.it "asBool on number is Err" (Unit.isTrue (Result.isErr (Json.asBool (okv "1"))))
+            Unit.it "asBool ok"    (Unit.isEq (SOME true)  (Json.asBool (okv "true")))
+          , Unit.it "asNumber ok"  (Unit.isEq (SOME 3.5)   (Json.asNumber (okv "3.5")))
+          , Unit.it "asString ok"  (Unit.isEq (SOME "hi")  (Json.asString (okv (quoted "hi"))))
+          , Unit.it "asArray ok"   (Unit.isEq (SOME [1,2]) (Json.asArray (okv "[1,2]")))
+          , Unit.it "asBool on number is NONE" (Unit.isEq NONE (Json.asBool (okv "1")))
           , Unit.it "asObject pairs"
-                    (Unit.isEq [("a",1)] (Result.unwrap (Json.asObject (okv ("{" ^ quoted "a" ^ ":1}")))))
+                    (Unit.isEq (SOME [("a",1)]) (Json.asObject (okv ("{" ^ quoted "a" ^ ":1}"))))
+          , Unit.it "asObject on non-object is NONE" (Unit.isEq NONE (Json.asObject (okv "[1,2]")))
         ],
 
         Unit.group "stringify" [

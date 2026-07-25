@@ -11,6 +11,7 @@
 import Template
 import Json
 import List
+import Outcome
 
 let val args = getCliArgs authority
 
@@ -30,8 +31,8 @@ let val args = getCliArgs authority
         case readFile (authority, dataPath) of
           {tag = "Ok", value = dataSrc} =>
             (case Json.parse dataSrc of
-               {tag = "Ok",  value = ctx} => onData outPath tmpl ctx
-             | {tag = "Err", error = e}   =>
+               OK ctx => onData outPath tmpl ctx
+             | ERR e  =>
                  print ("data parse error at offset " ^ toString e.offset ^ ": " ^ e.reason))
         | {tag = "Err", error = e} => print ("read error: " ^ e.reason ^ " (" ^ e.path ^ ")")
 

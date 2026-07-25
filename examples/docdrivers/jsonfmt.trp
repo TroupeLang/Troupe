@@ -9,18 +9,19 @@
 
 import Json
 import List
+import Outcome
 
 let val args = getCliArgs authority
 
     fun onRead outPath src =
         case Json.parse src of
-          {tag = "Ok",  value = v} =>
+          OK v =>
             let val pretty = Json.prettyPrint 2 v
             in case writeFile (authority, outPath, pretty) of
                  {tag = "Ok",  value = _} => print ("wrote " ^ outPath ^ ":\n" ^ pretty)
                | {tag = "Err", error = e} => print ("write error: " ^ e.reason ^ " (" ^ e.path ^ ")")
             end
-        | {tag = "Err", error = e} =>
+        | ERR e =>
             print ("parse error at offset " ^ toString e.offset ^ ": " ^ e.reason)
 
 in if List.length args < 2

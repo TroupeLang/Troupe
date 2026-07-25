@@ -19,10 +19,12 @@ import           SynVarHash
 import qualified Stack2JS
 import qualified Stack
 import           CompileMode (CompileMode(..))
-import           Exports (exportsFileContent, isDatatypeLine, parseDatatypeLine, datatypeHashReport)
+import           Exports (exportsFileContent, isDatatypeLine, parseDatatypeLine, datatypeHashReport,
+                          parseExportsFile, ExportsInterface(..))
 import           SynVarFolding (foldProg)
 import           Direct (Prog(..), Term(List))
-import           Basics (Imports(..), ImportDecl(..), ImportMode(..), LibName(..))
+import           Basics (Imports(..), ImportDecl(..), ImportMode(..), LibName(..),
+                         Fixity(..), OpAssoc(..))
 import           TroupePositionInfo (Located(..), PosInf(..))
 
 -- Exact group hashes from the spec, reused as dependency hashes in later
@@ -276,10 +278,22 @@ main = defaultMain $ testGroup "SynVarHash exact vectors"
             groups = [ (optionHash, optionCanon)
                      , (hBox, boxCanon)
                      , (mutualHash, mutualCanon) ]
-            content = exportsFileContent Nothing names groups
+            content = exportsFileContent Nothing names groups []
             (dtLines, nameLines) = partition isDatatypeLine (lines content)
         nameLines               @?= names
         map parseDatatypeLine dtLines @?= groups
+    -- The full interface (module hash, names, datatype lines, fixity lines)
+    -- round-trips through the one reader, parseExportsFile.
+    , testCase "full interface round-trips writer -> parseExportsFile" $ do
+        let names    = ["<+>", "$$", "render"]
+            groups   = [ (optionHash, optionCanon) ]
+            fixities = [ ("<+>", Fixity OpLeft 6), ("$$", Fixity OpNon 0) ]
+            iface    = parseExportsFile
+                         (exportsFileContent (Just "abcdef") names groups fixities)
+        eiModuleHashes iface @?= ["abcdef"]
+        eiNames iface        @?= names
+        eiDatatypes iface    @?= groups
+        eiFixities iface     @?= fixities
     ]
   , testGroup "datatype-hashes diagnostic report format"
     -- The --datatype-hashes flag prints this: one line per group, "<hash>  <canon>"

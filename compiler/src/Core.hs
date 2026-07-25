@@ -367,12 +367,11 @@ mapFromImports (Imports imports) =
 -- compiler-internal '$'-prefixed names.
 sanitizeForJS :: VarName -> VarName
 sanitizeForJS v
-  | any (`elem` jsHostileChars) v = "$op" ++ concatMap opCharCode v
-  | otherwise                     = map sanitizeChar v
+  | any (`elem` jsHostileOpChars) v = "$op" ++ concatMap opCharCode v
+  | otherwise                       = map sanitizeChar v
   where
     sanitizeChar '\'' = '_'  -- Replace single quotes with underscores
     sanitizeChar c = c        -- Keep other characters as-is
-    jsHostileChars = "!%&*+-/:<=>?@^|~." :: String
     opCharCode c = case c of
       '<' -> "$lt";   '>' -> "$gt";    '=' -> "$eq";    '+' -> "$plus"
       '-' -> "$minus";'*' -> "$star";  '/' -> "$slash"; '^' -> "$caret"
@@ -410,14 +409,6 @@ lookforgen v m =
                     "unbound operator '" ++ v ++ "': it is neither defined"
                     ++ " in this file nor imported unqualified"
               | otherwise -> return $ BaseName v
-  where
-    -- Operator names are all operator characters ('$'-only ones included);
-    -- compiler-internal '$'-prefixed names mix '$' with alphanumerics and
-    -- fall through to the ambient builtins as before.
-    isOperatorName x = not (null x)
-                       && (all (`elem` fullOpChars) x || any (`elem` hostile) x)
-    fullOpChars = "!$%&*+-/:<=>?@^|~." :: String
-    hostile     = "!%&*+-/:<=>?@^|~" :: String
 
 
 extend :: VarName -> VarName -> Env -> Env

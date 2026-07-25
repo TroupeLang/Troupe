@@ -111,6 +111,14 @@ resolveModule root importingFile lit =
 displayPath :: FilePath -> FilePath -> String
 displayPath root f = makeRelative root f
 
+-- | Fixities an import contributes: restricted to the selection when one is
+-- given (a fixity is moot without its value). Qualified imports keep their
+-- fixities in the record too — the re-association pass gates on the mode.
+restrictFixities :: ImportDecl -> [(VarName, Fixity)] -> [(VarName, Fixity)]
+restrictFixities imp fxs = case importSelected imp of
+  Just selected -> filter ((`elem` selected) . fst) fxs
+  Nothing       -> fxs
+
 processModuleImport :: PinCheck -> FilePath -> FilePath -> ImportDecl -> IO (ImportDecl, DepEntry)
 processModuleImport pin root file imp = do
   let Just lit = importPath imp
@@ -180,6 +188,7 @@ processModuleImport pin root file imp = do
   -- runtime address the module as "module:<hash>".
   return ( imp { importExports = Just nameLines
                , importDatatypes = datatypes
+               , importFixities = restrictFixities imp (eiFixities iface)
                , importPath = Just actualHash }
          , entry )
 
@@ -214,9 +223,13 @@ processLibImport imp = do
     Just selected -> do
       let missing = filter (`notElem` nameLines) selected
       if null missing
-        then return imp { importExports = Just nameLines, importDatatypes = datatypes }
+        then return imp { importExports = Just nameLines
+                        , importDatatypes = datatypes
+                        , importFixities = restrictFixities imp (eiFixities iface) }
         else die $ "Library '" ++ lib ++ "' does not export: " ++ unwords missing
-    Nothing -> return imp { importExports = Just nameLines, importDatatypes = datatypes }
+    Nothing -> return imp { importExports = Just nameLines
+                          , importDatatypes = datatypes
+                          , importFixities = restrictFixities imp (eiFixities iface) }
 
 --------------------------------------------------------------------------------
 

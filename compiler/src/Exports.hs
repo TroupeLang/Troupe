@@ -66,6 +66,34 @@ isModuleHashLine = startswith moduleHashPrefix
 parseModuleHashLine :: String -> String
 parseModuleHashLine = dropWhile (== ' ') . drop (length moduleHashPrefix)
 
+-- | The prefix marking an operator-fixity line in a @.exports@ interface:
+-- @fixity <l|r|n> <level> <name>@, one per exported operator. Writer,
+-- recognizer, and parser are colocated like the datatype trio above.
+fixityPrefix :: String
+fixityPrefix = "fixity "
+
+renderFixityLine :: (Basics.VarName, Basics.Fixity) -> String
+renderFixityLine (v, Basics.Fixity a n) =
+  fixityPrefix ++ assocCode a ++ " " ++ show n ++ " " ++ v
+  where assocCode Basics.OpLeft  = "l"
+        assocCode Basics.OpRight = "r"
+        assocCode Basics.OpNon   = "n"
+
+isFixityLine :: String -> Bool
+isFixityLine = startswith fixityPrefix
+
+-- | Inverse of 'renderFixityLine'. Total on lines the writer produces; a
+-- malformed line (foreign tooling) degrades to a level-9 non-associative
+-- fixity rather than a crash — the operator still resolves, conservatively.
+parseFixityLine :: String -> (Basics.VarName, Basics.Fixity)
+parseFixityLine line =
+  case words (drop (length fixityPrefix) line) of
+    [a, n, v] | [(lvl, "")] <- reads n -> (v, Basics.Fixity (assoc a) lvl)
+    ws -> (unwords ws, Basics.Fixity Basics.OpNon 9)
+  where assoc "l" = Basics.OpLeft
+        assoc "r" = Basics.OpRight
+        assoc _   = Basics.OpNon
+
 -- | A parsed @.exports@ interface: the module-hash lines (none for a library,
 -- exactly one for a module artifact — the caller enforces the arity so its
 -- error can name the importing context), the exported value names, and the
@@ -75,6 +103,7 @@ data ExportsInterface = ExportsInterface
   { eiModuleHashes :: [String]
   , eiNames        :: [Basics.VarName]
   , eiDatatypes    :: [(String, String)]
+  , eiFixities     :: [(Basics.VarName, Basics.Fixity)]
   }
 
 -- | Parse @.exports@ file content. Total: every line is classified by its
@@ -82,11 +111,13 @@ data ExportsInterface = ExportsInterface
 parseExportsFile :: String -> ExportsInterface
 parseExportsFile input =
   let (mhLines, rest)      = partition isModuleHashLine (lines input)
-      (dtLines, nameLines) = partition isDatatypeLine rest
+      (fxLines, rest')     = partition isFixityLine rest
+      (dtLines, nameLines) = partition isDatatypeLine rest'
   in ExportsInterface
        { eiModuleHashes = map parseModuleHashLine mhLines
        , eiNames        = nameLines
        , eiDatatypes    = map parseDatatypeLine dtLines
+       , eiFixities     = map parseFixityLine fxLines
        }
 
 -- | Assemble the @.exports@ interface content: the module-hash line (present
@@ -94,12 +125,14 @@ parseExportsFile input =
 -- value name per line, then one datatype line per exported datatype group in
 -- declaration order (spec §10). A library exports all its header datatype
 -- groups and carries no module-hash line.
-exportsFileContent :: Maybe String -> [Basics.VarName] -> [(String, String)] -> String
-exportsFileContent moduleHash names groups =
+exportsFileContent :: Maybe String -> [Basics.VarName] -> [(String, String)]
+                   -> [(Basics.VarName, Basics.Fixity)] -> String
+exportsFileContent moduleHash names groups fixities =
   intercalate "\n"
     (maybe [] (\h -> [renderModuleHashLine h]) moduleHash
       ++ names
-      ++ map renderDatatypeLine groups)
+      ++ map renderDatatypeLine groups
+      ++ map renderFixityLine fixities)
 
 -- | The @--datatype-hashes@ diagnostic report: one line per datatype group
 -- declared in a file, its content hash followed by its canonical form, in

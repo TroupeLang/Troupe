@@ -182,9 +182,9 @@ OpNames : OPSYM                        { [opTok $1] }
    | OPSYM OpNames                     { opTok $1 : $2 }
 
 ImportDecl: import OptQualified OptSelection VAR OptAlias ImportDecl
-              { (ImportDecl (LibName (varTok $4)) Nothing $5 Nothing $3 $2 []) : $6 }
+              { (ImportDecl (LibName (varTok $4)) Nothing $5 Nothing $3 $2 [] []) : $6 }
           | import OptQualified OptSelection STRING OptAlias ImportDecl
-              { (ImportDecl (LibName (moduleBindName (strTok $4))) (Just (strTok $4)) $5 Nothing $3 $2 []) : $6 }
+              { (ImportDecl (LibName (moduleBindName (strTok $4))) (Just (strTok $4)) $5 Nothing $3 $2 [] []) : $6 }
           | { [] }
 
 OptQualified : qualified  { Qualified }

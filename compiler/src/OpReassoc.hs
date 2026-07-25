@@ -18,7 +18,7 @@
 -- @not (x ^ y)@ for @not x ^ y@.
 --
 -- Design: @_dev_planning/custom-operators/design.md@ §4.3.
-module OpReassoc (reassocProg) where
+module OpReassoc (reassocProg, fileFixityEnv) where
 
 import           Basics
 import qualified Direct as D
@@ -214,10 +214,26 @@ declaredFixities = foldM addDecl Map.empty
         ppPos p ++ ": duplicate fixity declaration for operator '" ++ v
         ++ "' (first declared at " ++ ppPos p0 ++ ")"
 
-reassocProg :: S.Prog -> Except String D.Prog
-reassocProg (S.Prog imports fixities groups term) = do
+-- | The file's complete fixity environment, strongest first: a local
+-- declaration overrides imports (it is the override mechanism when locally
+-- shadowing an imported operator); among unqualified imports the later one
+-- wins — deliberately the same fold direction as value resolution, so the
+-- fixity always belongs to the value that resolves. Qualified imports
+-- contribute nothing (their operators are prefix-only).
+fileFixityEnv :: S.Prog -> Except String (Map VarName Fixity)
+fileFixityEnv (S.Prog (Imports imports) fixities _ _) = do
   declared <- declaredFixities fixities
-  let lookupFix v = internalFix . snd <$> Map.lookup v declared
+  let imported = foldl addImport Map.empty imports
+      addImport m imp
+        | importMode imp == Unqualified =
+            foldl (\m' (v, f) -> Map.insert v f m') m (importFixities imp)
+        | otherwise = m
+  return (Map.union (Map.map snd declared) imported)  -- left-biased: local wins
+
+reassocProg :: S.Prog -> Except String D.Prog
+reassocProg sprog@(S.Prog imports _ groups term) = do
+  env <- fileFixityEnv sprog
+  let lookupFix v = internalFix <$> Map.lookup v env
   D.Prog imports groups <$> reassocLTerm lookupFix term
 
 reassocLTerm :: FixityLookup -> S.LTerm -> M D.LTerm

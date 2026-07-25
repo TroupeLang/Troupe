@@ -1,0 +1,5 @@
+2026-07-25T14:03:14.312Z [RTM] info: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+(LABELED ("x", (CIRCLE 1)))
+["disc", "blank", "box"]
+[48, 0, 6]
+>>> Main thread finished with value: ()@{}%{}

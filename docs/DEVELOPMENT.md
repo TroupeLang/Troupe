@@ -50,9 +50,10 @@ Use `Ctrl-k m` ("Change language mode") to set the current file's language mode 
 
 #### Building and running
 
-- **Building the compiler:** When having opened the `compiler` folder, there is a task "Build all", which is set as the default build task, so running "Run build task" (Ctrl-F9) should execute it.
-- **Running a Troupe file locally:** When having the Troupe root folder opened, there is a task "Run local" which runs `local.sh` with the currently focused file. It is set to the default test task, so "Run Test Task" should execute it.
-- Tasks are defined in the respective `.vscode/tasks.json` file, where further tasks can be added.
+- **Building the compiler:** With the `compiler` folder open, the task "Make all" is the default build task, so "Run Build Task" executes it.
+- **Compiling a Troupe file:** With the Troupe root folder open, the task "Compile" runs `bin/troupec -v` on the currently focused file. It is the default build task there.
+- **Running a Troupe file locally:** With the Troupe root folder open, the task "Run local" runs `local.sh` on the currently focused file. It is the default test task, so "Run Test Task" executes it.
+- Tasks are defined in the respective `.vscode/tasks.json` file, where further tasks can be added. These files are not version-controlled (`.gitignore` excludes `*.vscode`).
 
 <!-- #### Makefile support -->
 <!-- - Install the extension [Makefile Tools](https://marketplace.visualstudio.com/items?itemName=ms-vscode.makefile-tools) -->
@@ -63,20 +64,47 @@ Use `Ctrl-k m` ("Change language mode") to set the current file's language mode 
 
 ### Building
 
-The following commands build specific parts of the project and install the results to the `bin`, `rt/built` and `lib` directories.
+The following commands build specific parts of the project and install the results to the `bin`,
+`rt/built`, `lib/out`, `trp-rt/out`, and `p2p-tools/built` directories. All are targets of the
+root `Makefile`.
 
-- `make all`: build everything (compiler, runtime, libraries, service placeholder (`trp-rt`), and p2p-tools)
-- `make` / `make compiler`: build the compiler
+- `make` / `make all`: run `make npm`, then build the compiler, runtime, service placeholder
+  (`trp-rt`), p2p-tools, and libraries. `all` is the default goal, so a bare `make` builds
+  everything, not just the compiler.
+- `make npm`: `npm install`, then `npm install -g typescript`
+- `make compiler`: build the compiler and install `bin/troupec`, `bin/golden`, `bin/irtester`,
+  and `bin/dclabels`
 - `make rt`: build the runtime (into the `rt/built` directory)
-- `make libs`: compile Troupe's built-in libraries (into the `lib` directory)
+- `make lib`: compile Troupe's built-in libraries (into the `lib/out` directory)
 - `make trp-rt`: compile the service module placeholder from `trp-rt/service.trp`
+- `make p2p-tools`: build `p2p-tools/` and `p2p-tools/relay/`
+- `make notebook`: `npm install` and `npm run build` in `notebook/`
+- `make clean`, `make clean/compiler`, `make clean/rt`, `make clean/trp-rt`, `make clean/p2p-tools`,
+  `make clean/lib`: remove build artifacts
+
+`make lib` and `make trp-rt` require `bin/troupec` to exist and fail with a message pointing at
+`make compiler` otherwise.
+
+`make benchmark-deps` re-pins the per-program dependencies files (`<main>.deps.json`). It runs
+`bin/troupec --update-deps` on every `.trp` file under `examples/` that has a line beginning
+`import "./`. The pins are content hashes over the imported modules' codegened IR, so re-run it
+after changing an imported module or rebuilding the compiler; a normal build enforces the recorded
+pins.
 
 ### Tests
 
-- `make test` to run all tests
-- `bin/golden` to run the test suite with options
+- `make test` runs `test/local`, `test/multinode`, and `test/result-socket`
+- `make test/local` runs `stack test` in `compiler/` (all of the compiler's Haskell test suites)
+  followed by the golden suite
+- `bin/golden` to run the golden test suite with options
 - `bin/golden -p <pattern>` to run tests matching a pattern (slashes are not allowed in patterns)
-- `bin/golden --quick` to skip the unoptimized pass for faster iteration
+- `bin/golden --quick` to run only the optimized pass, skipping the `--no-rawopt` pass
+- `bin/golden --no-color` compares against the `.nocolor.golden` files
+- `make test/multinode` runs `scripts/run-multinode-tests.sh`
+- `make test/prop-compiler`, `make test/prop-caseelim`, and `make test/prop-labelrt` run one
+  compiler property suite each, for iterating without the full `stack test`
+- `make test/prop-rt` (runtime lattice property tests) and `make test/prop-differential`
+  (Haskell/TypeScript differential lattice harness) are not part of `make test`
 
 For the test-suite layout and conventions, see [CONTRIBUTING.md](CONTRIBUTING.md#test-suite-layout).
 
@@ -99,9 +127,9 @@ cd compiler && make parser-info     # parser info
 
 ### Running examples that do not require network
 
-For programs that do not require network access, there is a utility script
-`local.sh` that prompts the Troupe runtime to skip initialization of the p2p
-infrastructure or key generation (which otherwise takes a few seconds).
+`local.sh` compiles the program to a temporary file and runs it with the runtime's `--localonly`
+flag, which skips p2p network creation and key generation. Under `--localonly` all external I/O
+operations yield a runtime error.
 
 ### Passing command-line arguments to Troupe programs
 
@@ -140,17 +168,21 @@ Use the `-m` or `--source-map` flag when compiling:
 bin/troupec -m myprogram.trp -o myprogram.js
 ```
 
-This generates both `myprogram.js` and `myprogram.js.map`.
+The source map is embedded in `myprogram.js` — as a non-enumerable `__sourceMap` property the
+runtime reads for error reporting, and as a trailing base64 `//# sourceMappingURL=data:...` comment
+for `node --enable-source-maps`. No separate `.map` file is written.
 
 ### Inspecting Source Maps
 
 A tool is provided for inspecting generated source maps:
 
 ```bash
-node rt/built/tools/inspect-sourcemap.js <file.js.map>
+node rt/built/tools/inspect-sourcemap.js [--one-based] <file.js|file.js.map>
 ```
 
-This displays:
+It accepts either a generated `.js` file with an embedded inline source map or a standalone JSON
+`.map` file. `--one-based` (`-1`) displays columns as 1-based; the default is the 0-based source-map
+spec indexing. It displays:
 - Source map metadata (file, sources, version)
 - All decoded mappings grouped by source file
 - Line/column mappings from generated to original code

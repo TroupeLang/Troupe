@@ -17,41 +17,47 @@ Troupe consists of three main components:
 
 ### Repository layout
 
-| Path         | Contents                                                                         |
-|--------------|----------------------------------------------------------------------------------|
-| `compiler/`  | Haskell compiler sources (`troupec`)                                             |
-| `rt/`        | TypeScript runtime; `rt/built/` is the generated build output                    |
-| `lib/`       | Troupe standard library (`.trp` sources)                                         |
-| `trp-rt/`    | Service module placeholder (`service.trp`), built by `make trp-rt`               |
-| `bin/`       | Compiled binaries — **not** version-controlled; do not add scripts here          |
-| `scripts/`   | Version-controlled executable scripts                                            |
-| `dev-utils/` | Developer helper scripts (e.g. `build-snapshot.sh`)                              |
-| `tests/`     | Test corpus (see [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md#test-suite-layout)) |
-| `p2p-tools/` | P2P utilities and relay                                                          |
-| `notebook/`  | Notebook front end and back end, built by `make notebook`                        |
-| `docs/`      | Project documentation                                                            |
+| Path         | Contents                                                                          |
+|--------------|-----------------------------------------------------------------------------------|
+| `compiler/`  | Haskell compiler sources (`troupec`)                                              |
+| `rt/`        | TypeScript runtime; `rt/built/` is the generated build output                     |
+| `lib/`       | Troupe standard library (`.trp` sources); `lib/out/` is the compiled output       |
+| `trp-rt/`    | Service module placeholder (`service.trp`), built by `make trp-rt`                |
+| `bin/`       | Compiled binaries — **not** version-controlled; do not add scripts here           |
+| `scripts/`   | Version-controlled executable scripts                                             |
+| `dev-utils/` | Developer helper scripts (e.g. `build-snapshot.sh`)                               |
+| `tests/`     | Test corpus (see [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md#test-suite-layout))  |
+| `examples/`  | Example and benchmark programs (`benchmarks/`, `savina/`, `variants/`, …)         |
+| `p2p-tools/` | P2P utilities and relay                                                           |
+| `notebook/`  | Notebook front end and back end, built by `make notebook`                         |
+| `docs/`      | Project documentation                                                             |
 
 ## Quick start
 
 With all [dependencies installed](docs/INSTALL.md), build everything and run a program:
 
 ```bash
-make all                 # build compiler, runtime, libraries, service placeholder (trp-rt), and p2p-tools
+make all                 # npm install, then compiler, runtime, trp-rt, p2p-tools, libraries
 ./local.sh myprogram.trp # run a program locally (no P2P)
 ```
+
+`all` is the default goal, so a bare `make` builds the same set.
 
 To try Troupe without a manual install, use the VSCode development container in the
 [Troupe/example-project](https://github.com/TroupeLang/example-project) repository.
 
 ## Documentation
 
-| Document                                     | Contents                                                              |
-|----------------------------------------------|-----------------------------------------------------------------------|
-| [docs/INSTALL.md](docs/INSTALL.md)           | Dependencies and step-by-step installation, including OS X setup      |
-| [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)   | Editor setup, build/test commands, running programs, source maps      |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Compilation pipeline, runtime architecture, IFC, file extensions      |
-| [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) | Test-suite layout and how to add a built-in function                  |
-| [docs/NETWORKING.md](docs/NETWORKING.md)     | P2P runtime, libp2p, node discovery, relays                           |
+| Document                                     | Contents                                                         |
+|----------------------------------------------|------------------------------------------------------------------|
+| [docs/INSTALL.md](docs/INSTALL.md)           | Dependencies and step-by-step installation, including OS X setup |
+| [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)   | Editor setup, build/test commands, running programs, source maps |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Compilation pipeline, runtime architecture, IFC, file extensions |
+| [docs/MODULES.md](docs/MODULES.md)           | Module system: imports and content-addressed identity            |
+| [docs/VARIANTS.md](docs/VARIANTS.md)         | Syntactic variants: `datatype` declarations and constructors     |
+| [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) | Test-suite layout and how to add a built-in function             |
+| [docs/NETWORKING.md](docs/NETWORKING.md)     | P2P runtime, libp2p, node discovery, relays                      |
+| [CONTRIBUTING.md](CONTRIBUTING.md)           | Pull-request policy and code style                               |
 
 ## User guide
 

@@ -15,7 +15,8 @@ in a runtime error.
 
 
 ## Generating new persistent IDs
-See [p2p-tools/mkid.mts](../p2p-tools/mkid.mts).
+See [p2p-tools/mkid.mts](../p2p-tools/mkid.mts). [p2p-tools/mkaliases.ts](../p2p-tools/mkaliases.ts)
+generates an aliases file from a set of id files. Both are built by `make p2p-tools`.
 
 ## Auto-created IDs
 
@@ -45,7 +46,11 @@ accessible from the outside.
 
 ## Navigating the code base
 
-The main p2p runtime module is in [rt/src/p2p/p2p.mts](../rt/src/p2p/p2p.mts).
+The main p2p runtime module is in [rt/src/p2p/p2p.mts](../rt/src/p2p/p2p.mts). The relay is a
+separate program under [p2p-tools/relay/](../p2p-tools/relay/); see its `README.md`. The runtime's
+network-related command-line options are declared in
+[rt/src/TroupeCliArgs.mts](../rt/src/TroupeCliArgs.mts), which also rejects inconsistent
+combinations (for example `--disable-relay` with `--relay` or `--relay-only`).
 
 
 ## How node discovery works

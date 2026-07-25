@@ -31,7 +31,7 @@
 
 import List
 import String
-import Result
+import Outcome
 import Html
 
 let
@@ -111,9 +111,9 @@ let
     (* Length filter: strings and lists only. *)
     fun lengthOf v =
         case getType v of
-            "string" => Result.ok (String.size v)
-          | "list"   => Result.ok (List.length v)
-          | _        => Result.err {reason = "length expects a string or list", offset = 0}
+            "string" => OK (String.size v)
+          | "list"   => OK (List.length v)
+          | _        => ERR {reason = "length expects a string or list", offset = 0}
 
     (* Compare two evaluated values under a comparison operator. *)
     fun compareVals op a b =
@@ -152,7 +152,7 @@ let
         let val n = String.size s
             val dquote = dquoteChar ()
             fun lex i acc =
-                if i >= n then Result.ok (List.reverse acc)
+                if i >= n then OK (List.reverse acc)
                 else
                   let val c = substring (s, i, i + 1)
                   in if isSpace c then lex (i + 1) acc
@@ -163,7 +163,7 @@ let
                      else lexOp i acc c
                   end
             and lexString j chars acc startPos =
-                if j >= n then Result.err {reason = "unterminated string literal", offset = baseOff + startPos}
+                if j >= n then ERR {reason = "unterminated string literal", offset = baseOff + startPos}
                 else
                   let val c = substring (s, j, j + 1)
                   in if c = dquote then lex (j + 1) ({tag = "Str", s = String.concat (List.reverse chars)} :: acc)
@@ -194,13 +194,13 @@ let
                    then lex (i + 2) ({tag = "Op", op = two} :: acc)
                    else if c = "<" orelse c = ">" orelse c = "|" orelse c = "(" orelse c = ")" orelse c = ","
                    then lex (i + 1) ({tag = "Op", op = c} :: acc)
-                   else Result.err {reason = "unexpected character in expression: " ^ c, offset = baseOff + i}
+                   else ERR {reason = "unexpected character in expression: " ^ c, offset = baseOff + i}
                 end
         in lex 0 [] end
 
     (* ===== Expression parser (recursive descent) =====
      * Precedence, loosest to tightest: or, and, not, comparison, filter, primary.
-     * Each parser returns Result (expr, remainingTokens).
+     * Each parser returns an Outcome of (expr, remainingTokens).
      *)
     (* Token predicates. Guarded field access: a token always has .tag; the
      * type-specific fields (.name, .op, .s, .n) are read only after checking .tag,
@@ -211,41 +211,41 @@ let
     fun isOpTok t o = t.tag = "Op" andalso t.op = o
 
     fun parseOr ts =
-        Result.andThen (fn (l, ts1) => parseOrTail l ts1) (parseAnd ts)
+        Outcome.andThen (fn (l, ts1) => parseOrTail l ts1) (parseAnd ts)
     and parseOrTail l ts =
         case ts of
             t :: ts1 =>
               if isIdentTok t "or"
-              then Result.andThen (fn (r, ts2) => parseOrTail {tag = "Or", l = l, r = r} ts2) (parseAnd ts1)
-              else Result.ok (l, ts)
-          | _ => Result.ok (l, ts)
+              then Outcome.andThen (fn (r, ts2) => parseOrTail {tag = "Or", l = l, r = r} ts2) (parseAnd ts1)
+              else OK (l, ts)
+          | _ => OK (l, ts)
     and parseAnd ts =
-        Result.andThen (fn (l, ts1) => parseAndTail l ts1) (parseNot ts)
+        Outcome.andThen (fn (l, ts1) => parseAndTail l ts1) (parseNot ts)
     and parseAndTail l ts =
         case ts of
             t :: ts1 =>
               if isIdentTok t "and"
-              then Result.andThen (fn (r, ts2) => parseAndTail {tag = "And", l = l, r = r} ts2) (parseNot ts1)
-              else Result.ok (l, ts)
-          | _ => Result.ok (l, ts)
+              then Outcome.andThen (fn (r, ts2) => parseAndTail {tag = "And", l = l, r = r} ts2) (parseNot ts1)
+              else OK (l, ts)
+          | _ => OK (l, ts)
     and parseNot ts =
         case ts of
             t :: ts1 =>
               if isIdentTok t "not"
-              then Result.map (fn (e, ts2) => ({tag = "Not", e = e}, ts2)) (parseNot ts1)
+              then Outcome.map (fn (e, ts2) => ({tag = "Not", e = e}, ts2)) (parseNot ts1)
               else parseCmp ts
           | _ => parseCmp ts
     and parseCmp ts =
-        Result.andThen (fn (l, ts1) =>
+        Outcome.andThen (fn (l, ts1) =>
             case ts1 of
                 t :: ts2 =>
                   if t.tag = "Op" andalso isCmpOp t.op
-                  then Result.map (fn (r, ts3) => ({tag = "Cmp", op = t.op, l = l, r = r}, ts3)) (parseFilter ts2)
-                  else Result.ok (l, ts1)
-              | _ => Result.ok (l, ts1))
+                  then Outcome.map (fn (r, ts3) => ({tag = "Cmp", op = t.op, l = l, r = r}, ts3)) (parseFilter ts2)
+                  else OK (l, ts1)
+              | _ => OK (l, ts1))
           (parseFilter ts)
     and parseFilter ts =
-        Result.andThen (fn (l, ts1) => parseFilterTail l ts1) (parsePrimary ts)
+        Outcome.andThen (fn (l, ts1) => parseFilterTail l ts1) (parsePrimary ts)
     and parseFilterTail l ts =
         case ts of
             t :: ts1 =>
@@ -254,56 +254,56 @@ let
                        ft :: ts2 =>
                          if ft.tag = "Ident"
                          then (if isKnownFilter ft.name
-                               then Result.andThen (fn (args, ts3) => parseFilterTail {tag = "Filter", e = l, name = ft.name, args = args} ts3)
+                               then Outcome.andThen (fn (args, ts3) => parseFilterTail {tag = "Filter", e = l, name = ft.name, args = args} ts3)
                                                    (parseFilterArgs ts2)
-                               else Result.err {reason = "unknown filter: " ^ ft.name, offset = 0})
-                         else Result.err {reason = "expected filter name after |", offset = 0}
-                     | _ => Result.err {reason = "expected filter name after |", offset = 0})
-              else Result.ok (l, ts)
-          | _ => Result.ok (l, ts)
+                               else ERR {reason = "unknown filter: " ^ ft.name, offset = 0})
+                         else ERR {reason = "expected filter name after |", offset = 0}
+                     | _ => ERR {reason = "expected filter name after |", offset = 0})
+              else OK (l, ts)
+          | _ => OK (l, ts)
     and parseFilterArgs ts =
         case ts of
-            t :: ts1 => if isOpTok t "(" then parseArgList ts1 [] else Result.ok ([], ts)
-          | _ => Result.ok ([], ts)
+            t :: ts1 => if isOpTok t "(" then parseArgList ts1 [] else OK ([], ts)
+          | _ => OK ([], ts)
     and parseArgList ts acc =
-        Result.andThen (fn (e, ts1) =>
+        Outcome.andThen (fn (e, ts1) =>
             case ts1 of
                 t :: ts2 =>
-                  if isOpTok t ")" then Result.ok (List.reverse (e :: acc), ts2)
+                  if isOpTok t ")" then OK (List.reverse (e :: acc), ts2)
                   else if isOpTok t "," then parseArgList ts2 (e :: acc)
-                  else Result.err {reason = "expected , or ) in filter arguments", offset = 0}
-              | _ => Result.err {reason = "expected , or ) in filter arguments", offset = 0})
+                  else ERR {reason = "expected , or ) in filter arguments", offset = 0}
+              | _ => ERR {reason = "expected , or ) in filter arguments", offset = 0})
           (parseOr ts)
     and parsePrimary ts =
         case ts of
             t :: r =>
-              if t.tag = "Str" then Result.ok ({tag = "Str", s = t.s}, r)
-              else if t.tag = "Num" then Result.ok ({tag = "Num", n = t.n}, r)
-              else if isIdentTok t "true" then Result.ok ({tag = "Bool", b = true}, r)
-              else if isIdentTok t "false" then Result.ok ({tag = "Bool", b = false}, r)
+              if t.tag = "Str" then OK ({tag = "Str", s = t.s}, r)
+              else if t.tag = "Num" then OK ({tag = "Num", n = t.n}, r)
+              else if isIdentTok t "true" then OK ({tag = "Bool", b = true}, r)
+              else if isIdentTok t "false" then OK ({tag = "Bool", b = false}, r)
               else if isOpTok t "(" then
-                Result.andThen (fn (e, r1) =>
+                Outcome.andThen (fn (e, r1) =>
                     case r1 of
                         t2 :: r2 =>
-                          if isOpTok t2 ")" then Result.ok (e, r2)
-                          else Result.err {reason = "expected ) in expression", offset = 0}
-                      | _ => Result.err {reason = "expected ) in expression", offset = 0})
+                          if isOpTok t2 ")" then OK (e, r2)
+                          else ERR {reason = "expected ) in expression", offset = 0}
+                      | _ => ERR {reason = "expected ) in expression", offset = 0})
                   (parseOr r)
-              else if t.tag = "Ident" then Result.ok (mkVar t.name, r)
-              else Result.err {reason = "unexpected token in expression", offset = 0}
-          | _ => Result.err {reason = "unexpected token in expression", offset = 0}
+              else if t.tag = "Ident" then OK (mkVar t.name, r)
+              else ERR {reason = "unexpected token in expression", offset = 0}
+          | _ => ERR {reason = "unexpected token in expression", offset = 0}
 
     (* Parse a full expression from a token list, requiring all tokens consumed. *)
     fun parseExprAll baseOff toks =
-        Result.andThen (fn (expr, rest) =>
+        Outcome.andThen (fn (expr, rest) =>
             case rest of
-                [] => Result.ok expr
-              | _  => Result.err {reason = "unexpected trailing tokens in expression", offset = baseOff})
+                [] => OK expr
+              | _  => ERR {reason = "unexpected trailing tokens in expression", offset = baseOff})
           (parseOr toks)
 
     (* Parse a full expression from a string. *)
     fun parseExprStr baseOff s =
-        Result.andThen (parseExprAll baseOff) (lexExpr baseOff s)
+        Outcome.andThen (parseExprAll baseOff) (lexExpr baseOff s)
 
     (* ===== Template tokenizer =====
      * Splits a template into chunks:
@@ -317,14 +317,14 @@ let
             fun mkText textStart i acc =
                 if i > textStart then {tag = "TextChunk", text = substring (s, textStart, i)} :: acc else acc
             fun scan i textStart acc =
-                if i >= n then Result.ok (List.reverse (mkText textStart n acc))
+                if i >= n then OK (List.reverse (mkText textStart n acc))
                 else
                   let val two = substring (s, i, i + 2)
                   in if two = "{{" then handleDelim i textStart acc "}}" "InterpChunk"
                      else if two = "{%" then handleDelim i textStart acc "%}" "TagChunk"
                      else if two = "{#" then
                        let val closeIdx = indexOf2 (s, "#}", i + 2)
-                       in if closeIdx < 0 then Result.err {reason = "unclosed comment (missing #})", offset = i}
+                       in if closeIdx < 0 then ERR {reason = "unclosed comment (missing #})", offset = i}
                           else scan (closeIdx + 2) (closeIdx + 2) (mkText textStart i acc)
                        end
                      else scan (i + 1) textStart acc
@@ -332,7 +332,7 @@ let
             and handleDelim i textStart acc close kind =
                 let val closeIdx = indexOf2 (s, close, i + 2)
                 in if closeIdx < 0
-                   then Result.err {reason = "unclosed " ^ (if kind = "TagChunk" then "tag (missing %})" else "interpolation (missing }})"),
+                   then ERR {reason = "unclosed " ^ (if kind = "TagChunk" then "tag (missing %})" else "interpolation (missing }})"),
                                     offset = i}
                    else let val inner = substring (s, i + 2, closeIdx)
                             val acc1 = mkText textStart i acc
@@ -344,212 +344,212 @@ let
 
     (* ===== Block parser =====
      * Folds a chunk list into an AST node list. Each parser returns
-     * Result (nodes, remainingChunks); parseSeq stops (leaving the chunk unconsumed)
+     * an Outcome of (nodes, remainingChunks); parseSeq stops (leaving the chunk unconsumed)
      * when it reaches a branch/close tag (elif/else/endif/endfor).
      *)
     fun parseSeq chunks =
         case chunks of
-            [] => Result.ok ([], [])
+            [] => OK ([], [])
           | c :: rest =>
               (case c.tag of
                   "TextChunk" =>
-                    Result.map (fn (nodes, rem) => ({tag = "TextNode", text = c.text} :: nodes, rem)) (parseSeq rest)
+                    Outcome.map (fn (nodes, rem) => ({tag = "TextNode", text = c.text} :: nodes, rem)) (parseSeq rest)
                 | "InterpChunk" =>
-                    Result.andThen (fn expr =>
-                        Result.map (fn (nodes, rem) => ({tag = "InterpNode", expr = expr, safe = hasSafe expr} :: nodes, rem))
+                    Outcome.andThen (fn expr =>
+                        Outcome.map (fn (nodes, rem) => ({tag = "InterpNode", expr = expr, safe = hasSafe expr} :: nodes, rem))
                                    (parseSeq rest))
                       (parseExprStr c.offset c.body)
                 | "TagChunk" =>
-                    Result.andThen (fn toks =>
+                    Outcome.andThen (fn toks =>
                         case toks of
                             t :: tokRest =>
-                              if t.tag <> "Ident" then Result.err {reason = "malformed tag", offset = c.offset}
+                              if t.tag <> "Ident" then ERR {reason = "malformed tag", offset = c.offset}
                               else
                                 let val kw = t.name
                                 in if kw = "elif" orelse kw = "else" orelse kw = "endif" orelse kw = "endfor"
-                                   then Result.ok ([], chunks)
+                                   then OK ([], chunks)
                                    else if kw = "if" then
-                                     Result.andThen (fn (ifNode, rem) =>
-                                         Result.map (fn (nodes, rem2) => (ifNode :: nodes, rem2)) (parseSeq rem))
+                                     Outcome.andThen (fn (ifNode, rem) =>
+                                         Outcome.map (fn (nodes, rem2) => (ifNode :: nodes, rem2)) (parseSeq rem))
                                        (parseIf c tokRest rest)
                                    else if kw = "for" then
-                                     Result.andThen (fn (forNode, rem) =>
-                                         Result.map (fn (nodes, rem2) => (forNode :: nodes, rem2)) (parseSeq rem))
+                                     Outcome.andThen (fn (forNode, rem) =>
+                                         Outcome.map (fn (nodes, rem2) => (forNode :: nodes, rem2)) (parseSeq rem))
                                        (parseFor c tokRest rest)
-                                   else Result.err {reason = "unknown tag: " ^ kw, offset = c.offset}
+                                   else ERR {reason = "unknown tag: " ^ kw, offset = c.offset}
                                 end
-                          | _ => Result.err {reason = "malformed tag", offset = c.offset})
+                          | _ => ERR {reason = "malformed tag", offset = c.offset})
                       (lexExpr c.offset c.body)
-                | _ => Result.err {reason = "internal: unknown chunk", offset = 0})
+                | _ => ERR {reason = "internal: unknown chunk", offset = 0})
     and parseIf c condToks chunks =
-        Result.andThen (fn cond =>
-            Result.andThen (fn (body, rem) => collectIf c ((cond, body) :: []) rem)
+        Outcome.andThen (fn cond =>
+            Outcome.andThen (fn (body, rem) => collectIf c ((cond, body) :: []) rem)
               (parseSeq chunks))
           (parseExprAll c.offset condToks)
     and collectIf c branchesRev rem =
         case rem of
-            [] => Result.err {reason = "unclosed if (missing endif)", offset = c.offset}
+            [] => ERR {reason = "unclosed if (missing endif)", offset = c.offset}
           | t :: rest =>
-              Result.andThen (fn toks =>
+              Outcome.andThen (fn toks =>
                   case toks of
                       bt :: elifRest =>
                         if isIdentTok bt "endif" then
-                            Result.ok ({tag = "IfNode", branches = List.reverse branchesRev, elseBody = []}, rest)
+                            OK ({tag = "IfNode", branches = List.reverse branchesRev, elseBody = []}, rest)
                         else if isIdentTok bt "elif" then
-                            Result.andThen (fn cond =>
-                                Result.andThen (fn (body, rem2) => collectIf c ((cond, body) :: branchesRev) rem2)
+                            Outcome.andThen (fn cond =>
+                                Outcome.andThen (fn (body, rem2) => collectIf c ((cond, body) :: branchesRev) rem2)
                                   (parseSeq rest))
                               (parseExprAll t.offset elifRest)
                         else if isIdentTok bt "else" then
-                            Result.andThen (fn (elseBody, rem2) =>
+                            Outcome.andThen (fn (elseBody, rem2) =>
                                 case rem2 of
                                     et :: rest2 =>
-                                      Result.andThen (fn toks2 =>
+                                      Outcome.andThen (fn toks2 =>
                                           case toks2 of
                                               et2 :: _ =>
                                                 if isIdentTok et2 "endif"
-                                                then Result.ok ({tag = "IfNode", branches = List.reverse branchesRev, elseBody = elseBody}, rest2)
-                                                else Result.err {reason = "expected endif after else", offset = et.offset}
-                                            | _ => Result.err {reason = "expected endif after else", offset = et.offset})
+                                                then OK ({tag = "IfNode", branches = List.reverse branchesRev, elseBody = elseBody}, rest2)
+                                                else ERR {reason = "expected endif after else", offset = et.offset}
+                                            | _ => ERR {reason = "expected endif after else", offset = et.offset})
                                         (lexExpr et.offset et.body)
-                                  | _ => Result.err {reason = "unclosed if (missing endif after else)", offset = c.offset})
+                                  | _ => ERR {reason = "unclosed if (missing endif after else)", offset = c.offset})
                               (parseSeq rest)
-                        else Result.err {reason = "expected elif/else/endif", offset = t.offset}
-                    | _ => Result.err {reason = "malformed tag", offset = t.offset})
+                        else ERR {reason = "expected elif/else/endif", offset = t.offset}
+                    | _ => ERR {reason = "malformed tag", offset = t.offset})
                 (lexExpr t.offset t.body)
     and parseFor c toks chunks =
         case toks of
             vt :: it :: collToks =>
               if vt.tag = "Ident" andalso isIdentTok it "in"
-              then Result.andThen (fn coll =>
-                       Result.andThen (fn (body, rem) => collectFor c vt.name coll body rem)
+              then Outcome.andThen (fn coll =>
+                       Outcome.andThen (fn (body, rem) => collectFor c vt.name coll body rem)
                          (parseSeq chunks))
                      (parseExprAll c.offset collToks)
-              else Result.err {reason = "malformed for (expected: for VAR in EXPR)", offset = c.offset}
-          | _ => Result.err {reason = "malformed for (expected: for VAR in EXPR)", offset = c.offset}
+              else ERR {reason = "malformed for (expected: for VAR in EXPR)", offset = c.offset}
+          | _ => ERR {reason = "malformed for (expected: for VAR in EXPR)", offset = c.offset}
     and collectFor c varName coll body rem =
         case rem of
-            [] => Result.err {reason = "unclosed for (missing endfor)", offset = c.offset}
+            [] => ERR {reason = "unclosed for (missing endfor)", offset = c.offset}
           | t :: rest =>
-              Result.andThen (fn toks =>
+              Outcome.andThen (fn toks =>
                   case toks of
                       bt :: _ =>
                         if isIdentTok bt "endfor" then
-                            Result.ok ({tag = "ForNode", var = varName, coll = coll, body = body, elseBody = []}, rest)
+                            OK ({tag = "ForNode", var = varName, coll = coll, body = body, elseBody = []}, rest)
                         else if isIdentTok bt "else" then
-                            Result.andThen (fn (elseBody, rem2) =>
+                            Outcome.andThen (fn (elseBody, rem2) =>
                                 case rem2 of
                                     et :: rest2 =>
-                                      Result.andThen (fn toks2 =>
+                                      Outcome.andThen (fn toks2 =>
                                           case toks2 of
                                               et2 :: _ =>
                                                 if isIdentTok et2 "endfor"
-                                                then Result.ok ({tag = "ForNode", var = varName, coll = coll, body = body, elseBody = elseBody}, rest2)
-                                                else Result.err {reason = "expected endfor after for/else", offset = et.offset}
-                                            | _ => Result.err {reason = "expected endfor after for/else", offset = et.offset})
+                                                then OK ({tag = "ForNode", var = varName, coll = coll, body = body, elseBody = elseBody}, rest2)
+                                                else ERR {reason = "expected endfor after for/else", offset = et.offset}
+                                            | _ => ERR {reason = "expected endfor after for/else", offset = et.offset})
                                         (lexExpr et.offset et.body)
-                                  | _ => Result.err {reason = "unclosed for (missing endfor after else)", offset = c.offset})
+                                  | _ => ERR {reason = "unclosed for (missing endfor after else)", offset = c.offset})
                               (parseSeq rest)
-                        else Result.err {reason = "expected else/endfor", offset = t.offset}
-                    | _ => Result.err {reason = "malformed tag", offset = t.offset})
+                        else ERR {reason = "expected else/endfor", offset = t.offset}
+                    | _ => ERR {reason = "malformed tag", offset = t.offset})
                 (lexExpr t.offset t.body)
 
     (* ===== Variable resolution ===== *)
 
-    fun findScope seg [] = Result.err {reason = "__scope_miss", offset = 0}
-      | findScope seg ((k, v) :: rest) = if k = seg then Result.ok v else findScope seg rest
+    fun findScope seg [] = ERR {reason = "__scope_miss", offset = 0}
+      | findScope seg ((k, v) :: rest) = if k = seg then OK v else findScope seg rest
 
     (* Look up `key` in a record value using the recordToList builtin. *)
     fun lookupKey rec key raw =
         if getType rec <> "record"
-        then Result.err {reason = "missing variable: " ^ raw, path = raw, offset = 0}
+        then ERR {reason = "missing variable: " ^ raw, path = raw, offset = 0}
         else let val pairs = recordToList rec
-                 fun find [] = Result.err {reason = "missing variable: " ^ raw, path = raw, offset = 0}
-                   | find ((k, v) :: rest) = if k = key then Result.ok v else find rest
+                 fun find [] = ERR {reason = "missing variable: " ^ raw, path = raw, offset = 0}
+                   | find ((k, v) :: rest) = if k = key then OK v else find rest
              in find pairs end
 
     (* Descend the remaining path segments into an already-resolved value. *)
     fun descend r [] raw = r
       | descend r (seg :: segs) raw =
-          descend (Result.andThen (fn v => lookupKey v seg raw) r) segs raw
+          descend (Outcome.andThen (fn v => lookupKey v seg raw) r) segs raw
 
     (* Resolve a dotted path: first segment from the loop scope, else the context
      * record; remaining segments descend via lookupKey. *)
     fun resolvePath scope ctx path raw =
         case path of
-            [] => Result.err {reason = "empty variable path", path = raw, offset = 0}
+            [] => ERR {reason = "empty variable path", path = raw, offset = 0}
           | seg :: segs =>
-              let val firstR = Result.orElse (fn _ => lookupKey ctx seg raw) (findScope seg scope)
+              let val firstR = Outcome.orElse (fn _ => lookupKey ctx seg raw) (findScope seg scope)
               in descend firstR segs raw end
 
     (* ===== Expression evaluation ===== *)
 
     fun eval scope ctx expr =
         case expr.tag of
-            "Str"  => Result.ok expr.s
-          | "Num"  => Result.ok expr.n
-          | "Bool" => Result.ok expr.b
+            "Str"  => OK expr.s
+          | "Num"  => OK expr.n
+          | "Bool" => OK expr.b
           | "Var"  => resolvePath scope ctx expr.path expr.raw
-          | "Not"  => Result.map (fn v => not (truthy v)) (eval scope ctx expr.e)
-          | "And"  => Result.andThen (fn a => Result.map (fn b => (truthy a) andalso (truthy b)) (eval scope ctx expr.r))
+          | "Not"  => Outcome.map (fn v => not (truthy v)) (eval scope ctx expr.e)
+          | "And"  => Outcome.andThen (fn a => Outcome.map (fn b => (truthy a) andalso (truthy b)) (eval scope ctx expr.r))
                                      (eval scope ctx expr.l)
-          | "Or"   => Result.andThen (fn a => Result.map (fn b => (truthy a) orelse (truthy b)) (eval scope ctx expr.r))
+          | "Or"   => Outcome.andThen (fn a => Outcome.map (fn b => (truthy a) orelse (truthy b)) (eval scope ctx expr.r))
                                      (eval scope ctx expr.l)
-          | "Cmp"  => Result.andThen (fn a => Result.map (fn b => compareVals expr.op a b) (eval scope ctx expr.r))
+          | "Cmp"  => Outcome.andThen (fn a => Outcome.map (fn b => compareVals expr.op a b) (eval scope ctx expr.r))
                                      (eval scope ctx expr.l)
           | "Filter" => evalFilter scope ctx expr
-          | _ => Result.err {reason = "internal: unknown expression", offset = 0}
+          | _ => ERR {reason = "internal: unknown expression", offset = 0}
     and evalFilter scope ctx expr =
         let val name = expr.name
         in if name = "safe" then eval scope ctx expr.e
            else if name = "default" then
              let val r = eval scope ctx expr.e
-             in if Result.isOk r then r
+             in if Outcome.isOk r then r
                 else (case expr.args of
                           a :: _ => eval scope ctx a
-                        | []     => Result.err {reason = "default requires an argument", offset = 0})
+                        | []     => ERR {reason = "default requires an argument", offset = 0})
              end
-           else if name = "upper" then Result.map (fn v => upperStr (valueToString v)) (eval scope ctx expr.e)
-           else if name = "lower" then Result.map (fn v => lowerStr (valueToString v)) (eval scope ctx expr.e)
-           else if name = "length" then Result.andThen (fn v => lengthOf v) (eval scope ctx expr.e)
-           else Result.err {reason = "unknown filter: " ^ name, offset = 0}
+           else if name = "upper" then Outcome.map (fn v => upperStr (valueToString v)) (eval scope ctx expr.e)
+           else if name = "lower" then Outcome.map (fn v => lowerStr (valueToString v)) (eval scope ctx expr.e)
+           else if name = "length" then Outcome.andThen (fn v => lengthOf v) (eval scope ctx expr.e)
+           else ERR {reason = "unknown filter: " ^ name, offset = 0}
         end
 
     (* ===== Rendering ===== *)
 
     fun renderNode scope ctx node =
         case node.tag of
-            "TextNode" => Result.ok node.text
+            "TextNode" => OK node.text
           | "InterpNode" =>
-              Result.map (fn v => if node.safe then valueToString v else Html.escapeHtml (valueToString v))
+              Outcome.map (fn v => if node.safe then valueToString v else Html.escapeHtml (valueToString v))
                          (eval scope ctx node.expr)
           | "IfNode"  => renderIf scope ctx node.branches node.elseBody
           | "ForNode" => renderFor scope ctx node.var node.coll node.body node.elseBody
-          | _ => Result.err {reason = "internal: unknown node", offset = 0}
+          | _ => ERR {reason = "internal: unknown node", offset = 0}
     and renderSeq scope ctx nodes =
-        let fun go [] acc = Result.ok (String.concat (List.reverse acc))
+        let fun go [] acc = OK (String.concat (List.reverse acc))
               | go (n :: ns) acc =
-                  Result.andThen (fn str => go ns (str :: acc)) (renderNode scope ctx n)
+                  Outcome.andThen (fn str => go ns (str :: acc)) (renderNode scope ctx n)
         in go nodes [] end
     and renderIf scope ctx branches elseBody =
         case branches of
             [] => renderSeq scope ctx elseBody
           | ((cond, body) :: rest) =>
-              Result.andThen (fn v => if truthy v then renderSeq scope ctx body
+              Outcome.andThen (fn v => if truthy v then renderSeq scope ctx body
                                       else renderIf scope ctx rest elseBody)
                              (eval scope ctx cond)
     and renderFor scope ctx varName collExpr body elseBody =
-        Result.andThen (fn coll =>
+        Outcome.andThen (fn coll =>
             if getType coll = "list"
             then (if List.null coll then renderSeq scope ctx elseBody
                   else renderEach scope ctx varName coll body)
-            else Result.err {reason = "for expects a list", offset = 0})
+            else ERR {reason = "for expects a list", offset = 0})
           (eval scope ctx collExpr)
     and renderEach scope ctx varName items body =
-        let fun go [] acc = Result.ok (String.concat (List.reverse acc))
+        let fun go [] acc = OK (String.concat (List.reverse acc))
               | go (x :: xs) acc =
                   let val scope' = (varName, x) :: scope
-                  in Result.andThen (fn str => go xs (str :: acc)) (renderSeq scope' ctx body)
+                  in Outcome.andThen (fn str => go xs (str :: acc)) (renderSeq scope' ctx body)
                   end
         in go items [] end
 
@@ -560,11 +560,11 @@ let
      *  an Err carrying {reason, offset}, where offset is a byte position in the
      *  template. *)
     fun compile s =
-        Result.andThen (fn chunks =>
-            Result.andThen (fn (nodes, rem) =>
+        Outcome.andThen (fn chunks =>
+            Outcome.andThen (fn (nodes, rem) =>
                 case rem of
-                    [] => Result.ok {tag = "Template", nodes = nodes}
-                  | t :: _ => Result.err {reason = "unexpected close/branch tag", offset = t.offset})
+                    [] => OK {tag = "Template", nodes = nodes}
+                  | t :: _ => ERR {reason = "unexpected close/branch tag", offset = t.offset})
               (parseSeq chunks))
           (tokenizeTemplate s)
 
@@ -575,7 +575,7 @@ let
     fun renderCompiled tmpl ctx = renderSeq [] ctx tmpl.nodes
 
     (** Compile and render in one call. *)
-    fun render s ctx = Result.andThen (fn tmpl => renderCompiled tmpl ctx) (compile s)
+    fun render s ctx = Outcome.andThen (fn tmpl => renderCompiled tmpl ctx) (compile s)
 
 in [ ("compile", compile)
    , ("renderCompiled", renderCompiled)

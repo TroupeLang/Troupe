@@ -9,13 +9,13 @@
  *)
 
 import Unit
-import Result
+import Outcome
 import Template
 
 let
     (* Render, unwrapping the Ok value. Used only where a successful render is
      * expected. *)
-    fun ren t c = Result.unwrap (Template.render t c)
+    fun ren t c = Outcome.unwrap (Template.render t c)
 
     (* The double-quote character (Troupe source cannot spell it as a literal). *)
     val dq = substring (toString "", 0, 1)
@@ -105,27 +105,27 @@ let
 
         Unit.group "error cases" [
             Unit.it "unclosed interpolation is an error"
-                    (Unit.isTrue (Result.isErr (Template.render "{{ x " {x = "a"})))
+                    (Unit.isTrue (Outcome.isErr (Template.render "{{ x " {x = "a"})))
           , Unit.it "unclosed tag is an error"
-                    (Unit.isTrue (Result.isErr (Template.render "{% if x %}hi" {x = true})))
+                    (Unit.isTrue (Outcome.isErr (Template.render "{% if x %}hi" {x = true})))
           , Unit.it "unknown filter is an error"
-                    (Unit.isTrue (Result.isErr (Template.render "{{ x | bogus }}" {x = "a"})))
+                    (Unit.isTrue (Outcome.isErr (Template.render "{{ x | bogus }}" {x = "a"})))
           , Unit.it "malformed expression is an error"
-                    (Unit.isTrue (Result.isErr (Template.render "{{ | }}" {})))
+                    (Unit.isTrue (Outcome.isErr (Template.render "{{ | }}" {})))
           , Unit.it "missing variable is an error"
-                    (Unit.isTrue (Result.isErr (Template.render "{{ z }}" {})))
+                    (Unit.isTrue (Outcome.isErr (Template.render "{{ z }}" {})))
           , Unit.it "missing-variable error names the path"
-                    (Unit.isEq "z" ((Result.unwrapErr (Template.render "{{ z }}" {})).path))
+                    (Unit.isEq "z" ((Outcome.unwrapErr (Template.render "{{ z }}" {})).path))
           , Unit.it "missing dotted path names the full path"
-                    (Unit.isEq "a.b" ((Result.unwrapErr (Template.render "{{ a.b }}" {a = {}})).path))
+                    (Unit.isEq "a.b" ((Outcome.unwrapErr (Template.render "{{ a.b }}" {a = {}})).path))
         ],
 
         Unit.group "compile once, render many" [
             let val t = Template.compile "{{ x }}!"
             in Unit.it "renders a compiled template against two contexts" [
-                    Unit.isTrue (Result.isOk t)
-                  , Unit.isEq "a!" (Result.unwrap (Template.renderCompiled (Result.unwrap t) {x = "a"}))
-                  , Unit.isEq "b!" (Result.unwrap (Template.renderCompiled (Result.unwrap t) {x = "b"}))
+                    Unit.isTrue (Outcome.isOk t)
+                  , Unit.isEq "a!" (Outcome.unwrap (Template.renderCompiled (Outcome.unwrap t) {x = "a"}))
+                  , Unit.isEq "b!" (Outcome.unwrap (Template.renderCompiled (Outcome.unwrap t) {x = "b"}))
                 ]
             end
         ],

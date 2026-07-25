@@ -24,8 +24,8 @@ let val args = getCliArgs authority
         if Json.kindOf ctx <> "object"
         then print "data file must contain a JSON object to use as the context"
         else case Template.render tmpl ctx of
-               {tag = "Ok",  value = out} => onRendered outPath out
-             | {tag = "Err", error = e}   => print ("template error: " ^ e.reason)
+               OK out => onRendered outPath out
+             | ERR e  => print ("template error: " ^ e.reason)
 
     fun onTemplate dataPath outPath tmpl =
         case readFile (authority, dataPath) of

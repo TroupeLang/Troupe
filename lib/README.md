@@ -17,7 +17,13 @@ reviewed rigorously rather than depend on the monitor.
 - `ListPair`      : Operations for list of pairs, i.e. `(x,y)::xs`.
 - `Map`           : Map from keys to values via a comparator function.
 - `Number`        : Operations for numbers, i.e. integer and floats.
-- `Result`        : Success-or-failure values, encoded as tagged records.
+- `Option`        : An optional value: `SOME v` / `NONE`.
+- `Outcome`       : A value or a diagnostic: `OK v` / `ERR e`. Use it when a failure carries
+                    something the caller cannot work out for itself, such as a source offset;
+                    where the failure is only the absence of a value, use `Option`. Importing
+                    it brings `OK` and `ERR` into scope, and that is not transitive: a client
+                    that receives an outcome from another library must import `Outcome` itself
+                    in order to pattern-match on it. The same holds for `Option`.
 - `Set`           : Set of elements via a comparator function.
 - `StencilVector` : Memory-efficient implementation of small (sparse) arrays.
 - `String`        : Operations for strings

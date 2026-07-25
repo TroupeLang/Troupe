@@ -1,0 +1,9 @@
+(* Operators imported from a module: infix use with imported fixities, and
+   qualified prefix access. *)
+import "./modsrc/OpsDoc"
+let val r = 1 <+> 2 $$ 3 <+> 4
+    val q = OpsDoc.( <+> ) 10 5
+in
+    printString (OpsDoc.describe r);
+    printString (toString q)
+end

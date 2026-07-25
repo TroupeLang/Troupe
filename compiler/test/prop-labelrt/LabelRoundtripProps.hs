@@ -13,7 +13,8 @@
 --     production `Prog : ImportDecl TopDecls Expr` accepts an empty import list
 --     and empty declaration section, so the rendered string *is* a minimal valid
 --     program.  We call `Parser.parseProg "roundtrip" rendered :: Either String
---     Direct.Prog`.
+--     Surface.Prog` (the parser's output type; a bare literal body is
+--     identical in Surface and Direct).
 --
 --   * Extract.  The parsed program is
 --         Prog (Imports []) [] (Loc _ (Lit (LDCLabel e')))
@@ -61,7 +62,7 @@ import DCLabels
   , ppDCLabelExpLit
   , dcLabelEq )
 import Parser (parseProg)
-import Direct (Prog(..), Term(..), Lit(..))
+import Surface (Prog(..), Term(..), Lit(..))
 import TroupePositionInfo (unLoc)
 
 -- ---------------------------------------------------------------------------
@@ -70,7 +71,7 @@ import TroupePositionInfo (unLoc)
 
 -- Extract the DCLabelExp from a program whose body is a bare label literal.
 extractLabel :: Prog -> Maybe DCLabelExp
-extractLabel (Prog _ _ lterm) =
+extractLabel (Prog _ _ _ lterm) =
   case unLoc lterm of
     Lit (LDCLabel e') -> Just e'
     _                 -> Nothing

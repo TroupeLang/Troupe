@@ -1,0 +1,43 @@
+2026-07-25T19:32:31.611Z [RTM] [32minfo[39m: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+[34mbegin [0mPretty
+  [34mbegin [0mbeside and above
+      [33m[ TEST ][0m it beside concatenates      [32m[ PASS ][0m it beside concatenates
+      [33m[ TEST ][0m it beside-space separates      [32m[ PASS ][0m it beside-space separates
+      [33m[ TEST ][0m it above stacks      [32m[ PASS ][0m it above stacks
+      [33m[ TEST ][0m it operators group at the HughesPJ levels      [32m[ PASS ][0m it operators group at the HughesPJ levels
+      [33m[ TEST ][0m it beside hangs at the right operand's start column      [32m[ PASS ][0m it beside hangs at the right operand's start column
+  [34mend [0m
+  [34mbegin [0mempty is an identity
+      [33m[ TEST ][0m it no leading space      [32m[ PASS ][0m it no leading space
+      [33m[ TEST ][0m it no trailing space      [32m[ PASS ][0m it no trailing space
+      [33m[ TEST ][0m it no blank line      [32m[ PASS ][0m it no blank line
+  [34mend [0m
+  [34mbegin [0mnest and hang
+      [33m[ TEST ][0m it nest indents lines after a break      [32m[ PASS ][0m it nest indents lines after a break
+      [33m[ TEST ][0m it nest is invisible beside      [32m[ PASS ][0m it nest is invisible beside
+      [33m[ TEST ][0m it hang hangs under the head      [32m[ PASS ][0m it hang hangs under the head
+  [34mend [0m
+  [34mbegin [0msep and cat
+      [33m[ TEST ][0m it sep fits on one line      [32m[ PASS ][0m it sep fits on one line
+      [33m[ TEST ][0m it sep stacks when narrow      [32m[ PASS ][0m it sep stacks when narrow
+      [33m[ TEST ][0m it cat concatenates when it fits      [32m[ PASS ][0m it cat concatenates when it fits
+      [33m[ TEST ][0m it nested sep fits as a whole      [32m[ PASS ][0m it nested sep fits as a whole
+      [33m[ TEST ][0m it stacked sep respects nesting      [32m[ PASS ][0m it stacked sep respects nesting
+  [34mend [0m
+  [34mbegin [0mhsep hcat vcat punctuate
+      [33m[ TEST ][0m it hsep      [32m[ PASS ][0m it hsep
+      [33m[ TEST ][0m it hcat      [32m[ PASS ][0m it hcat
+      [33m[ TEST ][0m it vcat      [32m[ PASS ][0m it vcat
+      [33m[ TEST ][0m it punctuate      [32m[ PASS ][0m it punctuate
+  [34mend [0m
+  [34mbegin [0mwrappers and constants
+      [33m[ TEST ][0m it brackets      [32m[ PASS ][0m it brackets
+      [33m[ TEST ][0m it braces      [32m[ PASS ][0m it braces
+      [33m[ TEST ][0m it quotes      [32m[ PASS ][0m it quotes
+      [33m[ TEST ][0m it named aliases match the operators      [32m[ PASS ][0m it named aliases match the operators
+  [34mend [0m
+[34mend [0m
+
+Total:  24
+Passes: 24
+>>> Main thread finished with value: true@{}%{}

@@ -31,6 +31,32 @@ data UnaryOp = IsList | IsTuple | IsRecord | Head | Tail | ListLength | TupleLen
   deriving (Eq, Generic, Ord)
 instance Serialize UnaryOp
 
+-- | Associativity of a declared operator fixity: @infixl@ / @infixr@ /
+-- @infix@ (non-associative, Haskell's meaning — SML's bare @infix@ is left).
+data OpAssoc = OpLeft | OpRight | OpNon
+  deriving (Eq, Show, Generic, Ord)
+instance Serialize OpAssoc
+
+-- | A declared operator fixity: associativity and level (0 through 9).
+-- Serializable because it travels with imports in 'ImportDecl'.
+data Fixity = Fixity OpAssoc Int
+  deriving (Eq, Show, Generic, Ord)
+instance Serialize Fixity
+
+-- | Whether a name is an operator name: all operator characters ('$'-only
+-- operators included), or containing a character that is not legal in a
+-- JavaScript identifier. Compiler-internal '$'-prefixed names mix '$' with
+-- alphanumerics and are not operator names.
+isOperatorName :: VarName -> Bool
+isOperatorName x =
+  not (null x) && (all (`elem` fullOpChars) x || any (`elem` jsHostileOpChars) x)
+  where fullOpChars = "!$%&*+-/:<=>?@^|~." :: String
+
+-- | The operator characters that are not legal JavaScript identifier
+-- characters ('$' and '.' excluded: '$' is legal, '.' never leads a name).
+jsHostileOpChars :: String
+jsHostileOpChars = "!%&*+-/:<=>?@^|~."
+
 instance Show BinOp where
   show Plus  = "+"
   show Minus = "-"
@@ -136,6 +162,12 @@ data ImportDecl = ImportDecl
       -- form) pairs in declaration order (dependencies precede dependents).
       -- Filled by ProcessImports from the @datatype@ lines of the @.exports@
       -- file; empty until then and for libraries that declare no datatypes.
+  , importFixities :: [(VarName, Fixity)]
+      -- ^ Fixities of the exported operators, from the @fixity@ lines of the
+      -- @.exports@ file, restricted to the selection when one is given.
+      -- Filled by ProcessImports; empty until then. Consumed by the
+      -- re-association pass for unqualified imports only (qualified access
+      -- is prefix-only and needs no fixity).
       -- Datatypes are imported wholesale, independent of 'importSelected'
       -- (they are compile-time only).
   } deriving (Eq, Show, Ord, Generic)

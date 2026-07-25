@@ -17,10 +17,15 @@ authoritative sequence.
    discover the program-relative modules the file imports transitively and load the pins recorded
    in `<main>.deps.json` (`DepsFile.hs`). Each module is compiled first, as a content-hashed
    library artifact. See [MODULES.md](MODULES.md).
-1. **Parsing** (`Parser.y`, `Lexer.x`) — parse `.trp` files into an AST.
+1. **Parsing** (`Parser.y`, `Lexer.x`) — parse `.trp` files into the parse-phase AST
+   (`Surface.hs`): expressions carry flat operator chains with no precedence commitment, and the
+   file header may carry fixity declarations. See [OPERATORS.md](OPERATORS.md).
 2. **Front end:**
    - Import processing (`ProcessImports.hs`) — resolve library and module imports, read their
      `.exports` interfaces, and either enforce or establish the dependency pins.
+   - Operator re-association (`OpReassoc.hs`) — translate `Surface` into the `Direct` AST,
+     rebuilding each operator chain from the fixity environment (built-ins seeded; user
+     operators from the header declarations and the imported `fixity` interface lines).
    - Export extraction (`Exports.hs`) when compiling a library or module (`-l`).
    - Syntactic-variant folding (`SynVarFolding.hs`, hashing in `SynVarHash.hs`) — process
      `datatype` groups, rewriting constructor occurrences and constructor patterns into tagged
@@ -49,8 +54,9 @@ and re-parses it and checks the position-erased ASTs match, and `--ingest-ir-sex
 and runs stage 4 on it.
 
 With `-v`, each stage writes a dump into `out/` under the working directory: `out.syntax`,
-`out.nopats`, `out.lowered`, `out.alpha`, `out.cps`, `out.cpsopt`, `out.ir`, `out.iropt`,
-`out.rawout`, `out.rawopt`, `out.stack`. `out.rawopt` is not written under `--no-rawopt`. Dumps are
+`out.opreassoc`, `out.nopats`, `out.lowered`, `out.alpha`, `out.cps`, `out.cpsopt`, `out.ir`,
+`out.iropt`, `out.rawout`, `out.rawopt`, `out.stack`. `out.rawopt` is not written under
+`--no-rawopt`. Dumps are
 written for the top-level file only, not for the modules compiled ahead of it.
 
 ## Runtime architecture

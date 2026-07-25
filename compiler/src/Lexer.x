@@ -35,6 +35,16 @@ $graphic    = $printable # $white
 @tyvar      = \' $alpha [$alpha $digit \_ \']*
 @string     = \" ($printable # \")* \"
 @label      = \`\{ ($printable # \})*  \}\`
+-- Operator lexemes (docs: _dev_planning/custom-operators/design.md §2.1).
+-- An operator is a maximal run of $opchar beginning with $opinitial. The
+-- initials exclude ! ~ ? (reserved for future prefix operators), and : .
+-- (protecting ::, projection, and ..); all four are legal continuations.
+-- Reserved spellings keep their dedicated tokens: those rules precede the
+-- operator rule, and Alex prefers the longest match, then the earliest rule,
+-- so equal-length ties stay reserved (<> is not-equal) while strictly longer
+-- runs are operators (<>> or ==>).
+$opinitial  = [\$ \% \& \* \+ \- \/ \< \= \> \@ \^ \|]
+$opchar     = [$opinitial \! \~ \? \: \.]
 @declit     = $digit[\_$digit]*
 @binlit     = 0[bB]$bindigit[\_$bindigit]*
 @octlit     = 0[oO]$octdigit[\_$octdigit]*
@@ -115,6 +125,9 @@ tokens:-
 <0>   andb                           { mkL TokenBinAnd }
 <0>   orb                            { mkL TokenBinOr }
 <0>   xorb                           { mkL TokenBinXor }
+<0>   infixl                         { mkL TokenInfixl }
+<0>   infixr                         { mkL TokenInfixr }
+<0>   infix                          { mkL TokenInfix }
 <0>   "#true"                        { mkL TokenDCTrue }
 <0>   "#false"                       { mkL TokenDCFalse }
 <state_dclabel> "#root-confidentiality" { mkL TokenDCRootConf }
@@ -163,6 +176,9 @@ tokens:-
 <0>   [\[]                           { mkL TokenLBracket }
 <0>   [\]]                           { mkL TokenRBracket }
 <0, state_dclabel>   [\&]            { mkL TokenAmpersand }
+-- The operator rule comes after every reserved-spelling rule above (tie goes
+-- to the earlier rule) and only in state 0 (never inside DC labels).
+<0>   $opinitial $opchar*            { mkLs TokenOperator }
 <0>   @tyvar                         { mkLs (\s -> TokenTyVar (tail s)) }
 <0, state_dclabel>   @sym            { mkLs (\s -> TokenSym s) }
 <0>   @label                         { mkLs (\s -> (TokenLabel (((map toLower) . trim . unquote) s)))}
@@ -220,7 +236,11 @@ data Token
   | TokenAs
   | TokenDatatype
   | TokenIntDiv
-  | TokenMod  
+  | TokenMod
+  | TokenInfixl
+  | TokenInfixr
+  | TokenInfix
+  | TokenOperator String
   | TokenFn
   | TokenHn
   | TokenNum Integer
@@ -291,7 +311,7 @@ alexEOF = do
     comment_depth <- getLexerCommentDepth
     start_code <- alexGetStartCode
     if comment_depth > 0
-        then alexError "Comment not closed at end of file"
+        then alexError "Comment not closed at end of file (note: '(*' starts a comment; for an operator beginning or ending with '*', write '( * )' with spaces)"
         else if start_code == state_dclabel
             then alexError "Incomplete DC label at end of file - label not closed"
         else return (L undefined TokenEOF)
@@ -423,6 +443,10 @@ showToken TokenAndAlso = "'andalso'"
 showToken TokenOrElse = "'orelse'"
 showToken TokenIntDiv = "'div'"
 showToken TokenMod = "'mod'"
+showToken TokenInfixl = "keyword 'infixl'"
+showToken TokenInfixr = "keyword 'infixr'"
+showToken TokenInfix = "keyword 'infix'"
+showToken (TokenOperator s) = "operator '" ++ s ++ "'"
 showToken (TokenNum n) = "number " ++ show n
 showToken (TokenBigInt s) = "bigint " ++ s ++ "n"
 showToken (TokenFloat f) = "float " ++ show f

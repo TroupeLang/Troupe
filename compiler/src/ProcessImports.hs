@@ -1,15 +1,15 @@
 module ProcessImports (PinCheck(..), processImports, discoverModules) where
 import Basics
-import Direct
+import Surface
 import DepsFile (DepEntry(..), lookupPinByPath)
-import Exports (isDatatypeLine, parseDatatypeLine, isModuleHashLine, parseModuleHashLine)
+import Exports (ExportsInterface(..), parseExportsFile)
 import Parser (parseProg)
 import Control.Monad (unless, foldM)
 import System.Environment
 import System.Exit
 import System.Directory (doesFileExist)
 import System.FilePath
-import Data.List (partition, intercalate)
+import Data.List (intercalate)
 import Data.String.Utils
 
 -- | Whether the frontend enforces the dependencies file (a normal compile) or
@@ -111,6 +111,14 @@ resolveModule root importingFile lit =
 displayPath :: FilePath -> FilePath -> String
 displayPath root f = makeRelative root f
 
+-- | Fixities an import contributes: restricted to the selection when one is
+-- given (a fixity is moot without its value). Qualified imports keep their
+-- fixities in the record too — the re-association pass gates on the mode.
+restrictFixities :: ImportDecl -> [(VarName, Fixity)] -> [(VarName, Fixity)]
+restrictFixities imp fxs = case importSelected imp of
+  Just selected -> filter ((`elem` selected) . fst) fxs
+  Nothing       -> fxs
+
 processModuleImport :: PinCheck -> FilePath -> FilePath -> ImportDecl -> IO (ImportDecl, DepEntry)
 processModuleImport pin root file imp = do
   let Just lit = importPath imp
@@ -131,16 +139,16 @@ processModuleImport pin root file imp = do
   input <- readFile expFile
   -- A module's .exports has the same shape as a library's: one value name per
   -- line and zero or more @datatype ...@ lines, plus (for a module) its own
-  -- @module-hash <hash>@ line. Strip the module-hash line first, then partition
-  -- the rest exactly as processLibImport does, so a module's datatype interface
-  -- reaches the syntactic-variant resolver (importer-side constructor
-  -- resolution) and neither the datatype lines nor the module-hash line leak
-  -- into the value namespace. Selection restricts value imports only.
-  let (mhLines, rest)      = partition isModuleHashLine (lines input)
-      (dtLines, nameLines) = partition isDatatypeLine rest
-      datatypes            = map parseDatatypeLine dtLines
-  actualHash <- case mhLines of
-    [l] -> return (parseModuleHashLine l)
+  -- @module-hash <hash>@ line. 'parseExportsFile' (Exports) is the one reader
+  -- of the format, so a module's datatype interface reaches the
+  -- syntactic-variant resolver (importer-side constructor resolution) and
+  -- neither the datatype lines nor the module-hash line leak into the value
+  -- namespace. Selection restricts value imports only.
+  let iface     = parseExportsFile input
+      nameLines = eiNames iface
+      datatypes = eiDatatypes iface
+  actualHash <- case eiModuleHashes iface of
+    [h] -> return h
     []  -> die $ "module " ++ show lit ++ " imported from " ++ displayPath root file
                ++ " has no content hash in " ++ displayPath root expFile
                ++ " (recompile it)"
@@ -180,6 +188,7 @@ processModuleImport pin root file imp = do
   -- runtime address the module as "module:<hash>".
   return ( imp { importExports = Just nameLines
                , importDatatypes = datatypes
+               , importFixities = restrictFixities imp (eiFixities iface)
                , importPath = Just actualHash }
          , entry )
 
@@ -201,10 +210,12 @@ processLibImport imp = do
   -- The .exports file carries one value name per line, followed by zero or
   -- more @datatype <group-hash> <canonical-form>@ lines (normalization.md §10).
   -- Value names feed value-name scoping (Core); datatype lines feed the
-  -- syntactic-variant resolver (SynVarFolding) and are kept separate here so
-  -- they never leak into the value namespace.
-  let (dtLines, nameLines) = partition isDatatypeLine (lines input)
-      datatypes = map parseDatatypeLine dtLines
+  -- syntactic-variant resolver (SynVarFolding) and are kept separate by the
+  -- shared reader so they never leak into the value namespace. (A library
+  -- artifact carries no module-hash line; the reader would strip one anyway.)
+  let iface     = parseExportsFile input
+      nameLines = eiNames iface
+      datatypes = eiDatatypes iface
   -- Validate selective imports if specified. Selection restricts *value*
   -- imports only; datatypes are imported wholesale regardless (they are
   -- compile-time only), so selection is checked against the value names.
@@ -212,9 +223,13 @@ processLibImport imp = do
     Just selected -> do
       let missing = filter (`notElem` nameLines) selected
       if null missing
-        then return imp { importExports = Just nameLines, importDatatypes = datatypes }
+        then return imp { importExports = Just nameLines
+                        , importDatatypes = datatypes
+                        , importFixities = restrictFixities imp (eiFixities iface) }
         else die $ "Library '" ++ lib ++ "' does not export: " ++ unwords missing
-    Nothing -> return imp { importExports = Just nameLines, importDatatypes = datatypes }
+    Nothing -> return imp { importExports = Just nameLines
+                          , importDatatypes = datatypes
+                          , importFixities = restrictFixities imp (eiFixities iface) }
 
 --------------------------------------------------------------------------------
 
@@ -258,12 +273,12 @@ checkDuplicateBinds imports = mapM_ checkOne (zip [(0::Int)..] imports)
 -- dependency entries it resolved (the module @(path, hash, name)@ triples,
 -- for the maintenance utility to record; ignored on a normal enforcing compile).
 processImports :: PinCheck -> FilePath -> FilePath -> Prog -> IO (Prog, [DepEntry])
-processImports pin root file (Prog (Imports imports) groups term) = do
+processImports pin root file (Prog (Imports imports) fixities groups term) = do
   checkDuplicateBinds imports
   results <- mapM (processImport pin root file) imports
   let imports' = map fst results
       deps     = [ d | (_, Just d) <- results ]
-  return (Prog (Imports imports') groups term, deps)
+  return (Prog (Imports imports') fixities groups term, deps)
 
 --------------------------------------------------------------------------------
 -- Module graph discovery for the compilation driver.
@@ -291,7 +306,7 @@ discoverModules mainFile = do
           input <- readFile file
           case parseProg file input of
             Left err -> die err
-            Right (Prog (Imports imports) _ _) -> do
+            Right (Prog (Imports imports) _ _ _) -> do
               let lits = [ lit | imp <- imports, Just lit <- [importPath imp] ]
               deps <- mapM (resolveOne root file) lits
               (order', done') <- foldM (visit root (file : stack)) (order, done) deps

@@ -33,6 +33,10 @@ import System.IO
 import TroupeSourceMap (buildSourceMap)
 import System.Exit
 import ProcessImports
+import OpReassoc (reassocProg, fileFixityEnv)
+import qualified OpReassoc
+import Basics (isOperatorName)
+import qualified Data.Map as Map
 import qualified ModuleHash
 import DepsFile (DepEntry(..), depsFilePath, readDepsFile, writeDepsFile, lookupPinByPath)
 import Direct (Prog(..))
@@ -142,16 +146,27 @@ process pin root flags fname input = do
       -- (see the fold block below); processImports therefore runs on the raw
       -- parsed program. Module imports resolve relative to this file, displayed
       -- relative to the project root.
-      (prog, resolvedDeps) <- processImports pin root (maybe "" id fname) prog_parsed
+      (sprog, resolvedDeps) <- processImports pin root (maybe "" id fname) prog_parsed
+
+      -- The parse-phase program (flat operator chains); this is what the
+      -- SYNTAX dump shows.
+      when verbose $ do printSep "SYNTAX"
+                        writeFileD "out/out.syntax" (showIndent 2 sprog)
+                        putStrLn (showIndent 2 sprog)
+
+      -- Re-association: rebuild operator chains into the Direct operator
+      -- tree from the fixity environment (built-ins seeded; user operators
+      -- from declarations and imports once those land).
+      prog <- case runExcept (reassocProg sprog) of
+                Right p -> return p
+                Left s  -> die s
+      when verbose $ do printSep "OPERATOR REASSOCIATION"
+                        writeFileD "out/out.opreassoc" (showIndent 2 prog)
 
       exports <- case compileMode of Library -> case runExcept (extractExports prog) of
                                                      Right es -> return (Just (es))
                                                      Left s   -> die s
                                      _       -> return Nothing
-
-      when verbose $ do printSep "SYNTAX"
-                        writeFileD "out/out.syntax" (showIndent 2 prog)
-                        putStrLn (showIndent 2 prog)
       ------------------------------------------------------
       -- Syntactic-variant folding runs on the user program before the ambient
       -- methods are injected, so the folder never inspects the generated
@@ -293,8 +308,25 @@ process pin root flags fname input = do
       let moduleHashVal = if ModuleArtifact `elem` flags
                           then Just (ModuleHash.moduleHash iropt)
                           else Nothing
-      case exports of Nothing -> return ()
-                      Just es -> writeExports outPath (exportsFileContent moduleHashVal es localGroups)
+      case exports of
+        Nothing -> return ()
+        Just es -> do
+          -- Every exported operator carries its fixity into the interface;
+          -- a symbolic export without a fixity in the file's environment
+          -- (local declarations plus unqualified imports, so re-export
+          -- propagates) is an error.
+          fixEnv <- case runExcept (fileFixityEnv sprog) of
+                      Right m -> return m
+                      Left s  -> die s
+          let opNames = filter isOperatorName es
+          exportedFixities <-
+            mapM (\v -> case Map.lookup v fixEnv of
+                          Just f  -> return (v, f)
+                          Nothing -> die $ "exported operator '" ++ v
+                                     ++ "' needs a fixity declaration in this file's header")
+                 opNames
+          writeExports outPath
+            (exportsFileContent moduleHashVal es localGroups exportedFixities)
 
       ----- EPILOGUE --------------------------------------
       when verbose printHr

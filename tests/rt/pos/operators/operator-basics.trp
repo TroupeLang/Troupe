@@ -1,0 +1,22 @@
+(* User-defined infix operators: declaration, definition, use.
+   <+> at level 6 (with + -), $$ at 5 (below), >=> right-associative. *)
+infixl 6 <+>
+infixl 5 $$
+infixr 1 >=>
+
+let fun ( <+> ) a b = a + b + 100
+    fun ( $$ ) a b = a * b
+    fun ( >=> ) a b = a - b
+    val chain = 1 <+> 2 $$ 3 <+> 4
+    val withBuiltin = 1 + 2 <+> 3 * 4
+    val rightAssoc = 10 >=> 3 >=> 2
+    val partial = ( <+> ) 10
+    val applied = partial 5
+    val viaValue = ( $$ ) 6 7
+in
+    printString (toString chain);
+    printString (toString withBuiltin);
+    printString (toString rightAssoc);
+    printString (toString applied);
+    printString (toString viaValue)
+end

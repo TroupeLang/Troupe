@@ -38,11 +38,14 @@ by the runtime module.
 
 Type
 
-- `make libs` to compile Troupe's built-in libraries, and
+- `make lib` to compile Troupe's built-in libraries into `lib/out`, and
 - `make trp-rt` to compile the service module placeholder from `trp-rt/service.trp`.
 
-Steps 1–3 above can be run together from the repository root with `make all`, which builds the
-compiler, runtime, libraries, service placeholder (`trp-rt`), and p2p-tools.
+Both require `bin/troupec` from step 2.
+
+Steps 1–3 above can be run together from the repository root with `make all` (the default goal, so
+a bare `make` does the same), which runs `npm install` and `npm install -g typescript` and then
+builds the compiler, runtime, service placeholder (`trp-rt`), p2p-tools, and libraries.
 
 
 ### Step 4. Running the test suite
@@ -60,24 +63,19 @@ The GNU diff is required because Troupe's test suite relies on specific diff fea
 diff --version
 ```
 
-Expected output:
+The first line must name GNU diffutils, for example:
 ```
 diff (GNU diffutils) 3.10
-Copyright (C) 2023 Free Software Foundation, Inc.
-License GPLv3+: GNU GPL version 3 or later <https://gnu.org/licenses/gpl.html>.
-This is free software: you are free to change and redistribute it.
-There is NO WARRANTY, to the extent permitted by law.
-
-Written by Paul Eggert, Mike Haertel, David Hayes,
-Richard Stallman, and Len Tower.
 ```
 
 #### Checking the installation
 
-Check that the installation works by running the local test suite: `$TROUPE/bin/golden`
-(alternatively `make test` in this directory).
+Check that the installation works by running the golden test suite: `$TROUPE/bin/golden`.
+
+`make test` runs the golden suite together with the compiler's own test suites, the multinode
+tests, and the result-socket tests.
 
 #### Multinode tests
 
-Multinode tests are located in `tests/rt/multinode-tests/` and can be run using the script:
-`scripts/run-multinode-tests.sh`
+Multinode tests are located in `tests/rt/multinode-tests/` and can be run using the script
+`scripts/run-multinode-tests.sh` (also `make test/multinode`).

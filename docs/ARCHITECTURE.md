@@ -3,19 +3,31 @@
 > **Scope:** how Troupe is structured internally — the compilation pipeline, the runtime, the
 > information-flow-control model, and file extensions. For making changes (e.g. adding a built-in)
 > see [CONTRIBUTING.md](CONTRIBUTING.md); for the networking layer see [NETWORKING.md](NETWORKING.md).
+> The module system and syntactic variants each have their own document —
+> [MODULES.md](MODULES.md) and [VARIANTS.md](VARIANTS.md).
 
 ## Compilation pipeline
 
-The compiler driver is `compiler/app/Main.hs`; its `process` function runs the stages below in
-order. The list is a simplification — consult `Main.hs` for the authoritative sequence.
+The compiler driver is `compiler/app/Main.hs`. `main` resolves the file's module graph and then
+calls `process` once per module (dependencies before consumers) and once for the file itself;
+`process` runs the stages below in order. The list is a simplification — consult `Main.hs` for the
+authoritative sequence.
 
+0. **Module graph** (`main`, `ProcessImports.discoverModules`) — for a non-library compile,
+   discover the program-relative modules the file imports transitively and load the pins recorded
+   in `<main>.deps.json` (`DepsFile.hs`). Each module is compiled first, as a content-hashed
+   library artifact. See [MODULES.md](MODULES.md).
 1. **Parsing** (`Parser.y`, `Lexer.x`) — parse `.trp` files into an AST.
 2. **Front end:**
+   - Import processing (`ProcessImports.hs`) — resolve library and module imports, read their
+     `.exports` interfaces, and either enforce or establish the dependency pins.
+   - Export extraction (`Exports.hs`) when compiling a library or module (`-l`).
+   - Syntactic-variant folding (`SynVarFolding.hs`, hashing in `SynVarHash.hs`) — process
+     `datatype` groups, rewriting constructor occurrences and constructor patterns into tagged
+     tuples and tuple patterns. See [VARIANTS.md](VARIANTS.md). This runs before ambient-method
+     injection, so a constructor may shadow an ambient built-in.
    - Ambient-method injection (`AddAmbientMethods.hs`, Normal compile mode only).
-   - Import processing (`ProcessImports.hs`).
-   - Export extraction (`Exports.hs`) when compiling a library (`-l`).
 3. **Core transformations:**
-   - Atom folding (`AtomFolding.hs`).
    - Pattern-match / case elimination (`CaseElimination.hs`). `DirectWOPats.hs` is the
      pattern-free AST representation these produce, not a driver pass.
    - Function/let lowering and alpha renaming (`Core.hs`).
@@ -29,6 +41,17 @@ order. The list is a simplification — consult `Main.hs` for the authoritative 
    - Raw optimization (`RawOpt.hs`), unless `--no-rawopt` is passed.
    - Raw → Stack (`Raw2Stack.hs`).
    - Stack → JavaScript (`Stack2JS.hs`), with optional source-map embedding (`-m`).
+   - For a library or module compile, the `.exports` interface is written alongside the `.js`.
+
+`IRSexp.hs` prints and parses the optimized IR as s-expression text. It is not part of the default
+path: `--emit-ir-sexp` stops after IR optimization and writes the text, `--verify-ir-sexp` prints
+and re-parses it and checks the position-erased ASTs match, and `--ingest-ir-sexp` reads such a file
+and runs stage 4 on it.
+
+With `-v`, each stage writes a dump into `out/` under the working directory: `out.syntax`,
+`out.nopats`, `out.lowered`, `out.alpha`, `out.cps`, `out.cpsopt`, `out.ir`, `out.iropt`,
+`out.rawout`, `out.rawopt`, `out.stack`. `out.rawopt` is not written under `--no-rawopt`. Dumps are
+written for the top-level file only, not for the modules compiled ahead of it.
 
 ## Runtime architecture
 
@@ -42,15 +65,22 @@ The runtime implements:
 
 Key components:
 
-| File                   | Role                                 |
-|------------------------|--------------------------------------|
-| `troupe.mts`           | Main entry point                     |
-| `runtimeMonitored.mts` | Gluing point for most of the runtime |
-| `Scheduler.mts`        | Scheduler                            |
-| `MailboxProcessor.mts` | Message handling                     |
-| `TrustManager.mts`     | Trust and security management        |
-| `p2p/p2p.mts`          | P2P networking layer                 |
-| `builtins/`            | Language built-ins                   |
+| File                   | Role                                                          |
+|------------------------|---------------------------------------------------------------|
+| `troupe.mts`           | Main entry point                                              |
+| `runtimeMonitored.mts` | Gluing point for most of the runtime                          |
+| `Scheduler.mts`        | Scheduler                                                     |
+| `MailboxProcessor.mts` | Message handling                                              |
+| `TrustManager.mts`     | Trust and security management                                 |
+| `TroupeCliArgs.mts`    | Runtime command-line options                                  |
+| `loadLibsAsync.mts`    | Loads the compiled libraries and modules a program imports    |
+| `moduleResolver.mts`   | Maps a module's content hash to its artifact (see MODULES.md) |
+| `serialize.mts`        | Value serialization for the wire                              |
+| `deserialize.mts`      | Value deserialization from the wire                           |
+| `p2p/p2p.mts`          | P2P networking layer                                          |
+| `builtins/`            | Language built-ins                                            |
+
+`loadLibs.mts` is marked deprecated in its own header and is not imported anywhere under `rt/src/`.
 
 ## External resource access
 
@@ -171,8 +201,34 @@ The user guide currently uses the V1 label syntax `` `{alice}` ``, which the pre
 
 ## File extensions
 
-| Extension  | Meaning                     |
-|------------|-----------------------------|
-| `.trp`     | Troupe source files         |
-| `.golden`  | Expected test outputs       |
-| `.exports` | Library export definitions  |
+Source and compiler artifacts:
+
+| Extension    | Meaning                                                          |
+|--------------|------------------------------------------------------------------|
+| `.trp`       | Troupe source files                                              |
+| `.js`        | Compiled output                                                  |
+| `.exports`   | Interface of a compiled library or module, written next to `.js` |
+| `.deps.json` | A program's module dependencies file                             |
+| `.tpnb`      | Notebook file (JSON), read and written by `notebook/`            |
+
+A library or module compile writes its `.js` and `.exports` to `<dir>/out/<name>`; a program compile
+writes to `-o`'s argument, or to `out/out.stack.js` under the working directory when `-o` is absent.
+With `-m` the source map is embedded in the `.js`; no separate `.map` file is produced.
+
+An `.exports` file is a line-oriented text interface (`compiler/src/Exports.hs`): an optional
+leading `module-hash <hash>` line carrying a module artifact's own content-addressed identity (a
+standard-library compile emits none), then one exported value name per line, then one
+`datatype <group-hash> <canonical-form>` line per exported datatype group in declaration order.
+
+A program that imports program-relative modules has a `<main>.deps.json` next to it, pinning each
+resolved module by path, content hash, and display name. See [MODULES.md](MODULES.md) and
+[VARIANTS.md](VARIANTS.md).
+
+Test-corpus artifacts (see [CONTRIBUTING.md](CONTRIBUTING.md#test-suite-layout)):
+
+| Extension         | Meaning                                                     |
+|-------------------|-------------------------------------------------------------|
+| `.golden`         | Expected test output, compared against a colored run        |
+| `.nocolor.golden` | Expected test output under `bin/golden --no-color`          |
+| `.trp.input`      | Standard input fed to the test program                      |
+| `.trp.options`    | Extra `local.sh` arguments; `#` lines are comments          |

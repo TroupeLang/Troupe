@@ -15,14 +15,14 @@ for how to work here. For human-facing reference material, see:
 Before running Troupe programs or tests, check for stale builds and rebuild what changed. Build
 commands are documented in [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) ("Building and running").
 
-| Changed                   | Command         | Symptom of a stale build                  |
-|---------------------------|-----------------|-------------------------------------------|
+| Changed                   | Command         | Symptom of a stale build                                 |
+|---------------------------|-----------------|----------------------------------------------------------|
 | Haskell (`compiler/src/`) | `make compiler` | `troupec: command not found`, parse errors in valid code |
-| TypeScript (`rt/src/`)    | `make rt`       | `Cannot find module` for runtime files    |
-| Troupe libraries (`lib/`) | `make libs`     | `Cannot find module` for library files    |
-| Everything                | `make all`      | —                                         |
+| TypeScript (`rt/src/`)    | `make rt`       | `Cannot find module` for runtime files                   |
+| Troupe libraries (`lib/`) | `make lib`      | `Cannot find module` for library files                   |
+| Everything                | `make all`      | —                                                        |
 
-- Libraries also need rebuilding (`make libs`) after the compiler is rebuilt.
+- Libraries also need rebuilding (`make lib`) after the compiler is rebuilt.
 - After any `git pull`, `git checkout`, or `git merge`, run `make all`.
 - `rt/built/` holds generated code — ignore it for source-code analysis.
 
@@ -37,8 +37,10 @@ pass does or does not optimize, what an operation costs — must be verified bef
 asserted:
 
 - Compile a **minimal probe program** and read the artifact the claim is about.
-  `bin/troupec -v probe.trp -o probe.js` refreshes the stage dumps in `out/`
-  (`out.nopats`, `out.cpsopt`, `out.iropt`, `out.rawopt`, `out.stack`) alongside the emitted JS.
+  `bin/troupec -v probe.trp -o probe.js` refreshes the stage dumps in `out/` (relative to the
+  working directory) alongside the emitted JS: `out.syntax`, `out.nopats`, `out.lowered`,
+  `out.alpha`, `out.cps`, `out.cpsopt`, `out.ir`, `out.iropt`, `out.rawout`, `out.rawopt`,
+  `out.stack`. `out.rawopt` is absent under `--no-rawopt`.
 - Read the **pass that implements the behavior**, not just its name, a summary, or a
   downstream artifact two stages away.
 - For performance claims, **measure** (`examples/variants/bench.trp`, or a timing probe);
@@ -82,7 +84,8 @@ current pc and blocking labels for correct information.
 
 ## Compiler work
 
-- `troupec -v` writes per-stage generated files into `/out`; inspect these to debug codegen.
+- `troupec -v` writes per-stage generated files into `out/` under the working directory; inspect
+  these to debug codegen.
 - `--no-rawopt` disables Raw optimizations and can surface corner-case compiler bugs.
 - The Troupe parser must have no shift/reduce or reduce/reduce conflicts.
 - For changes that span the whole compiler pipeline, prefer approaches that keep the compiler
@@ -143,16 +146,18 @@ development).
 
 Before finalizing any implementation plan, assess its complexity and structure accordingly:
 
-| Complexity | Criteria                        | Structure                                   |
-|------------|---------------------------------|---------------------------------------------|
-| Small      | <3 tasks, single focus          | Inline in conversation                      |
-| Medium     | 3-4 tasks, 2-3 areas            | Single plan file with sections              |
-| Large      | 4+ tasks, multiple areas/phases | Multi-file structure in `_claude_planning/` |
+| Complexity | Criteria                        | Structure                                |
+|------------|---------------------------------|------------------------------------------|
+| Small      | <3 tasks, single focus          | Inline in conversation                   |
+| Medium     | 3-4 tasks, 2-3 areas            | Single plan file with sections           |
+| Large      | 4+ tasks, multiple areas/phases | Multi-file structure in `_dev_planning/` |
+
+Planning files live in `_dev_planning/`, which `.gitignore` excludes from the repository.
 
 **For large plans**, automatically create the following structure without being asked:
 
 ```
-_claude_planning/<feature-name>/
+_dev_planning/<feature-name>/
   index.md             # Overview, progress tracking, step links
   step-1-<name>.md     # Self-contained step file
   step-2-<name>.md
@@ -165,9 +170,5 @@ _claude_planning/<feature-name>/
 2. **Step files**: each must be self-contained with enough context to execute in a fresh session.
 3. **Progress tracking**: use checkboxes and status indicators (Pending/In Progress/Complete/Blocked).
 
-**Templates are available at** `_claude_planning/_template/`:
-
-- `index.md` — index file template
-- `step-N-template.md` — step file template
-
-When creating a new large plan, copy and adapt these templates.
+There is no template directory. `_dev_planning/property-testing/` is an existing plan in this
+layout; use it as the reference when creating a new one.

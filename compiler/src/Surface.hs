@@ -181,7 +181,7 @@ ppTerm' (ProjIdx t idx) =
   ppLTerm projPrec t PP.<> text "." PP.<> PP.text (show idx)
 ppTerm' (List ts) =
   PP.brackets $ PP.hcat $ PP.punctuate (text ",") (map (ppLTerm 0) ts)
-ppTerm' (Var x) = text x
+ppTerm' (Var x) = D.ppName x
 ppTerm' (Abs lam) =
   let (ppArgs, ppBody) = qqLambda lam
   in text "fn" <+> ppArgs <+> text "=>" <+> ppBody
@@ -258,8 +258,8 @@ ppDecl (FunDecs fs) = ppFuns fs
   where
     ppLFunDecl _ (Loc _ (FunDecl _ [])) = error "empty fun list"
     ppLFunDecl prefix (Loc _ (FunDecl fname (first:rest))) =
-      let ppFirstOption = ppFunOptions (prefix ++ " " ++ fname)
-          ppOtherOption = ppFunOptions ("  | " ++ fname)
+      let ppFirstOption = ppFunOptions (prefix ++ " " ++ D.nameStr fname)
+          ppOtherOption = ppFunOptions ("  | " ++ D.nameStr fname)
       in ppFirstOption first $$ vcat (map ppOtherOption rest)
     ppFunOptions prefix lam =
       let (ppArgs, ppBody) = qqLambda lam

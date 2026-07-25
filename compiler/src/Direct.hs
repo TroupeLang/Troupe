@@ -16,6 +16,8 @@ module Direct ( Lambda (..)
               , SynDataDecl(..)
               , SynDataGroup(..)
               , ppLit
+              , ppName
+              , nameStr
               -- Printer helpers shared with the Surface (parse-phase) printer
               , ppSynDataGroup
               , ppLDeclPattern
@@ -302,7 +304,7 @@ ppTerm'  (List ts) =
 ppTerm' (ListCons hd tl) =
    ppLTerm consPrec hd PP.<> text "::" PP.<> ppLTerm consPrec tl
 
-ppTerm' (Var x) = text x
+ppTerm' (Var x) = ppName x
 ppTerm' (Abs lam) =
   let (ppArgs, ppBody) = qqLambda lam
   in text "fn" <+> ppArgs <+> text "=>" <+> ppBody
@@ -406,8 +408,8 @@ ppDecl (FunDecs fs) = ppFuns fs
   where
     ppLFunDecl _ (Loc _ (FunDecl _ [])) = error "empty fun list"
     ppLFunDecl prefix (Loc _ (FunDecl fname (first:rest))) =
-      let ppFirstOption = ppFunOptions (prefix ++ " " ++ fname)
-          ppOtherOption = ppFunOptions ("  | " ++ fname)
+      let ppFirstOption = ppFunOptions (prefix ++ " " ++ nameStr fname)
+          ppOtherOption = ppFunOptions ("  | " ++ nameStr fname)
       in ppFirstOption first $$ vcat (map ppOtherOption rest)
 
 
@@ -431,7 +433,7 @@ ppLDeclPattern :: LDeclPattern -> PP.Doc
 ppLDeclPattern (Loc _ p) = ppDeclPattern p
 
 ppDeclPattern :: DeclPattern -> PP.Doc
-ppDeclPattern (VarPattern x) = text x
+ppDeclPattern (VarPattern x) = ppName x
 ppDeclPattern Wildcard = text "_"
 ppDeclPattern (AtPattern p l) = ppLDeclPattern p PP.<> text ("@ " ++ l)
 ppDeclPattern (ValPattern literal) = ppLit literal
@@ -461,6 +463,16 @@ ppDeclPattern (RecordPattern fields mode) =
                 ExactMatch -> []
                 WildcardMatch -> [text ".."]
 ppDeclPattern ErrorPattern = text "<error>"
+
+-- | Print a binder or variable name: operator names are parenthesized with
+-- inner spaces ('( <+> )', '( * )'), which keeps the printed form
+-- re-lexable — '(*' would otherwise start a comment.
+ppName :: VarName -> PP.Doc
+ppName x = text (nameStr x)
+
+nameStr :: VarName -> String
+nameStr x | isOperatorName x = "( " ++ x ++ " )"
+          | otherwise               = x
 
 ppLit :: Lit -> PP.Doc
 ppLit (LNumeric (NumInt i))  = PP.integer i

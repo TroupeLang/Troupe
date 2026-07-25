@@ -160,6 +160,8 @@ process pin root flags fname input = do
       prog <- case runExcept (reassocProg sprog) of
                 Right p -> return p
                 Left s  -> die s
+      when verbose $ do printSep "OPERATOR REASSOCIATION"
+                        writeFileD "out/out.opreassoc" (showIndent 2 prog)
 
       exports <- case compileMode of Library -> case runExcept (extractExports prog) of
                                                      Right es -> return (Just (es))

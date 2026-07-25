@@ -7,6 +7,7 @@
  * with its byte offset and nothing is written. Paths resolve relative to
  * --io-root. *)
 
+import { readFile, writeFile } SimpleFileIO
 import Json
 import List
 import Outcome
@@ -18,8 +19,8 @@ let val args = getCliArgs authority
           OK v =>
             let val pretty = Json.prettyPrint 2 v
             in case writeFile (authority, outPath, pretty) of
-                 {tag = "Ok",  value = _} => print ("wrote " ^ outPath ^ ":\n" ^ pretty)
-               | {tag = "Err", error = e} => print ("write error: " ^ e.reason ^ " (" ^ e.path ^ ")")
+                 OK _ => print ("wrote " ^ outPath ^ ":\n" ^ pretty)
+               | ERR e => print ("write error: " ^ e.reason ^ " (" ^ e.path ^ ")")
             end
         | ERR e =>
             print ("parse error at offset " ^ toString e.offset ^ ": " ^ e.reason)
@@ -29,7 +30,7 @@ in if List.length args < 2
    else let val inPath  = List.nth args 0
             val outPath = List.nth args 1
         in case readFile (authority, inPath) of
-             {tag = "Ok",  value = src} => onRead outPath src
-           | {tag = "Err", error = e}   => print ("read error: " ^ e.reason ^ " (" ^ e.path ^ ")")
+             OK src => onRead outPath src
+           | ERR e => print ("read error: " ^ e.reason ^ " (" ^ e.path ^ ")")
         end
 end

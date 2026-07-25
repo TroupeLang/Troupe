@@ -198,6 +198,8 @@ OptAlias : as VAR   { Just (LibName (varTok $2)) }
 
 VarList : VAR              { [varTok $1] }
         | VAR ',' VarList  { (varTok $1) : $3 }
+        | '(' OPSYM ')'              { [opTok $2] }
+        | '(' OPSYM ')' ',' VarList  { (opTok $2) : $5 }
 
 
 -- The declaration section: a sequence of `datatype` declaration groups. The
@@ -266,26 +268,43 @@ Expr: Chain                        { $1 }
     | catch                        { noLoc (Lit LUnit) }  -- Error recovery
     | Expr ';' Expr               {% mkSeq $1 $3 $2 }
 
+-- The prefix-keyword list is non-empty and spelled out per position: a
+-- nullable prefix would force an empty reduction before every operand,
+-- which collides with the parenthesized-section productions on '-'
+-- ('( - )' vs '( - x )'). With the expansion, every decision is a shift.
 Chain : ChainSeq                     %prec CHAIN_DONE  { mkChain (reverse $1) }
-      | ChainSeq InfixTok PrefixSeq TrailingForm
+      | ChainSeq InfixTok TrailingForm
+          { mkChain (reverse (ChOperand $3 : $2 : $1)) }
+      | ChainSeq InfixTok PrefixKws TrailingForm
           { mkChain (reverse (ChOperand $4 : ($3 ++ $2 : $1))) }
-      | PrefixSeq TrailingForm       %prec CHAIN_DONE
+      | TrailingForm                 %prec CHAIN_DONE
+          { mkChain [ChOperand $1] }
+      | PrefixKws TrailingForm       %prec CHAIN_DONE
           { mkChain (reverse (ChOperand $2 : $1)) }
 
 -- Built reversed; mkChain reverses back to source order.
-ChainSeq : PrefixSeq Operand                     { ChOperand $2 : $1 }
-         | ChainSeq InfixTok PrefixSeq Operand   { ChOperand $4 : ($3 ++ $2 : $1) }
+ChainSeq : Operand                               { [ChOperand $1] }
+         | PrefixKws Operand                     { ChOperand $2 : $1 }
+         | ChainSeq InfixTok Operand             { ChOperand $3 : $2 : $1 }
+         | ChainSeq InfixTok PrefixKws Operand   { ChOperand $4 : ($3 ++ $2 : $1) }
 
-PrefixSeq : {- empty -}                          { [] }
-          | PrefixSeq PrefixKw                   { $2 : $1 }
+PrefixKws : PrefixKw                             { [$1] }
+          | PrefixKws PrefixKw                   { $2 : $1 }
 
 PrefixKw : 'isTuple'  {% chPrefix $1 IsTuple }
          | 'isList'   {% chPrefix $1 IsList }
          | 'isRecord' {% chPrefix $1 IsRecord }
          | 'not'      {% chPrefix $1 Not }
 
-InfixTok : '+'   {% chInfix $1 (ChBin Plus) }
+-- InfixTok is factored: SecOp is every infix operator except '-', which the
+-- parenthesized-section production must treat specially ('(' '-' ...) is
+-- also the start of a parenthesized negation; an explicit '(' '-' ')'
+-- production makes the choice a pure shift decision instead of an LALR
+-- conflict on merged lookaheads).
+InfixTok : SecOp { $1 }
          | '-'   {% chInfix $1 (ChBin Minus) }
+
+SecOp    : '+'   {% chInfix $1 (ChBin Plus) }
          | '*'   {% chInfix $1 (ChBin Mult) }
          | '/'   {% chInfix $1 (ChBin Div) }
          | div   {% chInfix $1 (ChBin IntDiv) }
@@ -406,6 +425,12 @@ Lit:   NUM                        {% atPos $1 (LNumeric (NumInt (numTok $1))) }
 
 -- Atom uses Located Lit to preserve source positions
 Atom : '(' Expr ')'                { $2 }
+     -- A parenthesized operator is a value: the named function for a user
+     -- operator, an eta-expanded section for a built-in (fn a => fn b => a + b).
+     -- '-' has its own production (see SecOp above).
+     | '(' SecOp ')'               {% mkOpAtom $2 }
+     | '(' '-' ')'                 {% do { p <- pos $2; mkOpAtom (ChInfix p (ChBin Minus)) } }
+     | Atom '.' '(' SecOp ')'      {% mkQualOpAtom $1 $2 $4 }
      | Lit                         { let Loc p l = $1 in Loc p (Lit l) }
      -- A bigint literal desugars to constructing the bigint from its digit
      -- string; bigFromLiteral is total (the lexer guarantees valid digits).
@@ -446,6 +471,7 @@ CSExpr : Expr ','                  { [$1] }
 
 
 Pattern : VAR                               {% atPos $1 (VarPattern (varTok $1)) }
+    | '(' OPSYM ')'                         {% atPos $2 (VarPattern (opTok $2)) }
     | '(' Pattern ')'                       { $2 }
     | Pattern '@' LABEL                     {% atPos $2 (AtPattern $1 (lblTok $3)) }
     | '(' ')'                               {% atPos $1 (ValPattern LUnit) }
@@ -526,7 +552,9 @@ OtherFunOption : '|' VAR FunArgs '=' Expr { Lambda $3 $5}
 
 
 FunDecl    : fun VAR FunOptions {% atPos $2 (FunDecl (varTok $2) $3) }
+           | fun '(' OPSYM ')' FunOptions {% atPos $3 (FunDecl (opTok $3) $5) }
 AndFunDecl : and VAR FunOptions {% atPos $2 (FunDecl (varTok $2) $3) }
+           | and '(' OPSYM ')' FunOptions {% atPos $3 (FunDecl (opTok $3) $5) }
 
 FunArgs : Pattern                        { [$1]  }
         | Pattern FunArgs                { $1 : $2}
@@ -600,6 +628,34 @@ chInfix tok op = do p <- pos tok
 chPrefix :: L Token -> UnaryOp -> ParseM ChainElem
 chPrefix tok u = do p <- pos tok
                     return (ChPrefix p u)
+
+-- | A parenthesized operator as a value: a user operator is the named
+-- function itself; a built-in becomes an eta-expanded section whose body is
+-- a one-operator chain, resolved by re-association like any other chain.
+mkOpAtom :: ChainElem -> ParseM LTerm
+mkOpAtom (ChInfix p (ChUser v)) = return (Loc p (Var v))
+mkOpAtom (ChInfix p op) =
+  let a  = Loc p (Var "$opl")
+      b  = Loc p (Var "$opr")
+      body = Loc p (OpChain [ChOperand a, ChInfix p op, ChOperand b])
+      pat v = Loc p (VarPattern v)
+      inner = Loc p (Abs (Lambda [pat "$opr"] body))
+  in return (Loc p (Abs (Lambda [pat "$opl"] inner)))
+mkOpAtom _ = throwError "parser: malformed operator atom"
+
+-- | Qualified prefix access to an operator: @Pretty.( <+> )@ is field
+-- projection with the operator name, the path qualified access already
+-- takes. Only user operators live in modules; a qualified built-in section
+-- is meaningless and reported.
+mkQualOpAtom :: LTerm -> L Token -> ChainElem -> ParseM LTerm
+mkQualOpAtom receiver dotTok (ChInfix _ (ChUser v)) =
+  atPos dotTok (ProjField receiver v)
+mkQualOpAtom _ dotTok _ = do
+  env <- ask
+  let (AlexPn _ line col) = getPos dotTok
+  throwError $ peFilename env ++ ":" ++ show line ++ ":" ++ show col
+             ++ ": only a user-defined operator can be accessed qualified;"
+             ++ " built-in operator sections are written unqualified, e.g. ( + )"
 
 -- | Build a fixity declaration, checking the level range. The level token is
 -- passed as the literal NUM lexeme.

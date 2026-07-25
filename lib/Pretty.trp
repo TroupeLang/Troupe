@@ -1,0 +1,223 @@
+(** Pretty — Hughes-style pretty-printing combinators.
+ *
+ *  Documents are built from text with three infix combinators — `<.>`
+ *  (beside), `<+>` (beside with a space), `$$` (above) — plus `nest` for
+ *  indentation and the width-directed groups `sep`/`cat`, which lay their
+ *  arguments on one line when they fit the target width and stack them
+ *  otherwise. `render w d` lays a document out to width `w`.
+ *
+ *  The interface mirrors the compiler's `Text.PrettyPrint.HughesPJ` surface
+ *  (compiler/src/PrettyPrint.hs), with `<.>` in place of `<>` (Troupe's
+ *  not-equal operator, which cannot be redefined). As in HughesPJ, a
+ *  document placed beside another hangs: its continuation lines indent to
+ *  the column where it started. This is the pragmatic subset: `fsep`/`fcat`
+ *  paragraph fill is not provided.
+ *)
+
+import List
+import Option
+import String
+
+infixl 6 <.> <+>
+infixl 5 $$
+
+datatype doc = NIL
+             | TEXT of string
+             | BESIDE of doc * bool * doc
+             | ABOVE of doc * doc
+             | NEST of int * doc
+             | SEP of doc list
+             | CAT of doc list
+
+let (*--- Construction ---*)
+
+    (** A document of one line of text. `s` must not contain newlines. *)
+    fun text s = TEXT s
+
+    (** The empty document: identity for `<.>`, `<+>`, and `$$`. *)
+    val empty = NIL
+
+    (* Smart constructors keep NIL out of composite documents, which gives
+       the identity laws (no stray spaces or blank lines) and lets the
+       layout engine assume nonempty children. *)
+    fun besideD sp a b =
+        case (a, b) of
+            (NIL, _) => b
+          | (_, NIL) => a
+          | _ => BESIDE (a, sp, b)
+
+    fun aboveD a b =
+        case (a, b) of
+            (NIL, _) => b
+          | (_, NIL) => a
+          | _ => ABOVE (a, b)
+
+    (** Beside: `d1 <.> d2` places `d2` immediately after `d1`. *)
+    fun ( <.> ) a b = besideD false a b
+
+    (** Beside with a separating space. *)
+    fun ( <+> ) a b = besideD true a b
+
+    (** Above: `d1 $$ d2` stacks `d1` over `d2`. *)
+    fun ( $$ ) a b = aboveD a b
+
+    (** Indent a document by `k` columns (applies to its lines that start
+     *  fresh; a document beside another hangs at its own start column). *)
+    fun nest k d = case d of NIL => NIL | _ => NEST (k, d)
+
+    (** `hang d1 k d2` is `d1 $$ nest k d2`. *)
+    fun hang d1 k d2 = d1 $$ nest k d2
+
+    fun foldD f ds =
+        case ds of
+            []      => NIL
+          | [d]     => d
+          | d :: dt => f d (foldD f dt)
+
+    (** One line, space-separated. *)
+    fun hsep ds = foldD ( <+> ) ds
+
+    (** One line, no separation. *)
+    fun hcat ds = foldD ( <.> ) ds
+
+    (** Stacked vertically. *)
+    fun vcat ds = foldD ( $$ ) ds
+
+    (** `hsep` if it fits the remaining width, else `vcat`. *)
+    fun sep ds = case ds of [] => NIL | [d] => d | _ => SEP ds
+
+    (** `hcat` if it fits the remaining width, else `vcat`. *)
+    fun cat ds = case ds of [] => NIL | [d] => d | _ => CAT ds
+
+    (** Insert `p` after every document except the last. *)
+    fun punctuate p ds =
+        case ds of
+            []      => []
+          | [d]     => [d]
+          | d :: dt => (d <.> p) :: punctuate p dt
+
+    (*--- Punctuation ---*)
+
+    val comma  = TEXT ","
+    val colon  = TEXT ":"
+    val semi   = TEXT ";"
+    val equals = TEXT "="
+    val lparen = TEXT "("
+    val rparen = TEXT ")"
+    val lbrack = TEXT "["
+    val rbrack = TEXT "]"
+    val lbrace = TEXT "{"
+    val rbrace = TEXT "}"
+
+    fun parens d       = lparen <.> d <.> rparen
+    fun brackets d     = lbrack <.> d <.> rbrack
+    fun braces d       = lbrace <.> d <.> rbrace
+    fun quotes d       = TEXT "'" <.> d <.> TEXT "'"
+    (* The double-quote character is written as an escape: a literal quote
+       would end the string at the lexer. *)
+    fun doubleQuotes d = TEXT "\x22" <.> d <.> TEXT "\x22"
+
+    (*--- Layout ---*)
+
+    (* Width of a document laid on one line; NONE when it contains `$$`
+       (an `above` never flattens). *)
+    fun flatW d =
+        case d of
+            NIL => SOME 0
+          | TEXT s => SOME (strlen s)
+          | BESIDE (a, sp, b) =>
+              (case (flatW a, flatW b) of
+                   (SOME x, SOME y) => SOME (x + y + (if sp then 1 else 0))
+                 | _ => NONE)
+          | ABOVE _ => NONE
+          | NEST (_, d1) => flatW d1
+          | SEP ds => flatL true ds
+          | CAT ds => flatL false ds
+    and flatL sp ds =
+        case ds of
+            [] => SOME 0
+          | [d] => flatW d
+          | d :: dt =>
+              (case (flatW d, flatL sp dt) of
+                   (SOME x, SOME y) => SOME (x + y + (if sp then 1 else 0))
+                 | _ => NONE)
+
+    (* The layout state: reversed output pieces, current column, and whether
+       the current line has emitted nothing yet (indentation is deferred to
+       the first text on a line, so `nest` under `$$` indents correctly).
+       `ind` is where fresh lines of the current document start; `beside`
+       resets it to the right operand's start column, which is the Hughes
+       hanging behavior. *)
+    fun lay (w, ind, st, d) =
+        let val (acc, col, atStart) = st
+        in case d of
+               NIL => st
+             | TEXT s =>
+                 if atStart
+                 then (s :: String.repeat ind " " :: acc, ind + strlen s, false)
+                 else (s :: acc, col + strlen s, false)
+             | BESIDE (a, sp, b) =>
+                 let val st1 = lay (w, ind, st, a)
+                     val (acc1, col1, _) = st1
+                     val st2 = if sp then (" " :: acc1, col1 + 1, false) else st1
+                     val (_, col2, _) = st2
+                 in lay (w, col2, st2, b) end
+             | ABOVE (a, b) =>
+                 let val (acc1, _, _) = lay (w, ind, st, a)
+                 in lay (w, ind, ("\n" :: acc1, 0, true), b) end
+             | NEST (k, d1) => lay (w, ind + k, st, d1)
+             | SEP ds => layGroup (w, ind, st, true, ds)
+             | CAT ds => layGroup (w, ind, st, false, ds)
+        end
+    and layGroup (w, ind, st, sp, ds) =
+        let val (_, col, atStart) = st
+            val startCol = if atStart then ind else col
+            val flatDoc = foldD (fn a => fn b => besideD sp a b) ds
+            fun stacked () = lay (w, ind, st, foldD ( $$ ) ds)
+        in case flatL sp ds of
+               SOME n => if startCol + n <= w
+                         then lay (w, ind, st, flatDoc)
+                         else stacked ()
+             | NONE => stacked ()
+        end
+
+    (** Lay a document out to width `w`. Lines that cannot fit are still
+     *  emitted (width directs the `sep`/`cat` choices; it is not a hard
+     *  limit). *)
+    fun render w d =
+        let val (acc, _, _) = lay (w, 0, ([], 0, true), d)
+        in String.concat (List.reverse acc) end
+
+in [ ("text", text)
+   , ("empty", empty)
+   , ("<.>", ( <.> ))
+   , ("<+>", ( <+> ))
+   , ("$$", ( $$ ))
+   , ("beside", ( <.> ))
+   , ("above", ( $$ ))
+   , ("nest", nest)
+   , ("hang", hang)
+   , ("sep", sep)
+   , ("cat", cat)
+   , ("hsep", hsep)
+   , ("hcat", hcat)
+   , ("vcat", vcat)
+   , ("punctuate", punctuate)
+   , ("parens", parens)
+   , ("brackets", brackets)
+   , ("braces", braces)
+   , ("quotes", quotes)
+   , ("doubleQuotes", doubleQuotes)
+   , ("comma", comma)
+   , ("colon", colon)
+   , ("semi", semi)
+   , ("equals", equals)
+   , ("lparen", lparen)
+   , ("rparen", rparen)
+   , ("lbrack", lbrack)
+   , ("rbrack", rbrack)
+   , ("lbrace", lbrace)
+   , ("rbrace", rbrace)
+   , ("render", render)
+   ]
+end

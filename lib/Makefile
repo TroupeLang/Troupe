@@ -36,6 +36,9 @@ build:
   # Dependency on `List` and `Number`
 	$(COMPILER) ./String.trp -l
 
+  # Dependency on `List`, `Option`, and `String`
+	$(COMPILER) ./Pretty.trp -l
+
   # Dependency on `Number` and `String` (and transitively `List`)
 	$(COMPILER) ./Hash.trp -l
 

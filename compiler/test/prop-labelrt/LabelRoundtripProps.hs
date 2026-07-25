@@ -71,7 +71,7 @@ import TroupePositionInfo (unLoc)
 
 -- Extract the DCLabelExp from a program whose body is a bare label literal.
 extractLabel :: Prog -> Maybe DCLabelExp
-extractLabel (Prog _ _ lterm) =
+extractLabel (Prog _ _ _ lterm) =
   case unLoc lterm of
     Lit (LDCLabel e') -> Just e'
     _                 -> Nothing

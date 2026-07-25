@@ -31,6 +31,18 @@ data UnaryOp = IsList | IsTuple | IsRecord | Head | Tail | ListLength | TupleLen
   deriving (Eq, Generic, Ord)
 instance Serialize UnaryOp
 
+-- | Associativity of a declared operator fixity: @infixl@ / @infixr@ /
+-- @infix@ (non-associative, Haskell's meaning — SML's bare @infix@ is left).
+data OpAssoc = OpLeft | OpRight | OpNon
+  deriving (Eq, Show, Generic, Ord)
+instance Serialize OpAssoc
+
+-- | A declared operator fixity: associativity and level (0 through 9).
+-- Serializable because it travels with imports in 'ImportDecl'.
+data Fixity = Fixity OpAssoc Int
+  deriving (Eq, Show, Generic, Ord)
+instance Serialize Fixity
+
 instance Show BinOp where
   show Plus  = "+"
   show Minus = "-"

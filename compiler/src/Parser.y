@@ -83,6 +83,9 @@ import Control.Monad.State
     '<>'  { L _ TokenNe }
     div { L _ TokenIntDiv }
     mod { L _ TokenMod }
+    infixl { L _ TokenInfixl }
+    infixr { L _ TokenInfixr }
+    infix  { L _ TokenInfix }
     andb  { L _ TokenBinAnd }
     orb   { L _ TokenBinOr }
     xorb  { L _ TokenBinXor }
@@ -162,8 +165,21 @@ import Control.Monad.State
 
 
 
-Prog : ImportDecl TopDecls Expr
-         { Prog (Imports $1) $2 $3 }
+Prog : ImportDecl FixityDecls TopDecls Expr
+         { Prog (Imports $1) $2 $3 $4 }
+
+-- Fixity declarations form their own header section between imports and
+-- datatype declarations: interface metadata lives with the other
+-- interface-level constructs.
+FixityDecls : {- empty -}              { [] }
+   | FixityDecl FixityDecls            { $1 : $2 }
+
+FixityDecl : infixl NUM OpNames        {% mkFixityDecl $1 OpLeft ($2) $3 }
+   | infixr NUM OpNames                {% mkFixityDecl $1 OpRight ($2) $3 }
+   | infix NUM OpNames                 {% mkFixityDecl $1 OpNon ($2) $3 }
+
+OpNames : OPSYM                        { [opTok $1] }
+   | OPSYM OpNames                     { opTok $1 : $2 }
 
 ImportDecl: import OptQualified OptSelection VAR OptAlias ImportDecl
               { (ImportDecl (LibName (varTok $4)) Nothing $5 Nothing $3 $2 []) : $6 }
@@ -585,6 +601,20 @@ chPrefix :: L Token -> UnaryOp -> ParseM ChainElem
 chPrefix tok u = do p <- pos tok
                     return (ChPrefix p u)
 
+-- | Build a fixity declaration, checking the level range. The level token is
+-- passed as the literal NUM lexeme.
+mkFixityDecl :: L Token -> OpAssoc -> L Token -> [VarName] -> ParseM FixityDecl
+mkFixityDecl kwTok assoc numTok' ops = do
+  p <- pos kwTok
+  let n = numTok numTok'
+  if n < 0 || n > 9
+    then do env <- ask
+            let (AlexPn _ line col) = getPos numTok'
+            throwError $ peFilename env ++ ":" ++ show line ++ ":" ++ show col
+                       ++ ": fixity level must be between 0 and 9 (got "
+                       ++ show n ++ ")"
+    else return (FixityDecl p (Fixity assoc (fromInteger n)) ops)
+
 
 -- | Get position from token list
 getTokenPosition :: [L Token] -> (Int, Int)
@@ -700,6 +730,9 @@ cleanExpectedToken "div" = "'div'"
 cleanExpectedToken "mod" = "'mod'"
 cleanExpectedToken "VAR" = "identifier"
 cleanExpectedToken "OPSYM" = "operator"
+cleanExpectedToken "infixl" = "keyword 'infixl'"
+cleanExpectedToken "infixr" = "keyword 'infixr'"
+cleanExpectedToken "infix" = "keyword 'infix'"
 cleanExpectedToken "NUM" = "number"
 cleanExpectedToken "BIGNUM" = "bigint literal"
 cleanExpectedToken "FLOAT" = "float"

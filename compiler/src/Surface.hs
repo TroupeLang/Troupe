@@ -16,6 +16,7 @@ module Surface ( Lambda (..)
                , Decl (..)
                , FunDecl (..)
                , Prog (..)
+               , FixityDecl (..)
                , Handler (..)
                , Guard
                -- Operator chains
@@ -109,7 +110,13 @@ data Term
     | OpChain [ChainElem]      -- at least one operator or prefix item
   deriving (Eq)
 
-data Prog = Prog Imports [SynDataGroup] LTerm
+-- | One fixity declaration from the file header: @infixl 6 <+> <.>@ declares
+-- every listed operator at the given fixity. The position is the keyword's,
+-- for diagnostics.
+data FixityDecl = FixityDecl PosInf Fixity [VarName]
+  deriving (Eq)
+
+data Prog = Prog Imports [FixityDecl] [SynDataGroup] LTerm
   deriving (Eq)
 
 --------------------------------------------------
@@ -122,8 +129,14 @@ instance ShowIndent Prog where
   showIndent k t = PP.render (nest k (ppProg t))
 
 ppProg :: Prog -> PP.Doc
-ppProg (Prog (Imports imports) groups term) =
-  let ppGroups =
+ppProg (Prog (Imports imports) fixities groups term) =
+  let ppFixities =
+        if null fixities then PP.empty
+        else vcat (map ppFixityDecl fixities)
+      ppFixityDecl (FixityDecl _ (Fixity a n) ops) =
+        text (case a of OpLeft -> "infixl"; OpRight -> "infixr"; OpNon -> "infix")
+          <+> PP.int n <+> hsep (map text ops)
+      ppGroups =
         if null groups then PP.empty
         else vcat (map D.ppSynDataGroup groups)
       ppImports =
@@ -145,7 +158,7 @@ ppProg (Prog (Imports imports) groups term) =
                       Nothing -> PP.empty
                 in modeText PP.<> selectText PP.<> aliasText
           in (vcat $ (map ppLibName imports)) $$ PP.text ""
-  in vcat [ ppImports, ppGroups, ppLTerm 0 term ]
+  in vcat [ ppImports, ppFixities, ppGroups, ppLTerm 0 term ]
 
 ppLTerm :: Precedence -> LTerm -> PP.Doc
 ppLTerm prec (Loc _ t) = ppTerm prec t

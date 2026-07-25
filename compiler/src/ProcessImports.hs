@@ -260,12 +260,12 @@ checkDuplicateBinds imports = mapM_ checkOne (zip [(0::Int)..] imports)
 -- dependency entries it resolved (the module @(path, hash, name)@ triples,
 -- for the maintenance utility to record; ignored on a normal enforcing compile).
 processImports :: PinCheck -> FilePath -> FilePath -> Prog -> IO (Prog, [DepEntry])
-processImports pin root file (Prog (Imports imports) groups term) = do
+processImports pin root file (Prog (Imports imports) fixities groups term) = do
   checkDuplicateBinds imports
   results <- mapM (processImport pin root file) imports
   let imports' = map fst results
       deps     = [ d | (_, Just d) <- results ]
-  return (Prog (Imports imports') groups term, deps)
+  return (Prog (Imports imports') fixities groups term, deps)
 
 --------------------------------------------------------------------------------
 -- Module graph discovery for the compilation driver.
@@ -293,7 +293,7 @@ discoverModules mainFile = do
           input <- readFile file
           case parseProg file input of
             Left err -> die err
-            Right (Prog (Imports imports) _ _) -> do
+            Right (Prog (Imports imports) _ _ _) -> do
               let lits = [ lit | imp <- imports, Just lit <- [importPath imp] ]
               deps <- mapM (resolveOne root file) lits
               (order', done') <- foldM (visit root (file : stack)) (order, done) deps

@@ -25,6 +25,9 @@ import qualified Direct as D
 import qualified Surface as S
 import           TroupePositionInfo (Located(..), PosInf(..))
 import           Control.Monad.Except
+import           Data.Map (Map)
+import qualified Data.Map as Map
+import           Control.Monad (foldM)
 
 --------------------------------------------------------------------------------
 -- Fixity
@@ -186,14 +189,36 @@ mkBinApp p (S.ChUser v) a b =
 -- Structural translation
 
 -- | Fixity of a user operator by name; Nothing means no fixity in scope.
--- Currently always empty (no declarations exist yet); the fixity-declaration
--- and interface changes populate it.
 type FixityLookup = VarName -> Maybe Fix
 
+-- | Convert a declared fixity to the internal scale: user level n at 10n.
+internalFix :: Fixity -> Fix
+internalFix (Fixity a n) = (10 * n, conv a)
+  where conv OpLeft  = ALeft
+        conv OpRight = ARight
+        conv OpNon   = ANon
+
+-- | Collect the file's fixity declarations; a duplicate declaration for one
+-- operator is an error naming both positions.
+declaredFixities :: [S.FixityDecl] -> M (Map VarName (PosInf, Fixity))
+declaredFixities = foldM addDecl Map.empty
+  where
+    addDecl :: Map VarName (PosInf, Fixity) -> S.FixityDecl
+            -> M (Map VarName (PosInf, Fixity))
+    addDecl m (S.FixityDecl p fx ops) = foldM (addOp p fx) m ops
+    addOp :: PosInf -> Fixity -> Map VarName (PosInf, Fixity) -> VarName
+          -> M (Map VarName (PosInf, Fixity))
+    addOp p fx m v = case Map.lookup v m of
+      Nothing -> return (Map.insert v (p, fx) m)
+      Just (p0, _) -> throwError $
+        ppPos p ++ ": duplicate fixity declaration for operator '" ++ v
+        ++ "' (first declared at " ++ ppPos p0 ++ ")"
+
 reassocProg :: S.Prog -> Except String D.Prog
-reassocProg (S.Prog imports groups term) =
-  D.Prog imports groups <$> reassocLTerm noUserFixities term
-  where noUserFixities = const Nothing
+reassocProg (S.Prog imports fixities groups term) = do
+  declared <- declaredFixities fixities
+  let lookupFix v = internalFix . snd <$> Map.lookup v declared
+  D.Prog imports groups <$> reassocLTerm lookupFix term
 
 reassocLTerm :: FixityLookup -> S.LTerm -> M D.LTerm
 reassocLTerm env (Loc p t) = case t of

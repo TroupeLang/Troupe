@@ -1,0 +1,15 @@
+{
+  "test_name": "malformed-json-frame",
+  "victim": {
+    "script": "victim.trp",
+    "port": 6850,
+    "survive_exit_code": 99,
+    "extra_argv": "--disable-relay"
+  },
+  "attacks": ["attack.mjs", "attack.mjs"],
+  "oracle": {
+    "must_survive": true,
+    "victim_log_contains": ["Dropping connection", "malformed inbound frame"],
+    "victim_must_not_contain": ["Unhandled error case", "Node.js v"]
+  }
+}

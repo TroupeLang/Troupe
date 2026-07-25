@@ -1,0 +1,11 @@
+(* Victim node for the malformed-frame hostile-peer test. Prints a readiness
+   marker the runner waits for, then blocks. A spawned guard bounds the run: if
+   the node survives the attack it exits with code 99; a crash on the inbound
+   bytes would terminate the process before the guard fires. *)
+let val guard = spawn (fn () =>
+        let val _ = sleep 6000
+        in exit (authority, 99)
+        end)
+    val _ = print "VICTIM: ready"
+in receive [ hn _ => print "VICTIM: unexpected message" ]
+end

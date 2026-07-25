@@ -59,10 +59,10 @@ ci-test-golden-no-color:
 	mkdir -p out 
 	./bin/golden --no-color
 
-test: test/local test/multinode test/result-socket
+test: test/local test/multinode test/hostile-peer test/result-socket
 
 # Test target for Docker runner (no Haskell toolchain available).
-test/docker: ci-test-golden-no-color test/multinode test/result-socket
+test/docker: ci-test-golden-no-color test/multinode test/hostile-peer test/result-socket
 
 test/local:
 	mkdir -p out
@@ -76,6 +76,8 @@ test/prop-labelrt:
 	cd compiler && stack test :labelrt-prop-test $(STACK_OPTS)
 test/multinode:
 	./scripts/run-multinode-tests.sh
+test/hostile-peer: rt p2p-tools
+	./scripts/run-hostile-peer-tests.sh
 test/libp2p-migration:
 	./scripts/run-libp2p-migration-tests.sh
 test/libp2p-migration-verbose:

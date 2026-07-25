@@ -189,6 +189,18 @@ function asDeserializationError(cause: unknown): DeserializationError {
     return new DeserializationError(`cannot deserialize inbound value: ${details}`);
 }
 
+// The list of exceptions expected when processing untrusted inbound data: a
+// value we cannot reconstruct or link (e.g. a closure naming a module or
+// library this node does not have). A receiving boundary drops these and keeps
+// serving. This is deliberately narrow by type but wide in intent: adversarial
+// inputs are expected here, so they must be handled rather than crash the node.
+// Anything not on this list is unexpected and must surface (see the node's
+// fail-fast policy), so a genuine bug is exposed rather than silently swallowed.
+// Extend this predicate as further expected inbound-error classes are added.
+export function isExpectedInboundError(e: unknown): boolean {
+    return e instanceof DeserializationError;
+}
+
 // Wrapper around the reconstruction logic: any failure to reconstruct an
 // inbound value is reported through the current errback (rejecting the
 // promise returned by `deserialize`) instead of crashing the node.

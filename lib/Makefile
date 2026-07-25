@@ -14,6 +14,7 @@ build:
 
   # Dependency on `Option`
 	$(COMPILER) ./List.trp -l
+	$(COMPILER) ./Outcome.trp -l
 
   # Dependency on `Number`
 	$(COMPILER) ./Duration.trp -l

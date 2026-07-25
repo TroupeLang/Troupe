@@ -106,12 +106,7 @@ let (* =================================================================== *)
                 in if n > 0 andalso String.sub (t, n - 1) = "\r"
                    then String.substring (t, 0, n - 1) else t
                 end
-            fun finish rev = stripCR (String.implode (List.reverse rev))
-            fun go []       cur acc = List.reverse ((finish cur) :: acc)
-              | go c::cs cur acc =
-                  if c = "\n" then go cs [] ((finish cur) :: acc)
-                  else go cs (c :: cur) acc
-        in go (String.explode s) [] [] end
+        in List.map stripCR (String.split "\n" s) end
 
     (* =================================================================== *)
     (*  Block classification                                               *)
@@ -471,9 +466,6 @@ let (* =================================================================== *)
     (*  AST -> Html nodes                                                  *)
     (* =================================================================== *)
 
-    (* Left-to-right flatten of a list of lists (order preserving). *)
-    fun flatten xss = List.foldl (fn (xs, acc) => List.append acc xs) [] xss
-
     fun headingNode level children =
         if level = 1 then Html.h1 {} children
         else if level = 2 then Html.h2 {} children
@@ -520,7 +512,7 @@ let (* =================================================================== *)
            | "ListBlock"     => [ listNode b.ordered b.items ]
            | _               => [])
 
-    and blocksToNodes tight bs = flatten (List.map (blockToNodes tight) bs)
+    and blocksToNodes tight bs = List.concat (List.map (blockToNodes tight) bs)
 
     and listNode ordered items =
         let val liNodes = List.map (fn item => Html.li {} (blocksToNodes true item.blocks)) items

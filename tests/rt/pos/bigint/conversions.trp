@@ -1,16 +1,13 @@
-(* bigint conversions: tagged-record fromString/toInt, exact-double
+(* bigint conversions: fromString/toInt return an option, exact-double
  * boundary at 9007199254740991 *)
 import BigInt
+import Option
 
-let fun report r =
-        case r of
-          {tag = "Ok", value = v}  => print ("Ok", BigInt.show v)
-        | {tag = "Err", error = e} => print ("Err", e)
+let fun report (SOME v) = print ("SOME", BigInt.show v)
+      | report NONE     = print "NONE"
 
-    fun reportInt r =
-        case r of
-          {tag = "Ok", value = v}  => print ("Ok", v)
-        | {tag = "Err", error = e} => print ("Err", e)
+    fun reportInt (SOME v) = print ("SOME", v)
+      | reportInt NONE     = print "NONE"
 
     val maxSafe = BigInt.fromInt 9007199254740991
 

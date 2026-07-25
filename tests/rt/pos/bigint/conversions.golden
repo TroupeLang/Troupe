@@ -1,8 +1,8 @@
-2026-07-17T17:41:24.215Z [RTM] [32minfo[39m: Skipping network creation. Observe that all external IO operations will yield a runtime error.
-("Ok", "987654321987654321987654321")
-("Err", "not a valid bigint: not a number")
-("Ok", 42)
-("Ok", 9007199254740991)
-("Err", "bigint out of exact double range: 9007199254740992")
-("Err", "bigint out of exact double range: -9007199254740992")
+2026-07-25T13:45:41.527Z [RTM] [32minfo[39m: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+("SOME", "987654321987654321987654321")
+"NONE"
+("SOME", 42)
+("SOME", 9007199254740991)
+"NONE"
+"NONE"
 >>> Main thread finished with value: ()@{}%{}

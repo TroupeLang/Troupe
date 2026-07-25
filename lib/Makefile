@@ -4,7 +4,6 @@ build:
 	mkdir -p out
 
   # No dependencies
-	$(COMPILER) ./BigInt.trp -l
 	$(COMPILER) ./Number.trp -l
 	$(COMPILER) ./Option.trp -l
 	$(COMPILER) ./ThreadUtil.trp -l
@@ -12,6 +11,7 @@ build:
 	$(COMPILER) ./VariantsDemo.trp -l
 
   # Dependency on `Option`
+	$(COMPILER) ./BigInt.trp -l
 	$(COMPILER) ./List.trp -l
 	$(COMPILER) ./Outcome.trp -l
 

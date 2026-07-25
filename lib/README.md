@@ -46,6 +46,11 @@ target of the *makefile*.
   `ListPair.findOpt` can be used in the same file.
 - Each function that is exported has to be documented (`(** <text> *)`). In the long run, we will
   auto-generate documentation for the Standard Library.
+- A library that exports operators (see [docs/OPERATORS.md](../docs/OPERATORS.md)) declares their
+  fixities in its header and exports them under their symbolic names
+  (`("<+>", ( <+> ))`); the fixity travels in the `.exports` interface. When an operator has a
+  natural word name, export that alphabetic alias alongside it (`("beside", ( <+> ))`), so
+  qualified-import users have a prefix spelling.
 - Avoid changing signatures and names of existing functions. It breaks backwards compatibility
   with existing code, i.e., in the user guide, assignments, etc. New library functions are okay to
   introduce, including those that happen to duplicate functionality. We should then go through the

@@ -1,6 +1,7 @@
 (* Time library - functional date/time manipulation *)
 
-import Result
+import Option
+import Outcome
 import Duration
 import Number
 import String
@@ -110,11 +111,12 @@ let
     fun dateFromYMD year month day =
         {tag = "Date", year = year, month = month, day = day}
 
-    (** Create a date from year, month, day with validation. Returns Result. *)
+    (** Create a date from year, month, day with validation. `NONE` if the components are not a
+        real date. *)
     fun tryDateFromYMD year month day =
         if isValidDate year month day
-        then Result.ok {tag = "Date", year = year, month = month, day = day}
-        else Result.err "invalid date"
+        then SOME {tag = "Date", year = year, month = month, day = day}
+        else NONE
 
     (** Get year from date *)
     fun year d = d.year
@@ -258,11 +260,11 @@ let
         second >= 0 andalso second <= 59 andalso
         ms >= 0 andalso ms <= 999
 
-    (** Create a datetime with validation. Returns Result. *)
+    (** Create a datetime with validation. `NONE` if the components are not a real datetime. *)
     fun tryDateTimeFromComponents year month day hour minute second ms =
         if isValidDateTime year month day hour minute second ms
-        then Result.ok (dateTimeFromComponents year month day hour minute second ms)
-        else Result.err "invalid datetime"
+        then SOME (dateTimeFromComponents year month day hour minute second ms)
+        else NONE
 
     (** Convert instant to datetime (UTC) *)
     fun dateTimeFromInstant instant =
@@ -379,29 +381,29 @@ let
 
     (* --- ISO 8601 Parsing --- *)
 
-    (** Parse ISO 8601 date: "YYYY-MM-DD" -> Result date string
+    (** Parse ISO 8601 date: "YYYY-MM-DD" -> `OK` date, or `ERR` naming the failure
         Single-pass validation and parsing using char codes directly. *)
     fun parseDateISO s =
-        if strlen s < 10 then Result.err "date too short"
+        if strlen s < 10 then ERR "date too short"
         else if not (checkCharCode s 4 codeDash andalso checkCharCode s 7 codeDash)
-             then Result.err "invalid format"
+             then ERR "invalid format"
         else let val (year, yOk) = parseIntDirect s 0 4
                  val (month, mOk) = parseIntDirect s 5 2
                  val (day, dOk) = parseIntDirect s 8 2
-             in if not (yOk andalso mOk andalso dOk) then Result.err "expected digits"
-                else if not (isValidDate year month day) then Result.err "invalid date"
-                else Result.ok {tag = "Date", year = year, month = month, day = day}
+             in if not (yOk andalso mOk andalso dOk) then ERR "expected digits"
+                else if not (isValidDate year month day) then ERR "invalid date"
+                else OK {tag = "Date", year = year, month = month, day = day}
              end
 
-    (** Parse ISO 8601 datetime: "YYYY-MM-DDTHH:mm:ss.sssZ" -> Result dateTime string
+    (** Parse ISO 8601 datetime: "YYYY-MM-DDTHH:mm:ss.sssZ" -> `OK` datetime, or `ERR` naming the failure
         Single-pass validation and parsing using char codes directly. *)
     fun parseDateTimeISO s =
-        if strlen s < 24 then Result.err "datetime too short"
+        if strlen s < 24 then ERR "datetime too short"
         else if not (checkCharCode s 4 codeDash andalso checkCharCode s 7 codeDash andalso
                      checkCharCode s 10 codeT andalso checkCharCode s 13 codeColon andalso
                      checkCharCode s 16 codeColon andalso checkCharCode s 19 codeDot andalso
                      checkCharCode s 23 codeZ)
-             then Result.err "invalid format"
+             then ERR "invalid format"
         else let val (year, yOk) = parseIntDirect s 0 4
                  val (month, moOk) = parseIntDirect s 5 2
                  val (day, dOk) = parseIntDirect s 8 2
@@ -410,16 +412,16 @@ let
                  val (second, sOk) = parseIntDirect s 17 2
                  val (ms, msOk) = parseIntDirect s 20 3
              in if not (yOk andalso moOk andalso dOk andalso hOk andalso miOk andalso sOk andalso msOk)
-                then Result.err "expected digits"
+                then ERR "expected digits"
                 else if not (isValidDateTime year month day hour minute second ms)
-                then Result.err "invalid datetime"
-                else Result.ok {tag = "DateTime", year = year, month = month, day = day,
+                then ERR "invalid datetime"
+                else OK {tag = "DateTime", year = year, month = month, day = day,
                                 hour = hour, minute = minute, second = second, ms = ms}
              end
 
     (** Parse ISO 8601 instant: same format as datetime *)
     fun parseInstantISO s =
-        Result.map dateTimeToInstant (parseDateTimeISO s)
+        Outcome.map dateTimeToInstant (parseDateTimeISO s)
 
     (* === Phase 4: Time Zones === *)
 

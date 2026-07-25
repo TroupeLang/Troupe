@@ -37,7 +37,7 @@ import           Control.Monad.Except
 
 import qualified Text.PrettyPrint.HughesPJ as PP
 import           Text.PrettyPrint.HughesPJ (
-   (<+>), ($$), text, hsep, vcat, nest, nest)
+   (<+>), ($$), text, vcat, nest)
 import           ShowIndent
 
 import           TroupePositionInfo (Located(..), getLoc, PosInf(..))

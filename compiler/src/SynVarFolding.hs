@@ -33,6 +33,7 @@ import           Basics (VarName, Imports(..), ImportDecl(..), ImportMode(..),
                          LibName(..))
 import qualified SynVarHash as H
 import           Exports (renderDatatypeLine)
+import           InternalError (internalError)
 import           TroupePositionInfo (Located(..), PosInf(..))
 
 import           Control.Monad (forM, forM_, when, foldM)
@@ -799,8 +800,12 @@ ctorPat env pos res mp = case mp of
 uniqueBare :: PosInf -> String -> [CtorRes] -> RW CtorRes
 uniqueBare pos name cands = case nubBy sameTag cands of
   [res] -> return res
-  distinct ->
+  -- Every candidate list reaching here is built by inserting singletons
+  -- (envBare, ctorMapOf), so the empty case is a compiler bug, not a program
+  -- error; the non-empty case names its first datatype in the hint.
+  []    -> internalError ("no candidates for constructor " ++ name)
+  distinct@(first : _) ->
     throwError (at pos ("constructor " ++ name ++ " is ambiguous: declared in datatypes "
                 ++ intercalate ", " (map crDatatype distinct)
-                ++ "; qualify it, e.g. " ++ crDatatype (head distinct) ++ "." ++ name))
+                ++ "; qualify it, e.g. " ++ crDatatype first ++ "." ++ name))
   where sameTag a b = crTag a == crTag b

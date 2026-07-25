@@ -133,11 +133,11 @@ trInsts ii = work [] [] ii  where
                   Raw.SetState cmp x -> Loc pos (Stack.SetState cmp x)
                   _ -> internalError "impossible case/bug: only label instructions must be passed to this translation function"
 
-        -- Get position for the group (use first instruction's position)
-        -- Note: linsts is non-empty here due to the guard at translateGroup []
+        -- Get position for the group (use first instruction's position);
+        -- linsts is non-empty here, the empty case having been taken by the
+        -- preceding `translateGroup []` equation.
         groupPos = case linsts of
           (li:_) -> getLoc li
-          _ -> NoPos  -- unreachable, but needed for exhaustiveness
 
         insts' = Loc groupPos (Stack.LabelGroup (map tri linsts))
 

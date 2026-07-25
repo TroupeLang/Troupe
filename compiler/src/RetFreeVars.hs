@@ -4,7 +4,6 @@
 module RetFreeVars where
 
 import RetCPS as CPS
-import qualified Core as C
 import Data.Set (Set)
 import qualified Data.Set as Set
 import TroupePositionInfo (Located(..), unLoc)

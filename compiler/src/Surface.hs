@@ -44,8 +44,7 @@ where
 
 import           Basics
 import qualified Direct as D
-import           Direct ( Lit, DeclPattern, LDeclPattern, FieldName
-                        , SynDataGroup )
+import           Direct ( Lit, LDeclPattern, SynDataGroup )
 import qualified Text.PrettyPrint.HughesPJ as PP
 import           Text.PrettyPrint.HughesPJ ((<+>), ($$), text, hsep, vcat, nest)
 import           ShowIndent

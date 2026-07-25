@@ -33,7 +33,7 @@ import qualified Core as C
 import Core (ppLit)
 import qualified Text.PrettyPrint.HughesPJ as PP
 import Text.PrettyPrint.HughesPJ (
-    (<+>), ($$), text, hsep, vcat, nest)
+    (<+>), ($$), text, vcat, nest)
 import           ShowIndent
 
 import TroupePositionInfo (Located(..), noLoc)

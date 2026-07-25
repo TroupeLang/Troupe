@@ -39,24 +39,6 @@ import           ShowIndent
 import           TroupePositionInfo (Located(..), PosInf(..))
 
 
-data PrimType
-    = TUnit
-    | TInt
-    | TBool
-    | TString
-  deriving (Eq, Ord, Show)
-
-data Ty
-    = TAny
-    | TParam String
-    | TPrim PrimType
-    | TFun Ty [Ty]
-    | TTuple [Ty]
-    | TList Ty
-  deriving (Eq)
-
-
-
 -- | Located type aliases for the Direct AST
 -- These are defined before the data types to allow mutual recursion
 type LTerm = Located Term

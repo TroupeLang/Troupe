@@ -119,9 +119,11 @@ restrictFixities imp fxs = case importSelected imp of
   Just selected -> filter ((`elem` selected) . fst) fxs
   Nothing       -> fxs
 
-processModuleImport :: PinCheck -> FilePath -> FilePath -> ImportDecl -> IO (ImportDecl, DepEntry)
-processModuleImport pin root file imp = do
-  let Just lit = importPath imp
+-- | Resolve a module import. The literal path is passed in rather than
+-- re-extracted from @imp@: 'processImport' is the only caller and it selects
+-- this function by matching that very field.
+processModuleImport :: PinCheck -> FilePath -> FilePath -> ImportDecl -> String -> IO (ImportDecl, DepEntry)
+processModuleImport pin root file imp lit = do
   case checkModulePath lit of
     Left reason -> die $ "invalid module import " ++ show lit ++ " in "
                        ++ displayPath root file ++ ": " ++ reason
@@ -239,8 +241,8 @@ processLibImport imp = do
 processImport :: PinCheck -> FilePath -> FilePath -> ImportDecl -> IO (ImportDecl, Maybe DepEntry)
 processImport pin root file imp =
   case importPath imp of
-    Just _  -> do (imp', entry) <- processModuleImport pin root file imp
-                  return (imp', Just entry)
+    Just lit -> do (imp', entry) <- processModuleImport pin root file imp lit
+                   return (imp', Just entry)
     Nothing -> do imp' <- processLibImport imp
                   return (imp', Nothing)
 

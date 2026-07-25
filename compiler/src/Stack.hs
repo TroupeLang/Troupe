@@ -18,8 +18,6 @@ import qualified IR (FunDef (..))
 import Raw (RawExpr (..), RawVar (..), MonComponent(..),
             ppRawExpr, Assignable (..), Consts, ppConsts, RTAssertion(..), ppRTAssertion)
 
-import qualified Core                      as C
-
 import           Text.PrettyPrint.HughesPJ (nest, text, vcat, ($$), (<+>))
 import qualified Text.PrettyPrint.HughesPJ as PP
 import           TroupePositionInfo (Located(..))

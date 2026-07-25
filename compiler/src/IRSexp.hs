@@ -29,7 +29,7 @@ import qualified Core as C
 import           Basics (BinOp(..), UnaryOp(..), LibName(..), FieldName)
 import           DCLabels
 import           RetCPS (VarName(..))
-import           TroupePositionInfo (Located(..), PosInf(..), noLoc, unLoc)
+import           TroupePositionInfo (Located(..), noLoc, unLoc)
 
 ------------------------------------------------------------
 -- The current format version.

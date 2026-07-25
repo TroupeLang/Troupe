@@ -34,7 +34,6 @@ import TroupeSourceMap (buildSourceMap)
 import System.Exit
 import ProcessImports
 import OpReassoc (reassocProg, fileFixityEnv)
-import qualified OpReassoc
 import Basics (isOperatorName)
 import qualified Data.Map as Map
 import qualified ModuleHash

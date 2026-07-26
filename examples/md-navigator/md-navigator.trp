@@ -258,11 +258,16 @@ let (* =================================================================== *)
      *  Modification time only. "Added" is not derivable here: a checkout writes a file and so
      *  sets both its modification and its creation time, which makes a restored file
      *  indistinguishable from a newly written one. Git is the only source that knows. *)
+    (** The tiers are exactly the windows the sidebar filter offers, so a document that matches a
+     *  filter always carries a mark and the track reads as the axis those windows index into. *)
     fun recencyOf now d =
-        if now - d.mtime < hourMs then "hour"
-        else if now - d.mtime < dayMs then "day"
-        else if now - d.mtime < 7 * dayMs then "week"
-        else ""
+        let val age = now - d.mtime
+        in if age < hourMs then "hour"
+           else if age < dayMs then "day"
+           else if age < 7 * dayMs then "week"
+           else if age < 30 * dayMs then "month"
+           else ""
+        end
 
     fun treeOf now docs =
         let val docPaths = List.map (fn d => d.rel) docs

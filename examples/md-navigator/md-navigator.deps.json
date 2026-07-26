@@ -2,6 +2,6 @@
   "deps": [
     {"path": "Client", "hash": "pq0lo5hmqqkgrpglk7avmfmi9bkeaf1tij0gu6403b8f09pm79mg", "name": "Client"},
     {"path": "Path", "hash": "i133d0fbkp8hu7c10jf32h2a0nub82e14lbkks66p2nq6n0076f0", "name": "Path"},
-    {"path": "Theme", "hash": "jdb964ankqhtqp6a3u6rs0o3ktjd8uckgsfr99e6bqvi6t7cidug", "name": "Theme"}
+    {"path": "Theme", "hash": "me6pcqj3p4vjnbtl0lma3dkrf2jg42jrl0rdtqecf0ea0245rbng", "name": "Theme"}
   ]
 }

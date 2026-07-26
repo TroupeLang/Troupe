@@ -81,8 +81,9 @@ and the run prints the name it used. The same applies to the other generated pag
 | Expand / collapse all  | Buttons above the tree                                                  |
 | Filter box             | Substring match on filenames; `/` focuses it, `Escape` clears it         |
 | Time filters           | 1h / 24h / 7d / 30d, or a custom number of hours, days or weeks; "All" cancels |
+| Recency and filters agree | The marker tiers are exactly the filter windows, so a document matching a filter always carries a mark |
 | Archive                | Documents under `archiveDir` are out of the tree until the "Show archive" button asks for them; the choice is remembered |
-| Recency markers        | A dot on a three-slot track flush with the right edge, running older to newer left to right: the last week, the last day, the last hour; no dot means older |
+| Recency markers        | A dot on a four-slot track flush with the right edge, running older to newer left to right: the last month, week, day, hour; no dot means older than a month |
 | Document counts        | Beside each directory name                                              |
 | Table of contents      | Follows the reading position; hidden below 1100px wide                   |
 | Heading anchors        | A `#` appears on hover, for linking to a section                         |
@@ -107,7 +108,7 @@ holds its hue under both protanopia and deuteranopia, where a vermillion simulat
 olive. Magnitude is carried as three strengths of that one hue rather than as three hues.
 
 More importantly, no signal depends on colour at all. Recency is a dot's **position** on a
-three-slot track, which no form of colour blindness can affect; the hue's strength repeats the
+four-slot track, which no form of colour blindness can affect; the hue's strength repeats the
 same information so that either cue alone is sufficient. The track sits on the right because the
 left of a tree already carries nesting, and two horizontal-position signals on the same side
 compete with one another. Broken links and the delete action are

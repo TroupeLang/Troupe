@@ -9,10 +9,9 @@ a number of nodes to bootstrap its discovery. Note that this process takes a hum
 
 
 ## Local only mode
-To skip network connection, one can provide `--localonly` flag to the runtime; in this case network
-operations — remote `send`, remote `spawn`, `whereis` — fail. Local I/O is unaffected: printing,
-`SimpleFileIO`, and `save`/`restore` all work, which is why the golden suite runs this way. The
-runtime's start-up message says all external I/O will fail; it means the network operations.
+To skip network connection, one can provide `--localonly` flag to the runtime, but
+observe that in this case all network operations will yield
+a runtime error.
 
 
 ## Generating new persistent IDs

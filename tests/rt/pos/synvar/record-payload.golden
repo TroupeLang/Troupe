@@ -1,0 +1,8 @@
+2026-07-26T14:36:27.177Z [RTM] [32minfo[39m: Skipping network creation. Observe that all network operations will yield a runtime error.
+12
+12
+0
+9
+(tag {name="t", payload=[1, 2], kids=[{n=7}]})
+"t"
+>>> Main thread finished with value: ()@{}%{}

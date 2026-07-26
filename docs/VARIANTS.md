@@ -40,6 +40,7 @@ Payload type expressions are:
 | `int`, `float`, `bigint`, `bool`, `string`, `unit` | The fixed primitive type names                                                     |
 | `t`                                                | A datatype in scope (same `and` group, or an earlier group, or imported)           |
 | `t1 * ... * tn`                                    | An n-ary product, flat and non-associative; `(a * b) * c` differs from `a * b * c` |
+| `{l1 : t1, ..., ln : tn}`                          | A record with distinct labels; `{}` is the empty record                            |
 | `ty t`, `(ty1, ty2) t`                             | Postfix application of a parameterized datatype or of the built-in `list`          |
 | `X.t`                                              | A datatype from the import qualified as `X`                                        |
 
@@ -49,6 +50,24 @@ inputs to the declaration's identity (see
 [Identity](#identity-normalization-and-hashing)) and nothing else. `rect 5`, where `rect` is
 declared `of int * int`, builds a value; the mismatch surfaces only when a `rect (w, h)` pattern
 fails to match it.
+
+A record payload is destructured by a record pattern under the constructor pattern, and the
+payload slot holds an ordinary record value:
+
+```sml
+datatype shape = circle of {r : int}
+               | rect   of {w : int, h : int}
+
+fun area (circle {r = r})      = 3 * r * r
+  | area (rect {w = w, h = h}) = w * h
+```
+
+Record and product payloads differ in how identity treats component order. A product is
+positional, so `of int * string` and `of string * int` are different declarations. A record is
+addressed by label, so field order is normalized away: `of {a : int, b : string}` and
+`of {b : string, a : int}` hash to the same tag and their constructors are interchangeable across
+libraries. The labels themselves are part of the identity — renaming a field yields a different
+tag. Repeating a label in one record type is a static error.
 
 ### Mutual recursion
 

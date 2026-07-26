@@ -112,6 +112,7 @@ import Control.Monad.State
     '_'   { L _ TokenWildcard }
     '|'   { L _ TokenBar }
     '::'  { L _ TokenColonColon }
+    ':'   { L _ TokenColon }
     '['   { L _ TokenLBracket }
     ']'   { L _ TokenRBracket }
     '.'   { L _ TokenDot }
@@ -251,6 +252,13 @@ AtomTy : TYVAR                    { STyVar (tyvarTok $1) }
    | QTyName                      { STyName $1 }
    | '(' TyExp ')'               { $2 }
    | '(' TyExp ',' TyArgList ')' QTyName   { STyApp ($2 : reverse $4) $6 }
+   | '{' '}'                      { STyRecord [] }
+   | '{' TyFieldList '}'          { STyRecord (reverse $2) }
+
+-- Record type fields, accumulated in reverse. Duplicate labels are rejected
+-- later, in payload resolution, so the error carries the constructor position.
+TyFieldList : VAR ':' TyExp             { [(varTok $1, $3)] }
+   | TyFieldList ',' VAR ':' TyExp      { (varTok $3, $5) : $1 }
 
 TyArgList : TyExp                 { [$1] }
    | TyArgList ',' TyExp          { $3 : $1 }

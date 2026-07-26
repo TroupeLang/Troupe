@@ -128,10 +128,8 @@ cd compiler && make parser-info     # parser info
 ### Running examples that do not require network
 
 `local.sh` compiles the program to a temporary file and runs it with the runtime's `--localonly`
-flag, which skips p2p network creation and key generation. Operations that need the network are
-unavailable in this mode; stdio and `SimpleFileIO` are not affected, which is why the golden suite
-runs this way. The runtime prints a startup line saying all external I/O will fail, which overstates
-it.
+flag, which skips p2p network creation and key generation. Network operations yield a runtime error
+in this mode.
 
 ### Passing command-line arguments to Troupe programs
 

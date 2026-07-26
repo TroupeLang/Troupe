@@ -365,13 +365,11 @@ differently:
 | Entry point                          | Behaviour                                                              |
 |--------------------------------------|------------------------------------------------------------------------|
 | `restore`                            | A thread-level Troupe error: `Error restoring value: cannot deserialize inbound value: cannot link module module:<hash>: it is not among this program's dependencies` |
-| A message received from another node | The `DeserializationError` is classified as expected inbound input, the message is dropped, and the node keeps running (`rt/src/runtimeMonitored.mts:239`, `rt/src/deserialize.mts:200`) |
-| A remote `spawn`                     | Same classification; the spawn is rejected rather than the node terminated (`rt/src/runtimeMonitored.mts:182`) |
+| A message received from another node | The `DeserializationError` is classified as expected inbound input and the message is dropped (`rt/src/runtimeMonitored.mts:239`, `rt/src/deserialize.mts:200`) |
+| A remote `spawn`                     | Same classification; the spawn is rejected (`rt/src/runtimeMonitored.mts:182`) |
 
-On the network path the drop is reported through `debug`/`qdebug` rather than to the program, so a
-node that silently ignores a message may be missing a module the sender has. Until `dbb08a5` this
-input killed the receiving node; a remote sender can no longer stop a node by sending it a closure
-over a module the receiver lacks.
+On the network path the drop is reported through `debug`/`qdebug` and not to the program, so a node
+that ignores a message may be missing a module the sender has.
 
 Two properties limit what a received module-bearing closure can do:
 

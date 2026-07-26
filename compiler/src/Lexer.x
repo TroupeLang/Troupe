@@ -38,7 +38,8 @@ $graphic    = $printable # $white
 -- Operator lexemes (docs: _dev_planning/custom-operators/design.md §2.1).
 -- An operator is a maximal run of $opchar beginning with $opinitial. The
 -- initials exclude ! ~ ? (reserved for future prefix operators), and : .
--- (protecting ::, projection, and ..); all four are legal continuations.
+-- (protecting ::, the record-type separator, projection, and ..); all four are
+-- legal continuations.
 -- Reserved spellings keep their dedicated tokens: those rules precede the
 -- operator rule, and Alex prefers the longest match, then the earliest rule,
 -- so equal-length ties stay reserved (<> is not-equal) while strictly longer
@@ -173,6 +174,7 @@ tokens:-
 <0, state_dclabel>   [\|]            { mkL TokenBar }
 <0>   [\_]                           { mkL TokenWildcard }
 <0>   [\:][\:]                       { mkL TokenColonColon }
+<0>   [\:]                           { mkL TokenColon }
 <0>   [\[]                           { mkL TokenLBracket }
 <0>   [\]]                           { mkL TokenRBracket }
 <0, state_dclabel>   [\&]            { mkL TokenAmpersand }
@@ -271,6 +273,7 @@ data Token
   | TokenWildcard
   | TokenBar
   | TokenColonColon
+  | TokenColon
   | TokenLBracket
   | TokenRBracket
   | TokenEOF
@@ -476,6 +479,7 @@ showToken TokenComma = "','"
 showToken TokenBar = "'|'"
 showToken TokenWildcard = "'_'"
 showToken TokenColonColon = "'::'"
+showToken TokenColon = "':'"
 showToken TokenDot = "'.'"
 showToken TokenDotDot = "'..'"
 showToken TokenRaisedTo = "'raisedTo'"

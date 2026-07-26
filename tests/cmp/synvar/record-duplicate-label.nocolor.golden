@@ -1,0 +1,1 @@
+tests/cmp/synvar/record-duplicate-label.trp:4:14: duplicate field label a in a record type

@@ -556,7 +556,7 @@ async function getNetworkPeerId(rtHandlers) {
   // Handle local-only or persist modes (skip network creation)
   if (argv[TroupeCliArg.LocalOnly] || argv[TroupeCliArg.Persist]) {
     if (!argv[TroupeCliArg.SuppressLocalInfoMessage]) {
-      info("Skipping network creation. Observe that all external IO operations will yield a runtime error.")
+      info("Skipping network creation. Observe that all network operations will yield a runtime error.")
     }
     if (argv[TroupeCliArg.Persist]) {
       info("Running with persist flag.")

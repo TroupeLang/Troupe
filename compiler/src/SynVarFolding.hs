@@ -322,10 +322,20 @@ extHashes = \case
   H.Ext h _   -> [h]
   H.Prod ts   -> concatMap extHashes ts
   H.App ts tg -> concatMap extHashes ts ++ targetHashes tg
+  H.Rec flds  -> concatMap (extHashes . snd) flds
   _           -> []
   where
     targetHashes (H.RExt h _) = [h]
     targetHashes _            = []
+
+-- | The first label that repeats in a record type's field list, if any.
+dupLabel :: [String] -> Maybe String
+dupLabel = go Set.empty
+  where
+    go _ [] = Nothing
+    go seen (l:ls)
+      | l `Set.member` seen = Just l
+      | otherwise           = go (Set.insert l seen) ls
 
 -- | Resolve a surface type expression to its normal form (spec §2 resolution
 -- rules, §4 normal form).
@@ -342,6 +352,9 @@ resolveTy env sameGroup params dtName cpos = go
     go (STyApp args q) = do
       args' <- mapM go args
       resolveApp (length args) args' q
+    go (STyRecord flds) = case dupLabel (map fst flds) of
+      Just l  -> throwHere ("duplicate field label " ++ l ++ " in a record type")
+      Nothing -> H.Rec <$> mapM (\(l, t) -> (,) l <$> go t) flds
 
     throwHere msg = throwError (at cpos msg)
 
@@ -440,6 +453,7 @@ checkGenuine dtPos group
     inRefs (H.In n)         = [n]
     inRefs (H.Prod ts)      = concatMap inRefs ts
     inRefs (H.App ts tgt)   = concatMap inRefs ts ++ inRefsTarget tgt
+    inRefs (H.Rec flds)     = concatMap (inRefs . snd) flds
     inRefs _                = []
     inRefsTarget (H.RIn n)  = [n]
     inRefsTarget _          = []

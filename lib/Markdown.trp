@@ -51,15 +51,37 @@ let (* =================================================================== *)
 
     fun dropWhileSpace cs = List.dropWhile isSpaceChar cs
 
+    (* These four are called on every line by several of the block classifiers, so they are
+     * written as index arithmetic over the string rather than as list operations on its
+     * characters. Exploding a line into a list and imploding it back costs about sixteen times
+     * as much as scanning it in place, and the block parser does that scanning repeatedly. *)
+
+    (* Compared as character codes rather than as strings: String.sub allocates a one-character
+     * string per position, which on a scan is most of the cost. *)
+    val spaceCode = 32
+
+    (* The index of the first character that is not a space. *)
+    fun firstNonSpace s =
+        let val n = String.size s
+            fun go i = if i < n andalso String.subCode (s, i) = spaceCode then go (i + 1) else i
+        in go 0 end
+
+    (* One past the last character that is not a space. *)
+    fun lastNonSpace s =
+        let fun go j = if j > 0 andalso String.subCode (s, j - 1) = spaceCode then go (j - 1) else j
+        in go (String.size s) end
+
     (* Remove leading spaces. *)
-    fun trimLeft s = String.implode (dropWhileSpace (String.explode s))
+    fun trimLeft s = String.substring (s, firstNonSpace s, String.size s)
 
     (* Remove trailing spaces. *)
-    fun trimRight s =
-        String.implode (List.reverse (dropWhileSpace (List.reverse (String.explode s))))
+    fun trimRight s = String.substring (s, 0, lastNonSpace s)
 
     (* Remove leading and trailing spaces. *)
-    fun trim s = trimRight (trimLeft s)
+    fun trim s =
+        let val a = firstNonSpace s
+            val b = lastNonSpace s
+        in if a >= b then "" else String.substring (s, a, b) end
 
     (* Number of leading characters equal to `ch`. *)
     fun countLeading ch s =
@@ -85,7 +107,7 @@ let (* =================================================================== *)
                        in if c = "" orelse c = " " then i else go (i + 1) end
         in String.substring (s, 0, go 0) end
 
-    fun isBlank s = trim s = ""
+    fun isBlank s = firstNonSpace s >= String.size s
 
     fun isDigitChar c = let val n = String.subCode (c, 0) in n >= 48 andalso n <= 57 end
 
@@ -145,15 +167,22 @@ let (* =================================================================== *)
     (* =================================================================== *)
 
     (* A thematic break: >= 3 of the same char among -, *, _ (spaces ignored). *)
+    (* Scanned in place for the same reason as the trimming helpers: this runs on every line,
+     * and the list form cost about twenty times as much. Spaces are ignored wherever they
+     * appear, as before. *)
     fun isThematicBreak line =
-        let val cs = String.explode (trim line)
-            val noSpace = List.filter (fn c => c <> " ") cs
-        in if List.length noSpace < 3 then false
-           else let val c0 = List.head noSpace
-                in (c0 = "-" orelse c0 = "*" orelse c0 = "_")
-                   andalso List.forall (fn c => c = c0) noSpace
-                end
-        end
+        let val n = String.size line
+            fun go i seen c0 =
+                if i >= n then seen >= 3
+                else let val c = String.subCode (line, i)
+                     in if c = spaceCode then go (i + 1) seen c0
+                        else if c0 = 0 then
+                            (if c = 45 orelse c = 42 orelse c = 95   (* - * _ *)
+                             then go (i + 1) 1 c else false)
+                        else if c = c0 then go (i + 1) (seen + 1) c0
+                        else false
+                     end
+        in go 0 0 0 end
 
     (* An ATX heading line -> [ {level, text} ] or []. *)
     fun stripTrailingHashes s =

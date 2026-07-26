@@ -1,0 +1,194 @@
+import Unit
+import Outcome
+import Pretty
+import Sexp
+import List
+import String
+
+let val q   = "\x22"
+    val bs  = "\x5c"
+    val nl  = "\x0a"
+    val tab = "\x09"
+    val cr  = "\x0d"
+
+    (* A payload exercising every escape, and its printed form. *)
+    val hairy    = "a" ^ q ^ "b" ^ bs ^ "c" ^ nl ^ tab ^ cr
+    val hairyOut = q ^ "a" ^ bs ^ q ^ "b" ^ bs ^ bs ^ "c" ^ bs ^ "n" ^ bs ^ "t" ^ bs ^ "r" ^ q
+
+    val long   = LST [ATOM "f", ATOM "aaaa", ATOM "bbbb"]
+    val define = LST [ATOM "define", LST [ATOM "square", ATOM "x"], LST [ATOM "mul", ATOM "x", ATOM "x"]]
+
+    (* Every value the reader can produce, for the round-trip law. *)
+    val corpus = [ ATOM "foo"
+                 , ATOM "+"
+                 , ATOM "-3"
+                 , STR ""
+                 , STR hairy
+                 , LST []
+                 , LST [ATOM "f"]
+                 , LST [ATOM "f", LST [ATOM "g", STR "x"], LST []]
+                 ]
+    fun roundTrips s = Sexp.parse (Sexp.print s) = OK s
+
+    val tests = Unit.group "Sexp" [
+            Unit.group "print" [
+                Unit.it "an atom prints as itself"
+                        (Unit.isEq "foo" (Sexp.print (ATOM "foo")))
+              , Unit.it "a string prints quoted"
+                        (Unit.isEq (q ^ "hi" ^ q) (Sexp.print (STR "hi")))
+              , Unit.it "a list prints space-separated"
+                        (Unit.isEq "(f a)" (Sexp.print (LST [ATOM "f", ATOM "a"])))
+              , Unit.it "the empty list prints as ()"
+                        (Unit.isEq "()" (Sexp.print (LST [])))
+              , Unit.it "nesting prints with inner parentheses"
+                        (Unit.isEq "(add 1 (mul 2 3))"
+                                   (Sexp.print (LST [ATOM "add", ATOM "1",
+                                                     LST [ATOM "mul", ATOM "2", ATOM "3"]])))
+              , Unit.it "a string escapes quote, backslash, newline, tab, and return"
+                        (Unit.isEq hairyOut (Sexp.print (STR hairy)))
+            ],
+            Unit.group "parse leaves" [
+                Unit.it "an atom"
+                        (Unit.isEq (OK (ATOM "foo")) (Sexp.parse "foo"))
+              , Unit.it "punctuation is atom material"
+                        (Unit.isEq (OK (ATOM "+-*/<=>!?_")) (Sexp.parse "+-*/<=>!?_"))
+              , Unit.it "a number stays an uninterpreted atom"
+                        (Unit.isEq (OK (ATOM "-3")) (Sexp.parse "-3"))
+              , Unit.it "a string literal"
+                        (Unit.isEq (OK (STR "hi")) (Sexp.parse (q ^ "hi" ^ q)))
+              , Unit.it "an empty string literal"
+                        (Unit.isEq (OK (STR "")) (Sexp.parse (q ^ q)))
+              , Unit.it "escapes decode"
+                        (Unit.isEq (OK (STR ("a" ^ nl ^ tab ^ q ^ bs ^ cr ^ "b")))
+                                   (Sexp.parse (q ^ "a" ^ bs ^ "n" ^ bs ^ "t" ^ bs ^ q
+                                                  ^ bs ^ bs ^ bs ^ "r" ^ "b" ^ q)))
+            ],
+            Unit.group "parse lists" [
+                Unit.it "the empty list"
+                        (Unit.isEq (OK (LST [])) (Sexp.parse "()"))
+              , Unit.it "nested lists"
+                        (Unit.isEq (OK (LST [ATOM "f", ATOM "a", LST [ATOM "g", ATOM "b"]]))
+                                   (Sexp.parse "(f a (g b))"))
+              , Unit.it "mixed leaf kinds"
+                        (Unit.isEq (OK (LST [ATOM "f", STR "x"]))
+                                   (Sexp.parse ("(f " ^ q ^ "x" ^ q ^ ")")))
+              , Unit.it "whitespace is insignificant"
+                        (Unit.isEq (OK (LST [ATOM "a", ATOM "b"]))
+                                   (Sexp.parse ("(" ^ nl ^ "  a" ^ tab ^ "b )")))
+              , Unit.it "a comment runs to end of line"
+                        (Unit.isEq (OK (LST [ATOM "a", ATOM "b"]))
+                                   (Sexp.parse ("(a ; note" ^ nl ^ " b)")))
+              , Unit.it "leading and trailing atmosphere is skipped"
+                        (Unit.isEq (OK (ATOM "a"))
+                                   (Sexp.parse ("; lead" ^ nl ^ " a  ; trail" ^ nl)))
+            ],
+            Unit.group "parseAll" [
+                Unit.it "reads every form in order"
+                        (Unit.isEq (OK [ATOM "a", LST [ATOM "b"], STR "c"])
+                                   (Sexp.parseAll ("a (b) " ^ q ^ "c" ^ q)))
+              , Unit.it "one form"
+                        (Unit.isEq (OK [ATOM "a"]) (Sexp.parseAll "a"))
+              , Unit.it "empty input yields no forms"
+                        (Unit.isEq (OK []) (Sexp.parseAll ""))
+              , Unit.it "atmosphere alone yields no forms"
+                        (Unit.isEq (OK []) (Sexp.parseAll "  ; only a comment"))
+              , Unit.it "a malformed form stops the sequence"
+                        (Unit.isEq (ERR {reason = "unexpected ')'", offset = 2})
+                                   (Sexp.parseAll "a )"))
+            ],
+            Unit.group "round trip" [
+                Unit.it "parse inverts print on the corpus"
+                        (Unit.isTrue (List.forall roundTrips corpus))
+              , Unit.it "no corpus member fails"
+                        (Unit.isEq [] (List.filter (fn s => roundTrips s = false) corpus))
+              , Unit.it "print inverts parse on a nested source"
+                        (Unit.isEq (OK "(a (b \x22c\x22) ())")
+                                   (Outcome.map Sexp.print (Sexp.parse "( a  (b \x22c\x22)  () )")))
+            ],
+            Unit.group "errors" [
+                Unit.it "unterminated string points at the opening quote"
+                        (Unit.isEq (ERR {reason = "unterminated string", offset = 0})
+                                   (Sexp.parse (q ^ "abc")))
+              , Unit.it "unterminated list points at its opening parenthesis"
+                        (Unit.isEq (ERR {reason = "unterminated list", offset = 0})
+                                   (Sexp.parse "(a b"))
+              , Unit.it "an unterminated outer list is reported, not the closed inner one"
+                        (Unit.isEq (ERR {reason = "unterminated list", offset = 0})
+                                   (Sexp.parse "(a (b c)"))
+              , Unit.it "a close parenthesis with no list open"
+                        (Unit.isEq (ERR {reason = "unexpected ')'", offset = 0})
+                                   (Sexp.parse ")"))
+              , Unit.it "a second form is trailing input"
+                        (Unit.isEq (ERR {reason = "trailing characters after form", offset = 2})
+                                   (Sexp.parse "a b"))
+              , Unit.it "empty input"
+                        (Unit.isEq (ERR {reason = "unexpected end of input", offset = 0})
+                                   (Sexp.parse ""))
+              , Unit.it "atmosphere with no form, at the end offset"
+                        (Unit.isEq (ERR {reason = "unexpected end of input", offset = 3})
+                                   (Sexp.parse "; c"))
+              , Unit.it "an unknown escape points at the escaped character"
+                        (Unit.isEq (ERR {reason = "invalid escape character", offset = 3})
+                                   (Sexp.parse (q ^ "a" ^ bs ^ "q" ^ q)))
+              , Unit.it "a backslash at end of input points at the backslash"
+                        (Unit.isEq (ERR {reason = "incomplete escape sequence", offset = 2})
+                                   (Sexp.parse (q ^ "a" ^ bs)))
+              , Unit.it "nesting past the depth limit is refused"
+                        (Unit.isEq (ERR {reason = "maximum nesting depth exceeded", offset = 201})
+                                   (Sexp.parse (String.repeat 250 "(" ^ String.repeat 250 ")")))
+              , Unit.it "nesting within the depth limit is accepted"
+                        (Unit.isTrue (Outcome.isOk
+                                        (Sexp.parse (String.repeat 199 "("
+                                                     ^ String.repeat 199 ")"))))
+            ],
+            Unit.group "pretty" [
+                Unit.it "a list that fits stays on one line"
+                        (Unit.isEq "(f aaaa bbbb)" (Sexp.pretty 80 long))
+              , Unit.it "a list that does not fit breaks between every element"
+                        (Unit.isEq ("(f" ^ nl ^ " aaaa" ^ nl ^ " bbbb)") (Sexp.pretty 5 long))
+              , Unit.it "breaking the outer list leaves the inner ones flat"
+                        (Unit.isEq ("(define" ^ nl ^ " (square x)" ^ nl ^ " (mul x x))")
+                                   (Sexp.pretty 20 define))
+              , Unit.it "the whole form fits at a wide width"
+                        (Unit.isEq "(define (square x) (mul x x))" (Sexp.pretty 80 define))
+              , Unit.it "an atom wider than the width is still emitted whole"
+                        (Unit.isEq "toolong" (Sexp.pretty 2 (ATOM "toolong")))
+              , Unit.it "the empty list never breaks"
+                        (Unit.isEq "()" (Sexp.pretty 1 (LST [])))
+              , Unit.it "a string leaf is printed escaped"
+                        (Unit.isEq hairyOut (Sexp.pretty 80 (STR hairy)))
+              , Unit.it "toDoc composes with other documents"
+                        (Unit.isEq "x: (a b)"
+                                   (Pretty.render 80 (Pretty.text "x:"
+                                                      <+> Sexp.toDoc (LST [ATOM "a", ATOM "b"]))))
+              , Unit.it "a broken list hangs under its opening parenthesis"
+                        (Unit.isEq ("val (aaa" ^ nl ^ "     bbb" ^ nl ^ "     ccc)")
+                                   (Pretty.render 12 (Pretty.text "val"
+                                                      <+> Sexp.toDoc (LST [ATOM "aaa", ATOM "bbb",
+                                                                           ATOM "ccc"]))))
+            ],
+            Unit.group "information flow" [
+                (* The leaves of a parsed value are substrings of the input, so a labeled input
+                 * yields a labeled result and the provenance of untrusted input survives. *)
+                let val secret = "(a b)" raisedTo `{alice}`
+                in Unit.it "a labeled input yields a labeled value"
+                        (Unit.isEq (OK (LST [ATOM "a", ATOM "b"]) raisedTo `{alice}`)
+                                   (Sexp.parse secret))
+                end
+              , let val secret = "(a b)" raisedTo `{alice}`
+                    val out = Outcome.unwrapOr (Outcome.map Sexp.print (Sexp.parse secret)) ""
+                in Unit.it "reprinting a labeled input keeps the label"
+                        (Unit.isEq ("(a b)" raisedTo `{alice}`) out)
+                end
+                (* Printing joins the labels of the nodes it visits, so one labeled leaf taints
+                 * the whole output. *)
+              , let val leaf = LST [ATOM "a", STR ("s3cr3t" raisedTo `{alice}`)]
+                in Unit.it "a labeled leaf taints the printed output"
+                        (Unit.isEq ((("(a " ^ q ^ "s3cr3t" ^ q ^ ")")) raisedTo `{alice}`)
+                                   (Sexp.print leaf))
+                end
+              , Unit.it "printing public data stays public"
+                        (Unit.isEq "(a)" (Sexp.print (LST [ATOM "a"])))
+            ]
+        ]
+in Unit.run authority tests end

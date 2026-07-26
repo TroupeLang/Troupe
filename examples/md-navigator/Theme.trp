@@ -145,20 +145,30 @@ let
       ^ ".tree details[open] > summary .dirname { color: var(--fg-muted); }\n"
       ^ ".tree summary:hover .dirname { color: var(--fg); }\n"
       ^ ".tree .dcount { color: var(--fg-faint); font-size: 0.68rem; font-variant-numeric: tabular-nums; }\n"
-      (* The gutter bar: one hue at three strengths, so recency reads as intensity and needs
-       * no key. The document being read is marked by its ground, leaving the bar free. *)
-      (* Scoped to document links by their id prefix: a directory link shares the .tree a
-       * selector and would otherwise inherit the gutter, shifting its row out of line with
-       * the directories that have no index to link to. *)
+      (* Recency reads as a dot on a three-slot track in the gutter, drifting away from the name
+       * as a change ages: the slot beside the filename is the last hour, the middle the last day,
+       * the far slot the last week, and no dot at all means older. The freshest document
+       * therefore gets both the nearest slot and the strongest hue, and staleness recedes.
+       * Position is a channel colour blindness cannot affect, and the hue's strength says the
+       * same thing again, so either cue alone carries it. The document being read is marked by
+       * its ground, which leaves the gutter free.
+       *
+       * Directory rows carry the same left padding, so the gutter is a real column rather than
+       * an indent only some rows have. *)
+      ^ ".tree summary { padding-left: 1.25rem; }\n"
       ^ ".tree a { color: var(--fg-muted); text-decoration: none; }\n"
-      ^ ".tree a[id^=doc] { display: block; border-left: 2px solid transparent;\n"
-      ^ "  padding-left: 0.45rem; white-space: nowrap; overflow: hidden;\n"
-      ^ "  text-overflow: ellipsis; }\n"
+      ^ ".tree a[id^=doc] { display: block; position: relative; padding-left: 1.25rem;\n"
+      ^ "  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n"
+      ^ ".tree a[id^=doc]::before { content: \'\'; position: absolute; top: 50%; width: 4.5px;\n"
+      ^ "  height: 4.5px; border-radius: 50%; transform: translateY(-50%); }\n"
+      ^ ".tree a.hour::before { left: 13px; background: var(--recent); }\n"
+      ^ ".tree a.day::before { left: 7px;\n"
+      ^ "  background: color-mix(in srgb, var(--recent) 75%, transparent); }\n"
+      ^ ".tree a.week::before { left: 1px;\n"
+      ^ "  background: color-mix(in srgb, var(--recent) 50%, transparent); }\n"
       ^ ".tree a:hover { color: var(--fg); }\n"
-      ^ ".tree a.week { border-left-color: color-mix(in srgb, var(--recent) 25%, transparent); }\n"
-      ^ ".tree a.day { border-left-color: color-mix(in srgb, var(--recent) 55%, transparent); }\n"
-      ^ ".tree a.hour { border-left-color: var(--recent); }\n"
-      ^ ".tree a.current { background: var(--surface-2); color: var(--fg); font-weight: 600; }\n"
+      ^ ".tree a.current { background-color: var(--surface-2); color: var(--fg);\n"
+      ^ "  font-weight: 600; }\n"
       ^ ".tree a.archived { opacity: 0.55; font-style: italic; }\n"
       ^ ".content { flex: 1 1 auto; min-width: 0; display: flex; align-items: flex-start; }\n"
       ^ "main { flex: 1 1 auto; min-width: 0; max-width: var(--main-w); padding: 2rem 2.5rem; }\n"

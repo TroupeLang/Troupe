@@ -68,7 +68,9 @@ at a pinned level has exactly the built-in's precedence:
 
 | Level | Built-ins there                 |
 |-------|---------------------------------|
-| 0–3   | —                               |
+| 0–1   | —                               |
+| 2     | `andalso orelse` (left)         |
+| 3     | —                               |
 | 4     | `= <> < > <= >=` (non-assoc)    |
 | (4,5) | `andb orb xorb`, `<< >> ~>>` — built-in only |
 | 5     | —                               |
@@ -78,7 +80,10 @@ at a pinned level has exactly the built-in's precedence:
 | (8,9) | `raisedTo`; `isTuple isList isRecord not` — built-in only |
 | 9     | `^` (left)                      |
 
-`andalso` and `orelse` bind below level 0. The bands marked built-in only are
+`andalso` and `orelse` are left-associative at level 2. A user operator may be
+declared there with either associativity, but a right-associative one cannot
+then appear in the same chain as `andalso` or `orelse`. The bands marked
+built-in only are
 not addressable by declarations. Two facts about the built-in table worth
 knowing (both long-standing Troupe behavior): `::` binds tighter than `+`
 (`1 + 2 :: []` is `1 + (2 :: [])`), and `^` binds tighter than `not`
@@ -90,7 +95,7 @@ multiplicative 7, the HughesPJ pretty-printing levels 6 and 5, `>>=` at 1.
 Chains that a fixity cannot order are errors:
 
 ```
-1 = 2 = 3        error: '=' is non-associative; use parentheses to chain it
+1 = 2 = 3        error: operator '=' is non-associative; use parentheses to chain it
 a <+ b +> c      error, for infixl 6 <+ and infixr 6 +> : same precedence,
                  incompatible associativity
 x |> f           error if |> has no fixity in scope

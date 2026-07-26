@@ -99,7 +99,7 @@ string operations, …) are available.
 ## Artifacts
 
 Compiling a program compiles its whole module import graph first, dependencies before consumers
-(`compiler/app/Main.hs:501-517`). There is no cache: every module in the graph is recompiled on
+(`compiler/app/Main.hs:539-547`). There is no cache: every module in the graph is recompiled on
 every compile of the program.
 
 Each module's output is written next to its source, in an `out/` directory. `<dir>` below is the
@@ -123,7 +123,7 @@ datatype shll35alvv9na0ofcilb0c97npl3ka69cvck8ppn541kugfdrk90 (group (dt tone 0 
 
 A standard-library compile (`troupec -l`) emits no `module-hash` line; the `ModuleArtifact` marker
 that adds it is internal to the compiler driver and is not a command-line option
-(`compiler/app/Main.hs:79`, `:293`).
+(`compiler/app/Main.hs:79`, `:307`).
 
 The compiler writes the `.js`, the `.exports`, and the dependencies file atomically — a temporary
 file beside the target, then a rename — so a concurrent build or a running program never reads a
@@ -244,7 +244,7 @@ The file is read by both halves of the toolchain:
 
 - **The compiler enforces it.** For each module import it reads the dependency's actual hash from
   that dependency's `.exports` and compares it with the pin. A missing pin or a mismatch is a
-  compile error (`ProcessImports.hs:165-178`). The compiler never writes the file during a normal
+  compile error (`ProcessImports.hs:175-188`). The compiler never writes the file during a normal
   compile.
 - **The runtime seeds its resolver from it.** The compiled program points at the file through
   `__moduleDepsFile`; the runtime builds a `hash -> (path, name)` map from it and resolves a
@@ -325,7 +325,7 @@ Three properties worth knowing:
 
 The load-time datatype version-skew check described in
 [VARIANTS.md](VARIANTS.md#across-libraries-and-modules) applies to libraries only. An importer
-records no consumed-hash entry for a module import (`SynVarFolding.hs:205`, `:225`), because a change
+records no consumed-hash entry for a module import (`SynVarFolding.hs:206`, `:226`), because a change
 to a module's declarations changes the module's own IR hash and is caught at compile time by the
 pin check instead.
 
@@ -340,7 +340,7 @@ dependency as the string `module:<hash>` and the name it uses from that module. 
 persisted form of a closure `fn s => Stamp.stamp s` shows exactly that:
 
 ```
-show40 ... gensym105 ;module:hsa2mt6aikrmdh928o24kdb74rlqoe0rmh67v34e55qpb495c9j0 render ...
+wrap40 ... gensym105 ;module:lbrn5kic1lu9hcug3mprn435a6qkjq33idevk91j68l4s884evrg stamp ...
 ```
 
 **The receiver relinks against its own dependencies.** On deserialization the runtime resolves each
@@ -365,13 +365,13 @@ differently:
 | Entry point                          | Behaviour                                                              |
 |--------------------------------------|------------------------------------------------------------------------|
 | `restore`                            | A thread-level Troupe error: `Error restoring value: cannot deserialize inbound value: cannot link module module:<hash>: it is not among this program's dependencies` |
-| A message received from another node | The `DeserializationError` reaches the p2p layer as an unhandled rejection and **terminates the receiving node process** |
+| A message received from another node | The `DeserializationError` is classified as expected inbound input, the message is dropped, and the node keeps running (`rt/src/runtimeMonitored.mts:239`, `rt/src/deserialize.mts:200`) |
+| A remote `spawn`                     | Same classification; the spawn is rejected rather than the node terminated (`rt/src/runtimeMonitored.mts:182`) |
 
-The second row follows from an uncaught rejection rather than a policy: `p2p.mts` calls
-`_rt.receiveFromRemote(...)` without awaiting or catching it (`rt/src/p2p/p2p.mts:691`), and the
-process-level `unhandledRejection` handler, `processExpectedNetworkErrors`, rethrows any error
-whose identifier it does not recognize (`rt/src/p2p/p2p.mts:1161-1163`). A remote sender can
-therefore stop a receiving node by sending it a closure over a module the receiver does not have.
+On the network path the drop is reported through `debug`/`qdebug` rather than to the program, so a
+node that silently ignores a message may be missing a module the sender has. Until `dbb08a5` this
+input killed the receiving node; a remote sender can no longer stop a node by sending it a closure
+over a module the receiver lacks.
 
 Two properties limit what a received module-bearing closure can do:
 
@@ -465,10 +465,10 @@ Every message below is the compiler's or runtime's actual output.
 | Dependency has no compiled interface                   | `module "./Fresh" imported from Wrapper3.trp is not compiled (no out/Fresh.exports)` |
 | Malformed dependencies file                            | `malformed dependencies file hello.deps.json: Unexpected end-of-input, expecting JSON value` |
 | Dependencies file missing at run time                  | Node `ENOENT` on the recorded `__moduleDepsFile` path               |
-| Received closure names a module the receiver lacks     | `cannot link module module:<hash>: it is not among this program's dependencies` |
+| Received closure names a module the receiver lacks     | `cannot link module module:<hash>: it is not among this program's dependencies` — on stdout from `restore`, at debug level on the network path |
 
 The structural checks run before the pin check, so a program with both a bad selective import and a
-stale pin reports the selective import (`ProcessImports.hs:155`).
+stale pin reports the selective import (`ProcessImports.hs:162-170`).
 
 Three of these errors — *no pin*, *no content hash*, *not compiled* — reach a well-formed program
 only through a compile that is not driven by a main program, that is, a `troupec -l` compile of a

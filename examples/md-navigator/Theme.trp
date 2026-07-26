@@ -167,8 +167,6 @@ let
       ^ "  background: color-mix(in srgb, var(--recent) 78%, transparent); }\n"
       ^ ".tree a.hour::before { right: 1px; background: var(--recent); }\n"
       ^ ".tree a:hover { color: var(--fg); }\n"
-      ^ ".tree a.current { background-color: var(--surface-2); color: var(--fg);\n"
-      ^ "  font-weight: 600; }\n"
       ^ ".tree a.archived { opacity: 0.55; font-style: italic; }\n"
       ^ ".content { flex: 1 1 auto; min-width: 0; display: flex; align-items: flex-start; }\n"
       ^ "main { flex: 1 1 auto; min-width: 0; max-width: var(--main-w); padding: 2rem 2.5rem; }\n"
@@ -360,7 +358,17 @@ let
       ^ "  main { padding: 1.25rem; max-width: 100%; width: 100%; }\n"
       ^ "}\n"
 
+    (** The rule marking the row of the document being read, for a selector matching that row.
+     *
+     *  Kept out of `css` because it is the one part of the sidebar that differs between pages:
+     *  the markup is identical for every document in a directory and is rendered once per
+     *  directory, so the page names its own row here instead of carrying a marked-up copy. *)
+    fun currentRowRule sel =
+        ".tree " ^ sel ^ " { background-color: var(--surface-2); color: var(--fg);\n"
+      ^ "  font-weight: 600; }\n"
+
 in [ ("css", css)
+   , ("currentRowRule", currentRowRule)
    , ("lightVars", lightVars)
    , ("darkVars", darkVars)
    , ("sepiaVars", sepiaVars)

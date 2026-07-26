@@ -307,22 +307,30 @@ let (* =================================================================== *)
 
 
 
-    fun pageHead cfg title =
-        [ Html.meta {charset = "utf-8"}
-        , Html.meta {name = "viewport", content = "width=device-width, initial-scale=1"}
-        , Html.element "title" {} [Html.text (title ^ " — " ^ cfg.title)]
-        , Html.script {} [Html.raw Client.themeInitJs]
-        , Html.style {} [Html.raw Theme.css] ]
+    fun pageHead cfg title extra =
+        List.append
+          [ Html.meta {charset = "utf-8"}
+          , Html.meta {name = "viewport", content = "width=device-width, initial-scale=1"}
+          , Html.element "title" {} [Html.text (title ^ " — " ^ cfg.title)]
+          , Html.script {} [Html.raw Client.themeInitJs]
+          , Html.style {} [Html.raw Theme.css] ]
+          extra
 
-    (* Whether `dir` is an ancestor of the document being rendered - such directories are emitted
-     * open regardless of any remembered state, so the current document is never hidden. *)
-    fun isAncestorOf currentRel dir =
-        dir <> "" andalso (String.startsWith (dir ^ "/") currentRel)
+    (* Whether `dir` is an ancestor of the directory being rendered from - such directories are
+     * emitted open regardless of any remembered state, so the current document is never hidden.
+     * Ancestry is a property of the directory alone: the ancestors of `a/b/c.md` are `a` and
+     * `a/b`, which are exactly `a/b` and its prefixes. *)
+    fun isAncestorOf fromDir dir =
+        dir <> "" andalso (dir = fromDir orelse String.startsWith (dir ^ "/") fromDir)
 
     (* The sidebar, with links relative to the page's own directory. Directories are <details>
      * elements: the disclosure control is native, so collapsing needs no script, and only the
-     * remembering of it does. *)
-    fun sidebar cfg nav fromDir currentRel nodes =
+     * remembering of it does.
+     *
+     * Nothing here depends on which document is being read, only on its directory, so one
+     * rendering serves every page in a directory; `sidebarsFor` below renders one per directory
+     * and the pages splice the text back in. *)
+    fun sidebar cfg nav fromDir nodes =
         let (* Whether a path lies in the archive. An archived directory row needs no marking of
              * its own: it disappears once all of its documents do. *)
             fun isArchived rel =
@@ -336,8 +344,7 @@ let (* =================================================================== *)
                 let val href = Path.relativeTo fromDir (Path.withExt rel "html")
                     fun addClass "" c = c
                       | addClass cs c = cs ^ " " ^ c
-                    val cls0 = if isArchived rel then addClass tag "archived" else tag
-                    val cls  = if rel = currentRel then addClass cls0 "current" else cls0
+                    val cls  = if isArchived rel then addClass tag "archived" else tag
                     val attrs = if cls = ""
                                 then {href = href, title = tip, id = "doc:" ^ rel}
                                 else {href = href, title = tip, class = cls, id = "doc:" ^ rel}
@@ -367,7 +374,7 @@ let (* =================================================================== *)
                    | TDIR  (name, dir, idx, kids) =>
                        (* The id doubles as the key its open state is remembered under. A
                         * heading slug can never collide: slugify strips the colon. *)
-                       let val attrs = if isAncestorOf currentRel dir
+                       let val attrs = if isAncestorOf fromDir dir
                                        then {class = "dir", open = "", id = "dir:" ^ dir}
                                        else {class = "dir", id = "dir:" ^ dir}
                        in Html.li {}
@@ -422,6 +429,17 @@ let (* =================================================================== *)
              , Html.ul {class = "tree"} (List.map nodeLi nodes) ]
         end
 
+    (* The sidebar rendered to text, once for each directory that holds a document, plus "" for
+     * the generated pages at the root. The rendered text is what is cached rather than the node
+     * tree: a page's share of the cost is Html.render walking and escaping the tree, which it
+     * pays once per page whether or not the tree itself is shared. *)
+    fun sidebarsFor cfg nav nodes dirs =
+        List.map (fn dir => (dir, Html.render (sidebar cfg nav dir nodes))) dirs
+
+    (** The rendered sidebar for pages sitting in `dir`. *)
+    fun sidebarFor []             _   = ""
+      | sidebarFor ((d, sb)::rest) dir = if d = dir then sb else sidebarFor rest dir
+
     fun tocNav headings =
         let val shown = List.filter (fn h => h.level >= 2 andalso h.level <= 4) headings
         in if List.null shown then Html.text ""
@@ -432,12 +450,14 @@ let (* =================================================================== *)
                            [Html.a {href = "#" ^ h.slug} [Html.text h.text]]) shown) ]
         end
 
-    fun shellWith cfg nav tree fromDir currentRel title mainNodes tocNodes extraScripts =
-        Html.document (pageHead cfg title)
+    (* `sb` is the sidebar for this page's directory, already rendered. Splicing it back as raw
+     * text is safe because it is HTML this program produced and escaped itself. *)
+    fun shellWith cfg nav sb headExtra title mainNodes tocNodes extraScripts =
+        Html.document (pageHead cfg title headExtra)
           (List.append
              [ Html.divElem {class = "layout"}
-                 [ sidebar cfg nav fromDir currentRel tree
-              , Html.divElem {class = "sbdrag", id = "sbdrag"} []
+                 [ Html.raw sb
+                 , Html.divElem {class = "sbdrag", id = "sbdrag"} []
                  , Html.divElem {class = "content"}
                      [ Html.element "main" {id = "top"} mainNodes
                      , Html.divElem {class = "maindrag", id = "maindrag"} []
@@ -446,8 +466,8 @@ let (* =================================================================== *)
              , Html.script {} [Html.raw Client.sidebarJs] ]
              extraScripts)
 
-    fun shell cfg nav tree fromDir currentRel title mainNodes tocNodes =
-        shellWith cfg nav tree fromDir currentRel title mainNodes tocNodes []
+    fun shell cfg nav sb title mainNodes tocNodes =
+        shellWith cfg nav sb [] title mainNodes tocNodes []
 
     (* Overview / dir / dir / document. A directory segment links to its own index when it has
      * one, and is plain text otherwise. *)
@@ -514,7 +534,19 @@ let (* =================================================================== *)
           , Html.span {class = "hint", id = "commenthint"}
                       [Html.text "select lines in Source to comment"] ]
 
-    fun docPage cfg nav tree sidebarTree docs doc =
+    (* A path as the value of a single-quoted CSS attribute selector. A quote or a backslash in a
+     * filename would otherwise end the selector's string early. *)
+    fun cssQuoted s =
+        let val n = String.size s
+            fun go i acc =
+                if i >= n then String.concat (List.reverse acc)
+                else let val c = String.sub (s, i)
+                     in if c = "'" orelse c = "\\" then go (i + 1) (c :: "\\" :: acc)
+                        else go (i + 1) (c :: acc)
+                     end
+        in go 0 [] end
+
+    fun docPage cfg nav tree sidebars docs doc =
         let val docDir    = Path.dirname doc.rel
             val rewritten = List.map (mapBlock (rewriteUrl cfg tree docDir)) doc.blocks
             val bodyNodes = Markdown.blocksToNodes false rewritten
@@ -527,24 +559,30 @@ let (* =================================================================== *)
             (* The path a comment records: relative to the io-root, so it is openable from the
              * directory the program was run in. *)
             val srcPath = Path.resolve cfg.sourceDir doc.rel
+            (* In <head>, because the sidebar script reads it to find the row of the document
+             * being read - the sidebar markup itself no longer says which row that is. *)
             val docMeta = Html.script {}
                             [ Html.raw ("window.MDNAV_DOC = " ^ Json.stringify
                                           {path = srcPath, rel = doc.rel, title = doc.title}
                                         ^ ";\n") ]
-        in shellWith cfg nav sidebarTree docDir doc.rel doc.title
+            (* And the row is marked by a rule the page emits for itself, for the same reason. *)
+            val curRule = Html.style {}
+                            [ Html.raw (Theme.currentRowRule
+                                          ("[id='doc:" ^ cssQuoted doc.rel ^ "']")) ]
+        in shellWith cfg nav (sidebarFor sidebars docDir) [docMeta, curRule] doc.title
              (List.append [ crumbs, viewToggle
                           , Html.divElem {class = "rendered", id = "rendered"} bodyNodes
                           , rawView doc.src ]
                           [nextPrev, footer])
              (tocNav doc.headings)
-             [ docMeta, Html.script {} [Html.raw Client.docJs] ]
+             [ Html.script {} [Html.raw Client.docJs] ]
         end
 
     (* =================================================================== *)
     (*  Generated overview, link report and search pages                   *)
     (* =================================================================== *)
 
-    fun overviewPage cfg nav tree docs =
+    fun overviewPage cfg nav sb docs =
         let fun row d =
                 Html.tr {}
                   [ Html.td {} [Html.a {href = Path.withExt d.rel "html"} [Html.text d.title]]
@@ -556,7 +594,7 @@ let (* =================================================================== *)
                                                , Html.th {} [Html.text "Path"]
                                                , Html.th {} [Html.text "Last modified"] ] ]
                   , Html.tbody {} (List.map row docs) ]
-        in shellWith cfg nav tree "" "" cfg.title
+        in shellWith cfg nav sb [] cfg.title
                  [ Html.h1 {} [Html.text cfg.title]
                  , Html.p {} [Html.text (intToString (List.length docs)
                                          ^ " documents compiled from " ^ cfg.sourceDir ^ "/.")]
@@ -590,7 +628,7 @@ let (* =================================================================== *)
            , total   = List.length all }
         end
 
-    fun reportPage cfg nav tree rep =
+    fun reportPage cfg nav sb rep =
         let fun linkRow l =
                 Html.tr {} [ Html.td {} [Html.code {} [Html.text l.from]]
                            , Html.td {} [Html.code {} [Html.text l.url]] ]
@@ -600,7 +638,7 @@ let (* =================================================================== *)
                        [ Html.thead {} [ Html.tr {} [ Html.th {} [Html.text "In document"]
                                                     , Html.th {} [Html.text "Link"] ] ]
                        , Html.tbody {} (List.map linkRow ls) ]
-        in shell cfg nav tree "" "" "Link report"
+        in shell cfg nav sb "Link report"
              [ Html.h1 {} [Html.text "Link report"]
              , Html.p {} [Html.text (intToString rep.total ^ " links examined.")]
              , Html.h2 {id = "broken"} [Html.text ("Broken links ("
@@ -629,14 +667,14 @@ let (* =================================================================== *)
 
     (* The search index is inlined into the one page that uses it, so nothing has to be fetched
      * at runtime — a file:// page cannot fetch a sibling file under default browser settings. *)
-    fun searchPage cfg nav tree docs =
+    fun searchPage cfg nav sb docs =
         let val entries = List.map (fn d => { path  = Path.withExt d.rel "html"
                                             , title = d.title
                                             , text  = d.src }) docs
             val indexJs = "window.MDNAV = " ^ Json.stringify entries ^ ";\n"
-        in Html.document (pageHead cfg "Search")
+        in Html.document (pageHead cfg "Search" [])
              [ Html.divElem {class = "layout"}
-                 [ sidebar cfg nav "" "" tree
+                 [ Html.raw sb
                  , Html.divElem {class = "content"}
                      [ Html.element "main" {}
                          [ Html.h1 {} [Html.text "Search"]
@@ -652,9 +690,9 @@ let (* =================================================================== *)
      * download or copy. `existing` is the current contents of the comments file when the run
      * found one, shown for context so a session's earlier round is visible alongside the new
      * one. *)
-    fun commentsPage cfg nav tree existing =
+    fun commentsPage cfg nav sb existing =
         let val hasExisting = existing <> ""
-        in shellWith cfg nav tree "" "" "Comments"
+        in shellWith cfg nav sb [] "Comments"
              [ Html.h1 {} [Html.text "Comments"]
              , Html.p {}
                  [ Html.text ("Comments are recorded against a source document and a line range "
@@ -740,22 +778,32 @@ let (* =================================================================== *)
                                       ^ String.concatWith "," (List.map timeEntry docs)
                                       ^ "};\n" }
                  val rep   = linkReport cfg tree docs
+                 (* One rendered sidebar per directory holding a document, rather than one per
+                  * document: the markup differs only by the links' relative prefix and by which
+                  * directories are emitted open, and both follow from the directory. Defined
+                  * after `nav` above, which it reads - an earlier `nav` would instead resolve to
+                  * Html.nav, since library imports are visible unqualified. *)
+                 fun addDir (d, acc) =
+                     let val dir = Path.dirname d.rel
+                     in if List.elem dir acc then acc else dir :: acc end
+                 val sidebars = sidebarsFor cfg nav sbTree (List.foldl addDir [""] docs)
+                 val root  = sidebarFor sidebars ""
                  val pPage = Progress.start authority "Rendering" (List.length docs)
                  val (pPage', fails) =
                      List.foldl (fn (d, (p, acc)) =>
                          ( Progress.step p
                          , acc + emit cfg.outputDir (Path.withExt d.rel "html")
-                                      (docPage cfg nav tree sbTree docs d) ))
+                                      (docPage cfg nav tree sidebars docs d) ))
                        (pPage, 0) docs
                  val _     = Progress.finish pPage'
-                 val _ = emit cfg.outputDir nav.home   (overviewPage cfg nav sbTree docs)
-                 val _ = emit cfg.outputDir nav.links  (reportPage cfg nav sbTree rep)
-                 val _ = emit cfg.outputDir nav.search (searchPage cfg nav sbTree docs)
+                 val _ = emit cfg.outputDir nav.home   (overviewPage cfg nav root docs)
+                 val _ = emit cfg.outputDir nav.links  (reportPage cfg nav root rep)
+                 val _ = emit cfg.outputDir nav.search (searchPage cfg nav root docs)
                  val existing = (case readFile (authority, cfg.commentsFile) of
                                      OK t  => t
                                    | ERR _ => "")
                  val _ = emit cfg.outputDir nav.comments
-                              (commentsPage cfg nav sbTree existing)
+                              (commentsPage cfg nav root existing)
                  val unread = List.length (List.filter (fn d => not d.readOk) docs)
              in print ( intToString (List.length docs) ^ " documents -> " ^ cfg.outputDir ^ "/"
                       ^ "\n  broken links:   " ^ intToString (List.length rep.broken)

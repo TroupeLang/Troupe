@@ -43,6 +43,11 @@ let
       ^ "  var sb = document.querySelector('.sidebar');\n"
       ^ "  var box = document.getElementById('filter');\n"
       ^ "  var POS = 'mdnav.scroll', DIRS = 'mdnav.dirs';\n"
+      (* The row of the document being read. The sidebar markup is shared by every page in a
+         directory, so the row is not marked in it; the page says which document it is, and the
+         highlight is a stylesheet rule the page carries. Null on a generated page. *)
+      ^ "  var cur = window.MDNAV_DOC\n"
+      ^ "    ? document.getElementById('doc:' + window.MDNAV_DOC.rel) : null;\n"
       ^ "  function get(k, d) { try { var v = sessionStorage.getItem(k);\n"
       ^ "      return v === null ? d : JSON.parse(v); } catch (e) { return d; } }\n"
       ^ "  function set(k, v) { try { sessionStorage.setItem(k, JSON.stringify(v)); }\n"
@@ -55,7 +60,7 @@ let
       ^ "    var d = dirs[i];\n"
       ^ "    /* An ancestor of the current document is emitted open; leave it alone. */\n"
       ^ "    if (!d.open && closed[d.id] === false) { d.open = true; }\n"
-      ^ "    else if (d.open && closed[d.id] === true && !d.querySelector('a.current')) {\n"
+      ^ "    else if (d.open && closed[d.id] === true && !(cur && d.contains(cur))) {\n"
       ^ "      d.open = false;\n"
       ^ "    }\n"
       ^ "    /* Recorded from the summary's activation, not from the toggle event: filtering\n"
@@ -81,7 +86,6 @@ let
       ^ "  /* --- scroll position ------------------------------------------------------- */\n"
       ^ "  if (sb) {\n"
       ^ "    var saved = get(POS, null);\n"
-      ^ "    var cur = sb.querySelector('a.current');\n"
       ^ "    if (saved !== null) { sb.scrollTop = saved; }\n"
       ^ "    /* Centre the current document if it is not on screen after restoring. */\n"
       ^ "    if (cur) {\n"
@@ -132,7 +136,7 @@ let
       ^ "           count towards the total either. The document being read is always shown,\n"
       ^ "           archived or not, or opening one would hide your own place in the tree. */\n"
       ^ "        if (!showArch && link.classList.contains('archived')\n"
-      ^ "            && !link.classList.contains('current')) {\n"
+      ^ "            && link !== cur) {\n"
       ^ "          li.style.display = 'none';\n"
       ^ "          continue;\n"
       ^ "        }\n"

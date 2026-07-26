@@ -1,0 +1,283 @@
+(* Theme.trp — the stylesheet, and the themes it is parameterised by.
+ *
+ * Every rule reads a custom property; not one of them names a colour. A theme is therefore a
+ * set of values for those properties, and adding one means adding a `*Vars` binding plus a
+ * `:root[data-theme=...]` line in `themeCss` — nothing else in the program changes.
+ *
+ * A program-relative module of examples/md-navigator; not a lib/ candidate, since the rules are
+ * specific to that page structure.
+ *)
+
+let
+    (* --- Theme engine ----------------------------------------------------------------
+     *
+     * No rule below this block names a colour: every one of them reads a custom property, and
+     * a theme is nothing but a set of values for those properties. Adding a theme means adding
+     * one `themeVars` entry, and nothing else.
+     *
+     * `:root` carries the light values, a prefers-color-scheme query supplies dark for anyone
+     * who has expressed no preference, and an explicit `data-theme` beats both on specificity
+     * whichever order they appear in.
+     *)
+    val lightVars =
+        "  --bg: #ffffff; --fg: #1a1a1a; --fg-muted: #555555; --fg-dim: #888888;\n"
+      ^ "  --fg-faint: #bbbbbb; --link: #0b5cad;\n"
+      ^ "  --surface: #fafafa; --surface-2: #f4f4f4; --surface-3: #f7f7f7;\n"
+      ^ "  --border: #e3e3e3; --border-light: #eeeeee; --border-strong: #cccccc;\n"
+      ^ "  --border-table: #dddddd;\n"
+      ^ "  --accent-bg: #1a1a1a; --accent-fg: #ffffff;\n"
+      ^ "  --mark-hour: #d40000; --mark-day: #d94f00; --mark-week: #d9bb00;\n"
+      ^ "  --note-bg: #fff8e1; --note-border: #e6b800;\n"
+      ^ "  --sel-bg: #e3ecfd; --sel-border: #3f74c8;\n"
+      ^ "  --danger: #aa1111; --shadow: rgba(0,0,0,0.14);\n"
+
+    val darkVars =
+        "  --bg: #16181d; --fg: #e6e6e6; --fg-muted: #a8adb8; --fg-dim: #878d99;\n"
+      ^ "  --fg-faint: #5c6270; --link: #6fa8e6;\n"
+      ^ "  --surface: #1b1e24; --surface-2: #22262e; --surface-3: #1e2128;\n"
+      ^ "  --border: #2c313a; --border-light: #262b33; --border-strong: #3a414d;\n"
+      ^ "  --border-table: #333a45;\n"
+      ^ "  --accent-bg: #e6e6e6; --accent-fg: #16181d;\n"
+      ^ "  --mark-hour: #ff6b6b; --mark-day: #ffa057; --mark-week: #e8cf67;\n"
+      ^ "  --note-bg: #33301c; --note-border: #a8892a;\n"
+      ^ "  --sel-bg: #1f2b40; --sel-border: #4a7fc8;\n"
+      ^ "  --danger: #ff7b7b; --shadow: rgba(0,0,0,0.5);\n"
+
+    val sepiaVars =
+        "  --bg: #f6f1e7; --fg: #33302a; --fg-muted: #6b6558; --fg-dim: #8a8375;\n"
+      ^ "  --fg-faint: #b5ae9e; --link: #35618f;\n"
+      ^ "  --surface: #efe8db; --surface-2: #e8e0d0; --surface-3: #eee7d9;\n"
+      ^ "  --border: #ddd4c2; --border-light: #e6ddcc; --border-strong: #c9bfa9;\n"
+      ^ "  --border-table: #d5cbb6;\n"
+      ^ "  --accent-bg: #33302a; --accent-fg: #f6f1e7;\n"
+      ^ "  --mark-hour: #b23025; --mark-day: #b26a1f; --mark-week: #a8912c;\n"
+      ^ "  --note-bg: #f5e9c8; --note-border: #bfa14a;\n"
+      ^ "  --sel-bg: #e2e7f0; --sel-border: #6b86b5;\n"
+      ^ "  --danger: #a4342b; --shadow: rgba(0,0,0,0.18);\n"
+
+    val themeCss =
+        ":root {\n" ^ lightVars ^ "}\n"
+      ^ "@media (prefers-color-scheme: dark) { :root {\n" ^ darkVars ^ "} }\n"
+      ^ ":root[data-theme=light] {\n" ^ lightVars ^ "}\n"
+      ^ ":root[data-theme=dark] {\n" ^ darkVars ^ "}\n"
+      ^ ":root[data-theme=sepia] {\n" ^ sepiaVars ^ "}\n"
+      ^ "html { color-scheme: light dark; }\n"
+
+    val css =
+        themeCss
+      ^         "* { box-sizing: border-box; }\n"
+      ^ "body { margin: 0; font: 15px/1.6 -apple-system, BlinkMacSystemFont, 'Segoe UI', "
+      ^ "Helvetica, Arial, sans-serif; color: var(--fg); background: var(--bg); }\n"
+      ^ ".layout { display: flex; align-items: flex-start; }\n"
+      (* Layout widths, both draggable and both remembered. Not colours, but they belong with
+       * the other tunables rather than hard-coded into the rules that read them. *)
+      ^ ":root { --sidebar-w: 20rem; --main-w: 52rem; }\n"
+      ^ ".sidebar { width: var(--sidebar-w); flex: 0 0 var(--sidebar-w); height: 100vh;\n"
+      ^ "  position: sticky; top: 0; "
+      ^ "overflow-y: auto; border-right: 1px solid var(--border); background: var(--surface); padding: 1rem; }\n"
+      ^ ".sidebar h2 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; "
+      ^ "color: var(--fg-muted); margin: 0 0 0.5rem; }\n"
+      ^ ".sidebar input { width: 100%; padding: 0.35rem 0.5rem; margin-bottom: 0.75rem; "
+      ^ "border: 1px solid var(--border-strong); border-radius: 4px; font: inherit; font-size: 0.85rem; }\n"
+      ^ ".tree, .tree ul { list-style: none; margin: 0; padding-left: 0.85rem; }\n"
+      ^ ".tree { padding-left: 0; font-size: 0.85rem; }\n"
+      ^ ".tree li { margin: 0.1rem 0; }\n"
+      ^ ".tree .dirname { color: var(--fg-muted); font-weight: 600; }\n"
+      ^ ".tree a { color: var(--link); text-decoration: none; }\n"
+      ^ ".tree a:hover { text-decoration: underline; }\n"
+      ^ ".tree a.current { font-weight: 700; color: var(--fg); }\n"
+      (* Opacity rather than a colour, so an archived row reads as secondary under every
+       * theme without introducing a token that each one would have to define. *)
+      ^ ".tree a.archived { opacity: 0.65; font-style: italic; }\n"
+      ^ ".content { flex: 1 1 auto; min-width: 0; display: flex; align-items: flex-start; }\n"
+      ^ "main { flex: 1 1 auto; min-width: 0; max-width: var(--main-w); padding: 2rem 2.5rem; }\n"
+      ^ ".maindrag { flex: 0 0 6px; align-self: stretch; cursor: col-resize; }\n"
+      ^ ".maindrag:hover { background: var(--border-strong); }\n"
+      ^ ".toc { width: 15rem; flex: 0 0 15rem; position: sticky; top: 0; max-height: 100vh; "
+      ^ "overflow-y: auto; padding: 2rem 1rem; font-size: 0.82rem; }\n"
+      ^ ".toc ul { list-style: none; margin: 0; padding: 0; }\n"
+      ^ ".toc a { color: var(--fg-muted); text-decoration: none; display: block; padding: 0.12rem 0; }\n"
+      ^ ".toc a:hover { color: var(--link); }\n"
+      ^ ".toc .lvl3 { padding-left: 0.8rem; }\n"
+      ^ ".toc .lvl4, .toc .lvl5, .toc .lvl6 { padding-left: 1.6rem; }\n"
+      ^ "h1, h2, h3, h4 { line-height: 1.25; }\n"
+      ^ "h1 { font-size: 1.7rem; margin-top: 0; }\n"
+      ^ "h2 { font-size: 1.3rem; margin-top: 2rem; padding-bottom: 0.2rem; "
+      ^ "border-bottom: 1px solid var(--border-light); }\n"
+      ^ "h3 { font-size: 1.1rem; margin-top: 1.5rem; }\n"
+      ^ "code { background: var(--surface-2); padding: 0.1rem 0.3rem; border-radius: 3px; "
+      ^ "font-size: 0.87em; font-family: 'SF Mono', Menlo, Consolas, monospace; }\n"
+      ^ "pre { background: var(--surface-3); border: 1px solid var(--border-light); border-radius: 5px; padding: 0.8rem; "
+      ^ "overflow-x: auto; }\n"
+      ^ "pre code { background: none; padding: 0; font-size: 0.82rem; }\n"
+      ^ "table { border-collapse: collapse; font-size: 0.88rem; width: 100%; margin: 1rem 0; }\n"
+      ^ "td.date { white-space: nowrap; }\n"
+      ^ "th, td { border: 1px solid var(--border-table); padding: 0.35rem 0.6rem; text-align: left; "
+      ^ "vertical-align: top; }\n"
+      ^ "th { background: var(--surface-2); }\n"
+      ^ "blockquote { margin: 1rem 0; padding: 0.1rem 1rem; border-left: 3px solid var(--border-table); "
+      ^ "color: var(--fg-muted); }\n"
+      ^ "del { color: var(--fg-dim); }\n"
+      ^ "a { color: var(--link); }\n"
+      ^ ".task-list-item { list-style: none; margin-left: -1.2rem; }\n"
+      ^ ".task-list-item input { margin-right: 0.4rem; }\n"
+      ^ "footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--border-light); "
+      ^ "color: var(--fg-dim); font-size: 0.8rem; }\n"
+      ^ ".broken { color: var(--danger); }\n"
+      ^ ".hit { padding: 0.6rem 0; border-bottom: 1px solid var(--border-light); }\n"
+      ^ ".hit .path { color: var(--fg-dim); font-size: 0.8rem; }\n"
+      ^ ".tree details > summary { list-style: revert; cursor: pointer; }\n"
+      ^ ".tree details > summary::marker { color: var(--fg-faint); }\n"
+      ^ ".tree summary a.dirlink { color: var(--fg-muted); font-weight: 600; text-decoration: none; }\n"
+      ^ ".tree summary a.dirlink:hover { color: var(--link); text-decoration: underline; }\n"
+      ^ ".crumbs { font-size: 0.82rem; color: var(--fg-dim); margin-bottom: 1.2rem; }\n"
+      ^ ".crumbs a { color: var(--fg-muted); text-decoration: none; }\n"
+      ^ ".crumbs a:hover { color: var(--link); text-decoration: underline; }\n"
+      ^ ".crumbs .sep { color: var(--border-strong); }\n"
+      ^ ".crumbs .here { color: var(--fg); }\n"
+      ^ ".prevnext { display: flex; justify-content: space-between; gap: 1rem;\n"
+      ^ "            margin-top: 2.5rem; font-size: 0.85rem; }\n"
+      ^ ".prevnext a { text-decoration: none; }\n"
+      ^ ".prevnext a:hover { text-decoration: underline; }\n"
+      ^ ".prevnext .next::after { content: ' →'; }\n"
+      (* Source view. white-space: pre-wrap keeps the source verbatim while still wrapping a
+       * long line, so a wide table row does not force the page sideways. *)
+      (* Sticky, so switching between rendered and source stays reachable however far down
+       * the document you have scrolled. *)
+      ^ ".viewtoggle { display: flex; align-items: center; gap: 0.4rem; position: sticky;\n"
+      ^ "  top: 0; z-index: 5; background: var(--bg); padding: 0.6rem 0;\n"
+      ^ "  border-bottom: 1px solid var(--border-light); margin-bottom: 1rem; }\n"
+      ^ ".viewtoggle button { font: inherit; font-size: 0.8rem; padding: 0.2rem 0.7rem;\n"
+      ^ "  border: 1px solid var(--border-strong); background: var(--bg); border-radius: 4px; cursor: pointer;\n"
+      ^ "  color: var(--fg-muted); }\n"
+      ^ ".viewtoggle button.on { background: var(--accent-bg); border-color: var(--accent-bg);\n"
+      ^ "  color: var(--accent-fg); }\n"
+      ^ ".viewtoggle .hint { color: var(--fg-dim); font-size: 0.78rem; margin-left: 0.4rem; }\n"
+      ^ "ol.rawlines { margin: 0; padding: 0 0 0 4.5rem; list-style: decimal;\n"
+      ^ "  font-family: 'SF Mono', Menlo, Consolas, monospace; font-size: 0.8rem;\n"
+      ^ "  line-height: 1.55; color: var(--fg); }\n"
+      (* Wrapping is the default. In nowrap mode the list scrolls sideways instead; the
+       * line numbers are ::marker content in the padding, so they scroll with it. *)
+      ^ "ol.rawlines.nowrap { overflow-x: auto; }\n"
+      ^ "ol.rawlines.nowrap li { white-space: pre; word-break: normal; }\n"
+      ^ "ol.rawlines li { white-space: pre-wrap; word-break: break-word;\n"
+      ^ "  padding-left: 0.5rem; border-left: 1px solid var(--border-light); }\n"
+      ^ "ol.rawlines li::marker { color: var(--fg-faint); font-size: 0.75rem; }\n"
+      ^ "ol.rawlines li:hover { background: var(--surface); }\n"
+      ^ "ol.rawlines li.commented { background: var(--note-bg); border-left-color: var(--note-border); }\n"
+      (* After .commented so it wins: the native selection collapses when the textarea
+       * takes focus, so the range being commented on is marked with a class instead. *)
+      ^ "ol.rawlines li.selecting { background: var(--sel-bg); border-left-color: var(--sel-border); }\n"
+      ^ "ol.rawlines li:empty::after { content: ' '; }\n"
+      (* Comment composer, pinned so it stays put while the selection is above it. *)
+      ^ ".commentbar { display: none; position: fixed; right: 1.5rem; bottom: 1.5rem;\n"
+      ^ "  width: 24rem; max-width: calc(100vw - 3rem); background: var(--bg); z-index: 20;\n"
+      ^ "  border: 1px solid var(--border-strong); border-radius: 6px; padding: 0.8rem;\n"
+      ^ "  box-shadow: 0 4px 20px var(--shadow); }\n"
+      ^ ".commentbar.open { display: block; }\n"
+      ^ ".commentbar .cb-range { font-family: 'SF Mono', Menlo, monospace; font-size: 0.75rem;\n"
+      ^ "  color: var(--fg-dim); margin-bottom: 0.4rem; }\n"
+      ^ ".commentbar textarea { width: 100%; font: inherit; font-size: 0.85rem;\n"
+      ^ "  border: 1px solid var(--border-strong); border-radius: 4px; padding: 0.4rem; resize: vertical; }\n"
+      ^ ".commentbar .cb-actions { margin-top: 0.5rem; text-align: right; }\n"
+      ^ ".commentbar button { font: inherit; font-size: 0.8rem; padding: 0.25rem 0.8rem;\n"
+      ^ "  border: 1px solid var(--border-strong); border-radius: 4px; background: var(--bg); cursor: pointer; }\n"
+      ^ ".commentbar .cb-save { background: var(--accent-bg); border-color: var(--accent-bg);\n"
+      ^ "  color: var(--accent-fg); }\n"
+      (* Comments page. *)
+      ^ ".cactions { display: flex; gap: 0.5rem; align-items: center; margin: 1rem 0; }\n"
+      ^ ".cactions button { font: inherit; font-size: 0.82rem; padding: 0.3rem 0.8rem;\n"
+      ^ "  border: 1px solid var(--border-strong); border-radius: 4px; background: var(--bg); cursor: pointer; }\n"
+      ^ "#clist .centry { border: 1px solid var(--border-light); border-radius: 5px; padding: 0.7rem;\n"
+      ^ "  margin-bottom: 0.8rem; }\n"
+      ^ "#clist .chead { font-family: 'SF Mono', Menlo, monospace; font-size: 0.75rem;\n"
+      ^ "  color: var(--fg-dim); display: flex; justify-content: space-between; gap: 1rem; }\n"
+      ^ "#clist .cdel { font: inherit; font-size: 0.72rem; border: 1px solid var(--border-table);\n"
+      ^ "  background: var(--bg); border-radius: 3px; cursor: pointer; color: var(--danger); }\n"
+      ^ "#clist .cquote { background: var(--note-bg); border: 1px solid var(--note-border); border-radius: 4px;\n"
+      ^ "  padding: 0.5rem; margin: 0.5rem 0; font-size: 0.78rem; overflow-x: auto; }\n"
+      ^ "#clist .cbody { white-space: pre-wrap; font-size: 0.9rem; }\n"
+      ^ "#preview { background: var(--surface-3); border: 1px solid var(--border-light); border-radius: 5px;\n"
+      ^ "  padding: 0.8rem; font-size: 0.78rem; overflow-x: auto; white-space: pre-wrap; }\n"
+      ^ ".hint { color: var(--fg-dim); font-size: 0.8rem; }\n"
+      (* Recency markers. A dot after the name rather than a colour on it, so the link stays
+       * readable and the marker survives the filter hiding rows around it. *)
+      ^ ".tree a.day::after, .tree a.week::after { content: '●'; font-size: 0.62rem;\n"
+      ^ "  vertical-align: 0.15em; margin-left: 0.3rem; }\n"
+      ^ ".tree a.day::after { color: var(--mark-day); }\n"
+      ^ ".tree a.week::after { color: var(--mark-week); }\n"
+      ^ ".legend { font-size: 0.7rem; color: var(--fg-dim); margin: 0.4rem 0 0.6rem; }\n"
+      ^ ".legend .dot { display: inline-block; width: 0.5rem; height: 0.5rem;\n"
+      ^ "  border-radius: 50%; vertical-align: baseline; }\n"
+      ^ ".legend .dot.day { background: var(--mark-day); }\n"
+      ^ ".legend .dot.week { background: var(--mark-week); }\n"
+      ^ ".tree a.hour::after { color: var(--mark-hour); }\n"
+      ^ ".legend .dot.hour { background: var(--mark-hour); }\n"
+      ^ ".tree .dcount { color: var(--fg-faint); font-size: 0.72rem; }\n"
+      ^ "#shown { color: var(--fg-muted); }\n"
+      ^ ".timefilter { display: flex; flex-wrap: wrap; gap: 0.25rem; align-items: center;\n"
+      ^ "  margin: 0.35rem 0; }\n"
+      ^ ".timefilter .chip { font: inherit; font-size: 0.7rem; padding: 0.1rem 0.45rem;\n"
+      ^ "  border: 1px solid var(--border-table); background: var(--bg); border-radius: 10px; cursor: pointer;\n"
+      ^ "  color: var(--fg-muted); }\n"
+      ^ ".timefilter .chip.on { background: var(--accent-bg); border-color: var(--accent-bg);\n"
+      ^ "  color: var(--accent-fg); }\n"
+      ^ ".timefilter input[type=number] { width: 3.2rem; font: inherit; font-size: 0.7rem;\n"
+      ^ "  padding: 0.1rem 0.3rem; border: 1px solid var(--border-table); border-radius: 4px; }\n"
+      ^ ".timefilter select { font: inherit; font-size: 0.7rem; border: 1px solid var(--border-table);\n"
+      ^ "  border-radius: 4px; }\n"
+      ^ "a.hanchor { margin-left: 0.4rem; color: var(--border-table); text-decoration: none;\n"
+      ^ "  font-weight: 400; opacity: 0; transition: opacity 0.1s; }\n"
+      ^ "h2:hover a.hanchor, h3:hover a.hanchor, h4:hover a.hanchor { opacity: 1; }\n"
+      ^ "a.hanchor:hover { color: var(--link); }\n"
+      ^ ".prewrap { position: relative; }\n"
+      ^ ".prewrap .copybtn { position: absolute; top: 0.4rem; right: 0.4rem; font: inherit;\n"
+      ^ "  font-size: 0.7rem; padding: 0.1rem 0.45rem; border: 1px solid var(--border-table);\n"
+      ^ "  background: var(--bg); border-radius: 4px; cursor: pointer; color: var(--fg-muted);\n"
+      ^ "  opacity: 0; transition: opacity 0.1s; }\n"
+      ^ ".prewrap:hover .copybtn { opacity: 1; }\n"
+      ^ ".sbtools { display: flex; align-items: center; gap: 0.3rem; margin: 0.35rem 0; }\n"
+      ^ ".sbtools select { font: inherit; font-size: 0.7rem; background: var(--bg);\n"
+      ^ "  border: 1px solid var(--border-strong); border-radius: 4px; color: var(--fg); }\n"
+      ^ ".sbtools label { font-size: 0.7rem; color: var(--fg-dim); }\n"
+      (* Fixed rather than absolute: the sidebar scrolls and clips its overflow, which
+       * would hide a grip positioned inside it. A fixed element escapes that clipping. *)
+      ^ ".sbdrag { position: fixed; top: 0; left: var(--sidebar-w); width: 6px;\n"
+      ^ "  height: 100vh; cursor: col-resize; z-index: 30; }\n"
+      ^ ".sbdrag:hover { background: var(--border-strong); }\n"
+      ^ ".toc a.active { color: var(--link); font-weight: 600; }\n"
+      ^ "th.sortable { cursor: pointer; user-select: none; }\n"
+      ^ "th.sortable::after { content: ' ⇅'; color: var(--fg-faint); font-size: 0.8em; }\n"
+      ^ "th.sortasc::after { content: ' ↑'; color: var(--fg); }\n"
+      ^ "th.sortdesc::after { content: ' ↓'; color: var(--fg); }\n"
+      ^ "mark { background: var(--note-bg); color: var(--fg); }\n"
+      ^ "@media print {\n"
+      ^ "  .sidebar, .toc, .viewtoggle, .prevnext, .commentbar, ol.rawlines,\n"
+      ^ "  .maindrag, .sbdrag { display: none; }\n"
+      ^ "  .layout { display: block; }\n"
+      ^ "  main { max-width: 100%; padding: 0; }\n"
+      ^ "  a { color: var(--fg); text-decoration: none; }\n"
+      ^ "}\n"
+      (* The table of contents is the first thing to go when width runs short, then the
+       * side-by-side layout itself: a fixed sidebar plus a fixed toc leaves a narrow window
+       * with almost no room for the document. *)
+      ^ "@media (max-width: 1100px) { .toc { display: none; } }\n"
+      ^ "@media (max-width: 820px) {\n"
+      (* align-items must go back to stretch: in a column flex container flex-start is the
+       * horizontal axis, which shrink-wraps the content to its widest child. *)
+      ^ "  .layout { flex-direction: column; align-items: stretch; }\n"
+      (* Capped, or the whole document tree pushes the document itself off the screen. *)
+      ^ "  .sidebar { width: 100%; flex: none; height: auto; max-height: 40vh;\n"
+      ^ "             position: static; border-right: none;\n"
+      ^ "             border-bottom: 1px solid var(--border); }\n"
+      ^ "  .content { display: block; width: 100%; }\n"
+      ^ "  .maindrag, .sbdrag { display: none; }\n"
+      ^ "  main { padding: 1.25rem; max-width: 100%; width: 100%; }\n"
+      ^ "}\n"
+
+in [ ("css", css)
+   , ("lightVars", lightVars)
+   , ("darkVars", darkVars)
+   , ("sepiaVars", sepiaVars)
+   ]
+end

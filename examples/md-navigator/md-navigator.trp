@@ -1,0 +1,769 @@
+(* md-navigator — compile a Markdown documentation tree into a browsable static HTML mirror.
+ *
+ *   troupe md-navigator.trp --io-root <dir> -- [config.json]
+ *
+ * Reads a JSON configuration naming a source directory of Markdown documents and an output
+ * directory, walks the source tree, and writes one HTML page per document mirroring the source
+ * layout. Every page carries a sidebar with the whole tree and a table of contents built from
+ * the document's own headings. Links between documents are rewritten from `.md` to `.html`, and
+ * the ones that do not resolve are collected into a report.
+ *
+ * Both directories are relative to --io-root, which must contain both. All HTML is produced as
+ * Html nodes and rendered through Html.render, so escaping is inherited rather than re-invented.
+ *)
+
+import Outcome
+import Option
+import List
+import String
+import Json
+import Html
+import Markdown
+import Time
+import { readFile, writeFile, readDir, makeDir, fileStat, fileExists } SimpleFileIO
+import "./Path"
+import "./Theme"
+import "./Client"
+
+(* How a link in a document resolves. INTERNAL carries the resolved target document and the
+ * "#fragment" to keep on the rewritten URL. *)
+datatype linkclass = ANCHOR                        (* within the same page          *)
+                   | EXTERNAL                      (* has a URL scheme              *)
+                   | INTERNAL of string * string   (* a document: target, fragment  *)
+                   | ASSET of string               (* in the tree, not a document   *)
+                   | OUTREF of string              (* real file outside the tree    *)
+                   | BROKEN                        (* nothing there                 *)
+
+(* A node of the sidebar tree.
+ *   TFILE (display name, path, tooltip, recency tag: "new", "edited" or "")
+ *   TDIR  (display name, directory path, its index document or "", children)
+ * The directory path is the key its expanded/collapsed state is remembered under; the index
+ * document is what its row links to when the directory has one. *)
+datatype treenode = TFILE of string * string * string * string
+                  | TDIR  of string * string * string * treenode list
+
+let (* =================================================================== *)
+    (*  Configuration                                                      *)
+    (* =================================================================== *)
+
+    val defaultConfigPath = "examples/md-navigator/config.json"
+
+    fun strField j name dflt =
+        (case Json.field name j of
+             SOME v => (case Json.asString v of SOME s => s | NONE => dflt)
+           | NONE   => dflt)
+
+    fun loadConfig path =
+        (case readFile (authority, path) of
+             ERR e  => ERR ("cannot read " ^ e.path ^ ": " ^ e.reason)
+           | OK src =>
+               (case Json.parse src of
+                    ERR e => ERR ("cannot parse " ^ path ^ ": " ^ e.reason)
+                  | OK j  =>
+                      if Json.kindOf j <> "object"
+                      then ERR (path ^ ": expected a JSON object")
+                      else OK { sourceDir    = strField j "sourceDir" "docs"
+                              , outputDir    = strField j "outputDir" "out/md-navigator"
+                              , title        = strField j "title" "Documentation"
+                              , commentsFile = strField j "commentsFile" "comments.md"
+                              , archiveDir   = strField j "archiveDir" "_archive" }))
+
+    (* =================================================================== *)
+    (*  Walking the source tree                                            *)
+    (* =================================================================== *)
+
+    (* Everything under `srcDir` as paths relative to it: `docs` holds the Markdown documents,
+     * `all` every entry including directories and non-Markdown files. `all` is what tells a link
+     * to a real file apart from a link to nothing. Entries whose name begins with "." are
+     * skipped, which keeps a nested .git directory out of the walk. *)
+    fun collectTree srcDir =
+        let fun under rel =
+                let val full = if rel = "" then srcDir else srcDir ^ "/" ^ rel
+                in (case readDir (authority, full) of
+                        ERR _ => []
+                      | OK entries =>
+                          List.concat
+                            (List.map
+                               (fn e =>
+                                  if String.startsWith "." e.name then []
+                                  else let val child = if rel = "" then e.name
+                                                       else rel ^ "/" ^ e.name
+                                       in if e.kind = "dir"
+                                          then child :: under child
+                                          else [child]
+                                       end)
+                               entries))
+                end
+            val all = List.sort (fn a => fn b => a <= b) (under "")
+        in {all = all, docs = List.filter (fn r => Path.hasExt r "md") all} end
+
+    (* A document that cannot be read is reported rather than silently treated as empty: an empty
+     * document contributes no links, which would quietly inflate the unreferenced count. *)
+    fun loadDoc srcDir rel =
+        let val full   = srcDir ^ "/" ^ rel
+            val (src, readOk) =
+                (case readFile (authority, full) of
+                     OK s  => (s, true)
+                   | ERR e => let val _ = print ("read error: " ^ e.reason ^ " (" ^ e.path ^ ")")
+                              in ("", false) end)
+            val mtime  = (case fileStat (authority, full) of OK st => st.mtime | ERR _ => 0)
+            val blocks = Markdown.parse src
+            val hs     = Markdown.headingsOf blocks
+            val title  = (case List.filter (fn h => h.level = 1) hs of
+                              h::_ => h.text
+                            | []   => Path.basename rel)
+        in { rel = rel, src = src, blocks = blocks, headings = hs, title = title,
+             mtime = mtime, readOk = readOk }
+        end
+
+    (* =================================================================== *)
+    (*  Links                                                              *)
+    (* =================================================================== *)
+
+    (* A URL scheme is a ":" reached before any "/" or "#". *)
+    fun hasScheme url =
+        let fun go []        = false
+              | go (c::rest) = if c = ":" then true
+                               else if c = "/" orelse c = "#" then false
+                               else go rest
+        in go (String.explode url) end
+
+    fun splitFrag url =
+        (case String.split "#" url of
+             []      => ("", "")
+           | p::[]   => (p, "")
+           | p::rest => (p, "#" ^ String.concatWith "#" rest))
+
+    (* A link to a directory is taken to mean its index or readme, as a browser would. *)
+    fun resolveTarget docPaths docDir target =
+        let val base  = Path.resolve docDir target
+            val cands = [base, Path.resolve base "index.md", Path.resolve base "README.md"]
+            fun firstKnown []        = []
+              | firstKnown (c::rest) = if List.elem c docPaths then [c] else firstKnown rest
+        in firstKnown cands end
+
+    (* A target that leaves the source tree is still worth following when it names a real file
+     * inside the io-root — the planning documents cite repository sources that way. Its path is
+     * carried relative to the io-root, since that is the only root both trees share. *)
+    fun classify cfg tree docDir url =
+        if url = "" then BROKEN
+        else if String.startsWith "#" url then ANCHOR
+        else if hasScheme url then EXTERNAL
+        else let val (target, frag) = splitFrag url
+             in if target = "" then ANCHOR
+                else (case resolveTarget tree.docs docDir target of
+                          t::_ => INTERNAL (t, frag)
+                        | []   =>
+                            let val resolved = Path.resolve docDir target
+                            in if not (Path.escapes resolved)
+                               then (if List.elem resolved tree.all then ASSET resolved
+                                     else BROKEN)
+                               else let val ioRel = Path.resolve
+                                                      (Path.resolve cfg.sourceDir docDir) target
+                                    in if Path.escapes ioRel then BROKEN
+                                       else (case fileExists (authority, ioRel) of
+                                                 OK true => OUTREF ioRel
+                                               | _       => BROKEN)
+                                    end
+                            end)
+             end
+
+    (* A document link becomes a link to the generated page. A link to a file that is in the tree
+     * but is not a document keeps pointing at the source file, reached from the output tree — no
+     * asset is copied, so nothing can be corrupted by a text-mode copy. *)
+    fun rewriteUrl cfg tree docDir url =
+        (case classify cfg tree docDir url of
+             INTERNAL (t, frag) => Path.relativeTo docDir (Path.withExt t "html") ^ frag
+           | ASSET t            => Path.relativeTo (Path.resolve cfg.outputDir docDir)
+                                                   (Path.resolve cfg.sourceDir t)
+           | OUTREF t           => Path.relativeTo (Path.resolve cfg.outputDir docDir) t
+           | _                  => url)
+
+    (* --- Walking the AST for links -------------------------------------------------- *)
+
+    fun mapInline f n =
+        (case n.tag of
+             "Link"   => {tag = "Link", url = f n.url, inline = List.map (mapInline f) n.inline}
+           | "Emph"   => {tag = "Emph",   inline = List.map (mapInline f) n.inline}
+           | "Strong" => {tag = "Strong", inline = List.map (mapInline f) n.inline}
+           | "Strike" => {tag = "Strike", inline = List.map (mapInline f) n.inline}
+           | _        => n)
+
+    fun mapCells f cells = List.map (fn c => List.map (mapInline f) c) cells
+
+    fun mapBlock f b =
+        (case b.tag of
+             "Heading"    => {tag = "Heading", level = b.level, slug = b.slug,
+                              inline = List.map (mapInline f) b.inline}
+           | "Paragraph"  => {tag = "Paragraph", inline = List.map (mapInline f) b.inline}
+           | "BlockQuote" => {tag = "BlockQuote", blocks = List.map (mapBlock f) b.blocks}
+           | "ListBlock"  => {tag = "ListBlock", ordered = b.ordered,
+                              items = List.map (fn i => {blocks  = List.map (mapBlock f) i.blocks,
+                                                         task    = i.task,
+                                                         checked = i.checked}) b.items}
+           | "Table"      => {tag = "Table", align = b.align,
+                              header = mapCells f b.header,
+                              rows   = List.map (mapCells f) b.rows}
+           | _            => b)
+
+    fun linksInline n =
+        (case n.tag of
+             "Link"   => n.url :: List.concat (List.map linksInline n.inline)
+           | "Emph"   => List.concat (List.map linksInline n.inline)
+           | "Strong" => List.concat (List.map linksInline n.inline)
+           | "Strike" => List.concat (List.map linksInline n.inline)
+           | _        => [])
+
+    fun linksCells cells = List.concat (List.map (fn c => List.concat (List.map linksInline c)) cells)
+
+    fun linksBlock b =
+        (case b.tag of
+             "Heading"    => List.concat (List.map linksInline b.inline)
+           | "Paragraph"  => List.concat (List.map linksInline b.inline)
+           | "BlockQuote" => List.concat (List.map linksBlock b.blocks)
+           | "ListBlock"  => List.concat (List.map (fn i => List.concat
+                                                     (List.map linksBlock i.blocks)) b.items)
+           | "Table"      => List.append (linksCells b.header)
+                                         (List.concat (List.map linksCells b.rows))
+           | _            => [])
+
+    fun linksOf doc = List.concat (List.map linksBlock doc.blocks)
+
+    (* =================================================================== *)
+    (*  Formatting                                                         *)
+    (* =================================================================== *)
+
+    fun pad2 n = String.padLeft 2 "0" (intToString n)
+
+    (* An mtime in milliseconds as YYYY-MM-DD. *)
+    fun formatDate ms =
+        let val d = Time.dateFromInstant (Time.fromEpochMillis (floor ms))
+        in intToString (Time.year d) ^ "-" ^ pad2 (Time.month d) ^ "-" ^ pad2 (Time.day d) end
+
+    (* =================================================================== *)
+    (*  The sidebar tree                                                   *)
+    (* =================================================================== *)
+
+    (* The document a directory stands for, when it has one: its index or its readme. *)
+    fun dirIndex docPaths dir =
+        let fun firstKnown []        = ""
+              | firstKnown (c::rest) = if List.elem c docPaths then c else firstKnown rest
+        in firstKnown [Path.resolve dir "index.md", Path.resolve dir "README.md"] end
+
+    val hourMs = 3600000
+    val dayMs  = 86400000
+
+    (** How recently a document changed, as a class name for the sidebar.
+     *
+     *  Modification time only. "Added" is not derivable here: a checkout writes a file and so
+     *  sets both its modification and its creation time, which makes a restored file
+     *  indistinguishable from a newly written one. Git is the only source that knows. *)
+    fun recencyOf now d =
+        if now - d.mtime < hourMs then "hour"
+        else if now - d.mtime < dayMs then "day"
+        else if now - d.mtime < 7 * dayMs then "week"
+        else ""
+
+    fun treeOf now docs =
+        let val docPaths = List.map (fn d => d.rel) docs
+            fun build prefix entries =
+                let val (files, dirs) = List.partition (fn e => List.length e.segs = 1) entries
+                    val fileNodes =
+                        List.map (fn e => TFILE (List.head e.segs, e.rel, e.tip, e.tag)) files
+                    fun groups []        = []
+                      | groups (e::rest) =
+                          let val h = List.head e.segs
+                              val (same, other) =
+                                  List.partition (fn x => List.head x.segs = h) rest
+                              val kids = List.map (fn x => {segs = List.tail x.segs,
+                                                            rel  = x.rel,
+                                                            tip  = x.tip,
+                                                            tag  = x.tag})
+                                                  (e :: same)
+                              val dir = if prefix = "" then h else prefix ^ "/" ^ h
+                          in TDIR (h, dir, dirIndex docPaths dir, build dir kids)
+                             :: groups other
+                          end
+                in List.append (groups dirs) fileNodes end
+        in build "" (List.map (fn d => { segs = Path.split d.rel
+                                       , rel  = d.rel
+                                       , tip  = d.title ^ " — modified " ^ formatDate d.mtime
+                                       , tag  = recencyOf now d })
+                              docs)
+        end
+
+    (* =================================================================== *)
+    (*  Page assembly                                                      *)
+    (* =================================================================== *)
+
+
+
+
+
+
+    fun pageHead cfg title =
+        [ Html.meta {charset = "utf-8"}
+        , Html.meta {name = "viewport", content = "width=device-width, initial-scale=1"}
+        , Html.element "title" {} [Html.text (title ^ " — " ^ cfg.title)]
+        , Html.script {} [Html.raw Client.themeInitJs]
+        , Html.style {} [Html.raw Theme.css] ]
+
+    (* Whether `dir` is an ancestor of the document being rendered - such directories are emitted
+     * open regardless of any remembered state, so the current document is never hidden. *)
+    fun isAncestorOf currentRel dir =
+        dir <> "" andalso (String.startsWith (dir ^ "/") currentRel)
+
+    (* The sidebar, with links relative to the page's own directory. Directories are <details>
+     * elements: the disclosure control is native, so collapsing needs no script, and only the
+     * remembering of it does. *)
+    fun sidebar cfg nav fromDir currentRel nodes =
+        let (* Whether a path lies in the archive. An archived directory row needs no marking of
+             * its own: it disappears once all of its documents do. *)
+            fun isArchived rel =
+                cfg.archiveDir <> ""
+                andalso (rel = cfg.archiveDir
+                         orelse String.startsWith (cfg.archiveDir ^ "/") rel)
+
+            (* Every document link carries its path as an id, which is how the time filter finds
+             * its modification time in MDNAV_TIMES. *)
+            fun linkFor name rel tip tag =
+                let val href = Path.relativeTo fromDir (Path.withExt rel "html")
+                    fun addClass "" c = c
+                      | addClass cs c = cs ^ " " ^ c
+                    val cls0 = if isArchived rel then addClass tag "archived" else tag
+                    val cls  = if rel = currentRel then addClass cls0 "current" else cls0
+                    val attrs = if cls = ""
+                                then {href = href, title = tip, id = "doc:" ^ rel}
+                                else {href = href, title = tip, class = cls, id = "doc:" ^ rel}
+                in Html.a attrs [Html.text name] end
+
+            fun countFiles ns =
+                List.foldl (fn (n, acc) =>
+                    (case n of TFILE _ => acc + 1
+                             | TDIR (_, _, _, kids) => acc + countFiles kids)) 0 ns
+
+            fun summaryFor name dir idx n =
+                let val count = Html.span {class = "dcount"}
+                                         [Html.text (" " ^ intToString n)]
+                in if idx = ""
+                   then Html.element "summary" {}
+                          [Html.span {class = "dirname"} [Html.text name], count]
+                   else Html.element "summary" {}
+                          [ Html.a {href  = Path.relativeTo fromDir (Path.withExt idx "html"),
+                                    class = "dirname dirlink",
+                                    title = "Open " ^ dir}
+                                   [Html.text name]
+                          , count ]
+                end
+
+            fun nodeLi n =
+                (case n of
+                     TFILE (name, rel, tip, tag) => Html.li {} [linkFor name rel tip tag]
+                   | TDIR  (name, dir, idx, kids) =>
+                       (* The id doubles as the key its open state is remembered under. A
+                        * heading slug can never collide: slugify strips the colon. *)
+                       let val attrs = if isAncestorOf currentRel dir
+                                       then {class = "dir", open = "", id = "dir:" ^ dir}
+                                       else {class = "dir", id = "dir:" ^ dir}
+                       in Html.li {}
+                            [ Html.element "details" attrs
+                                [ summaryFor name dir idx (countFiles kids)
+                                , Html.ul {} (List.map nodeLi kids) ] ]
+                       end)
+            val home   = Path.relativeTo fromDir nav.home
+            val report = Path.relativeTo fromDir nav.links
+            val search = Path.relativeTo fromDir nav.search
+        in Html.element "aside" {class = "sidebar", id = "sidebar"}
+             [ Html.h2 {} [Html.text cfg.title]
+             , Html.p {}
+                 [ Html.a {href = home} [Html.text "Overview"]
+                 , Html.text " · "
+                 , Html.a {href = search} [Html.text "Search"]
+                 , Html.text " · "
+                 , Html.a {href = report} [Html.text "Links"]
+                 , Html.text " · "
+                 , Html.a {href = Path.relativeTo fromDir nav.comments, id = "commentslink"}
+                          [Html.text "Comments"] ]
+             , Html.input {type = "text", id = "filter", placeholder = "Filter documents"}
+             , Html.divElem {class = "timefilter"}
+                 [ Html.button {type = "button", class = "chip on", id = "win-0"}
+                               [Html.text "All"]
+                 , Html.button {type = "button", class = "chip", id = "win-3600000"}
+                               [Html.text "1h"]
+                 , Html.button {type = "button", class = "chip", id = "win-86400000"}
+                               [Html.text "24h"]
+                 , Html.button {type = "button", class = "chip", id = "win-604800000"}
+                               [Html.text "7d"]
+                 , Html.button {type = "button", class = "chip", id = "win-2592000000"}
+                               [Html.text "30d"] ]
+             , Html.divElem {class = "timefilter"}
+                 [ Html.input {type = "number", id = "wincustom", min = "1", placeholder = "n"}
+                 , Html.select {id = "winunit"}
+                     [ Html.option {value = "3600000"} [Html.text "hours"]
+                     , Html.option {value = "86400000"} [Html.text "days"]
+                     , Html.option {value = "604800000"} [Html.text "weeks"] ]
+                 , Html.button {type = "button", class = "chip", id = "expandall"}
+                               [Html.text "Expand all"]
+                 , Html.button {type = "button", class = "chip", id = "collapseall"}
+                               [Html.text "Collapse all"]
+                 , (if cfg.archiveDir = "" then Html.text ""
+                    else Html.button {type = "button", class = "chip", id = "archivetoggle",
+                                      title = "Show documents under " ^ cfg.archiveDir ^ "/"}
+                                     [Html.text "Show archive"]) ]
+             , Html.p {class = "legend"}
+                 [ Html.span {class = "dot hour"} []
+                 , Html.text " 1h · "
+                 , Html.span {class = "dot day"} []
+                 , Html.text " 24h · "
+                 , Html.span {class = "dot week"} []
+                 , Html.text " 7d"
+                 , Html.span {id = "shown"} [] ]
+             , Html.divElem {class = "sbtools"}
+                 [ Html.label {} [Html.text "Theme"]
+                 , Html.select {id = "theme"}
+                     [ Html.option {value = "auto"}  [Html.text "Auto"]
+                     , Html.option {value = "light"} [Html.text "Light"]
+                     , Html.option {value = "dark"}  [Html.text "Dark"]
+                     , Html.option {value = "sepia"} [Html.text "Sepia"] ] ]
+             , Html.divElem {class = "sbdrag", id = "sbdrag"} []
+             , Html.ul {class = "tree"} (List.map nodeLi nodes) ]
+        end
+
+    fun tocNav headings =
+        let val shown = List.filter (fn h => h.level >= 2 andalso h.level <= 4) headings
+        in if List.null shown then Html.text ""
+           else Html.nav {class = "toc"}
+                  [ Html.ul {}
+                      (List.map (fn h =>
+                         Html.li {class = "lvl" ^ intToString h.level}
+                           [Html.a {href = "#" ^ h.slug} [Html.text h.text]]) shown) ]
+        end
+
+    fun shellWith cfg nav tree fromDir currentRel title mainNodes tocNodes extraScripts =
+        Html.document (pageHead cfg title)
+          (List.append
+             [ Html.divElem {class = "layout"}
+                 [ sidebar cfg nav fromDir currentRel tree
+                 , Html.divElem {class = "content"}
+                     [ Html.element "main" {id = "top"} mainNodes
+                     , Html.divElem {class = "maindrag", id = "maindrag"} []
+                     , tocNodes ] ]
+             , Html.script {} [Html.raw nav.timesJs]
+             , Html.script {} [Html.raw Client.sidebarJs] ]
+             extraScripts)
+
+    fun shell cfg nav tree fromDir currentRel title mainNodes tocNodes =
+        shellWith cfg nav tree fromDir currentRel title mainNodes tocNodes []
+
+    (* Overview / dir / dir / document. A directory segment links to its own index when it has
+     * one, and is plain text otherwise. *)
+    fun breadcrumbs cfg nav tree docDir doc =
+        let val docPaths = tree.docs
+            fun crumbFor (dir, name) =
+                let val idx = dirIndex docPaths dir
+                in if idx = "" then Html.span {} [Html.text name]
+                   else Html.a {href = Path.relativeTo docDir (Path.withExt idx "html")}
+                               [Html.text name]
+                end
+            (* Each segment paired with the directory path it stands for. *)
+            fun crumbs prefix []      = []
+              | crumbs prefix (x::xs) =
+                  let val dir = if prefix = "" then x else prefix ^ "/" ^ x
+                  in (dir, x) :: crumbs dir xs end
+            val dirCrumbs = crumbs "" (Path.split docDir)
+            val sep       = Html.span {class = "sep"} [Html.text " / "]
+            val head      = [ Html.a {href = Path.relativeTo docDir nav.home}
+                                     [Html.text "Overview"] ]
+            val mid       = List.concat (List.map (fn c => [sep, crumbFor c]) dirCrumbs)
+            val tail      = [ sep, Html.span {class = "here"}
+                                       [Html.text (Path.basename doc.rel)] ]
+        in Html.nav {class = "crumbs"} (List.append head (List.append mid tail)) end
+
+    (* The documents either side of this one in tree order. *)
+    fun neighbours docs rel =
+        let fun go prev []            = (prev, "", "")
+              | go prev (d::rest) =
+                  if d.rel = rel
+                  then (prev, (case rest of n::_ => n.rel | [] => ""),
+                              (case rest of n::_ => n.title | [] => ""))
+                  else go d rest
+            val (p, nRel, nTitle) = go {rel = "", title = ""} docs
+        in {prevRel = p.rel, prevTitle = p.title, nextRel = nRel, nextTitle = nTitle} end
+
+    fun prevNextNav docDir nb =
+        let fun link rel title cls label =
+                if rel = "" then Html.span {} []
+                else Html.a {href = Path.relativeTo docDir (Path.withExt rel "html"),
+                             class = cls, title = title}
+                            [Html.text (label ^ Path.basename rel)]
+        in if nb.prevRel = "" andalso nb.nextRel = "" then Html.text ""
+           else Html.nav {class = "prevnext"}
+                  [ link nb.prevRel nb.prevTitle "prev" "← "
+                  , link nb.nextRel nb.nextTitle "next" "" ]
+        end
+
+    (* The source as a numbered list, one line per <li id="Ln">. The numbering is what comments
+     * anchor to: in this view a line number is unambiguous, which is not true of the rendered
+     * HTML without source positions in the Markdown AST. *)
+    fun rawView src =
+        let val lines = String.split "\n" src
+            fun lineNode (i, l) =
+                Html.li {id = "L" ^ intToString (i + 1)} [Html.text l]
+        in Html.element "ol" {class = "rawlines", id = "raw"} (List.mapi lineNode lines) end
+
+    val viewToggle =
+        Html.divElem {class = "viewtoggle"}
+          [ Html.button {type = "button", id = "showrendered", class = "on"}
+                        [Html.text "Rendered"]
+          , Html.button {type = "button", id = "showraw"} [Html.text "Source"]
+          , Html.button {type = "button", id = "wrap", class = "on"} [Html.text "Wrap"]
+          , Html.span {class = "hint", id = "commenthint"}
+                      [Html.text "select lines in Source to comment"] ]
+
+    fun docPage cfg nav tree sidebarTree docs doc =
+        let val docDir    = Path.dirname doc.rel
+            val rewritten = List.map (mapBlock (rewriteUrl cfg tree docDir)) doc.blocks
+            val bodyNodes = Markdown.blocksToNodes false rewritten
+            val crumbs    = breadcrumbs cfg nav tree docDir doc
+            val nextPrev  = prevNextNav docDir (neighbours docs doc.rel)
+            val footer    = Html.element "footer" {}
+                              [ Html.text (doc.rel ^ " · last modified " ^ formatDate doc.mtime)
+                              , Html.text " · "
+                              , Html.a {href = "#top"} [Html.text "top ↑"] ]
+            (* The path a comment records: relative to the io-root, so it is openable from the
+             * directory the program was run in. *)
+            val srcPath = Path.resolve cfg.sourceDir doc.rel
+            val docMeta = Html.script {}
+                            [ Html.raw ("window.MDNAV_DOC = " ^ Json.stringify
+                                          {path = srcPath, rel = doc.rel, title = doc.title}
+                                        ^ ";\n") ]
+        in shellWith cfg nav sidebarTree docDir doc.rel doc.title
+             (List.append [ crumbs, viewToggle
+                          , Html.divElem {class = "rendered", id = "rendered"} bodyNodes
+                          , rawView doc.src ]
+                          [nextPrev, footer])
+             (tocNav doc.headings)
+             [ docMeta, Html.script {} [Html.raw Client.docJs] ]
+        end
+
+    (* =================================================================== *)
+    (*  Generated overview, link report and search pages                   *)
+    (* =================================================================== *)
+
+    fun overviewPage cfg nav tree docs =
+        let fun row d =
+                Html.tr {}
+                  [ Html.td {} [Html.a {href = Path.withExt d.rel "html"} [Html.text d.title]]
+                  , Html.td {} [Html.code {} [Html.text d.rel]]
+                  , Html.td {class = "date"} [Html.text (formatDate d.mtime)] ]
+            val table =
+                Html.table {}
+                  [ Html.thead {} [ Html.tr {} [ Html.th {} [Html.text "Document"]
+                                               , Html.th {} [Html.text "Path"]
+                                               , Html.th {} [Html.text "Last modified"] ] ]
+                  , Html.tbody {} (List.map row docs) ]
+        in shellWith cfg nav tree "" "" cfg.title
+                 [ Html.h1 {} [Html.text cfg.title]
+                 , Html.p {} [Html.text (intToString (List.length docs)
+                                         ^ " documents compiled from " ^ cfg.sourceDir ^ "/.")]
+                 , table ]
+                 (Html.text "")
+                 [ Html.script {} [Html.raw Client.tableJs] ]
+        end
+
+    (* Broken links, links leaving the tree, and documents nothing links to. *)
+    fun linkReport cfg tree docs =
+        let fun forDoc d =
+                let val docDir = Path.dirname d.rel
+                in List.map (fn u => {from = d.rel, url = u, cls = classify cfg tree docDir u})
+                            (linksOf d)
+                end
+            val all = List.concat (List.map forDoc docs)
+            fun isBroken l  = (case l.cls of BROKEN  => true | _ => false)
+            fun isOutside l = (case l.cls of OUTREF _ => true | _ => false)
+            fun isAsset l   = (case l.cls of ASSET _ => true | _ => false)
+            fun internalTargets [] = []
+              | internalTargets (l::rest) =
+                  (case l.cls of
+                       INTERNAL (t, _) => t :: internalTargets rest
+                     | _               => internalTargets rest)
+            val linked  = internalTargets all
+            val orphans = List.filter (fn r => not (List.elem r linked)) tree.docs
+        in { broken  = List.filter isBroken all
+           , outside = List.filter isOutside all
+           , assets  = List.filter isAsset all
+           , orphans = orphans
+           , total   = List.length all }
+        end
+
+    fun reportPage cfg nav tree rep =
+        let fun linkRow l =
+                Html.tr {} [ Html.td {} [Html.code {} [Html.text l.from]]
+                           , Html.td {} [Html.code {} [Html.text l.url]] ]
+            fun linkTable ls =
+                if List.null ls then Html.p {} [Html.text "None."]
+                else Html.table {}
+                       [ Html.thead {} [ Html.tr {} [ Html.th {} [Html.text "In document"]
+                                                    , Html.th {} [Html.text "Link"] ] ]
+                       , Html.tbody {} (List.map linkRow ls) ]
+        in shell cfg nav tree "" "" "Link report"
+             [ Html.h1 {} [Html.text "Link report"]
+             , Html.p {} [Html.text (intToString rep.total ^ " links examined.")]
+             , Html.h2 {id = "broken"} [Html.text ("Broken links ("
+                                                   ^ intToString (List.length rep.broken) ^ ")")]
+             , Html.p {} [Html.text "The target does not exist in the source tree."]
+             , linkTable rep.broken
+             , Html.h2 {id = "outside"} [Html.text ("Links leaving the tree ("
+                                                    ^ intToString (List.length rep.outside) ^ ")")]
+             , Html.p {} [Html.text ("The target is a real file above the source directory, "
+                                     ^ "reached from the output tree.")]
+             , linkTable rep.outside
+             , Html.h2 {id = "assets"} [Html.text ("Links to non-document files ("
+                                                   ^ intToString (List.length rep.assets) ^ ")")]
+             , Html.p {} [Html.text ("The target is in the source tree but is not a Markdown "
+                                     ^ "document, so the link points at the source file.")]
+             , linkTable rep.assets
+             , Html.h2 {id = "orphans"} [Html.text ("Unreferenced documents ("
+                                                    ^ intToString (List.length rep.orphans) ^ ")")]
+             , Html.p {} [Html.text "No other document in the tree links to these."]
+             , (if List.null rep.orphans then Html.p {} [Html.text "None."]
+                else Html.ul {} (List.map (fn r =>
+                       Html.li {} [Html.a {href = Path.withExt r "html"}
+                                          [Html.code {} [Html.text r]]]) rep.orphans)) ]
+             (Html.text "")
+        end
+
+    (* The search index is inlined into the one page that uses it, so nothing has to be fetched
+     * at runtime — a file:// page cannot fetch a sibling file under default browser settings. *)
+    fun searchPage cfg nav tree docs =
+        let val entries = List.map (fn d => { path  = Path.withExt d.rel "html"
+                                            , title = d.title
+                                            , text  = d.src }) docs
+            val indexJs = "window.MDNAV = " ^ Json.stringify entries ^ ";\n"
+        in Html.document (pageHead cfg "Search")
+             [ Html.divElem {class = "layout"}
+                 [ sidebar cfg nav "" "" tree
+                 , Html.divElem {class = "content"}
+                     [ Html.element "main" {}
+                         [ Html.h1 {} [Html.text "Search"]
+                         , Html.input {type = "text", id = "q",
+                                       placeholder = "Search all documents"}
+                         , Html.divElem {id = "results"} [] ] ] ]
+             , Html.script {} [Html.raw Client.sidebarJs]
+             , Html.script {} [Html.raw indexJs]
+             , Html.script {} [Html.raw Client.searchJs] ]
+        end
+
+    (* The comments page: everything stored while browsing, turned into a comments.md to
+     * download or copy. `existing` is the current contents of the comments file when the run
+     * found one, shown for context so a session's earlier round is visible alongside the new
+     * one. *)
+    fun commentsPage cfg nav tree existing =
+        let val hasExisting = existing <> ""
+        in shellWith cfg nav tree "" "" "Comments"
+             [ Html.h1 {} [Html.text "Comments"]
+             , Html.p {}
+                 [ Html.text ("Comments are recorded against a source document and a line range "
+                              ^ "in its Source view, and are held in this browser until you "
+                              ^ "export them. A page opened from the filesystem cannot append to "
+                              ^ "a file on disk, so exporting is a download or a copy.") ]
+             , Html.divElem {class = "cactions"}
+                 [ Html.button {type = "button", id = "download"}
+                               [Html.text ("Download " ^ Path.basename cfg.commentsFile)]
+                 , Html.button {type = "button", id = "copy"} [Html.text "Copy to clipboard"]
+                 , Html.button {type = "button", id = "clear"} [Html.text "Clear all"]
+                 , Html.span {id = "copied", class = "hint"} [] ]
+             , Html.p {class = "hint"}
+                 [ Html.text ("Target file: " ^ cfg.commentsFile
+                              ^ " — move the download there, or paste the copy into it.") ]
+             , Html.divElem {id = "clist"} []
+             , Html.h2 {id = "asmarkdown"} [Html.text "comments.md"]
+             , Html.element "pre" {id = "preview"} []
+             , (if hasExisting
+                then Html.section {}
+                       [ Html.h2 {id = "already"}
+                                 [Html.text ("Already in " ^ cfg.commentsFile)]
+                       , Html.element "pre" {} [Html.text existing] ]
+                else Html.text "") ]
+             (Html.text "")
+             [ Html.script {} [Html.raw (Client.commentsJs cfg)] ]
+        end
+
+    (* =================================================================== *)
+    (*  Writing                                                            *)
+    (* =================================================================== *)
+
+    fun ensureDirFor outDir rel =
+        let val d = Path.dirname rel
+        in if d = "" then makeDir (authority, outDir)
+           else makeDir (authority, outDir ^ "/" ^ d)
+        end
+
+    fun emit outDir rel html =
+        let val _ = ensureDirFor outDir rel
+        in (case writeFile (authority, outDir ^ "/" ^ rel, html) of
+                OK _   => 0
+              | ERR e  => (print ("write error: " ^ e.reason ^ " (" ^ e.path ^ ")"); 1))
+        end
+
+    (* =================================================================== *)
+    (*  Main                                                               *)
+    (* =================================================================== *)
+
+    val args       = getCliArgs authority
+    val configPath = (case args of p::_ => p | [] => defaultConfigPath)
+
+    fun run cfg =
+        let val tree     = collectTree cfg.sourceDir
+            val docPaths = tree.docs
+        in if List.null docPaths
+           then print ("no .md documents found under " ^ cfg.sourceDir ^ "/")
+           else
+             let (* A source document may itself render to index.html — `_dev_planning/index.md`
+                  * does. Generated pages step aside rather than overwrite one. *)
+                 val taken = List.map (fn r => Path.withExt r "html") docPaths
+                 fun freeName base = if List.elem base taken then "_mdnav-" ^ base else base
+                 val docs   = List.map (loadDoc cfg.sourceDir) docPaths
+                 val now    = Time.toEpochMillis (Time.now ())
+                 val sbTree = treeOf now docs
+
+                 (* rel -> modification time, so the sidebar can filter on an arbitrary window
+                  * rather than only the tiers baked into the class names. Written out by hand
+                  * because a Troupe record cannot take keys computed at run time. *)
+                 fun timeEntry d = Json.stringify d.rel ^ ":" ^ intToString (floor d.mtime)
+                 val nav = { home     = freeName "index.html"
+                           , links    = freeName "links.html"
+                           , search   = freeName "search.html"
+                           , comments = freeName "comments.html"
+                           , timesJs  = "window.MDNAV_TIMES = {"
+                                      ^ String.concatWith "," (List.map timeEntry docs)
+                                      ^ "};\n" }
+                 val rep   = linkReport cfg tree docs
+                 val fails = List.foldl (fn (d, acc) =>
+                                 acc + emit cfg.outputDir (Path.withExt d.rel "html")
+                                             (docPage cfg nav tree sbTree docs d))
+                               0 docs
+                 val _ = emit cfg.outputDir nav.home   (overviewPage cfg nav sbTree docs)
+                 val _ = emit cfg.outputDir nav.links  (reportPage cfg nav sbTree rep)
+                 val _ = emit cfg.outputDir nav.search (searchPage cfg nav sbTree docs)
+                 val existing = (case readFile (authority, cfg.commentsFile) of
+                                     OK t  => t
+                                   | ERR _ => "")
+                 val _ = emit cfg.outputDir nav.comments
+                              (commentsPage cfg nav sbTree existing)
+                 val unread = List.length (List.filter (fn d => not d.readOk) docs)
+             in print ( intToString (List.length docs) ^ " documents -> " ^ cfg.outputDir ^ "/"
+                      ^ "\n  broken links:   " ^ intToString (List.length rep.broken)
+                      ^ "\n  leaving tree:   " ^ intToString (List.length rep.outside)
+                      ^ "\n  to non-docs:    " ^ intToString (List.length rep.assets)
+                      ^ "\n  unreferenced:   " ^ intToString (List.length rep.orphans)
+                      ^ "\n  unreadable:     " ^ intToString unread
+                      ^ "\n  write failures: " ^ intToString fails
+                      ^ "\n  open " ^ cfg.outputDir ^ "/" ^ nav.home )
+             end
+        end
+
+in (case loadConfig configPath of
+        ERR msg => print ("md-navigator: " ^ msg)
+      | OK cfg  => run cfg)
+end

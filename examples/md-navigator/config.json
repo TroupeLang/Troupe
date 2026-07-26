@@ -1,0 +1,7 @@
+{
+  "sourceDir": "_dev_planning",
+  "outputDir": "out/md-navigator",
+  "title": "Troupe development planning",
+  "commentsFile": "comments.md",
+  "archiveDir": "_archive"
+}

@@ -56,9 +56,11 @@ benchmark-deps: check-compiler
 # The io-root must contain the source directory, the output directory and the config file, all of
 # which the config names relative to it -- which is why it is the repository root rather than
 # _dev_planning/ itself.
+# Depends on lib rather than only on the compiler: the program imports SimpleFileIO and Markdown,
+# so a lib/out/ left over from before a merge fails with "Library 'SimpleFileIO' does not export".
 IOROOT ?= $(CURDIR)
 CONFIG ?= examples/md-navigator/config.json
-dev-planning-to-html: check-compiler
+dev-planning-to-html: lib
 	@if [ ! -d "$(IOROOT)/_dev_planning" ]; then \
 		echo "No _dev_planning/ under $(IOROOT). It is a separate repository and is absent" >&2; \
 		echo "from worktrees; pass IOROOT=<checkout that has it>." >&2; \

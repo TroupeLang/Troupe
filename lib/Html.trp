@@ -60,22 +60,16 @@ let (* --- Helper Functions --- *)
 
     (* --- Escaping Functions --- *)
 
-    (* Base escape function for common HTML entities: &, <, > *)
-    fun escapeBase c =
-        if c = "&" then "&amp;"
-        else if c = "<" then "&lt;"
-        else if c = ">" then "&gt;"
-        else c
-
     (* Escape HTML special characters for text content: &, <, >
      *
      * Scans by character code and copies unescaped runs whole, rather than mapping over the
-     * string's characters: String.translate explodes into a list and allocates a one-character
-     * string per position, which on rendered output is most of the cost. Text needing no escape
-     * at all -- the common case -- is returned unchanged without allocating. *)
-    val ampCode = 38
-    val ltCode  = 60
-    val gtCode  = 62
+     * string's characters: a one-character string per position is most of the cost on rendered
+     * output. Text needing no escape at all -- the common case -- is returned unchanged without
+     * allocating. *)
+    val ampCode   = 38
+    val ltCode    = 60
+    val gtCode    = 62
+    val slashCode = 47
 
     fun escapeOf 38 = "&amp;"
       | escapeOf 60 = "&lt;"
@@ -119,16 +113,22 @@ let (* --- Helper Functions --- *)
     (* Escape content for script/style tags.
      * HTML5 spec: script/style content ends at </script or </style (case-insensitive).
      * We escape </ as <\/ which is valid in JavaScript/CSS and prevents tag injection.
-     * Note: This processes character-by-character, escaping < followed by / *)
+     * Scanned for the pair the same way as escapeHtml above: this runs over whole inlined
+     * scripts, which are the longest strings a page carries. *)
     fun escapeScriptContent s =
-        let val chars = String.explode s
-            fun escape [] acc = List.reverse acc
-              | escape c::[] acc = List.reverse (c::acc)
-              | escape c::next::rest acc =
-                  if c = "<" andalso next = "/"
-                  then escape rest ("/"::"\\"::"<"::acc)  (* </ becomes <\/ *)
-                  else escape (next::rest) (c::acc)
-        in String.concat (escape chars []) end
+        let val n = String.size s
+            fun scan i = if i + 1 >= n then n
+                         else if String.subCode (s, i) = ltCode
+                                 andalso String.subCode (s, i + 1) = slashCode
+                         then i
+                         else scan (i + 1)
+            fun go from acc =
+                let val j = scan from
+                in if j >= n
+                   then String.concat (List.reverse (String.substring (s, from, n) :: acc))
+                   else go (j + 2) ("<\\/" :: String.substring (s, from, j) :: acc)
+                end
+        in if scan 0 >= n then s else go 0 [] end
 
     (* --- Core Node Constructors --- *)
 

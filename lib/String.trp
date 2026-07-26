@@ -67,15 +67,34 @@ let
 
     (* TODO: `explodeCode` where one obtaing the list of all charCodes (with NULL termination?). *)
 
-    (** Applies `f` to each element of `f` from left to right, returning the resulting string. *)
-    fun map f s = implode(List.map f (explode s))
+    (** Returns the string generated from `s` by mapping each character in `s` by `f`.
+     *
+     * Scanned in place rather than exploded into a list: the characters `f` leaves alone are
+     * copied as whole runs, so a translation that touches a few characters of a long string --
+     * escaping, mostly -- allocates once per touched character rather than once per character.
+     * `f` is still applied to every character, as a one-character string. *)
+    fun translate f s =
+        let val n = size s
+            (* `from` is the start of the run not yet copied into `acc`. *)
+            fun go i from acc =
+                if i >= n then acc ^ substring (s, from, n)
+                else let val c = sub (s, i)
+                         val r = f c
+                     in if r = c then go (i + 1) from acc
+                        else go (i + 1) (i + 1) (acc ^ substring (s, from, i) ^ r)
+                     end
+        in go 0 0 "" end
+
+    (* TODO: `translateCode` where one maps over charCodes instead. `translate` still builds a
+     * one-character string per position to pass to `f`, which a code-point version would not. *)
+
+    (** Applies `f` to each character of `s` from left to right, returning the resulting string.
+     *
+     * The same operation as `translate`, which does not require `f` to return a single
+     * character. *)
+    val map = translate
 
     (* TODO: `mapCode` where one maps over charCodes instead. *)
-
-    (** Returns the string generated from `s` by mapping each character in `s` by `f`.  *)
-    fun translate f s = concat(List.map f (explode s))
-
-    (* TODO: `translateCode` where one maps over charCodes instead. *)
 
     (*--- Repetition ---*)
 

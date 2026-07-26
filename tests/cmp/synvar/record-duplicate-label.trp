@@ -1,0 +1,6 @@
+(* A record payload type may not repeat a field label. Unlike a product, whose
+   components are positional, a record's components are addressed by label, so a
+   repeated label has no reading. *)
+datatype t = c of {a : int, a : string}
+
+let val x = c {a = 3} in print x end

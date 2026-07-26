@@ -32,7 +32,7 @@ module SynVarHash
   ) where
 
 import           Data.Bits           (shiftL, shiftR, (.&.))
-import           Data.List           (sortOn)
+import           Data.List           (nub, sortOn)
 import           Data.Word           (Word8)
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString.Lazy.Char8 as BLC
@@ -49,6 +49,10 @@ data TyNF
   | Ext String String -- ^ reference to a previously hashed group: (group hash, member name)
   | Prod [TyNF]      -- ^ n-ary product (n >= 2)
   | App [TyNF] TyRef -- ^ n-ary application to a built-in / referenced target
+  | Rec [(String, TyNF)]
+      -- ^ a record type with n >= 0 fields. Canonicalization sorts the fields
+      --   by label, so field order in the source does not affect identity; the
+      --   caller is responsible for rejecting duplicate labels.
   deriving (Eq, Show)
 
 -- | The target of an application (spec section 5): a built-in type
@@ -86,6 +90,8 @@ renderTy (In n)     = sexp ["in", n]
 renderTy (Ext h n)  = sexp ["ext", h, n]
 renderTy (Prod tys) = sexp ("prod" : map renderTy tys)
 renderTy (App tys tgt) = sexp ("app" : map renderTy tys ++ [renderTarget tgt])
+renderTy (Rec flds) = sexp ("rec" : map renderFld (sortOn fst flds))
+  where renderFld (l, t) = sexp ["fld", l, renderTy t]
 
 renderTarget :: TyRef -> String
 renderTarget (RBuiltin n) = sexp ["builtin", n]
@@ -184,7 +190,17 @@ sxTy (SNode (SAtom "app" : rest))
       as  <- mapM sxTy (init rest)
       tgt <- sxTarget (last rest)
       return (App as tgt)
+sxTy (SNode (SAtom "rec" : flds))            = do
+  fs <- mapM sxFld flds
+  let ls = map fst fs
+  if length (nub ls) /= length ls
+    then Left "duplicate field label in a record type node"
+    else Right (Rec fs)
 sxTy _ = Left "malformed type node"
+
+sxFld :: Sx -> Either String (String, TyNF)
+sxFld (SNode [SAtom "fld", SAtom l, ty]) = do t <- sxTy ty; return (l, t)
+sxFld _ = Left "expected a (fld ...) node"
 
 sxTarget :: Sx -> Either String TyRef
 sxTarget (SNode [SAtom "builtin", SAtom n])     = Right (RBuiltin n)

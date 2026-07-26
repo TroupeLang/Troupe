@@ -137,6 +137,10 @@ data SynTyExp
     | STyProd [SynTyExp]       -- ^ an n-ary product @t1 * ... * tn@ (n >= 2), flat
     | STyApp [SynTyExp] QName  -- ^ postfix application: @ty name@ (one argument)
                                --   or @(t1, ..., tn) name@ (several)
+    | STyRecord [(String, SynTyExp)]
+                               -- ^ a record type @{l1 : t1, ..., ln : tn}@ (n >= 0),
+                               --   fields in source order; duplicate labels are
+                               --   rejected during payload resolution
   deriving (Eq, Show)
 
 -- | A single constructor: the source position of its name, its name, and its
@@ -241,6 +245,9 @@ ppSynTyExp = ppTy False
     ppTy _ (STyApp [t] q) = ppTy True t <+> ppQName q
     ppTy _ (STyApp ts q)  =
       PP.parens (hsep (PP.punctuate (text ",") (map (ppTy False) ts))) <+> ppQName q
+    ppTy _ (STyRecord flds) =
+      PP.braces (hsep (PP.punctuate (text ",")
+        [ text l <+> text ":" <+> ppTy False t | (l, t) <- flds ]))
 
 -- | Pretty print a located term at given precedence
 ppLTerm :: Precedence -> LTerm -> PP.Doc

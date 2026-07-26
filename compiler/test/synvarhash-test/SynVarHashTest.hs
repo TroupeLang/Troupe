@@ -192,6 +192,74 @@ treeCanon =
 treeHash :: String
 treeHash = "l4t3v11o49m7cc0kgbcekj0nb8jml2qtc4bcpif69kgmuiqkl5tg"
 
+-- rect: a record payload. Fields are fed in an order that is neither source
+-- order nor sorted order, proving that field sorting happens inside the module.
+rectGroup :: Group
+rectGroup =
+  [ ("rect", 0
+    , [ ("MK", Just (Rec [ ("w", Prim "int")
+                         , ("h", Prim "int")
+                         , ("name", Prim "string") ])) ])
+  ]
+
+rectCanon :: String
+rectCanon =
+  "(group (dt rect 0 (ctor MK (rec (fld h (prim int)) "
+    ++ "(fld name (prim string)) (fld w (prim int))))))"
+
+rectHash :: String
+rectHash = "e2bk39u8t1ddr5jn0u9ir0srh86l5lplqvff2on831jv50snfb70"
+
+-- rect with the same fields permuted: identity must not depend on field order.
+rectPermutedGroup :: Group
+rectPermutedGroup =
+  [ ("rect", 0
+    , [ ("MK", Just (Rec [ ("name", Prim "string")
+                         , ("w", Prim "int")
+                         , ("h", Prim "int") ])) ])
+  ]
+
+-- rect with one field renamed: labels are part of the identity.
+rectRenamedGroup :: Group
+rectRenamedGroup =
+  [ ("rect", 0
+    , [ ("MK", Just (Rec [ ("w", Prim "int")
+                         , ("height", Prim "int")
+                         , ("name", Prim "string") ])) ])
+  ]
+
+-- nil: the empty record, the degenerate node.
+nilRecGroup :: Group
+nilRecGroup = [ ("nil", 0, [ ("N", Just (Rec [])) ]) ]
+
+nilRecCanon :: String
+nilRecCanon = "(group (dt nil 0 (ctor N (rec))))"
+
+nilRecHash :: String
+nilRecHash = "pncrcg4d1h6v55vmo4vickqblo7cvrouitc4e8crpjfq9hihguj0"
+
+-- node: a record whose fields nest every other type node -- a type variable, a
+-- self-application under the built-in list, and an ext reference.
+nodeGroup :: Group
+nodeGroup =
+  [ ("node", 1
+    , [ ("N", Just (Rec [ ("val",  Var 0)
+                        , ("kids", App [App [Var 0] (RIn "node")] (RBuiltin "list"))
+                        , ("tag",  Ext hBinop "binop") ]))
+      , ("EMPTY", Nothing)
+      ])
+  ]
+
+nodeCanon :: String
+nodeCanon =
+  "(group (dt node 1 (ctor EMPTY) (ctor N (rec "
+    ++ "(fld kids (app (app (var 0) (in node)) (builtin list))) "
+    ++ "(fld tag (ext " ++ hBinop ++ " binop)) "
+    ++ "(fld val (var 0))))))"
+
+nodeHash :: String
+nodeHash = "5cn6o0rb02vpe89b1j33362mldce1tqp5hn44hmejs1ca9k344ig"
+
 main :: IO ()
 main = defaultMain $ testGroup "SynVarHash exact vectors"
   [ testGroup "6.1 option"
@@ -237,6 +305,28 @@ main = defaultMain $ testGroup "SynVarHash exact vectors"
   , testGroup "6.5 tree (self-application)"
     [ testCase "canonical" $ canonicalGroup treeGroup @?= treeCanon
     , testCase "hash"      $ groupHash treeGroup @?= treeHash
+    ]
+  , testGroup "rect (record payload)"
+    [ testCase "canonical" $ canonicalGroup rectGroup @?= rectCanon
+    , testCase "hash"      $ groupHash rectGroup @?= rectHash
+    ]
+  , testGroup "nil (empty record)"
+    [ testCase "canonical" $ canonicalGroup nilRecGroup @?= nilRecCanon
+    , testCase "hash"      $ groupHash nilRecGroup @?= nilRecHash
+    ]
+  , testGroup "node (record nesting every other type node)"
+    [ testCase "canonical" $ canonicalGroup nodeGroup @?= nodeCanon
+    , testCase "hash"      $ groupHash nodeGroup @?= nodeHash
+    ]
+  , testGroup "record identity"
+    -- Field order is canonicalized away; field labels are not. Without the
+    -- sort in renderTy the first case fails; without labels in the encoding
+    -- the second does.
+    [ testCase "field order does not change the hash" $
+        groupHash rectPermutedGroup @?= groupHash rectGroup
+    , testCase "renaming a field changes the hash" $
+        assertBool "height /= h must alter identity"
+          (groupHash rectRenamedGroup /= groupHash rectGroup)
     ]
   , testGroup "constructor tags"
     [ testCase "expr#BIN" $
@@ -334,6 +424,9 @@ main = defaultMain $ testGroup "SynVarHash exact vectors"
     , roundTrip "pair"    pairGroup
     , roundTrip "pr"      prGroup
     , roundTrip "tree"    treeGroup
+    , roundTrip "rect"    rectGroup
+    , roundTrip "nilRec"  nilRecGroup
+    , roundTrip "node"    nodeGroup
     ]
   ]
 
@@ -348,6 +441,7 @@ genJS mode records =
 -- and the hash recomputed from the parsed form must match the original. This
 -- pins @parseGroup@ as the inverse of @canonicalGroup@ on canonical input for
 -- every worked vector (products, applications, ext references, built-ins,
+-- records including the empty one,
 -- multiple type parameters, self-application, mutual recursion).
 roundTrip :: String -> Group -> TestTree
 roundTrip name g = testGroup name

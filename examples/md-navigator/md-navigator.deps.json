@@ -1,5 +1,6 @@
 {
   "deps": [
+    {"path": "../progress/Progress", "hash": "i4ttjoj2vf5mdvdobur9b2t8u4isg5p2hf2md69ah34racrjbr1g", "name": "../progress/Progress"},
     {"path": "Client", "hash": "pq0lo5hmqqkgrpglk7avmfmi9bkeaf1tij0gu6403b8f09pm79mg", "name": "Client"},
     {"path": "Path", "hash": "i133d0fbkp8hu7c10jf32h2a0nub82e14lbkks66p2nq6n0076f0", "name": "Path"},
     {"path": "Theme", "hash": "puquudqcu5fkqbnpf3vl399evblk8pe5t7tqsep5hd6t26i65agg", "name": "Theme"}

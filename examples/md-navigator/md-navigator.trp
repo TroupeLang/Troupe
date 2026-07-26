@@ -22,6 +22,7 @@ import Markdown
 import Time
 import { readFile, writeFile, readDir, makeDir, fileStat, fileExists } SimpleFileIO
 import "./Path"
+import "../progress/Progress"
 import "./Theme"
 import "./Client"
 
@@ -716,7 +717,14 @@ let (* =================================================================== *)
                   * does. Generated pages step aside rather than overwrite one. *)
                  val taken = List.map (fn r => Path.withExt r "html") docPaths
                  fun freeName base = if List.elem base taken then "_mdnav-" ^ base else base
-                 val docs   = List.map (loadDoc cfg.sourceDir) docPaths
+                 (* The two long phases report progress. Both bars are Troupe: the module writes
+                  * to stdout itself rather than a wrapper timing the process from outside. *)
+                 val pLoad  = Progress.start authority "Parsing  " (List.length docPaths)
+                 val (pLoad', docsRev) =
+                     List.foldl (fn (r, (p, acc)) =>
+                         (Progress.step p, loadDoc cfg.sourceDir r :: acc)) (pLoad, []) docPaths
+                 val _      = Progress.finish pLoad'
+                 val docs   = List.reverse docsRev
                  val now    = Time.toEpochMillis (Time.now ())
                  val sbTree = treeOf now docs
 
@@ -732,10 +740,14 @@ let (* =================================================================== *)
                                       ^ String.concatWith "," (List.map timeEntry docs)
                                       ^ "};\n" }
                  val rep   = linkReport cfg tree docs
-                 val fails = List.foldl (fn (d, acc) =>
-                                 acc + emit cfg.outputDir (Path.withExt d.rel "html")
-                                             (docPage cfg nav tree sbTree docs d))
-                               0 docs
+                 val pPage = Progress.start authority "Rendering" (List.length docs)
+                 val (pPage', fails) =
+                     List.foldl (fn (d, (p, acc)) =>
+                         ( Progress.step p
+                         , acc + emit cfg.outputDir (Path.withExt d.rel "html")
+                                      (docPage cfg nav tree sbTree docs d) ))
+                       (pPage, 0) docs
+                 val _     = Progress.finish pPage'
                  val _ = emit cfg.outputDir nav.home   (overviewPage cfg nav sbTree docs)
                  val _ = emit cfg.outputDir nav.links  (reportPage cfg nav sbTree rep)
                  val _ = emit cfg.outputDir nav.search (searchPage cfg nav sbTree docs)

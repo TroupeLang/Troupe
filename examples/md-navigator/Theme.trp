@@ -67,8 +67,12 @@ let
       ^ ":root[data-theme=dark] {\n" ^ darkVars ^ "}\n"
       ^ ":root[data-theme=sepia] {\n" ^ sepiaVars ^ "}\n"
       ^ "html { color-scheme: light dark; }\n"
-      (* Two kinds of content, two faces, and no sans anywhere: prose is set in a serif and
-       * every identifier - paths, chrome, code - in the mono face. Both stacks are resident,
+      (* Two faces, split by what the text *is* rather than by which region it sits in. The mono
+       * face is for machine-readable strings: paths, hashes, code, the terse time scale. The
+       * serif is for language wherever it appears - document prose, headings, the site title,
+       * table cells, contents entries, control labels. A table is mostly prose, and the
+       * identifiers inside it are already marked up as code, so setting the whole table in mono
+       * erased the very distinction the backticks were carrying. Both stacks are resident,
        * since a page opened from the filesystem can fetch nothing. *)
       ^ ":root {\n"
       ^ "  --serif: Charter, 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;\n"
@@ -91,14 +95,15 @@ let
       (* --- sidebar chrome: four rows, each doing one job ------------------------------- *)
       ^ ".sbhead { display: flex; align-items: baseline; justify-content: space-between;\n"
       ^ "  gap: 0.5rem; }\n"
-      ^ ".sbhead .brand { font-size: 0.68rem; letter-spacing: 0.13em; text-transform: uppercase;\n"
-      ^ "  color: var(--fg); text-decoration: none; font-weight: 600; }\n"
+      ^ ".sbhead .brand { font-family: var(--serif); font-size: 1rem; color: var(--fg);\n"
+      ^ "  text-decoration: none; font-weight: 600; letter-spacing: -0.01em; }\n"
       ^ ".themesel { font: inherit; font-size: 0.68rem; border: 0; background: none;\n"
       ^ "  color: var(--fg-dim); padding: 0; }\n"
-      ^ ".sbnav { display: flex; gap: 0.55rem; margin: 0.45rem 0 0.5rem; font-size: 0.68rem; }\n"
+      ^ ".sbnav { display: flex; gap: 0.6rem; margin: 0.4rem 0 0.5rem;\n"
+      ^ "  font-family: var(--serif); font-size: 0.8rem; }\n"
       ^ ".sbnav a { color: var(--fg-muted); text-decoration: none; }\n"
       ^ ".sbnav a:hover { color: var(--fg); }\n"
-      ^ ".sidebar input#filter { width: 100%; font: inherit; font-size: 0.72rem;\n"
+      ^ ".sidebar input#filter { width: 100%; font-family: var(--serif); font-size: 0.82rem;\n"
       ^ "  padding: 0.3rem 0.4rem; background: var(--bg); color: var(--fg);\n"
       ^ "  border: 1px solid var(--border); border-radius: 3px; }\n"
       ^ ".sbfilters { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem;\n"
@@ -107,8 +112,10 @@ let
        * panel rather than an index. *)
       (* Interactive labels sit at --fg-muted, which clears 4.5:1 against the sidebar ground;
        * --fg-faint measures 1.7:1 at this size and reads as disabled rather than quiet. *)
-      ^ ".sbfilters .tog { font: inherit; font-size: 0.68rem; border: 0; background: none;\n"
-      ^ "  padding: 0; color: var(--fg-muted); cursor: pointer; }\n"
+      ^ ".sbfilters .tog { font-family: var(--mono); font-size: 0.68rem; border: 0;\n"
+      ^ "  background: none; padding: 0; color: var(--fg-muted); cursor: pointer; }\n"
+      ^ "#expandall, #collapseall, #archivetoggle { font-family: var(--serif);\n"
+      ^ "  font-size: 0.78rem; }\n"
       ^ ".sbfilters .tog:hover { color: var(--fg); }\n"
       ^ ".sbfilters .tog.on { color: var(--fg); text-decoration: underline;\n"
       ^ "  text-underline-offset: 0.2em; }\n"
@@ -158,8 +165,8 @@ let
       ^ ".maindrag { flex: 0 0 6px; align-self: stretch; cursor: col-resize; }\n"
       ^ ".maindrag:hover { background: var(--border-strong); }\n"
       ^ ".toc { width: 14rem; flex: 0 0 14rem; position: sticky; top: 0; max-height: 100vh;\n"
-      ^ "  overflow-y: auto; padding: 2.2rem 1rem; font-family: var(--mono);\n"
-      ^ "  font-size: 0.68rem; line-height: 1.6; }\n"
+      ^ "  overflow-y: auto; padding: 2.4rem 1rem; font-family: var(--serif);\n"
+      ^ "  font-size: 0.82rem; line-height: 1.45; }\n"
       ^ ".toc ul { list-style: none; margin: 0; padding: 0; }\n"
       ^ ".toc a { color: var(--fg-muted); text-decoration: none; display: block; padding: 0.12rem 0; }\n"
       ^ ".toc a:hover { color: var(--link); }\n"
@@ -180,8 +187,8 @@ let
       ^ "pre { background: var(--surface-3); border: 1px solid var(--border-light); border-radius: 5px; padding: 0.8rem; "
       ^ "overflow-x: auto; }\n"
       ^ "pre code { background: none; padding: 0; font-size: 0.74rem; }\n"
-      ^ "table { border-collapse: collapse; font-family: var(--mono); font-size: 0.72rem;\n"
-      ^ "  width: 100%; margin: 1.2rem 0; }\n"
+      ^ "table { border-collapse: collapse; font-family: var(--serif); font-size: 0.88rem;\n"
+      ^ "  font-variant-numeric: tabular-nums; width: 100%; margin: 1.2rem 0; }\n"
       ^ "td.date { white-space: nowrap; }\n"
       ^ "th, td { border: 1px solid var(--border-table); padding: 0.35rem 0.6rem; text-align: left; "
       ^ "vertical-align: top; }\n"
@@ -220,13 +227,13 @@ let
       ^ ".viewtoggle { display: flex; align-items: center; gap: 0.8rem; position: sticky;\n"
       ^ "  top: 0; z-index: 5; background: var(--bg); padding: 0.6rem 0;\n"
       ^ "  border-bottom: 1px solid var(--border-light); margin-bottom: 1rem; }\n"
-      ^ ".viewtoggle { font-family: var(--mono); }\n"
-      ^ ".viewtoggle button { font: inherit; font-size: 0.68rem; padding: 0; border: 0;\n"
+      ^ ".viewtoggle { font-family: var(--serif); }\n"
+      ^ ".viewtoggle button { font: inherit; font-size: 0.8rem; padding: 0; border: 0;\n"
       ^ "  background: none; cursor: pointer; color: var(--fg-muted); }\n"
       ^ ".viewtoggle button:hover { color: var(--fg); }\n"
       ^ ".viewtoggle button.on { color: var(--fg); text-decoration: underline;\n"
       ^ "  text-underline-offset: 0.2em; }\n"
-      ^ ".viewtoggle .hint { color: var(--fg-faint); font-size: 0.68rem; }\n"
+      ^ ".viewtoggle .hint { color: var(--fg-dim); font-size: 0.78rem; }\n"
       ^ "ol.rawlines { margin: 0; padding: 0 0 0 4.5rem; list-style: decimal;\n"
       ^ "  font-family: 'SF Mono', Menlo, Consolas, monospace; font-size: 0.8rem;\n"
       ^ "  line-height: 1.55; color: var(--fg); }\n"

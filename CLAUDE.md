@@ -38,9 +38,9 @@ asserted:
 
 - Compile a **minimal probe program** and read the artifact the claim is about.
   `bin/troupec -v probe.trp -o probe.js` refreshes the stage dumps in `out/` (relative to the
-  working directory) alongside the emitted JS: `out.syntax`, `out.nopats`, `out.lowered`,
-  `out.alpha`, `out.cps`, `out.cpsopt`, `out.ir`, `out.iropt`, `out.rawout`, `out.rawopt`,
-  `out.stack`. `out.rawopt` is absent under `--no-rawopt`.
+  working directory) alongside the emitted JS: `out.syntax`, `out.opreassoc`, `out.nopats`,
+  `out.lowered`, `out.alpha`, `out.cps`, `out.cpsopt`, `out.ir`, `out.iropt`, `out.rawout`,
+  `out.rawopt`, `out.stack`. `out.rawopt` is absent under `--no-rawopt`.
 - Read the **pass that implements the behavior**, not just its name, a summary, or a
   downstream artifact two stages away.
 - For performance claims, **measure** (`examples/variants/bench.trp`, or a timing probe);

@@ -81,6 +81,12 @@ let val q   = "\x22"
               , Unit.it "leading and trailing atmosphere is skipped"
                         (Unit.isEq (OK (ATOM "a"))
                                    (Sexp.parse ("; lead" ^ nl ^ " a  ; trail" ^ nl)))
+                (* Nesting is bounded by memory rather than by a policy limit, so a depth far
+                 * beyond any real document parses and round-trips. *)
+              , let val deep = String.repeat 5000 "(" ^ "x" ^ String.repeat 5000 ")"
+                in Unit.it "deep nesting is accepted and round-trips"
+                        (Unit.isEq (OK deep) (Outcome.map Sexp.print (Sexp.parse deep)))
+                end
             ],
             Unit.group "parseAll" [
                 Unit.it "reads every form in order"
@@ -133,13 +139,6 @@ let val q   = "\x22"
               , Unit.it "a backslash at end of input points at the backslash"
                         (Unit.isEq (ERR {reason = "incomplete escape sequence", offset = 2})
                                    (Sexp.parse (q ^ "a" ^ bs)))
-              , Unit.it "nesting past the depth limit is refused"
-                        (Unit.isEq (ERR {reason = "maximum nesting depth exceeded", offset = 201})
-                                   (Sexp.parse (String.repeat 250 "(" ^ String.repeat 250 ")")))
-              , Unit.it "nesting within the depth limit is accepted"
-                        (Unit.isTrue (Outcome.isOk
-                                        (Sexp.parse (String.repeat 199 "("
-                                                     ^ String.repeat 199 ")"))))
             ],
             Unit.group "pretty" [
                 Unit.it "a list that fits stays on one line"

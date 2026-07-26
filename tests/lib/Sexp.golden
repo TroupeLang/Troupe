@@ -1,4 +1,4 @@
-2026-07-26T08:22:37.486Z [RTM] [32minfo[39m: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+2026-07-26T08:49:14.677Z [RTM] [32minfo[39m: Skipping network creation. Observe that all external IO operations will yield a runtime error.
 [34mbegin [0mSexp
   [34mbegin [0mprint
       [33m[ TEST ][0m it an atom prints as itself      [32m[ PASS ][0m it an atom prints as itself
@@ -23,6 +23,7 @@
       [33m[ TEST ][0m it whitespace is insignificant      [32m[ PASS ][0m it whitespace is insignificant
       [33m[ TEST ][0m it a comment runs to end of line      [32m[ PASS ][0m it a comment runs to end of line
       [33m[ TEST ][0m it leading and trailing atmosphere is skipped      [32m[ PASS ][0m it leading and trailing atmosphere is skipped
+      [33m[ TEST ][0m it deep nesting is accepted and round-trips      [32m[ PASS ][0m it deep nesting is accepted and round-trips
   [34mend [0m
   [34mbegin [0mparseAll
       [33m[ TEST ][0m it reads every form in order      [32m[ PASS ][0m it reads every form in order
@@ -46,8 +47,6 @@
       [33m[ TEST ][0m it atmosphere with no form, at the end offset      [32m[ PASS ][0m it atmosphere with no form, at the end offset
       [33m[ TEST ][0m it an unknown escape points at the escaped character      [32m[ PASS ][0m it an unknown escape points at the escaped character
       [33m[ TEST ][0m it a backslash at end of input points at the backslash      [32m[ PASS ][0m it a backslash at end of input points at the backslash
-      [33m[ TEST ][0m it nesting past the depth limit is refused      [32m[ PASS ][0m it nesting past the depth limit is refused
-      [33m[ TEST ][0m it nesting within the depth limit is accepted      [32m[ PASS ][0m it nesting within the depth limit is accepted
   [34mend [0m
   [34mbegin [0mpretty
       [33m[ TEST ][0m it a list that fits stays on one line      [32m[ PASS ][0m it a list that fits stays on one line
@@ -68,6 +67,6 @@
   [34mend [0m
 [34mend [0m
 
-Total:  50
-Passes: 50
+Total:  49
+Passes: 49
 >>> Main thread finished with value: true@{alice}%{alice}

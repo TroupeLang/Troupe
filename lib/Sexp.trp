@@ -1,5 +1,6 @@
 import String
 import List
+import Number
 import Outcome
 import Pretty
 
@@ -61,9 +62,16 @@ let (*--- Character helpers ---*)
 
     (*--- Reading ---*)
 
-    (* The greatest nesting depth the reader accepts; deeper input yields an `ERR` rather than
-     * exhausting the stack. Mirrors `Json.parse`. *)
-    val maxDepth = 200
+    (* The greatest nesting depth the reader accepts; deeper input yields an `ERR`.
+     *
+     * This is a bound on resource exhaustion, not a stack guard: the runtime keeps its stack on
+     * the heap, so recursive descent does not run out of stack the way it would in a host
+     * language that uses the machine stack. Measured on this runtime, a million lists deep parses
+     * and prints; three million exhausts the heap, and that failure is a process abort no
+     * in-library check can convert into an `ERR`. The bound therefore sits at the integer ceiling,
+     * where it rejects nothing a caller could hold in memory and no test can reach it. Revisit
+     * together with `Json.parse`, which carries the same bound, if a resource policy is defined. *)
+    val maxDepth = Number.maxInt32
 
     (* The reader for both entry points: `many` chooses between one form and a sequence of them.
      * The scanners return ("ok", value, next index) or ("err", reason, offset), the convention
@@ -184,8 +192,7 @@ let (*--- Character helpers ---*)
     (** Read the one s-expression that `input` contains. On success returns `OK sexp`; on malformed
      *  input, or on anything other than whitespace and comments after the form, returns
      *  `ERR {reason, offset}`, where `offset` is the character index of the offending character.
-     *  Nesting deeper than 200 lists is refused rather than exhausting the stack. Never crashes on
-     *  malformed input. *)
+     *  Never crashes on malformed input. Nesting is bounded only by memory; see `maxDepth`. *)
     fun parse input = readWith false input
 
     (** Read every s-expression in `input`, in order: `OK []` for input that is empty or only

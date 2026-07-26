@@ -24,7 +24,14 @@ reviewed rigorously rather than depend on the monitor.
                     it brings `OK` and `ERR` into scope, and that is not transitive: a client
                     that receives an outcome from another library must import `Outcome` itself
                     in order to pattern-match on it. The same holds for `Option`.
+- `Pretty`        : Hughes-style pretty-printing combinators: documents laid out to a target
+                    width, with groups that occupy one line when they fit and stack when they do
+                    not. Exports the operators `<.>` (beside), `<+>` (beside with a space), and
+                    `$$` (above); see [docs/OPERATORS.md](../docs/OPERATORS.md).
 - `Set`           : Set of elements via a comparator function.
+- `Sexp`          : Reader and printer for Lisp-style s-expressions: `ATOM` / `STR` / `LST`,
+                    `parse` returning an `Outcome`, and both a single-line and a `Pretty`-based
+                    rendering.
 - `StencilVector` : Memory-efficient implementation of small (sparse) arrays.
 - `String`        : Operations for strings
 - `ThreadUtil`    : Additional functions for thread management.

@@ -1,0 +1,27 @@
+(* Savina benchmark: Filter Bank (parallelism group).
+ *
+ * The main process broadcasts a stream of n samples to 4 branch actors;
+ * each branch runs an FIR filter (8 branch-specific coefficients) over a
+ * sliding window and emits a filtered value every 4th sample once its
+ * window is full; a combiner actor accumulates everything and reports the
+ * total. Measures broadcast fan-out with per-branch stream processing and
+ * fan-in.
+ *
+ * Verification recomputes the same filter bank sequentially on the same
+ * (deterministic) input and compares totals.
+ *
+ *   ./local.sh examples/savina/filterbank.trp               # default sizes
+ *   ./local.sh examples/savina/filterbank.trp -- 2000 8000  # explicit sizes
+ *
+ * Result: pipeline total; ok iff it is within 1e-3 of the sequential
+ * reference.
+ *)
+
+import List
+import Bench
+import "./Savina"
+
+let val d = case List.filter (fn d => d.name = "filterbank") Savina.all of [d] => d
+    val sizes = Bench.sizesFromArgs (getCliArgs authority) d.sizes
+in Bench.run authority d.name sizes 3 d.bench d.check
+end

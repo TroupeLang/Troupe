@@ -1,0 +1,12 @@
+(* A parameterized datatype referencing itself applied under a built-in
+   (`('a tree) list`); build a small tree and count its leaves recursively. *)
+datatype 'a tree = LEAF | NODE of ('a tree) list
+
+let fun count LEAF      = 1
+      | count (NODE ts) =
+          let fun sum []        = 0
+                | sum (t::rest) = count t + sum rest
+          in sum ts end
+in
+  print (count (NODE [LEAF, LEAF]))   (* 2 *)
+end

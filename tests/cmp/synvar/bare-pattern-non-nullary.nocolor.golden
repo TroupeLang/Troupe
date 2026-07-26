@@ -1,0 +1,1 @@
+tests/cmp/synvar/bare-pattern-non-nullary.trp:6:14: constructor SOME expects an argument

@@ -1,0 +1,20 @@
+(* Savina benchmark: Fibonacci (microbenchmark group).
+ *
+ * fib(n) computed by a tree of actors: each actor for n > 2 spawns two
+ * children for n-1 and n-2 and adds their replies; leaves reply 1. Measures
+ * dynamic actor creation (2*fib(n)-1 actors per run) and reply aggregation.
+ *
+ *   ./local.sh examples/savina/fibonacci.trp            # default sizes
+ *   ./local.sh examples/savina/fibonacci.trp -- 18 21   # explicit sizes
+ *
+ * Result: fib(n); ok iff it matches an iteratively computed reference.
+ *)
+
+import List
+import Bench
+import "./Savina"
+
+let val d = case List.filter (fn d => d.name = "fibonacci") Savina.all of [d] => d
+    val sizes = Bench.sizesFromArgs (getCliArgs authority) d.sizes
+in Bench.run authority d.name sizes 3 d.bench d.check
+end

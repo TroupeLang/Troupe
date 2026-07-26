@@ -1,0 +1,163 @@
+(* Untyped lambda calculus, extended with if-then-else and integer arithmetic,
+ * as a multi-module program: a call-by-value interpreter, two renderings of a
+ * term, and a timing study against native Troupe recursion.
+ *
+ * The program is split across program-relative modules under ./lambda/, which
+ * this file imports by path:
+ *
+ *   ./lambda/Term      the term/value/env datatypes and a node count
+ *   ./lambda/Eval      lookup, numOf, eval, run
+ *   ./lambda/Print     precedence-aware Pretty layout and a Sexp rendering
+ *   ./lambda/Programs  fib and even/odd as object-language terms
+ *
+ * Datatype constructors travel with the module that declares them, and that is
+ * not transitive: this file imports "./lambda/Term" for its own use of var, lam,
+ * app and lit even though Eval and Print already import it. The pins in
+ * lambda-calculus.deps.json fix the content hash of each module; re-pin with
+ * `troupec --update-deps` after editing one.
+ *
+ * Demonstrates:
+ *   - an AST datatype (term) for the object language;
+ *   - a mutually recursive value/env `and` group: value refers to env through
+ *     the closure constructor clo, and env refers to value through its cons
+ *     constructor bind, so the group is genuinely mutually recursive in both
+ *     directions (the `and` well-formedness rule).  term is declared in an
+ *     earlier group; env is a cons-list environment;
+ *   - a constructor-pattern evaluator eval : env -> term -> value with an
+ *     environment-lookup helper.  Application evaluates the function to a
+ *     closure and evaluates the body in the captured environment extended with
+ *     the (already evaluated) argument -- call-by-value;
+ *   - the call-by-value Z combinator (the eta-expanded fixed-point combinator)
+ *     built as an AST value, used to define a doubly recursive fib entirely
+ *     inside the object language;
+ *   - a mutual fixed-point combinator: Church pairs plus a paired variant of Z
+ *     tie a whole group of mutually recursive functions at once, shown on
+ *     even/odd -- still entirely inside the object language, with no interpreter
+ *     support for recursion;
+ *   - terms rendered two ways: a precedence-aware layout that breaks to fit a
+ *     width, and a structural s-expression that reads back into the same term.
+ *
+ *   ./local.sh examples/variants/lambda-calculus.trp --localonly
+ *
+ * Output: sanity checks (interpreted fib 10 = 55; mutual even/odd on 10 and 7),
+ * the term renderings at a wide and a narrow width, an s-expression round trip,
+ * then an interpreted-fib timing table that grows n until one computation
+ * exceeds 4000 ms, then a native-fib comparison and the interpreted/native
+ * slowdown ratio at the largest interpreted n.  Timings are wall-clock and vary
+ * between runs.
+ *)
+
+import "./lambda/Term"
+import "./lambda/Eval"
+import "./lambda/Print"
+import "./lambda/Programs"
+
+import Outcome
+import Pretty
+
+let (* --- the object-language programs, driven from Troupe ---------------- *)
+
+    fun ifib n  = Eval.run (app (Programs.fibTerm, lit n))
+    fun ieven n = Eval.run (app (Programs.fstT Programs.evenOddPair, lit n))
+    fun iodd n  = Eval.run (app (Programs.sndT Programs.evenOddPair, lit n))
+
+    (* --- native Troupe fib (same doubly recursive shape) --------------- *)
+    fun nfib n = if n <= 1 then n else nfib (n - 1) + nfib (n - 2)
+
+    (* --- timing helpers ------------------------------------------------ *)
+    fun timeMs f =
+        let val start  = getTime ()
+            val result = f ()
+            val finish = getTime ()
+        in (result, finish - start)
+        end
+
+    fun repeat 0 _ = ()
+      | repeat k f = (f (); repeat (k - 1) f)
+
+    (* native fib is far below timer resolution for a single call, so time a
+       growing batch until it exceeds 200 ms and report ms per call. *)
+    fun nativePerCallMs n =
+        let fun go reps =
+                let val (_, el) = timeMs (fn () => repeat reps (fn () => nfib n))
+                in if el >= 200 then el / reps else go (reps * 4)
+                end
+        in go 1
+        end
+
+    (* Sweep interpreted fib upward, printing (n, ms), stopping once one call
+       exceeds the budget.  Returns (largest n within budget, its ms). *)
+    val budgetMs = 4000
+    fun sweep n bestN bestMs =
+        let val (r, ms) = timeMs (fn () => ifib n)
+        in print ("  interpreted fib", n, "=", r, "in", ms, "ms")
+         ; if ms > budgetMs then (bestN, bestMs)
+           else sweep (n + 1) n ms
+        end
+
+    (* --- term display -------------------------------------------------- *)
+
+    (* Show one term at a width wide enough to keep it flat and again at a width
+       that forces it to break. The narrow rendering goes through Print.toDoc so
+       it can be indented as a whole: nesting a document the module built is why
+       toDoc is exported alongside the ready-made pretty. *)
+    fun showTerm (label, t, narrow) =
+        ( printString ""
+        ; printString (label ^ " (" ^ toString (Term.size t) ^ " nodes)")
+        ; printString ("  wide:  " ^ Print.pretty 200 t)
+        ; printString ("  at width " ^ toString narrow ^ ":")
+        ; printString (Pretty.render narrow (Pretty.nest 4 (Print.toDoc t)))
+        ; printString ("  sexp:  " ^ Print.sexpString t)
+        )
+
+    (* Print a term as an s-expression, read it back, and evaluate both to show
+       the rendering is faithful. *)
+    fun roundTrip (label, t, arg) =
+        let val src      = Print.sexpString t
+            val direct   = Eval.run (app (t, lit arg))
+        in case Print.fromString src of
+               ERR e   => printString (label ^ ": decode failed: " ^ e.reason)
+             | OK back =>
+                 let val viaSexp = Eval.run (app (back, lit arg))
+                 in print (label, "applied to", arg, "= ", direct,
+                           "; after a sexp round trip =", viaSexp,
+                           "; terms equal:", back = t)
+                 end
+        end
+
+in print ("sanity: interpreted fib 10 =", ifib 10)   (* 55 *)
+ ; print ("sanity: mutual even/odd on 10 and 7 =",
+          ieven 10, iodd 10, ieven 7, iodd 7)        (* 1, 0, 0, 1 *)
+ ; printString ""
+ ; printString "--- terms, laid out to a width ---"
+ ; showTerm ("fibStep", Programs.fibStep, 40)
+ ; showTerm ("the Z combinator", Programs.zc, 30)
+ ; showTerm ("even/odd step", Programs.evenOddStep, 46)
+ ; printString ""
+ ; printString "--- the same s-expression, laid out by Sexp rather than printed flat ---"
+ ; printString (Print.sexpPretty 44 Programs.fibStep)
+ ; printString ""
+ ; printString "--- s-expression round trip ---"
+ ; roundTrip ("fib", Programs.fibTerm, 10)
+ ; roundTrip ("even", Programs.fstT Programs.evenOddPair, 10)
+ ; (case Print.fromString "(app (lam x (add (var x) (lit 1))) (lit 41))" of
+        ERR e   => print ("hand-written term rejected:", e.reason)
+      | OK t    => print ("hand-written sexp term:", Print.pretty 60 t, "=",
+                          Eval.run t))
+ ; (case Print.fromString "(mul (lit 2) (lit 3))" of
+        ERR e   => print ("a term the decoder rejects:", e.reason)
+      | OK t    => print ("unexpectedly decoded:", Print.sexpString t))
+ ; printString ""
+ ; printString "--- interpreted fib timing (stop once one call exceeds 4000 ms) ---"
+ ; let val (bestN, bestMs) = sweep 15 0 0
+       val nativeAtBest       = nativePerCallMs bestN
+       val (bigResult, bigMs) = timeMs (fn () => nfib 35)
+   in print ("largest interpreted n within 4 s:", bestN, "at", bestMs, "ms")
+    ; print "--- native Troupe fib ---"
+    ; print ("native fib", bestN, "= ", nfib bestN,
+             " (", nativeAtBest, "ms per call, averaged over a batch)")
+    ; print ("native fib 35 =", bigResult, "in", bigMs, "ms (single call)")
+    ; print ("interpreted/native slowdown at n =", bestN, ":",
+             bestMs / nativeAtBest)
+   end
+end

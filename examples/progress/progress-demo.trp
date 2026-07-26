@@ -1,0 +1,84 @@
+(* progress-demo.trp — exercises the Progress module.
+ *
+ *   local.sh examples/progress/progress-demo.trp -- [bar | plain | edge]
+ *
+ * bar    (the default) a 115-item batch in redrawn-in-place mode, one line rewritten as it runs
+ * plain  the same batch in line-per-update mode, the form to use when stdout is a file
+ * edge   the degenerate totals: 0 items, 1 item, and a total far larger than the bar width
+ *
+ * The batches are driven with `List.foldl`, the bar state riding in the accumulator next to the
+ * list of results being built. Each item "works" by sleeping, so the elapsed time and the ETA
+ * have something to report.
+ *)
+
+import List
+import "./Progress"
+
+let val auth = authority
+
+    fun say s = fwrite (stdout auth, s ^ "\n")
+
+    (* Stand-in for a unit of real work. *)
+    fun work pause x =
+        let val _ = if pause > 0 then sleep pause else ()
+        in x * x
+        end
+
+    (* Fold a batch, threading the bar beside the results. Returns the bar state as it stood
+     * before `finish`, so the draw count can be reported. *)
+    fun runBatch opts pause n =
+        let val items    = List.range n
+            val p0       = Progress.startWith auth opts n
+            val (p, acc) = List.foldl (fn (x, (p, acc)) => (Progress.step p, work pause x :: acc))
+                                      (p0, [])
+                                      items
+            val _        = Progress.finish p
+        in (p, List.reverse acc)
+        end
+
+    fun report p =
+        say ("  counted " ^ intToString (Progress.count p) ^ "/" ^ intToString (Progress.total p)
+             ^ ", draws before finish: " ^ intToString (Progress.redraws p))
+
+    fun barRun () =
+        let val _      = say "bar mode: 115 items, 25 ms each, one line redrawn in place"
+            val (p, r) = runBatch { Progress.defaults with label = "Rendering" } 25 115
+            val _      = report p
+        in say ("  last result: " ^ intToString (List.nth r (List.length r - 1)))
+        end
+
+    fun plainRun () =
+        let val _      = say "plain mode: 60 items, 35 ms each, one complete line per update"
+            val opts   = { Progress.defaults with label = "Rendering", width = 20, plain = true }
+            val (p, r) = runBatch opts 35 60
+            val _      = report p
+        in say ("  last result: " ^ intToString (List.nth r (List.length r - 1)))
+        end
+
+    fun edgeRun () =
+        let val _  = say "edge: a total of 0, nothing to wait for, so the bar starts full"
+            val p0 = Progress.start auth "Nothing to do" 0
+            val _  = Progress.finish p0
+            val _  = report p0
+
+            val _  = say "edge: a total of 1, stepped twice, the second step clamped away"
+            val p1 = Progress.start auth "One item" 1
+            val p2 = Progress.step p1
+            val p3 = Progress.step p2
+            val _  = Progress.finish p3
+            val _  = report p3
+
+            val _  = say "edge: 4000 items over a 20-cell bar, 200 steps per cell, no sleeping"
+            val (p4, _) = runBatch { Progress.defaults with label = "Counting", width = 20 } 0 4000
+            val _  = report p4
+        in ()
+        end
+
+    val mode = (case getCliArgs auth of m::_ => m | [] => "bar")
+
+in case mode of
+       "bar"   => barRun ()
+     | "plain" => plainRun ()
+     | "edge"  => edgeRun ()
+     | m       => say ("unknown mode " ^ m ^ "; expected bar, plain or edge")
+end

@@ -1,0 +1,70 @@
+import Outcome
+
+(** SimpleFileIO - file access reported as an Outcome rather than a tagged record.
+ *
+ *  The runtime builtins return `{tag = "Ok", value}` / `{tag = "Err", error = {reason, path}}`.
+ *  This wrapper converts that at the boundary, so no library-source hash has to be embedded in
+ *  the runtime to build a datatype value there.
+ *
+ *  Import it selectively to shadow the builtins, leaving call sites unchanged:
+ *
+ *    import { readFile, writeFile } SimpleFileIO
+ *
+ *    case readFile (authority, path) of OK src => ...
+ *                                     | ERR e  => report (e.reason, e.path)
+ *
+ *  Every operation takes ROOT `authority` and resolves its path inside the `--io-root` subtree.
+ *)
+
+let (* The builtins, captured before the definitions below shadow their names. *)
+    val rawReadFile   = readFile
+    val rawWriteFile  = writeFile
+    val rawAppendFile = appendFile
+    val rawFileExists = fileExists
+    val rawReadDir    = readDir
+    val rawMakeDir    = makeDir
+    val rawFileStat   = fileStat
+    val rawRemoveFile = removeFile
+
+    fun toOutcome {tag = "Ok",  value = v} = OK v
+      | toOutcome {tag = "Err", error = e} = ERR e
+
+    (** Contents of `path`; `ERR {reason, path}` if it cannot be read. *)
+    fun readFile (auth, path) = toOutcome (rawReadFile (auth, path))
+
+    (** Write `contents` to `path`; `ERR {reason, path}` if it cannot be written. *)
+    fun writeFile (auth, path, contents) = toOutcome (rawWriteFile (auth, path, contents))
+
+    (** Append `contents` to `path`, creating it if absent. *)
+    fun appendFile (auth, path, contents) = toOutcome (rawAppendFile (auth, path, contents))
+
+    (** `OK true` / `OK false`; never `ERR`. A path outside the sandbox does not exist. *)
+    fun fileExists (auth, path) = toOutcome (rawFileExists (auth, path))
+
+    (** Entries of the directory `path` as a list of `{name, kind}`, where `kind` is one of
+     *  "file", "dir" or "other". Entry order is unspecified; sort if it matters. *)
+    fun readDir (auth, path) = toOutcome (rawReadDir (auth, path))
+
+    (** Create `path` and any missing parents. Succeeds if it already exists. *)
+    fun makeDir (auth, path) = toOutcome (rawMakeDir (auth, path))
+
+    (** `{kind, size, mtime}` for `path`; `mtime` is in milliseconds since the epoch. A symlink
+     *  reports `kind = "other"` rather than the kind of its target.
+     *
+     *  There is deliberately no creation time: a file written by a checkout is "created" then,
+     *  so in a working tree the field cannot tell an added file from a restored one. *)
+    fun fileStat (auth, path) = toOutcome (rawFileStat (auth, path))
+
+    (** Delete the file `path`; `ERR` on a missing path or a directory. *)
+    fun removeFile (auth, path) = toOutcome (rawRemoveFile (auth, path))
+
+in [ ("readFile", readFile)
+   , ("writeFile", writeFile)
+   , ("appendFile", appendFile)
+   , ("fileExists", fileExists)
+   , ("readDir", readDir)
+   , ("makeDir", makeDir)
+   , ("fileStat", fileStat)
+   , ("removeFile", removeFile)
+   ]
+end

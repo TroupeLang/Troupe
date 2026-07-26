@@ -1,0 +1,223 @@
+(* Unit tests for lib/Markdown.trp
+ *
+ * Run:  ./local.sh tests/_unautomated/claude/markdown-tests.trp --localonly
+ *
+ * Expected strings were confirmed by observing Markdown.toHtml output directly.
+ *)
+
+import Unit
+import Html
+import Markdown
+
+let val md = Markdown.toHtml
+
+    val tests = Unit.group "Markdown" [
+
+        Unit.group "headings" [
+            Unit.it "h1"            (Unit.isEq "<h1 id='hi'>Hi</h1>"        (md "# Hi"))
+          , Unit.it "h2"            (Unit.isEq "<h2 id='two'>Two</h2>"       (md "## Two"))
+          , Unit.it "h6"            (Unit.isEq "<h6 id='six'>Six</h6>"       (md "###### Six"))
+          , Unit.it "closing hashes stripped"
+                                    (Unit.isEq "<h3 id='heading-3'>Heading 3</h3>" (md "### Heading 3 ###"))
+          , Unit.it "seven hashes is not a heading"
+                                    (Unit.isEq "<p>####### Seven</p>" (md "####### Seven"))
+        ],
+
+        Unit.group "spec contract" [
+            Unit.it "heading then emphasised paragraph"
+                    (Unit.isEq "<h1 id='hi'>Hi</h1><p>Hello <em>world</em></p>" (md "# Hi\n\nHello *world*"))
+        ],
+
+        Unit.group "paragraphs and inline" [
+            Unit.it "blank-separated paragraphs"
+                    (Unit.isEq "<p>a</p><p>b</p><p>c</p>" (md "a\n\nb\n\nc"))
+          , Unit.it "soft break inside a paragraph"
+                    (Unit.isEq "<p>one\ntwo</p>" (md "one\ntwo"))
+        ],
+
+        Unit.group "emphasis" [
+            Unit.it "star emphasis"       (Unit.isEq "<p><em>world</em></p>"       (md "*world*"))
+          , Unit.it "underscore emphasis" (Unit.isEq "<p><em>em</em></p>"          (md "_em_"))
+          , Unit.it "star strong"         (Unit.isEq "<p><strong>bold</strong></p>" (md "**bold**"))
+          , Unit.it "underscore strong"   (Unit.isEq "<p><strong>strong</strong></p>" (md "__strong__"))
+          , Unit.it "mixed"
+                    (Unit.isEq "<p><strong>bold</strong> and <em>em</em></p>" (md "**bold** and _em_"))
+        ],
+
+        Unit.group "inline code" [
+            Unit.it "code span"       (Unit.isEq "<p>a <code>code</code> b</p>" (md "a `code` b"))
+          , Unit.it "code is not interpreted"
+                    (Unit.isEq "<p><code>*not emphasis*</code></p>" (md "`*not emphasis*`"))
+        ],
+
+        Unit.group "fenced code" [
+            Unit.it "with info string as language"
+                    (Unit.isEq "<pre><code class='language-js'>let x = 1;\n</code></pre>"
+                               (md "```js\nlet x = 1;\n```"))
+          , Unit.it "without language"
+                    (Unit.isEq "<pre><code>plain\n</code></pre>" (md "```\nplain\n```"))
+          , Unit.it "content is escaped, never interpreted"
+                    (Unit.isEq "<pre><code>&lt;script&gt;alert(1)&lt;/script&gt;\n</code></pre>"
+                               (md "```\n<script>alert(1)</script>\n```"))
+        ],
+
+        Unit.group "lists" [
+            Unit.it "unordered dash"  (Unit.isEq "<ul><li>a</li><li>b</li></ul>" (md "- a\n- b"))
+          , Unit.it "unordered star"  (Unit.isEq "<ul><li>a</li><li>b</li></ul>" (md "* a\n* b"))
+          , Unit.it "unordered plus"  (Unit.isEq "<ul><li>a</li></ul>"           (md "+ a"))
+          , Unit.it "ordered"         (Unit.isEq "<ol><li>one</li><li>two</li></ol>" (md "1. one\n2. two"))
+          , Unit.it "nested"
+                    (Unit.isEq "<ul><li>a<ul><li>b</li><li>c</li></ul></li><li>d</li></ul>"
+                               (md "- a\n  - b\n  - c\n- d"))
+        ],
+
+        Unit.group "blockquotes" [
+            Unit.it "simple"
+                    (Unit.isEq "<blockquote><p>quoted\nmore</p></blockquote>" (md "> quoted\n> more"))
+          , Unit.it "nested"
+                    (Unit.isEq "<blockquote><p>outer</p><blockquote><p>inner</p></blockquote></blockquote>"
+                               (md "> outer\n> > inner"))
+        ],
+
+        Unit.group "thematic breaks" [
+            Unit.it "dashes"      (Unit.isEq "<hr />" (md "---"))
+          , Unit.it "stars"       (Unit.isEq "<hr />" (md "***"))
+          , Unit.it "underscores" (Unit.isEq "<hr />" (md "___"))
+        ],
+
+        Unit.group "links and images" [
+            Unit.it "safe link"
+                    (Unit.isEq "<p><a href='http://example.com'>safe</a></p>"
+                               (md "[safe](http://example.com)"))
+          , Unit.it "image"
+                    (Unit.isEq "<p><img src='/img.png' alt='alt text' /></p>"
+                               (md "![alt text](/img.png)"))
+        ],
+
+        Unit.group "hard breaks" [
+            Unit.it "two trailing spaces"
+                    (Unit.isEq "<p>line one<br />line two</p>" (md "line one  \nline two"))
+          , Unit.it "backslash newline"
+                    (Unit.isEq "<p>line<br />broken</p>" (md "line\\\nbroken"))
+        ],
+
+        Unit.group "backslash escapes" [
+            Unit.it "escaped star is literal"
+                    (Unit.isEq "<p>escape * not emphasis * here</p>"
+                               (md "escape \\* not emphasis \\* here"))
+        ],
+
+        Unit.group "security" [
+            Unit.it "literal HTML is escaped, never markup"
+                    (Unit.isEq "<p>text with &lt;script&gt;alert(1)&lt;/script&gt; inline</p>"
+                               (md "text with <script>alert(1)</script> inline"))
+          , Unit.it "ampersand and angle brackets escaped"
+                    (Unit.isEq "<p>text with &amp; ampersand and &lt; less</p>"
+                               (md "text with & ampersand and < less"))
+          , Unit.it "javascript: link is neutralised (anchor without href)"
+                    (Unit.isEq "<p><a>link</a></p>" (md "[link](javascript:alert(1))"))
+          , Unit.it "javascript: image degrades to its alt text"
+                    (Unit.isEq "<p>evil</p>" (md "![evil](javascript:alert(1))"))
+        ],
+
+        Unit.group "AST and node exports" [
+            Unit.it "parse produces the block AST"
+                    (Unit.isEq [ {tag = "Heading", level = 1,
+                                  inline = [ {tag = "Text", content = "Hi"} ], slug = "hi"} ]
+                               (Markdown.parse "# Hi"))
+          , Unit.it "toHtmlNodes render to the same HTML as toHtml"
+                    (Unit.isEq "<h1 id='hi'>Hi</h1>" (Html.renderAll (Markdown.toHtmlNodes "# Hi")))
+        ],
+
+        Unit.group "tables" [
+            Unit.it "header and one body row"
+                    (Unit.isEq ("<table><thead><tr><th>A</th><th>B</th></tr></thead>"
+                                ^ "<tbody><tr><td>1</td><td>2</td></tr></tbody></table>")
+                               (md "| A | B |\n|---|---|\n| 1 | 2 |"))
+          , Unit.it "outer pipes are optional"
+                    (Unit.isEq ("<table><thead><tr><th>A</th><th>B</th></tr></thead>"
+                                ^ "<tbody><tr><td>1</td><td>2</td></tr></tbody></table>")
+                               (md "A | B\n--|--\n1 | 2"))
+          , Unit.it "alignment markers become inline styles"
+                    (Unit.isEq ("<table><thead><tr><th style='text-align: left'>L</th>"
+                                ^ "<th style='text-align: center'>C</th>"
+                                ^ "<th style='text-align: right'>R</th></tr></thead>"
+                                ^ "<tbody></tbody></table>")
+                               (md "| L | C | R |\n|:--|:-:|--:|"))
+          , Unit.it "an escaped pipe stays inside its cell"
+                    (Unit.isEq ("<table><thead><tr><th>A</th></tr></thead>"
+                                ^ "<tbody><tr><td>a | b</td></tr></tbody></table>")
+                               (md "| A |\n|---|\n| a \\| b |"))
+          , Unit.it "a pipe inside a code span does not split the cell"
+                    (Unit.isEq ("<table><thead><tr><th>A</th></tr></thead>"
+                                ^ "<tbody><tr><td><code>x|y</code></td></tr></tbody></table>")
+                               (md "| A |\n|---|\n| `x|y` |"))
+          , Unit.it "a short row is padded"
+                    (Unit.isEq ("<table><thead><tr><th>A</th><th>B</th></tr></thead>"
+                                ^ "<tbody><tr><td>1</td><td></td></tr></tbody></table>")
+                               (md "| A | B |\n|---|---|\n| 1 |"))
+          , Unit.it "a long row is truncated to the header width"
+                    (Unit.isEq ("<table><thead><tr><th>A</th></tr></thead>"
+                                ^ "<tbody><tr><td>1</td></tr></tbody></table>")
+                               (md "| A |\n|---|\n| 1 | 2 |"))
+          , Unit.it "cell contents are parsed as inline markdown"
+                    (Unit.isEq ("<table><thead><tr><th>A</th></tr></thead>"
+                                ^ "<tbody><tr><td><strong>b</strong></td></tr></tbody></table>")
+                               (md "| A |\n|---|\n| **b** |"))
+          , Unit.it "a paragraph containing a pipe is not a table"
+                    (Unit.isEq "<p>a | b</p>" (md "a | b"))
+          , Unit.it "a delimiter row with a different cell count is not a table"
+                    (Unit.isEq "<p>| A | B |\n|---|</p>" (md "| A | B |\n|---|"))
+          , Unit.it "a table may open directly after a paragraph line"
+                    (Unit.isEq ("<p>intro</p><table><thead><tr><th>A</th></tr></thead>"
+                                ^ "<tbody></tbody></table>")
+                               (md "intro\n| A |\n|---|"))
+        ],
+
+        Unit.group "task lists" [
+            Unit.it "an unticked item"
+                    (Unit.isEq ("<ul><li class='task-list-item'>"
+                                ^ "<input type='checkbox' disabled='' />open</li></ul>")
+                               (md "- [ ] open"))
+          , Unit.it "a ticked item"
+                    (Unit.isEq ("<ul><li class='task-list-item'>"
+                                ^ "<input type='checkbox' disabled='' checked='' />done</li></ul>")
+                               (md "- [x] done"))
+          , Unit.it "an uppercase X also ticks"
+                    (Unit.isEq ("<ul><li class='task-list-item'>"
+                                ^ "<input type='checkbox' disabled='' checked='' />done</li></ul>")
+                               (md "- [X] done"))
+          , Unit.it "a bracketed word is not a checkbox"
+                    (Unit.isEq "<ul><li>[not a task]</li></ul>" (md "- [not a task]"))
+          , Unit.it "a link at the start of an item is not a checkbox"
+                    (Unit.isEq "<ul><li><a href='x.md'>t</a></li></ul>" (md "- [t](x.md)"))
+        ],
+
+        Unit.group "strikethrough" [
+            Unit.it "a tilde pair"      (Unit.isEq "<p><del>gone</del></p>" (md "~~gone~~"))
+          , Unit.it "nested emphasis"
+                    (Unit.isEq "<p><del>a <em>b</em></del></p>" (md "~~a *b*~~"))
+          , Unit.it "a lone tilde is literal"
+                    (Unit.isEq "<p>a ~ b</p>" (md "a ~ b"))
+          , Unit.it "an unmatched pair is literal"
+                    (Unit.isEq "<p>~~open</p>" (md "~~open"))
+        ],
+
+        Unit.group "heading slugs" [
+            Unit.it "punctuation is dropped and spaces become hyphens"
+                    (Unit.isEq "<h2 id='a-b-c'>A b: c</h2>" (md "## A b: c"))
+          , Unit.it "repeated headings get numbered slugs"
+                    (Unit.isEq "<h1 id='dup'>Dup</h1><h1 id='dup-1'>Dup</h1>"
+                               (md "# Dup\n\n# Dup"))
+          , Unit.it "headings reports level, text and slug"
+                    (Unit.isEq [ {level = 1, text = "One",   slug = "one"}
+                               , {level = 2, text = "Two",   slug = "two"} ]
+                               (Markdown.headings "# One\n\n## Two"))
+          , Unit.it "the slug ignores inline markup but keeps its text"
+                    (Unit.isEq [ {level = 1, text = "a b", slug = "a-b"} ]
+                               (Markdown.headings "# a *b*"))
+        ]
+
+    ]
+
+in Unit.run authority tests end

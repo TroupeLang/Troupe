@@ -1,6 +1,7 @@
 import { UserRuntimeZero } from './builtins/UserRuntimeZero.mjs'
 import { BuiltinStdIo } from './builtins/stdio.mjs'
 import { BuiltinMath } from './builtins/math.mjs'
+import { BuiltinBigInt } from './builtins/bigint.mjs'
 import { BuiltinDebugUtils } from './builtins/debugutils.mjs'
 import { BuiltinDebugValue } from './builtins/debugValue.mjs'
 import { BuiltinPini } from './builtins/pini.mjs'
@@ -10,6 +11,7 @@ import { BuiltinLevOps } from './builtins/levelops.mjs'
 import { BuiltinMboxClear } from './builtins/mboxclear.mjs'
 import { BuiltinMkUuid } from './builtins/mkuuid.mjs'
 import { BuiltinPersist } from './builtins/persist.mjs'
+import { BuiltinSimpleFileIO } from './builtins/simplefileio.mjs'
 import { BuiltinNodeUtils } from './builtins/nodeutil.mjs'
 import { BuiltinSelf } from './builtins/self.mjs'
 import { BuiltinExit } from './builtins/exit.mjs'
@@ -60,6 +62,7 @@ export const UserRuntime =
     BuiltinSelf(
     BuiltinNodeUtils(
     BuiltinPersist(
+    BuiltinSimpleFileIO(
     BuiltinMkUuid(
     BuiltinMboxClear(
     BuiltinLevOps(
@@ -69,8 +72,9 @@ export const UserRuntime =
     BuiltinDebugValue(
     BuiltinDebugUtils(
     BuiltinMath(
+    BuiltinBigInt(
     BuiltinRecordToList(
     BuiltinRecordReflection(
     BuiltinTypeInformation(
     BuiltinStdIo(UserRuntimeZero)
-    )))))))))))))))))))))))))))))))))
+    )))))))))))))))))))))))))))))))))))

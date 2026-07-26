@@ -1,0 +1,21 @@
+(* Savina benchmark: Fork Join, throughput variant (microbenchmark group).
+ *
+ * The main process floods 8 worker actors round-robin with n messages each;
+ * every worker counts its messages and reports its count when done. All
+ * 8n messages queue up ahead of the workers, so this measures raw delivery
+ * throughput with deep mailboxes.
+ *
+ *   ./local.sh examples/savina/fjthrput.trp                 # default sizes
+ *   ./local.sh examples/savina/fjthrput.trp -- 5000 20000   # explicit sizes
+ *
+ * Result: sum of worker message counts; ok iff it equals 8n.
+ *)
+
+import List
+import Bench
+import "./Savina"
+
+let val d = case List.filter (fn d => d.name = "fjthrput") Savina.all of [d] => d
+    val sizes = Bench.sizesFromArgs (getCliArgs authority) d.sizes
+in Bench.run authority d.name sizes 3 d.bench d.check
+end

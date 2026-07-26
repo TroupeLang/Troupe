@@ -1,0 +1,11 @@
+(* Parameterized 'a option, matching SOME/NONE in fun heads, and a
+   wildcard default branch in a case. *)
+datatype 'a option = NONE | SOME of 'a
+
+let fun unwrap d NONE     = d
+      | unwrap _ (SOME x) = x
+in
+  print (unwrap 0 (SOME 42));   (* 42 *)
+  print (unwrap 0 NONE);        (* 0  *)
+  print (case SOME 7 of SOME 7 => "seven" | _ => "other")  (* "seven" *)
+end

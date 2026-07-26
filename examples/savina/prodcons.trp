@@ -1,0 +1,27 @@
+(* Savina benchmark: Producer-Consumer with bounded buffer (concurrency
+ * group).
+ *
+ * 4 producers and 4 consumers share a buffer actor with capacity 10. Flow
+ * control is credit-based: a producer sends one item, then waits for CREDIT
+ * before the next; the buffer withholds credit while full. Consumers pull
+ * with GET and block (as queued requests) while the buffer is empty. Each
+ * producer produces n items and each consumer consumes n items (the size
+ * parameter).
+ *
+ * Item values are distinct integers 0 .. 4n-1; consumers checksum what they
+ * consume, so the check proves every item is consumed exactly once.
+ *
+ *   ./local.sh examples/savina/prodcons.trp               # default sizes
+ *   ./local.sh examples/savina/prodcons.trp -- 200 800    # explicit sizes
+ *
+ * Result: sum of consumed values; ok iff it equals 0 + 1 + ... + (4n-1).
+ *)
+
+import List
+import Bench
+import "./Savina"
+
+let val d = case List.filter (fn d => d.name = "prodcons") Savina.all of [d] => d
+    val sizes = Bench.sizesFromArgs (getCliArgs authority) d.sizes
+in Bench.run authority d.name sizes 3 d.bench d.check
+end

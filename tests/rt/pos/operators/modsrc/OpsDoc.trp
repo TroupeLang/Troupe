@@ -1,0 +1,8 @@
+(* A module exporting operators; their fixities travel via the .exports
+   interface. *)
+infixl 6 <+>
+infixl 5 $$
+let fun ( <+> ) a b = a + b + 100
+    fun ( $$ ) a b = a * b
+    fun describe x = "value " ^ toString x
+in [ ("<+>", ( <+> )), ("$$", ( $$ )), ("describe", describe) ] end

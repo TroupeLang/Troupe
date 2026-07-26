@@ -1,0 +1,20 @@
+(* Savina benchmark: Counting Actor (microbenchmark group).
+ *
+ * The main process sends n INC messages to a counting actor, then asks for
+ * the total. Measures one-way send throughput and mailbox pressure: all n
+ * messages queue up ahead of the final GET.
+ *
+ *   ./local.sh examples/savina/counting.trp                 # default sizes
+ *   ./local.sh examples/savina/counting.trp -- 10000 50000  # explicit sizes
+ *
+ * Result: the count reported by the actor; ok iff it equals n.
+ *)
+
+import List
+import Bench
+import "./Savina"
+
+let val d = case List.filter (fn d => d.name = "counting") Savina.all of [d] => d
+    val sizes = Bench.sizesFromArgs (getCliArgs authority) d.sizes
+in Bench.run authority d.name sizes 3 d.bench d.check
+end

@@ -1,0 +1,10 @@
+(* 't' is both a datatype (with a constructor C) and a bound record value that
+   has a field named C. The head of 't.C' is therefore genuinely ambiguous: it
+   could project field C off the value, or name constructor C of datatype t.
+   Per spec §10 this is a use-site static error, resolved by renaming the value
+   or qualifying the constructor. *)
+datatype t = C of int
+
+let val t = { C = 5 }
+in print (t.C)
+end

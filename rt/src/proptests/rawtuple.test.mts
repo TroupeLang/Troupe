@@ -120,3 +120,31 @@ test('single-element tuple: length 1, dataLevel equals the element dataLevel', (
         return true
     }), RUNS)
 })
+
+// ---------------------------------------------------------------------------
+// Flagged (syntactic-variant) tuple rendering (RawTuple.stringRep)
+// ---------------------------------------------------------------------------
+
+test('well-formed flagged tuple renders by the tag: bare name and (name payload)', () => {
+    const tag = new LVal('h#color#RED', IFC_BOT)
+    const payload = new LVal(42, IFC_BOT)
+    // 1-tuple (nullary constructor): the segment after the last '#'.
+    assert.strictEqual(new RawTuple([tag], true).stringRep(true), 'RED')
+    // 2-tuple (applied constructor): "(name payload)".
+    assert.strictEqual(new RawTuple([tag, payload], true).stringRep(true), '(RED 42)')
+})
+
+test('flagged tuple of an unexpected shape falls back to plain-tuple rendering', () => {
+    const tag = new LVal('h#color#RED', IFC_BOT)
+    const n = (k: number) => new LVal(k, IFC_BOT)
+    // empty: no slot 0 to read — plain '()' rather than a crash.
+    assert.strictEqual(new RawTuple([], true).stringRep(true), '()')
+    // over-long (3 slots): plain join, no silently dropped payload slots.
+    const three = [tag, n(1), n(2)]
+    assert.strictEqual(new RawTuple(three, true).stringRep(true),
+        '(' + listStringRep(three, true) + ')')
+    // slot 0 not a string: plain rendering.
+    const nonStr = [n(0), n(1)]
+    assert.strictEqual(new RawTuple(nonStr, true).stringRep(true),
+        '(' + listStringRep(nonStr, true) + ')')
+})

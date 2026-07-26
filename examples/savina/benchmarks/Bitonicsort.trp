@@ -1,0 +1,68 @@
+(* Savina bitonicsort: recursive bitonic sort; sub-sorters build ascending and
+ * descending halves and a merger compare-exchanges them. Exports `descriptor`. *)
+
+import List
+
+datatype 'a msg = Merge of int list * bool * int * 'a
+                | Merged of int * int list
+                | Bsort of int list * bool * int * 'a
+                | Bsorted of int * int list
+
+let fun takeN (0, _)       = []
+      | takeN (k, x :: xs) = x :: takeN (k - 1, xs)
+    fun dropN (0, xs)      = xs
+      | dropN (k, _ :: xs) = dropN (k - 1, xs)
+    (* pairwise compare-exchange of two equal-length halves *)
+    fun pairMinMax ([], [])           = ([], [])
+      | pairMinMax (x :: xs, y :: ys) =
+          let val (ls, hs) = pairMinMax (xs, ys)
+          in if x <= y then (x :: ls, y :: hs) else (y :: ls, x :: hs) end
+    fun merger () =
+        receive [ hn (Merge (xs, up, tag, parent)) =>
+            let val len = List.length xs
+            in if len <= 1 then send (parent, Merged (tag, xs))
+               else let val half = (len div 2)
+                        val (lo, hi) = pairMinMax (takeN (half, xs), dropN (half, xs))
+                        val (first, second) = if up then (lo, hi) else (hi, lo)
+                        val me = self ()
+                        val _ = send (spawn merger, Merge (first, up, 0, me))
+                        val _ = send (spawn merger, Merge (second, up, 1, me))
+                    in receive [ hn (Merged (0, a)) =>
+                         receive [ hn (Merged (1, b)) =>
+                           send (parent, Merged (tag, List.append a b)) ] ]
+                    end
+            end ]
+    fun bsorter () =
+        receive [ hn (Bsort (xs, up, tag, parent)) =>
+            let val len = List.length xs
+            in if len <= 1 then send (parent, Bsorted (tag, xs))
+               else let val half = (len div 2)
+                        val me = self ()
+                        val _ = send (spawn bsorter,
+                                      Bsort (takeN (half, xs), true, 0, me))
+                        val _ = send (spawn bsorter,
+                                      Bsort (dropN (half, xs), false, 1, me))
+                    in receive [ hn (Bsorted (0, asc)) =>
+                         receive [ hn (Bsorted (1, desc)) =>
+                           (send (spawn merger,
+                                  Merge (List.append asc desc, up, 0, me));
+                            receive [ hn (Merged (0, merged)) =>
+                              send (parent, Bsorted (tag, merged)) ]) ] ]
+                    end
+            end ]
+    fun bench n =
+        let val input = List.map (fn _ => floor (random () * 1000000))
+                                 (List.range n)
+            val _ = send (spawn bsorter, Bsort (input, true, 0, self ()))
+            val result = receive [ hn (Bsorted (0, xs)) => xs ]
+        in (result, input) end
+    fun sameList ([], [])           = true
+      | sameList (x :: xs, y :: ys) = x = y andalso sameList (xs, ys)
+      | sameList (_, _)             = false
+    val descriptor =
+        { name  = "bitonicsort"
+        , bench = bench
+        , check = fn n => fn (result, input) =>
+            sameList (result, List.sort (fn a => fn b => a < b) input)
+        , sizes = [256, 1024, 4096] }
+in [ ("descriptor", descriptor) ] end

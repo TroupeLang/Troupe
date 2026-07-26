@@ -1,13 +1,14 @@
 'use strict';
 import { v4 as uuidv4} from 'uuid'
 import { Thread } from './Thread.mjs';
+import { FifoQueue } from './FifoQueue.mjs';
 import runId from './runId.mjs';
 import { __unit } from './UnitVal.mjs';
 import { mkTuple } from './ValuesUtil.mjs';
 import { SchedulerInterface } from './SchedulerInterface.mjs';
 import { RuntimeInterface } from './RuntimeInterface.mjs';
 import { LVal } from './Lval.mjs'
-import {ProcessID, pid_equals} from './process.mjs'
+import {ProcessID} from './process.mjs'
 import SandboxStatus from './SandboxStatus.mjs'
 import  {ThreadError, TroupeError} from './TroupeError.mjs'
 import  {lub} from './Level.mjs'
@@ -31,22 +32,25 @@ let TerminationStatus = {
 
 export class Scheduler implements SchedulerInterface {
     rt_uuid: any;
-    __funloop: Thread[];
-    __blocked: any[];
-    __alive: {};
+    // Runnable threads, in round-robin order.
+    __funloop: FifoQueue<Thread>;
+    // Threads parked in receive, keyed by pid string, so that message
+    // delivery unblocks the recipient in O(1) instead of scanning.
+    __blocked: Map<string, Thread>;
+    __alive: Map<string, Thread>;
     __currentThread: Thread;
     stackcounter: number;
     __unit: any;
     rtObj : RuntimeInterface
     __node: any;
     __stopWhenAllThreadsAreDone: boolean;
-    __stopRuntime: () => void;    
-    constructor(rtObj:RuntimeInterface) {        
+    __stopRuntime: () => void;
+    constructor(rtObj:RuntimeInterface) {
         this.rt_uuid = runId;
         this.rtObj = rtObj
-        this.__funloop = new Array()
-        this.__blocked = new Array()
-        this.__alive = {} // new Set();
+        this.__funloop = new FifoQueue()
+        this.__blocked = new Map()
+        this.__alive = new Map()
         
         this.__currentThread = null; // current thread object
 
@@ -57,19 +61,25 @@ export class Scheduler implements SchedulerInterface {
     }
 
 
+    // Both __alive and __blocked are keyed by this string form of a pid.
+    private pidKey (tid) : string {
+        return tid.val.toString();
+    }
+
     resetScheduler() {
-        for (let x in this.__alive) {
-            if (this.currentThreadId.val.toString() != x) {
-                delete this.__alive[x]
+        let current = this.pidKey(this.currentThreadId)
+        for (let x of this.__alive.keys()) {
+            if (current != x) {
+                this.__alive.delete(x)
             }
         }
-        this.__blocked = []
-        this.__funloop = []
+        this.__blocked = new Map()
+        this.__funloop.clear()  // in place: loop() holds an alias to the queue
     }
 
     done  ()  {
         this.notifyMonitors();
-        delete this.__alive [this.currentThreadId.val.toString()];
+        this.__alive.delete (this.pidKey(this.currentThreadId));
     }
 
 
@@ -81,7 +91,7 @@ export class Scheduler implements SchedulerInterface {
 
         this.notifyMonitors ();
 
-        delete this.__alive[this.currentThreadId.val.toString()];
+        this.__alive.delete(this.pidKey(this.currentThreadId));
         sendSocketMessage({ type: 'main-thread-result', value: retVal.stringRep() });
         if (!argv[TroupeCliArg.SuppressMainThreadFinishedMessage] && !isResultSocketEnabled()) {
             console.log(">>> Main thread finished with value:", retVal.stringRep());
@@ -171,7 +181,7 @@ export class Scheduler implements SchedulerInterface {
     
 
     scheduleThread(t) {
-        this.__funloop.push(t)
+        this.__funloop.enqueue(t)
     }
 
 
@@ -202,7 +212,7 @@ export class Scheduler implements SchedulerInterface {
             , this );
 
 
-        this.__alive[newPid.val.toString()] = t;
+        this.__alive.set(this.pidKey(newPid), t);
         this.scheduleThread (t)
         return newPid;
     }
@@ -214,33 +224,32 @@ export class Scheduler implements SchedulerInterface {
 
 
     blockThread(t) {
-        this.__blocked.push(t)
+        this.__blocked.set(this.pidKey(t.tid), t)
     }
 
 
-    unblockThread(pid) {        
-        for (let i = 0; i < this.__blocked.length; i++) {            
-            if (pid_equals(this.__blocked[i].tid, pid)) {
-                this.scheduleThread(this.__blocked[i]);
-                this.__blocked.splice(i, 1);                
-                break;
-            }
+    unblockThread(pid) {
+        let key = this.pidKey(pid)
+        let t = this.__blocked.get(key)
+        if (t != null) {
+            this.__blocked.delete(key)
+            this.scheduleThread(t)
         }
     }
 
 
     isAlive(tid) {
-        return (this.__alive[tid.val.toString()] != null);
+        return (this.__alive.get(this.pidKey(tid)) != null);
     }
 
     getThread (tid) {
-        return this.__alive[tid.val.toString()];
+        return this.__alive.get(this.pidKey(tid));
     }
 
 
     stopThreadWithErrorMessage (t:Thread, s:string ) {
         this.notifyMonitors(TerminationStatus.ERR, s) ;
-        delete this.__alive [t.tid.val.toString()];
+        this.__alive.delete (this.pidKey(t.tid));
     }
 
     /*****************************************************************************\
@@ -263,11 +272,11 @@ export class Scheduler implements SchedulerInterface {
     loop()  {
         const $$LOOPBOUND = 500000;
         let _FUNLOOP = this.__funloop
-        let _curThread: Thread; 
-        let dest; 
+        let _curThread: Thread;
+        let dest;
         try {
-            for (let $$loopiter = 0; $$loopiter < $$LOOPBOUND && _FUNLOOP.length > 0; $$loopiter ++ ) {
-                _curThread = _FUNLOOP.shift();
+            for (let $$loopiter = 0; $$loopiter < $$LOOPBOUND && !_FUNLOOP.isEmpty; $$loopiter ++ ) {
+                _curThread = _FUNLOOP.dequeue();
                 this.__currentThread = _curThread;
                 dest = _curThread.next 
                 let ttl = 1000;  // magic constant; 2021-04-29
@@ -279,7 +288,7 @@ export class Scheduler implements SchedulerInterface {
                     _curThread.handlerState.checkGuard() 
 
                     _curThread.next = dest ;
-                    _FUNLOOP.push (_curThread);
+                    _FUNLOOP.enqueue (_curThread);
                 }
             }    
         } catch (e) {
@@ -294,12 +303,12 @@ export class Scheduler implements SchedulerInterface {
             }
         }
 
-        if (_FUNLOOP.length > 0) {
+        if (!_FUNLOOP.isEmpty) {
             // we are not really done, but are just hacking around the V8's memory management
             this.resumeLoopAsync();
         }
-  
-        if (this.__stopWhenAllThreadsAreDone && Object.keys(this.__alive).length == 0 ) {
+
+        if (this.__stopWhenAllThreadsAreDone && this.__alive.size == 0 ) {
             this.__stopRuntime();
         }
     }

@@ -557,6 +557,28 @@ function nPeers(): number {
  * received are marshalled correctly and
  * passes any input to the input handler.
  */
+// A frame that is not valid JSON on the Troupe protocol is an expected
+// adversarial input at the transport boundary: any peer that can reach the port
+// can send arbitrary bytes, before any trust check or deserialization runs.
+// Wrap the parse so the read pipe can drop the offending connection and keep the
+// node serving, rather than let a raw SyntaxError reach the fatal default arm of
+// processExpectedNetworkErrors and terminate the process.
+class MalformedInboundFrame extends Error {
+  constructor(peer: string, cause: unknown) {
+    super(`malformed inbound frame from ${peer}: `
+      + `${cause instanceof Error ? cause.message : String(cause)}`);
+    this.name = 'MalformedInboundFrame';
+  }
+}
+
+function parseInboundFrame(id: string, s: string): any {
+  try {
+    return JSON.parse(s);
+  } catch (e) {
+    throw new MalformedInboundFrame(id, e);
+  }
+}
+
 function setupConnection(peerId: PeerId, stream): void {
   let id: string = peerId.toString();
   debug(`setupConnection with ${id}`);
@@ -587,15 +609,31 @@ function setupConnection(peerId: PeerId, stream): void {
     stream,
     (source) => lp.decode(source),
     (source) => map(source, (buf) => uint8ArrayToString(buf.subarray())),
-    (source) => map(source, (string: string) => JSON.parse(string)),
+    (source) => map(source, (string: string) => parseInboundFrame(id, string)),
     async (source) => {
       try {
         for await (const message of source) {
-          // Send any input to the input handler
-          inputHandler(id, message);
+          // Send any input to the input handler. inputHandler is async and is
+          // intentionally not awaited here (messages are processed as they
+          // arrive). Its handlers drop expected adversarial inputs at their own
+          // boundary; anything that still rejects is unexpected, so log it with
+          // peer context and let it surface (the node's fail-fast policy) rather
+          // than have it reach the process-level handler with no context.
+          inputHandler(id, message).catch(err => {
+            error(`Unexpected error handling message from ${id}: ${err?.stack ?? err}`);
+            throw err;
+          });
         }
       } catch (err) {
-        processExpectedNetworkErrors(err, "setupConnection/read-pipe");
+        if (err instanceof MalformedInboundFrame) {
+          // Expected: a peer spoke non-JSON on the Troupe protocol. Log it and
+          // fall through to hang up this connection below; the node keeps
+          // serving every other peer. The fatal default arm of
+          // processExpectedNetworkErrors is reserved for the unexpected.
+          info(`Dropping connection to ${id}: ${err.message}`);
+        } else {
+          processExpectedNetworkErrors(err, "setupConnection/read-pipe");
+        }
       }
 
       // Hangs up when the connection closes

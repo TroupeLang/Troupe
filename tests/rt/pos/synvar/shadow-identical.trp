@@ -1,0 +1,14 @@
+(* An identical re-declaration in a later group is the *same* type
+   (content addressing, spec §5/§10). Both declarations hash identically, so
+   their constructors carry identical tags: the bare names RED / GREEN are
+   therefore NOT ambiguous (ambiguity is tag-based -- distinct tags would make
+   this a static error), and a value built via the shared tag matches the
+   shared-tag pattern. The program compiling and running is the pin. *)
+datatype color = RED | GREEN of int
+datatype color = RED | GREEN of int
+
+let val x = GREEN 5
+in
+  print x;                                    (* (GREEN 5) *)
+  print (case x of GREEN n => n | RED => 0)   (* 5         *)
+end

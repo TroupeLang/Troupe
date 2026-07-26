@@ -1,30 +1,61 @@
 # Contributing
 
 > **Scope:** conventions for changing the codebase — the test-suite layout and a worked example of
-> adding a built-in function. For background on how the system is structured see
+> adding a built-in function. For the pull-request policy see the repository-root
+> [CONTRIBUTING.md](../CONTRIBUTING.md). For background on how the system is structured see
 > [ARCHITECTURE.md](ARCHITECTURE.md); for build/test commands see [DEVELOPMENT.md](DEVELOPMENT.md).
 
 ## Test suite layout
 
 Tests live in `tests/`:
 
-- `cmp/` — negative compiler tests
+- `cmp/` — negative compiler tests, with `modules/` and `synvar/` subdirectories
 - `lib/` — standard-library tests
 - `rt/` — runtime tests
-  - `pos/` — positive tests (should succeed): `core/`, `ifc/` (with `ifc/sandbox/`), `preamble/`
-  - `neg/` — negative tests (should fail)
-  - `timeout/` — tests with timeouts
+  - `pos/` — positive tests (should succeed): `bigint/`, `core/`, `ifc/` (with
+    `ifc/blocking_pini_leaks/`, `ifc/nmifc/`, `ifc/projection-typelabel/`, `ifc/sandbox/`),
+    `modules/`, `operators/`, `preamble/`, `synvar/`
+  - `neg/` — negative tests (should fail): `bigint/`, `core/`, `ifc/` (with `ifc/nmifc/`,
+    `ifc/projection-progress/`), `preamble/`
+  - `timeout/` — `blocking/` (with `blocking/neg/`) and `diverging/`; both run under an 8-second
+    external `timeout` and must not terminate on their own, and differ only in the diff wrapper
+    used (`diverging/` compares the first 100 lines of output)
   - `warn/` — tests that should produce warnings
   - `multinode-tests/` — multinode (networking) tests
+  - `hostile-peer/` — raw-libp2p attacks against one victim node, driven by
+    `scripts/run-hostile-peer-tests.sh` (`make test/hostile-peer`)
+  - `result-socket/` — result-socket tests, driven by their own scripts
+- `_util/` — the diff wrappers the golden runner invokes (`diff.sh`, `diff_n.sh`), and `filter.sh`,
+  used by the multinode runner
+- `_old_tests/` — retired tests, not run
 
 Throwaway/experimental tests go in `tests/_unautomated/` (see `CLAUDE.md`).
 
-Non-networking tests pair a `.trp` source with a `.golden` expected-output file; the `bin/golden` utility compares output using a diff that discards timestamped values. Multinode tests do not use golden files — see `tests/rt/multinode-tests/README.md`.
+The golden runner (`compiler/test/Golden.hs`) collects `.trp` files from `tests/cmp`,
+`tests/rt/pos`, `tests/rt/neg`, `tests/rt/warn`, `tests/rt/timeout/blocking`,
+`tests/rt/timeout/diverging`, and `tests/lib`. At startup it locates the Troupe root — from the
+installed `bin/golden` path, by searching upward from the working directory for the `.troupe-root`
+marker file, or from `$TROUPE` — and changes into it, so it can be run from any subdirectory of a
+checkout. Files under a directory component named `modsrc` are excluded from collection: they are
+module sources compiled by the test that imports them, not tests themselves.
+
+Non-networking tests pair a `.trp` source with a `.golden` expected-output file, and with a
+`.nocolor.golden` file for runs under `bin/golden --no-color`. The `bin/golden` utility compares
+output using a diff wrapper (`tests/_util/diff.sh`) that discards timestamped values and uuids. A
+test may also carry a `<name>.trp.input` file, whose contents are fed to the program on standard
+input, and a `<name>.trp.options` file, whose contents are parsed shell-style and appended to the
+`local.sh` invocation (`#` lines are comments). A program that imports program-relative modules
+carries a `<name>.deps.json` pinning each module by content hash. Multinode tests do not use golden
+files — see `tests/rt/multinode-tests/README.md`.
+
+By default the runner executes every collected test twice, once with Raw optimization and once with
+`--no-rawopt`; `bin/golden --quick` runs only the optimized pass.
 
 ## Adding a built-in function
 
-Adding a built-in requires changes in both the compiler and the runtime. The easiest way to
-list all existing built-ins is to inspect `compiler/src/IR.hs`.
+Adding a built-in requires changes in both the compiler and the runtime. The list of all existing
+built-ins is the `wfir (Base fname)` case in `compiler/src/IR.hs`; it is the only place the
+compiler checks base-function names.
 
 ### 1. Compiler registration
 
@@ -74,8 +105,10 @@ export const UserRuntime =
 
 ```bash
 make compiler   # rebuild compiler
+make lib        # rebuild the Troupe libraries against the new compiler
 make rt         # rebuild runtime
-make test       # run tests
+make test       # run tests (mkdir -p out && ./bin/golden for the golden suite alone;
+                # without the out directory, the persistence tests fail with ENOENT)
 ```
 
 Notes:

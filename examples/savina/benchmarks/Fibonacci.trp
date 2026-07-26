@@ -1,0 +1,27 @@
+(* Savina fibonacci: fib(n) via a tree of actors; each actor for n > 2 spawns
+ * two children and sums their replies. Exports `descriptor`. *)
+
+datatype 'a msg = Compute of int * 'a | Result of int
+
+let fun fibActor () =
+        receive [ hn (Compute (n, parent)) =>
+            if n <= 2 then send (parent, Result 1)
+            else let val me = self ()
+                     val _ = send (spawn fibActor, Compute (n - 1, me))
+                     val _ = send (spawn fibActor, Compute (n - 2, me))
+                 in receive [ hn (Result a) =>
+                      receive [ hn (Result b) =>
+                        send (parent, Result (a + b)) ] ]
+                 end ]
+    fun bench n =
+        let val _ = send (spawn fibActor, Compute (n, self ()))
+        in receive [ hn (Result v) => v ] end
+    fun fibRef n =
+        let fun go (k, a, b) = if k = n then b else go (k + 1, b, a + b)
+        in if n <= 2 then 1 else go (2, 1, 1) end
+    val descriptor =
+        { name  = "fibonacci"
+        , bench = bench
+        , check = fn n => fn r => r = fibRef n
+        , sizes = [16, 19, 22] }
+in [ ("descriptor", descriptor) ] end

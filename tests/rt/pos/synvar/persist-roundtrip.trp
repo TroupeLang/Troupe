@@ -1,0 +1,41 @@
+(* A compound variant value that crosses a real serialization boundary --
+   persisted to disk with `save`, then read back with `restore` -- still
+   matches constructor patterns. The content-addressed variant tags (a
+   SHA-256 of the declaration embedded in tuple slot 0) survive the JSON
+   round trip through the file, so pattern matching by string equality still
+   succeeds on the reloaded value. *)
+
+import List
+
+datatype color = RED | GREEN | BLUE
+datatype shape = Circle of int
+               | Rect of int * int
+               | Group of shape list
+
+let (* A compound value: nullary and applied constructors, a variant nested
+       inside another variant (Group), and variants inside a tuple/list. *)
+    val payload = (GREEN, [ Circle 3
+                          , Rect (4, 5)
+                          , Group [Circle 1, Rect (2, 2)] ])
+
+    val _        = save (authority, "synvar-roundtrip", payload)
+    val restored = restore ("synvar-roundtrip")
+
+    fun area (Circle r)    = 3 * r * r
+      | area (Rect (w, h)) = w * h
+      | area (Group ss)    = List.foldl (fn (s, acc) => acc + area s) 0 ss
+
+    fun colorName RED   = "red"
+      | colorName GREEN = "green"
+      | colorName BLUE  = "blue"
+in
+    (* Match the reloaded value with patterns compiled here, independent of the
+       write side, and print the extracted payloads. *)
+    case restored of
+      (c, shapes) =>
+        let val _ = print ("color: " ^ colorName c)
+            val _ = print ("shape count: " ^ toString (List.length shapes))
+            val _ = List.map (fn s => print ("area: " ^ toString (area s))) shapes
+        in print ("total area: " ^ toString (List.foldl (fn (s, acc) => acc + area s) 0 shapes))
+        end
+end

@@ -1,0 +1,86 @@
+(* runall — run the CLBG allocation/GC-stress evaluation from one place.
+ *
+ * Runs every benchmark in the published Clbg module (or a subset named on
+ * the command line) at its default sizes, one untimed warmup plus three
+ * timed repetitions per size, prints the Bench measurement lines as it
+ * goes, and writes three artifacts via SimpleFileIO:
+ *
+ *   clbg-results.txt   the raw measurement rows
+ *   clbg-report.md     per-benchmark medians and per-unit costs
+ *   clbg-charts.svg    small-multiple scaling charts
+ *
+ * The benchmark descriptors are a program-relative module imported below
+ * (recompiled with the whole import graph on every run). The report renderer
+ * is reused from the Savina study (rows are generic (name, size, ms, ok)
+ * tuples), imported directly as a module across directories via
+ * "../../savina/SavinaReport", so nothing needs publishing first:
+ *
+ *   ./local.sh examples/benchmarks/clbg/runall.trp --io-root out
+ *   ./local.sh examples/benchmarks/clbg/runall.trp --io-root out -- fannkuchredux
+ *
+ * The whole suite runs in a single Troupe process; between benchmarks the
+ * main mailbox is drained (a self-sent marker behind FIFO delivery bounds
+ * the drain), so a benchmark that leaked a message cannot confuse the next
+ * one — a nonzero drain count is reported.
+ *)
+
+import Outcome
+import { writeFile } SimpleFileIO
+import List
+import String
+import Bench
+import "./Clbg"
+import "../../savina/SavinaReport"
+
+datatype Atoms = FLUSHMARK
+
+let val args = getCliArgs authority
+
+    val selected =
+        if List.length args = 0 then Clbg.all
+        else List.filter (fn d => List.length
+                                    (List.filter (fn a => a = d.name) args) > 0)
+                         Clbg.all
+
+    val unknown =
+        List.filter (fn a => List.length
+                               (List.filter (fn d => d.name = a) Clbg.all) = 0)
+                    args
+
+    fun flushMailbox () =
+        let val _ = send (self (), FLUSHMARK)
+            fun drain n =
+                receive [ hn FLUSHMARK => n
+                        , hn _         => drain (n + 1) ]
+        in drain 0 end
+
+    fun runOne d =
+        let val rows = Bench.collectRows authority d.name d.sizes 3 d.bench d.check
+            val leaked = flushMailbox ()
+            val _ = if leaked > 0
+                    then print (d.name, "leaked messages into main mailbox:", leaked)
+                    else ()
+        in List.map (fn (n, _, ms, ok) => (d.name, n, ms, ok)) rows end
+
+    fun runAll ([], acc)      = List.reverse acc
+      | runAll (d :: ds, acc) =
+          runAll (ds, List.append (List.reverse (runOne d)) acc)
+
+    fun save (path, content) =
+        case writeFile (authority, path, content) of
+          OK _ => print ("wrote", path)
+        | ERR e => print ("write error", path, e.reason)
+
+in if List.length unknown > 0
+   then print ("unknown benchmarks:", unknown)
+   else
+     let val rows = runAll (selected, [])
+         val summaries = SavinaReport.summarize rows
+         val _ = save ("clbg-results.txt", SavinaReport.resultLines rows ^ "\n")
+         val _ = save ("clbg-report.md", SavinaReport.markdown ("CLBG results", summaries) ^ "\n")
+         val _ = save ("clbg-charts.svg", SavinaReport.svg summaries)
+         val failed = List.filter (fn (_, ok, _) => not ok) summaries
+     in print (List.length summaries, "benchmarks run,",
+               List.length failed, "with failures")
+     end
+end

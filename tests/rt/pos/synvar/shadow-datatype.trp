@@ -1,0 +1,16 @@
+(* A later group re-declaring a datatype name is legal lexical shadowing
+   (spec §2). The name 't' resolves to the newest declaration; values built
+   under the old declaration remain constructible and matchable through their
+   own bare constructor, which stays reachable while unambiguous. A qualified
+   't.B' resolves against the nearest (newest) 't'. *)
+datatype t = A of int
+datatype t = B of string
+
+let val oldv = A 5           (* A belongs to the shadowed t *)
+    val newv = B "hi"        (* B belongs to the shadowing t *)
+in
+  print oldv;                              (* (A 5)     *)
+  print newv;                              (* (B "hi")  *)
+  print (case oldv of A n => n | _ => 0);  (* 5         -- old value still matches bare A *)
+  print (case newv of t.B s => s)          (* "hi"      -- t.B resolves to the newest t *)
+end

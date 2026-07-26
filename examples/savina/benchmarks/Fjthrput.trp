@@ -1,0 +1,31 @@
+(* Savina fjthrput: flood 8 workers with n messages each and tally the counts
+ * they report. Exports `descriptor`. *)
+
+import List
+
+datatype msg = Ping | Done of int
+
+let val numWorkers = 8
+    fun worker (main, n) =
+        let fun loop c =
+                if c = n then send (main, Done c)
+                else receive [ hn Ping => loop (c + 1) ]
+        in loop 0 end
+    fun bench n =
+        let val main = self ()
+            val workers = List.map (fn _ => spawn (fn () => worker (main, n)))
+                                   (List.range numWorkers)
+            fun flood i =
+                if i = n then ()
+                else (List.map (fn w => send (w, Ping)) workers; flood (i + 1))
+            val _ = flood 0
+            fun collect (k, total) =
+                if k = 0 then total
+                else receive [ hn (Done c) => collect (k - 1, total + c) ]
+        in collect (numWorkers, 0) end
+    val descriptor =
+        { name  = "fjthrput"
+        , bench = bench
+        , check = fn n => fn t => t = numWorkers * n
+        , sizes = [5000, 20000, 50000] }
+in [ ("descriptor", descriptor) ] end

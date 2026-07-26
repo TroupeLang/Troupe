@@ -41,8 +41,8 @@ lterm = lp
 fwritelnDecl :: LFunDecl
 fwritelnDecl = lp $ FunDecl "fwriteln"
   [Lambda [lpat $ TuplePattern [lpat $ VarPattern "fd", lpat $ VarPattern "x"] ] $
-    lterm $ Seq [lterm $ App (lterm $ Var "fwrite") [lterm $ Tuple [lterm $ Var "fd", lterm $ Var "x"]]
-                , lterm $ App (lterm $ Var "fwrite") [lterm $ Tuple [lterm $ Var "fd", lterm $ Lit $ LString "\\n"]]
+    lterm $ Seq [lterm $ App (lterm $ Var "fwrite") [lterm $ Tuple [lterm $ Var "fd", lterm $ Var "x"] False]
+                , lterm $ App (lterm $ Var "fwrite") [lterm $ Tuple [lterm $ Var "fd", lterm $ Lit $ LString "\\n"] False]
         ]
   ]
 
@@ -50,7 +50,7 @@ fwritelnWithLabelsDecl :: LFunDecl
 fwritelnWithLabelsDecl = lp $ FunDecl "fwritelnWithLabels"
   [Lambda [lpat $ TuplePattern [lpat $ VarPattern "fd", lpat $ VarPattern "x"] ] $
     lterm $ App (lterm $ Var "fwriteln") [lterm $ Tuple [lterm $ Var "fd"
-                                                        , lterm $ App (lterm $ Var "toStringL") [lterm $ Var "x"]]]
+                                                        , lterm $ App (lterm $ Var "toStringL") [lterm $ Var "x"]] False]
   ]
 
 printStringDecl :: LFunDecl
@@ -58,7 +58,7 @@ printStringDecl = lp $ FunDecl "printString"
     [Lambda [lpat $ VarPattern "x" ] $
       lterm $ Let [ ValDecl (lpat $ VarPattern "fd") (lterm $ App (lterm $ Var "stdout")
                                                               [lterm $ Var "authority"])] $
-          (lterm $ App (lterm $ Var "fwriteln") [lterm $ Tuple [lterm $ Var "fd", lterm $ Var "x"]])
+          (lterm $ App (lterm $ Var "fwriteln") [lterm $ Tuple [lterm $ Var "fd", lterm $ Var "x"] False])
     ]
 
 printDecl :: LFunDecl
@@ -81,7 +81,7 @@ inputLineDecl = lp $ FunDecl "inputLine"
     ]
 
 addAmbientMethods :: Prog -> Prog
-addAmbientMethods (Prog imports atoms t) =
+addAmbientMethods (Prog imports groups t) =
     let t' = lterm $ Let [FunDecs [ fwritelnDecl
                           , fwritelnWithLabelsDecl
                           , printStringDecl
@@ -89,4 +89,4 @@ addAmbientMethods (Prog imports atoms t) =
                           , printWithLabelsDecl
                           , inputLineDecl]
                  ] t
-    in Prog imports atoms t'
+    in Prog imports groups t'

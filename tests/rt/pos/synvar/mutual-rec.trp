@@ -1,0 +1,12 @@
+(* A genuinely mutually recursive `and` group (expr/stmt) and a
+   recursive walk that crosses between the two types. *)
+datatype expr = NUM of int | DO of stmt
+     and stmt = SKIP | RUN of expr | SEQ of stmt * stmt
+
+let fun evalE (NUM n)        = n
+      | evalE (DO s)         = evalS s
+    and evalS SKIP           = 0
+      | evalS (RUN e)        = evalE e
+      | evalS (SEQ (s1, s2)) = evalS s1 + evalS s2
+in print (evalE (DO (SEQ (RUN (NUM 3), RUN (DO (SEQ (RUN (NUM 4), SKIP)))))))  (* 3 + 4 = 7 *)
+end

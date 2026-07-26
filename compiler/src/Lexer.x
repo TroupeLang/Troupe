@@ -32,13 +32,26 @@ $alpha_ = [$alpha \_]
 $eol   = [\n]
 $graphic    = $printable # $white
 @sym        = $alpha_ [$alpha $digit \_ \']*
+@tyvar      = \' $alpha [$alpha $digit \_ \']*
 @string     = \" ($printable # \")* \"
 @label      = \`\{ ($printable # \})*  \}\`
+-- Operator lexemes (docs: _dev_planning/custom-operators/design.md §2.1).
+-- An operator is a maximal run of $opchar beginning with $opinitial. The
+-- initials exclude ! ~ ? (reserved for future prefix operators), and : .
+-- (protecting ::, the record-type separator, projection, and ..); all four are
+-- legal continuations.
+-- Reserved spellings keep their dedicated tokens: those rules precede the
+-- operator rule, and Alex prefers the longest match, then the earliest rule,
+-- so equal-length ties stay reserved (<> is not-equal) while strictly longer
+-- runs are operators (<>> or ==>).
+$opinitial  = [\$ \% \& \* \+ \- \/ \< \= \> \@ \^ \|]
+$opchar     = [$opinitial \! \~ \? \: \.]
 @declit     = $digit[\_$digit]*
 @binlit     = 0[bB]$bindigit[\_$bindigit]*
 @octlit     = 0[oO]$octdigit[\_$octdigit]*
 @hexlit     = 0[xX]$hexdigit[\_$hexdigit]*
 @floatlit   = $digit[\_$digit]* \. $digit[\_$digit]* ([eE][\+\-]? $digit[\_$digit]*)?
+@biglit     = $digit[\_$digit]* n
 
 tokens:-
 -- Whitespace insensitive
@@ -113,7 +126,9 @@ tokens:-
 <0>   andb                           { mkL TokenBinAnd }
 <0>   orb                            { mkL TokenBinOr }
 <0>   xorb                           { mkL TokenBinXor }
-<0>   Atoms                          { mkL TokenAtoms }
+<0>   infixl                         { mkL TokenInfixl }
+<0>   infixr                         { mkL TokenInfixr }
+<0>   infix                          { mkL TokenInfix }
 <0>   "#true"                        { mkL TokenDCTrue }
 <0>   "#false"                       { mkL TokenDCFalse }
 <state_dclabel> "#root-confidentiality" { mkL TokenDCRootConf }
@@ -127,6 +142,7 @@ tokens:-
 <0>   @binlit                        { mkLs (\s -> TokenNum (fst (head (readBin (filter (/='_') (drop 2 s)))))) }
 <0>   @octlit                        { mkLs (\s -> TokenNum (fst (head (readOct (filter (/='_') (drop 2 s)))))) }
 <0>   @hexlit                        { mkLs (\s -> TokenNum (fst (head (readHex (filter (/='_') (drop 2 s)))))) }
+<0>   @biglit                        { mkLs (\s -> TokenBigInt (filter (/='_') (init s))) }
 <0>   (@declit|@binlit|@octlit|@hexlit)@sym { \(_, _, _, s) _ -> lexerError ("Invalid literal " ++ s) }
 <0>   [\<][\<]                       { mkL TokenBinShiftLeft }
 <0>   [\>][\>]                       { mkL TokenBinShiftRight }
@@ -158,9 +174,14 @@ tokens:-
 <0, state_dclabel>   [\|]            { mkL TokenBar }
 <0>   [\_]                           { mkL TokenWildcard }
 <0>   [\:][\:]                       { mkL TokenColonColon }
+<0>   [\:]                           { mkL TokenColon }
 <0>   [\[]                           { mkL TokenLBracket }
 <0>   [\]]                           { mkL TokenRBracket }
 <0, state_dclabel>   [\&]            { mkL TokenAmpersand }
+-- The operator rule comes after every reserved-spelling rule above (tie goes
+-- to the earlier rule) and only in state 0 (never inside DC labels).
+<0>   $opinitial $opchar*            { mkLs TokenOperator }
+<0>   @tyvar                         { mkLs (\s -> TokenTyVar (tail s)) }
 <0, state_dclabel>   @sym            { mkLs (\s -> TokenSym s) }
 <0>   @label                         { mkLs (\s -> (TokenLabel (((map toLower) . trim . unquote) s)))}
 
@@ -216,14 +237,19 @@ data Token
   | TokenQualified
   | TokenAs
   | TokenDatatype
-  | TokenAtoms
-  | TokenIntDiv 
-  | TokenMod  
+  | TokenIntDiv
+  | TokenMod
+  | TokenInfixl
+  | TokenInfixr
+  | TokenInfix
+  | TokenOperator String
   | TokenFn
   | TokenHn
   | TokenNum Integer
+  | TokenBigInt String
   | TokenFloat Double
   | TokenSym String
+  | TokenTyVar String
   | TokenString String
   | TokenTrue
   | TokenFalse
@@ -247,6 +273,7 @@ data Token
   | TokenWildcard
   | TokenBar
   | TokenColonColon
+  | TokenColon
   | TokenLBracket
   | TokenRBracket
   | TokenEOF
@@ -287,7 +314,7 @@ alexEOF = do
     comment_depth <- getLexerCommentDepth
     start_code <- alexGetStartCode
     if comment_depth > 0
-        then alexError "Comment not closed at end of file"
+        then alexError "Comment not closed at end of file (note: '(*' starts a comment; for an operator beginning or ending with '*', write '( * )' with spaces)"
         else if start_code == state_dclabel
             then alexError "Incomplete DC label at end of file - label not closed"
         else return (L undefined TokenEOF)
@@ -411,7 +438,6 @@ showToken TokenWith = "keyword 'with'"
 showToken TokenQualified = "keyword 'qualified'"
 showToken TokenAs = "keyword 'as'"
 showToken TokenDatatype = "keyword 'datatype'"
-showToken TokenAtoms = "keyword 'Atoms'"
 showToken TokenFn = "keyword 'fn'"
 showToken TokenHn = "keyword 'hn'"
 showToken TokenTrue = "'true'"
@@ -420,9 +446,15 @@ showToken TokenAndAlso = "'andalso'"
 showToken TokenOrElse = "'orelse'"
 showToken TokenIntDiv = "'div'"
 showToken TokenMod = "'mod'"
+showToken TokenInfixl = "keyword 'infixl'"
+showToken TokenInfixr = "keyword 'infixr'"
+showToken TokenInfix = "keyword 'infix'"
+showToken (TokenOperator s) = "operator '" ++ s ++ "'"
 showToken (TokenNum n) = "number " ++ show n
+showToken (TokenBigInt s) = "bigint " ++ s ++ "n"
 showToken (TokenFloat f) = "float " ++ show f
 showToken (TokenSym s) = "identifier '" ++ s ++ "'"
+showToken (TokenTyVar s) = "type variable '" ++ '\'' : s ++ "'"
 showToken (TokenString s) = "string \"" ++ s ++ "\""
 showToken (TokenLabel l) = "label `{" ++ l ++ "}`"
 showToken TokenArrow = "'=>'"
@@ -447,6 +479,7 @@ showToken TokenComma = "','"
 showToken TokenBar = "'|'"
 showToken TokenWildcard = "'_'"
 showToken TokenColonColon = "'::'"
+showToken TokenColon = "':'"
 showToken TokenDot = "'.'"
 showToken TokenDotDot = "'..'"
 showToken TokenRaisedTo = "'raisedTo'"

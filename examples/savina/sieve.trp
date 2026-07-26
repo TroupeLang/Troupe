@@ -1,0 +1,27 @@
+(* Savina benchmark: Sieve of Eratosthenes (parallelism group).
+ *
+ * A dynamically growing pipeline of prime-filter actors: each actor holds
+ * one prime and forwards candidates not divisible by it; a candidate that
+ * survives the whole chain is a new prime and becomes a new filter at the
+ * end of the chain. The main process streams odd candidates up to n (the
+ * size parameter) into the chain, then sends a stop marker that flushes
+ * through behind them. Measures pipeline messaging with dynamic actor
+ * creation (one actor per prime found).
+ *
+ *   ./local.sh examples/savina/sieve.trp                # default sizes
+ *   ./local.sh examples/savina/sieve.trp -- 2000 5000   # explicit sizes
+ *
+ * Result: number of primes found; ok iff it equals the number of primes
+ * up to n. Reference counts are built in for the supported sizes; a size
+ * without a reference reports ok=false rather than claiming an unverified
+ * result.
+ *)
+
+import List
+import Bench
+import "./Savina"
+
+let val d = case List.filter (fn d => d.name = "sieve") Savina.all of [d] => d
+    val sizes = Bench.sizesFromArgs (getCliArgs authority) d.sizes
+in Bench.run authority d.name sizes 3 d.bench d.check
+end

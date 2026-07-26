@@ -1,0 +1,42 @@
+(* Savina trapezoid: 8 workers integrate 4/(1+x^2) over [0,1] by the trapezoid
+ * rule; the sum approximates pi. Exports `descriptor`. *)
+
+import List
+
+datatype 'a msg = Work of float * float * int * 'a | Partial of float
+
+let val numWorkers = 8
+    val pi = 3.14159265358979
+    fun f x = 4.0 / (1.0 + x * x)
+    fun worker () =
+        receive [ hn (Work (lo, h, count, master)) =>
+            let fun go (i, acc) =
+                    if i = count then acc
+                    else let val x = lo + i * h
+                         in go (i + 1, acc + (f x + f (x + h)) * h / 2.0)
+                         end
+            in send (master, Partial (go (0, 0.0)))
+            end ]
+    fun bench n =
+        let val main = self ()
+            val h = 1.0 / n
+            val chunk = (n div numWorkers)
+            fun assign i =
+                let val count = if i = numWorkers - 1
+                                then n - chunk * (numWorkers - 1)
+                                else chunk
+                    val lo = i * chunk * h
+                in send (spawn worker, Work (lo, h, count, main))
+                end
+            val _ = List.map assign (List.range numWorkers)
+            fun collect (k, acc) =
+                if k = 0 then acc
+                else receive [ hn (Partial s) => collect (k - 1, acc + s) ]
+        in collect (numWorkers, 0.0) end
+    fun abs x = if x < 0.0 then 0.0 - x else x
+    val descriptor =
+        { name  = "trapezoid"
+        , bench = bench
+        , check = fn n => fn r => abs (r - pi) < 0.000001
+        , sizes = [50000, 200000, 800000] }
+in [ ("descriptor", descriptor) ] end

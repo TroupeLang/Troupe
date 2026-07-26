@@ -1,0 +1,271 @@
+import String
+import List
+import Number
+import Outcome
+import Pretty
+
+(** Sexp - a reader and printer for Lisp-style s-expressions.
+ *
+ *  An s-expression is an atom, a quoted string, or a list of s-expressions:
+ *
+ *    datatype sexp = ATOM of string | STR of string | LST of sexp list
+ *
+ *  `ATOM` carries a symbol or a number as written (`foo`, `+`, `42`, `-3`); the reader does not
+ *  interpret numeric syntax, so a caller that wants numbers converts the payload itself. `STR`
+ *  carries the decoded contents of a `"`-delimited literal. Importing this library brings `ATOM`,
+ *  `STR`, and `LST` into scope; that is not transitive, so a client that pattern-matches on a sexp
+ *  it received from another library imports `Sexp` itself. The same holds for the `OK`/`ERR` of the
+ *  outcome `parse` returns: match on it only after `import Outcome`.
+ *
+ *  Input syntax: lists in parentheses, atoms as maximal runs of characters that are none of
+ *  whitespace, `(`, `)`, `"`, or `;`, string literals in double quotes with the escapes
+ *  `\"` `\\` `\n` `\t` `\r`, and `;` line comments running to the next newline. Whitespace
+ *  separates but is otherwise insignificant.
+ *
+ *    case Sexp.parse "(add 1 (mul 2 3)) ; arithmetic" of
+ *        OK t  => Sexp.pretty 40 t
+ *      | ERR e => "at " ^ toString e.offset ^ ": " ^ e.reason
+ *
+ *  `print` and `parse` are inverse on every sexp the reader can produce: `parse (print s)` is
+ *  `OK s`. A hand-built `ATOM` whose payload is empty or contains whitespace, a parenthesis, a
+ *  quote, or a semicolon is outside that set — it prints unquoted, and so does not read back as
+ *  the same value. Use `STR` for text that is not atom-shaped.
+ *
+ *  Security / IFC: the pieces of every leaf `parse` produces are substrings of the input, so they
+ *  carry the label of the input string and the provenance of untrusted input survives parsing.
+ *  Printed output is labelled with the join of the visited node labels (automatic through
+ *  `String.concat`). The library performs no `declassify` or `endorse`.
+ *)
+
+datatype sexp = ATOM of string
+              | STR  of string
+              | LST  of sexp list
+
+let (*--- Character helpers ---*)
+
+    (* A double-quote character, built via an escape so no literal quote appears in source. *)
+    val q  = "\x22"
+    (* A single backslash character. *)
+    val bs = "\x5c"
+
+    (* Space, tab, newline, and carriage return. *)
+    fun isWs c = c = 32 orelse c = 9 orelse c = 10 orelse c = 13
+
+    (* The characters that end an atom: whitespace, the parentheses, the string quote, and the
+       comment marker. Code 0 is what `String.subCode` returns past the end of the input. *)
+    fun isAtomChar c =
+        if      c = 0                                 then false
+        else if isWs c                                then false
+        else if c = 40 orelse c = 41                  then false
+        else if c = 34 orelse c = 59                  then false
+        else true
+
+    (*--- Reading ---*)
+
+    (* The greatest nesting depth the reader accepts; deeper input yields an `ERR`.
+     *
+     * This is a bound on resource exhaustion, not a stack guard: the runtime keeps its stack on
+     * the heap, so recursive descent does not run out of stack the way it would in a host
+     * language that uses the machine stack. Measured on this runtime, a million lists deep parses
+     * and prints; three million exhausts the heap, and that failure is a process abort no
+     * in-library check can convert into an `ERR`. The bound therefore sits at the integer ceiling,
+     * where it rejects nothing a caller could hold in memory and no test can reach it. Revisit
+     * together with `Json.parse`, which carries the same bound, if a resource policy is defined. *)
+    val maxDepth = Number.maxInt32
+
+    (* The reader for both entry points: `many` chooses between one form and a sequence of them.
+     * The scanners return ("ok", value, next index) or ("err", reason, offset), the convention
+     * `Json.parse` uses. *)
+    fun readWith many input =
+        let val s = input
+            val n = String.size s
+            fun code i = String.subCode (s, i)
+
+            (* Skip whitespace and `;` comments; the first index that begins a form, or `n`. *)
+            fun skipWs i =
+                if i >= n then i
+                else let val c = code i
+                     in if      isWs c  then skipWs (i+1)
+                        else if c = 59  then skipComment (i+1)
+                        else i
+                     end
+            and skipComment i =
+                if i >= n then i
+                else if code i = 10 then skipWs (i+1)
+                else skipComment (i+1)
+
+            (* Decode an escape sequence; `k` is the character just after the backslash. *)
+            fun decodeEscape k =
+                if k >= n
+                then ("err", "incomplete escape sequence", k - 1)
+                else let val c = code k
+                     in if      c = 34  then ("ok", q,      k+1)
+                        else if c = 92  then ("ok", bs,     k+1)
+                        else if c = 110 then ("ok", "\x0a", k+1)
+                        else if c = 116 then ("ok", "\x09", k+1)
+                        else if c = 114 then ("ok", "\x0d", k+1)
+                        else ("err", "invalid escape character", k)
+                     end
+
+            (* Read a string literal; `i` is at the opening quote. Unescaped runs are taken as
+               substrings of the input, so only escapes cost an allocation. *)
+            fun pString i =
+                let fun goStr j runStart acc =
+                        if j >= n
+                        then ("err", "unterminated string", i)
+                        else let val c = code j
+                             in if c = 34
+                                then let val piece = String.substring (s, runStart, j)
+                                         val full  = String.concat (List.reverse (piece :: acc))
+                                     in ("ok", STR full, j+1)
+                                     end
+                                else if c = 92
+                                then let val piece = String.substring (s, runStart, j)
+                                     in case decodeEscape (j+1) of
+                                            ("ok", str, j2) => goStr j2 j2 (str :: piece :: acc)
+                                          | e => e
+                                     end
+                                else goStr (j+1) runStart acc
+                             end
+                in goStr (i+1) (i+1) []
+                end
+
+            (* Read an atom; `i` is at its first character, which the caller has checked. *)
+            fun pAtom i =
+                let fun goAtom j = if j < n andalso isAtomChar (code j) then goAtom (j+1) else j
+                    val e = goAtom i
+                in ("ok", ATOM (String.substring (s, i, e)), e)
+                end
+
+            (* Read one form, skipping any leading whitespace and comments. *)
+            fun pForm depth i =
+                if depth > maxDepth
+                then ("err", "maximum nesting depth exceeded", i)
+                else let val i1 = skipWs i
+                     in if i1 >= n
+                        then ("err", "unexpected end of input", i1)
+                        else let val c = code i1
+                             in if      c = 40 then pList depth i1
+                                else if c = 41 then ("err", "unexpected ')'", i1)
+                                else if c = 34 then pString i1
+                                else pAtom i1
+                             end
+                     end
+
+            (* Read a list; `i` is at the opening parenthesis. *)
+            and pList depth i =
+                let fun goList j acc =
+                        let val j1 = skipWs j
+                        in if j1 >= n
+                           then ("err", "unterminated list", i)
+                           else if code j1 = 41
+                           then ("ok", LST (List.reverse acc), j1+1)
+                           else case pForm (depth+1) j1 of
+                                    ("ok", v, k) => goList k (v::acc)
+                                  | e => e
+                        end
+                in goList (i+1) []
+                end
+
+            (* Read forms until the input is exhausted. *)
+            fun goAll i acc =
+                let val i1 = skipWs i
+                in if i1 >= n
+                   then OK (List.reverse acc)
+                   else case pForm 0 i1 of
+                            ("ok", v, j)        => goAll j (v::acc)
+                          | ("err", msg, off)   => ERR {reason = msg, offset = off}
+                end
+
+        in if many
+           then goAll 0 []
+           else case pForm 0 0 of
+                    ("ok", v, i) =>
+                        let val i2 = skipWs i
+                        in if i2 >= n
+                           then OK v
+                           else ERR {reason = "trailing characters after form", offset = i2}
+                        end
+                  | ("err", msg, off) => ERR {reason = msg, offset = off}
+        end
+
+    (** Read the one s-expression that `input` contains. On success returns `OK sexp`; on malformed
+     *  input, or on anything other than whitespace and comments after the form, returns
+     *  `ERR {reason, offset}`, where `offset` is the character index of the offending character.
+     *  Never crashes on malformed input. Nesting is bounded only by memory; see `maxDepth`. *)
+    fun parse input = readWith false input
+
+    (** Read every s-expression in `input`, in order: `OK []` for input that is empty or only
+     *  whitespace and comments, `OK [s1, s2, ...]` otherwise, and `ERR {reason, offset}` on
+     *  malformed input. *)
+    fun parseAll input = readWith true input
+
+    (*--- Printing ---*)
+
+    (* Escape the contents of a `STR` so the reader decodes it back unchanged: the quote, the
+       backslash, and the three whitespace characters that have escapes. Other control characters
+       are emitted literally, which round-trips because nothing but `"` and `\` is special inside a
+       string literal. Keep this the inverse of `decodeEscape`. *)
+    fun escape str =
+        let val m = String.size str
+            fun needsEscape c =
+                c = 34 orelse c = 92 orelse c = 10 orelse c = 9 orelse c = 13
+            fun escapeFor c =
+                if      c = 34 then bs ^ q
+                else if c = 92 then bs ^ bs
+                else if c = 10 then bs ^ "n"
+                else if c = 9  then bs ^ "t"
+                else                bs ^ "r"
+            fun scan p runStart acc =
+                if p >= m
+                then String.concat (List.reverse ((String.substring (str, runStart, p)) :: acc))
+                else let val c = String.subCode (str, p)
+                     in if needsEscape c
+                        then let val piece = String.substring (str, runStart, p)
+                             in scan (p+1) (p+1) ((escapeFor c) :: piece :: acc)
+                             end
+                        else scan (p+1) runStart acc
+                     end
+        in scan 0 0 []
+        end
+
+    (** Render an s-expression on one line, with single spaces between the elements of a list. The
+     *  reader reads the result back as the same value; see the note on atom-shaped payloads in the
+     *  header. *)
+    fun print sx =
+        case sx of
+            ATOM a  => a
+          | STR t   => q ^ escape t ^ q
+          | LST xs  => "(" ^ String.concatWith " " (List.map print xs) ^ ")"
+
+    (** An s-expression as a `Pretty.doc`. A list is laid out with `Pretty.sep`, so it occupies one
+     *  line when it fits the remaining width and is stacked one element per line otherwise; since a
+     *  document placed beside another hangs, the stacked elements align one column in, under the
+     *  opening parenthesis. A list that breaks breaks between every element, so at width 20
+     *
+     *      (define (square x) (mul x x))
+     *
+     *  is laid out as
+     *
+     *      (define
+     *       (square x)
+     *       (mul x x))
+     *)
+    fun toDoc sx =
+        case sx of
+            ATOM a  => Pretty.text a
+          | STR t   => Pretty.text (q ^ escape t ^ q)
+          | LST xs  => Pretty.lparen <.> Pretty.sep (List.map toDoc xs) <.> Pretty.rparen
+
+    (** Render an s-expression to width `w`, breaking lists that do not fit. As in `Pretty.render`,
+     *  the width directs where lists break; it is not a hard limit, since an atom longer than `w`
+     *  is still emitted whole. *)
+    fun pretty w sx = Pretty.render w (toDoc sx)
+
+in [ ("parse", parse)
+   , ("parseAll", parseAll)
+   , ("print", print)
+   , ("toDoc", toDoc)
+   , ("pretty", pretty)
+   ]
+end

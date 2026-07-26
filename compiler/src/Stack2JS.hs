@@ -18,8 +18,7 @@ module Stack2JS where
 
 import IR (HFN(..)
           , ppFunCall, ppArgs
-          , serializeFunDef
-          , serializeAtoms )
+          , serializeFunDef )
 import qualified Data.ByteString.Lazy.Char8 as BL
 import qualified IR
 import qualified Raw
@@ -75,11 +74,45 @@ addLibs xs = vcat $ nub (map addOneLib xs)
 data JSOutput = JSOutput { libs :: [LibAccess]
                          , fname:: Maybe String
                          , code :: String
-                         , atoms :: [Basics.AtomName]
                          , sourceMap :: Value  -- Source map for restored code error reporting
                          } deriving (Show, Generic)
 
 instance Aeson.ToJSON JSOutput
+
+
+-- | The datatype records embedded in a compiled artifact (spec §10). A library
+-- carries the group hashes it exports; any artifact that consumed imported
+-- datatypes carries the per-library consumed hashes, checked at load time.
+data DatatypeRecords = DatatypeRecords
+  { drExported :: [String]              -- ^ this library's exported group hashes
+  , drConsumed :: [(String, [String])]  -- ^ per-library consumed group hashes
+  }
+
+noDatatypeRecords :: DatatypeRecords
+noDatatypeRecords = DatatypeRecords [] []
+
+-- | The leading @this.@ declarations that embed the datatype records. A library
+-- emits its exported-hash list; both libraries and programs emit any consumed
+-- record. Placed at the top of the enclosing constructor body (the library body
+-- or the program's @Top@ constructor), where the load-time skew check reads
+-- them off the instance.
+datatypeRecordDecls :: CompileMode -> DatatypeRecords -> [PP.Doc]
+datatypeRecordDecls compileMode (DatatypeRecords exported consumed) =
+  case compileMode of
+    Library -> [exportedDecl, consumedDecl]
+    _       -> [consumedDecl]
+  where
+    exportedDecl
+      | null exported = PP.empty
+      | otherwise = semi $ text "this.__datatypeHashes =" <+> jsStringArray exported
+    consumedDecl
+      | null consumed = PP.empty
+      | otherwise = semi $ text "this.__consumedDatatypeHashes =" <+> obj
+    obj = PP.braces $ hcatComma
+            [ PP.doubleQuotes (text lib) <> text ":" <> jsStringArray hs
+            | (lib, hs) <- consumed ]
+    jsStringArray xs = PP.brackets $ hcatComma (map (PP.doubleQuotes . text) xs)
+    hcatComma = PP.hcat . PP.punctuate (text ",")
 
 
 data TheState = TheState { freshCounter :: Integer
@@ -99,9 +132,11 @@ type MarkerData = (Int, PosInf)
 data CodeGenOpts = CodeGenOpts
   { cgoDebugMode      :: Bool  -- ^ Emit debug statements
   , cgoSourceMapEnabled :: Bool  -- ^ Emit source position tracking for error messages
+  , cgoModuleRoot     :: Maybe String  -- ^ Project root recorded in the program for module linking
+  , cgoModuleDepsFile :: Maybe String  -- ^ Dependencies file recorded in the program; the runtime seeds its hash->(location,name) resolver from it
   } deriving (Show, Eq)
 
-type WData = ([LibAccess], [Basics.AtomName], [RetKontText], [MarkerData])
+type WData = ([LibAccess], [RetKontText], [MarkerData])
 type W = RWS CodeGenOpts WData TheState
 
 
@@ -126,7 +161,7 @@ emitMarker pos = case pos of
   p@(SrcPosInf {}) -> do
     markerId <- gets markerCounter
     modify (\s -> s { markerCounter = markerId + 1 })
-    tell ([], [], [], [(markerId, p)])
+    tell ([], [], [(markerId, p)])
     return $ text ("/*SM:" ++ show markerId ++ "*/")
   _ -> return PP.empty
 
@@ -153,13 +188,10 @@ instance Identifier VarName where
 instance Identifier HFN where
   ppId (HFN n) = text n
 
-instance Identifier Basics.LibName where 
+instance Identifier Basics.LibName where
   ppId (Basics.LibName s) = text s
 
-instance Identifier Basics.AtomName where 
-  ppId = text
-
-instance Identifier RawVar where 
+instance Identifier RawVar where
   ppId (RawVar x) = text x
 
 instance Identifier Raw.Assignable where 
@@ -179,17 +211,26 @@ sourceMapPlaceholderStr = "/*__SOURCE_MAP_PLACEHOLDER__*/"
 sourceMapPlaceholder :: PP.Doc
 sourceMapPlaceholder = PP.text sourceMapPlaceholderStr
 
-stack2PPDoc :: CompileMode -> CodeGenOpts -> StackUnit -> (PP.Doc, WData)
+stack2PPDoc :: CompileMode -> CodeGenOpts -> DatatypeRecords -> StackUnit -> (PP.Doc, WData)
 
-stack2PPDoc compileMode opts (ProgramStackUnit sp) =
-  let (fns, _, w@(libs, atoms, konts, markers)) = runRWS (toJS sp) opts initState
+stack2PPDoc compileMode opts records (ProgramStackUnit sp) =
+  let (fns, _, w@(libs, konts, markers)) = runRWS (toJS sp) opts initState
       sourceMapEnabled = cgoSourceMapEnabled opts
       -- Source map attachment: defineProperty ensures it's non-enumerable
       sourceMapAttachment = if sourceMapEnabled
                             then PP.text "Object.defineProperty(this, '__sourceMap', { value:" <+> sourceMapPlaceholder <+> PP.text ", enumerable: false })"
                             else PP.empty
+      moduleRootAttachment = case cgoModuleRoot opts of
+        Just r  -> PP.text ("this.__moduleRoot = " ++ show r)
+        Nothing -> PP.empty
+      moduleDepsAttachment = case cgoModuleDepsFile opts of
+        Just r  -> PP.text ("this.__moduleDepsFile = " ++ show r)
+        Nothing -> PP.empty
       inner = vcat $
+        datatypeRecordDecls compileMode records ++
         [ sourceMapAttachment
+        , moduleRootAttachment
+        , moduleDepsAttachment
         , jsLoadLibs
         , addLibs libs
         ]
@@ -205,16 +246,16 @@ stack2PPDoc compileMode opts (ProgramStackUnit sp) =
                                   _                      -> outer
   in (ppDoc, w)
 
-stack2PPDoc _           opts su =
-  let (inner, _, w@(libs, _, konts, markers)) = runRWS (toJS su) opts initState
+stack2PPDoc _           opts _ su =
+  let (inner, _, w@(libs, konts, markers)) = runRWS (toJS su) opts initState
       ppDoc = vcat $ [ addLibs libs ] ++ (inner:konts)
   in (ppDoc, w)
 
 
 stack2JSString :: CompileMode -> Bool -> StackUnit -> String
 stack2JSString compileMode debugMode su =
-  let opts = CodeGenOpts { cgoDebugMode = debugMode, cgoSourceMapEnabled = False }
-      (ppDoc, _) = stack2PPDoc compileMode opts su
+  let opts = CodeGenOpts { cgoDebugMode = debugMode, cgoSourceMapEnabled = False, cgoModuleRoot = Nothing, cgoModuleDepsFile = Nothing }
+      (ppDoc, _) = stack2PPDoc compileMode opts noDatatypeRecords su
       rendered = PP.render ppDoc
       -- Remove lines that contain only whitespace
       cleanedLines = filter (not . isWhitespaceOnly) (lines rendered)
@@ -222,10 +263,10 @@ stack2JSString compileMode debugMode su =
 
 -- | Generate JS string and source map mappings
 -- Returns (JS code with markers stripped, list of source map mappings)
-stack2JSWithMappings :: CompileMode -> Bool -> Bool -> StackUnit -> (String, [Mapping])
-stack2JSWithMappings compileMode debugMode sourceMapEnabled su =
-  let opts = CodeGenOpts { cgoDebugMode = debugMode, cgoSourceMapEnabled = sourceMapEnabled }
-      (ppDoc, (_, _, _, markerData)) = stack2PPDoc compileMode opts su
+stack2JSWithMappings :: CompileMode -> Bool -> Bool -> DatatypeRecords -> Maybe String -> Maybe String -> StackUnit -> (String, [Mapping])
+stack2JSWithMappings compileMode debugMode sourceMapEnabled records moduleRoot moduleDepsFile su =
+  let opts = CodeGenOpts { cgoDebugMode = debugMode, cgoSourceMapEnabled = sourceMapEnabled, cgoModuleRoot = moduleRoot, cgoModuleDepsFile = moduleDepsFile }
+      (ppDoc, (_, _, markerData)) = stack2PPDoc compileMode opts records su
       rendered = PP.render ppDoc
       -- processMarkers handles marker stripping and merging whitespace-only lines
       (cleanCode, mappings) = processMarkers rendered markerData
@@ -303,19 +344,17 @@ parseMarker s
 
 stack2JSON :: CompileMode -> Bool -> StackUnit -> ByteString
 stack2JSON compileMode debugMode su =
-  let opts = CodeGenOpts { cgoDebugMode = debugMode, cgoSourceMapEnabled = True }
-      (ppDoc, (libs, atoms, konts, markers)) = stack2PPDoc compileMode opts su
+  let opts = CodeGenOpts { cgoDebugMode = debugMode, cgoSourceMapEnabled = True, cgoModuleRoot = Nothing, cgoModuleDepsFile = Nothing }
+      (ppDoc, (libs, konts, markers)) = stack2PPDoc compileMode opts noDatatypeRecords su
       rendered = PP.render ppDoc
       -- Process markers to generate source map mappings
       (cleanCode, mappings) = processMarkers rendered markers
       fname = case su of FunStackUnit (Loc _ (FunDef (HFN n) _ _ _ _)) -> Just n
-                         AtomStackUnit _                       -> Nothing
                          ProgramStackUnit _                    -> error "Internal error: stack2JSON called with ProgramStackUnit"
       -- Build source map from mappings (use empty filename since this is dynamically loaded code)
       srcMap = buildSourceMap "" mappings
   in Aeson.encode $ JSOutput { libs = libs
                              , fname = fname
-                             , atoms = atoms
                              , code = cleanCode
                              , sourceMap = srcMap
                              }
@@ -323,7 +362,6 @@ stack2JSON compileMode debugMode su =
 
 instance ToJS StackUnit where
   toJS (FunStackUnit lfdecl) = toJS lfdecl
-  toJS (AtomStackUnit ca) = toJS ca
   toJS (ProgramStackUnit p) = error "not implemented"
 
 -- | Instance for Located FunDef - extracts position and delegates to FunDef ToJS
@@ -350,19 +388,9 @@ instance ToJS IR.LVarAccess where
   toJS (Loc _ va) = toJS va
 
 instance ToJS StackProgram where
-  toJS (StackProgram atoms funs) = do
-     jjA <- toJS atoms
+  toJS (StackProgram funs) = do
      jjF <- mapM toJS funs
-     return $ vcat $ [jjA] ++ jjF
-
-
-instance ToJS C.Atoms where
-  toJS catoms@(C.Atoms atoms) = return $
-    vcat [ vcat $ (map  (\a -> hsep ["const"
-                                    , text a
-                                    , "= new rt.Atom"
-                                                  , (PP.parens ( (PP.doubleQuotes.text) a))]) atoms)
-         , text "this.serializedatoms =" <+> (pickle.serializeAtoms) catoms]
+     return $ vcat jjF
 
 
 jsonValueToString :: Value -> String
@@ -380,7 +408,9 @@ constsToJS consts = do
      docs <- mapM toJsConst consts
      return $ vcat docs
   where
-    toJsConst (x, lit) = return $ hsep ["const", ppId x , text "=", lit2JS lit ]
+    toJsConst :: (Raw.RawVar, C.Lit) -> W PP.Doc
+    toJsConst (x, lit) =
+      return $ hsep ["const", ppId x , text "=", lit2JS lit ]
 
 -- | Helper function for FunDef ToJS with explicit position
 toJSFunDefWithPos :: PosInf -> FunDef -> W PP.Doc
@@ -399,7 +429,7 @@ toJSFunDefWithPos pos (FunDef hfn stacksize consts bb irfdef) = do
        jj <- toJS bb
        opts <- ask
        let debug = cgoDebugMode opts
-       let (irdeps, libdeps, _atomdeps) = IR.ppDepsAsJSON irfdef
+       let (irdeps, libdeps) = IR.ppDepsAsJSON irfdef
        sparseSlotIdxPP <- ppSparseSlotIdx
        -- Emit source map marker for function definition
        marker <- emitMarker pos
@@ -560,8 +590,18 @@ ir2jsWithPos _pos (SetState c x) = return $ semi $ monStateToJs c <+> "=" <+> pp
 
 ir2jsWithPos pos (RTAssertion a) = do
   marker <- emitMarker pos
-  let debugComment = text $ "/* RTAssertion pos=" ++ show pos ++ " */"
-  return $ debugComment PP.<> marker PP.<> ppRTAssertionCode jsFunCall a
+  opts <- ask
+  -- Pass the operation's source position to the assertion so that, on failure,
+  -- the runtime records it as the machine's position for error reporting.
+  -- Emit it only when source maps are enabled and the position is meaningful
+  -- (not NoPos), mirroring the tail-call position write; otherwise omit it so
+  -- prelude/library operations do not carry a position. This is passed on every
+  -- assertion, but the runtime only writes it to the thread on the failure path.
+  let hasPos = case pos of
+        NoPos -> False
+        _     -> True
+  let posArgs = if cgoSourceMapEnabled opts && hasPos then [ppPosInfo pos] else []
+  return $ marker PP.<> ppRTAssertionCode jsFunCall posArgs a
 
 -- Note: LabelGroup now contains [LStackInst] (Located instructions)
 ir2jsWithPos _pos (LabelGroup lii) = do
@@ -639,7 +679,7 @@ tr2jsWithPos _pos (StackExpand bb bb2) = do
                     ]
 
 
-    tell ([], [], [jsKont], [])
+    tell ([], [jsKont], [])
     return $ vcat [
       "_SP_OLD = _SP; ", -- 2021-04-23; hack ! ;AA
       "_SP = _SP + " <+> text (show (_frameSize + 5)) <+> ";",
@@ -746,7 +786,7 @@ lfieldsToJS lfs = do
 instance ToJS RawExpr where
   toJS x = do
     HFN (fname) <- gets stHFN
-    let ppFunSelfRef = text "$env." PP.<> ppId fname
+    let ppFunSelfRef = text "$env." PP.<> text fname
     -- Helper to print VarAccess, with special case for self-reference
     let ppVarName IR.VarFunSelfRef = ppFunSelfRef
         ppVarName va = IR.ppVarAccess va
@@ -769,9 +809,11 @@ instance ToJS RawExpr where
           then hsep [ ppId va1, text', ppId va2 ]
           else jsFunCall text' [ppId va1, ppId va2]
       Un op v -> return $ text (unaryOpToJS op) <> PP.parens (ppId v)
-      -- Tuple now takes [LVarAccess]
-      Tuple lvars -> return $
-        text "rt.mkTuple" <> PP.parens (PP.brackets $ PP.hsep $ PP.punctuate (text ",") (map ppLVarAccess lvars))
+      -- Tuple now takes [LVarAccess] and a syntactic-variant tag
+      Tuple lvars tag -> return $
+        text "rt.mkTuple" <> PP.parens ((PP.brackets $ PP.hsep $ PP.punctuate (text ",") (map ppLVarAccess lvars)) <> text ", " <> tagToJS tag)
+        where tagToJS True  = text "true"
+              tagToJS False = text "false"
       -- Record now takes LFields ([(FieldName, LVarAccess)])
       Record lfields -> do
         jsFields <- lfieldsToJS lfields
@@ -797,12 +839,9 @@ instance ToJS RawExpr where
       Const (C.LLabel s) -> return $
         text "rt.mkV1Label" <> (PP.parens . PP.doubleQuotes) (text s)
       Const lit -> do
-        case lit of
-          C.LAtom atom -> tell ([], [atom], [], [])
-          _ -> return ()
         return $ ppLit lit
       Lib lib'@(Basics.LibName libname) varname -> do
-        tell ([LibAccess lib' varname], [], [], [])
+        tell ([LibAccess lib' varname], [], [])
         return $
           text "rt.loadLib" <> PP.parens ((PP.doubleQuotes.text) libname <> text ", " <> (PP.doubleQuotes.text) varname <> text ", this")
       ConstructLVal r1 r2 r3 -> return $

@@ -1,0 +1,155 @@
+import Unit
+import List
+import String
+import Outcome
+import IfcUtil
+import { readFile, writeFile, appendFile, fileExists, readDir, makeDir, fileStat, removeFile }
+       SimpleFileIO
+
+(* Hermetic by construction: with no --io-root flag the runtime allocates a fresh scratch
+ * directory per invocation, so this test builds every path it reads. No absolute path reaches
+ * the output — errors echo the caller-supplied relative path — so the golden file is
+ * machine-independent.
+ *
+ * The effects are sequenced through `val` bindings rather than written inline in the assertion
+ * list, so the order in which the filesystem is touched is the order it is read here.
+ *
+ * Every result the runtime produces is labeled at ROOT (see rt/src/builtins/simplefileio.mts:98),
+ * and `Unit.isEq` compares labels as well as values. Expectations are therefore raised to
+ * `IfcUtil.root`, which makes each assertion check the labeling contract too. *)
+
+let (* --- Sequenced effects ------------------------------------------------------------- *)
+
+    val mkNested   = makeDir (authority, "sub/nested")
+    val existsDir  = fileExists (authority, "sub/nested")
+    val mkAgain    = makeDir (authority, "sub/nested")
+
+    val wroteA     = writeFile (authority, "sub/nested/a.txt", "hello")
+    val readA1     = readFile (authority, "sub/nested/a.txt")
+    val appendedA  = appendFile (authority, "sub/nested/a.txt", " world")
+    val readA2     = readFile (authority, "sub/nested/a.txt")
+
+    val appendedB  = appendFile (authority, "sub/nested/b.txt", "created by append")
+    val readB      = readFile (authority, "sub/nested/b.txt")
+
+    val mkInner    = makeDir (authority, "sub/nested/inner")
+    val listed     = readDir (authority, "sub/nested")
+    val statA      = fileStat (authority, "sub/nested/a.txt")
+    val statDir    = fileStat (authority, "sub/nested/inner")
+
+    val removedA   = removeFile (authority, "sub/nested/a.txt")
+    val existsA    = fileExists (authority, "sub/nested/a.txt")
+
+    (* Failures. *)
+    val missingRd  = readFile (authority, "nope.txt")
+    val missingSt  = fileStat (authority, "nope.txt")
+    val notADir    = readDir (authority, "sub/nested/b.txt")
+    val rmMissing  = removeFile (authority, "nope.txt")
+    val rmDir      = removeFile (authority, "sub/nested/inner")
+    val escapeRd   = readFile (authority, "../escape.txt")
+    val escapeWr   = writeFile (authority, "../escape.txt", "nope")
+    val escapeEx   = fileExists (authority, "../escape.txt")
+
+    (* --- Helpers ---------------------------------------------------------------------- *)
+
+    (** An expectation carrying the ROOT label every SimpleFileIO result has. *)
+    fun atRoot v = v raisedTo IfcUtil.root
+
+    (** Directory order is not guaranteed across filesystems, so compare a sorted projection,
+     *  flattened to one string to keep the comparison over a single labeled value. *)
+    fun entrySummary outcome =
+        String.concatWith " "
+          (List.sort (fn a => fn b => a <= b)
+                     (List.map (fn e => e.name ^ ":" ^ e.kind) (Outcome.unwrap outcome)))
+
+    fun reasonOf outcome = (Outcome.unwrapErr outcome).reason
+    fun pathOf   outcome = (Outcome.unwrapErr outcome).path
+
+    val tests = Unit.group "SimpleFileIO" [
+
+        Unit.group "directories" [
+            Unit.it "makeDir creates a nested path"
+                    (Unit.isTrueValue (Outcome.isOk mkNested))
+          , Unit.it "the directory exists"
+                    (Unit.isEq (atRoot true) (Outcome.unwrap existsDir))
+          , Unit.it "makeDir is idempotent"
+                    (Unit.isTrueValue (Outcome.isOk mkAgain))
+        ],
+
+        Unit.group "whole-file read and write" [
+            Unit.it "writeFile reports OK"
+                    (Unit.isTrueValue (Outcome.isOk wroteA))
+          , Unit.it "readFile returns the contents"
+                    (Unit.isEq (atRoot "hello") (Outcome.unwrap readA1))
+          , Unit.it "appendFile reports OK"
+                    (Unit.isTrueValue (Outcome.isOk appendedA))
+          , Unit.it "the append is visible"
+                    (Unit.isEq (atRoot "hello world") (Outcome.unwrap readA2))
+          , Unit.it "appendFile creates a missing file"
+                    (Unit.isTrueValue (Outcome.isOk appendedB))
+          , Unit.it "the created file has the appended contents"
+                    (Unit.isEq (atRoot "created by append") (Outcome.unwrap readB))
+        ],
+
+        Unit.group "readDir" [
+            Unit.it "lists files and subdirectories with their kinds"
+                    (Unit.isEq (atRoot "a.txt:file b.txt:file inner:dir") (entrySummary listed))
+        ],
+
+        Unit.group "fileStat" [
+            Unit.it "reports the kind of a file"
+                    (Unit.isEq (atRoot "file") (Outcome.unwrap statA).kind)
+          , Unit.it "reports the size in bytes"
+                    (Unit.isEq (atRoot 11) (Outcome.unwrap statA).size)
+            (* The mtime itself is not reproducible, so only its presence is asserted. *)
+          , Unit.it "reports a positive mtime"
+                    (Unit.isTrueValue ((Outcome.unwrap statA).mtime > 0))
+          , Unit.it "reports the kind of a directory"
+                    (Unit.isEq (atRoot "dir") (Outcome.unwrap statDir).kind)
+        ],
+
+        Unit.group "removeFile" [
+            Unit.it "reports OK"
+                    (Unit.isTrueValue (Outcome.isOk removedA))
+          , Unit.it "the file is gone afterwards"
+                    (Unit.isEq (atRoot false) (Outcome.unwrap existsA))
+        ],
+
+        Unit.group "failures" [
+            Unit.it "readFile on a missing file"
+                    (Unit.isEq (atRoot "file not found") (reasonOf missingRd))
+          , Unit.it "the error echoes the caller's path"
+                    (Unit.isEq (atRoot "nope.txt") (pathOf missingRd))
+          , Unit.it "fileStat on a missing file"
+                    (Unit.isEq (atRoot "file not found") (reasonOf missingSt))
+          , Unit.it "readDir on a file"
+                    (Unit.isEq (atRoot "path is not a directory") (reasonOf notADir))
+          , Unit.it "removeFile on a missing file"
+                    (Unit.isEq (atRoot "file not found") (reasonOf rmMissing))
+            (* The errno for unlinking a directory differs by platform (EPERM on macOS,
+             * EISDIR on Linux), so only the failure itself is portable. *)
+          , Unit.it "removeFile on a directory fails"
+                    (Unit.isTrueValue (Outcome.isErr rmDir))
+        ],
+
+        Unit.group "sandbox" [
+            Unit.it "readFile cannot escape the io-root"
+                    (Unit.isEq (atRoot "path escapes the io-root sandbox") (reasonOf escapeRd))
+          , Unit.it "writeFile cannot escape the io-root"
+                    (Unit.isEq (atRoot "path escapes the io-root sandbox") (reasonOf escapeWr))
+          , Unit.it "an escaping path reports the caller's path, not the resolved one"
+                    (Unit.isEq (atRoot "../escape.txt") (pathOf escapeRd))
+          , Unit.it "fileExists reports false outside the io-root"
+                    (Unit.isEq (atRoot false) (Outcome.unwrap escapeEx))
+        ],
+
+        Unit.group "labeling" [
+            Unit.it "file contents are labeled at ROOT"
+                    (Unit.isTrueValue (levelOf (Outcome.unwrap readA2) = IfcUtil.root))
+          , Unit.it "error reasons are labeled at ROOT"
+                    (Unit.isTrueValue (levelOf (reasonOf missingRd) = IfcUtil.root))
+        ]
+    ]
+
+in Unit.run authority tests
+end

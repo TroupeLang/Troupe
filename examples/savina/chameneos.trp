@@ -1,0 +1,27 @@
+(* Savina benchmark: Chameneos (microbenchmark group).
+ *
+ * 10 chameneos creatures meet in pairs at a mall actor; each meeting
+ * changes both participants' colors to the complement of the pair. The
+ * mall brokers n meetings, then tells every arriving creature to exit;
+ * creatures report how many meetings they took part in. Measures
+ * rendezvous-style pairing through a central broker.
+ *
+ * Colors are 0, 1, 2; the complement of two distinct colors is the third
+ * one (their sum subtracted from 3), and meeting with one's own color
+ * leaves it unchanged.
+ *
+ *   ./local.sh examples/savina/chameneos.trp                # default sizes
+ *   ./local.sh examples/savina/chameneos.trp -- 2000 8000   # explicit sizes
+ *
+ * Result: sum of per-creature meeting counts; ok iff it equals 2n (every
+ * meeting involves exactly two creatures).
+ *)
+
+import List
+import Bench
+import "./Savina"
+
+let val d = case List.filter (fn d => d.name = "chameneos") Savina.all of [d] => d
+    val sizes = Bench.sizesFromArgs (getCliArgs authority) d.sizes
+in Bench.run authority d.name sizes 3 d.bench d.check
+end

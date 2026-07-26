@@ -1,0 +1,45 @@
+(* Labeled variant of the Ping-Pong benchmark (IFC dimension of the Savina
+ * study).
+ *
+ * The ping message carries a confidential payload labeled `{alice}`. The
+ * ponger computes its reply from the payload, so the reply — and everything
+ * derived from it — must stay tainted with alice's confidentiality. The
+ * program checks the data flow explicitly with levelOf/flowsTo and prints
+ * the observed labels.
+ *
+ *   ./local.sh examples/savina/pingpong-labeled.trp
+ *
+ * Expected: reply value 43; "alice flows to reply level" true (provenance
+ * survives the actor round trip); the public control counter stays public.
+ *)
+
+import List
+
+datatype Atoms = PING | PONG | STOP
+
+let val secretPayload = 42 raisedTo `{alice}`
+
+    fun ponger () =
+        receive [ hn (PING, x, p) => (send (p, (PONG, x + 1)); ponger ())
+                , hn STOP        => () ]
+
+    val pong = spawn ponger
+
+    (* control: a public payload through the same code path *)
+    val _ = send (pong, (PING, 100, self ()))
+    val publicReply = receive [ hn (PONG, r) => r ]
+
+    val _ = send (pong, (PING, secretPayload, self ()))
+    val secretReply = receive [ hn (PONG, r) => r ]
+    val _ = send (pong, STOP)
+in
+    printWithLabels ("secret reply", secretReply);
+    printWithLabels ("public reply", publicReply);
+    print ("secret reply value ok (43): ", secretReply = 43);
+    print ("alice flows to secret reply level: ",
+           flowsTo (`{alice}`, levelOf secretReply));
+    print ("secret reply level flows to alice (no extra taint): ",
+           flowsTo (levelOf secretReply, `{alice}`));
+    print ("public reply stayed public: ",
+           flowsTo (levelOf publicReply, `{}`))
+end

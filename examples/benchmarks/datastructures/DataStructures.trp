@@ -1,0 +1,527 @@
+(* DataStructures — micro-benchmarks for the stock container libraries
+ * (lib/Map, lib/HashMap, lib/Set, lib/HashSet, lib/Vector) as benchmark
+ * descriptors ({name, sizes, bench : size -> result,
+ * check : size -> result -> bool}). This is a program-relative module: it
+ * exports `all`, the descriptor list, and is imported by runall.trp via
+ * `import "./DataStructures"`. The whole import graph is recompiled on
+ * every run, so there is no artifact to republish after a benchmark or
+ * compiler change.
+ *
+ * Four operation profiles per structure — insert-heavy, lookup-heavy,
+ * mixed, and iteration — mirroring the Savina descriptor architecture
+ * (examples/savina/Savina.trp).
+ *
+ * Determinism. Every key/index stream is produced by an in-language MINSTD
+ * LCG (no randomness primitive), so a `check` can reproduce the exact
+ * sequence a `bench` consumed and validate against a closed form or an
+ * independent reference. The LCG multiplier/modulus keep every product
+ * below 2^47, so the streams are exact under Troupe integers.
+ *
+ * A note on delete. lib/Map's `remove` does not recurse through a node
+ * that has an empty child (the single-child arms return the node
+ * unchanged), so it silently drops deletions on most search paths; lib/Set
+ * inherits the defect. The HAMT `remove` in lib/HashMap / lib/HashSet is
+ * correct. Accordingly the mixed profile deletes for the HAMT structures
+ * and, for the search trees, substitutes an overwrite (a second insert
+ * stream) — noted again at each descriptor.
+ *)
+
+import List
+import Map
+import HashMap
+import Set
+import HashSet
+import Vector
+
+let (*==================== shared helpers ====================*)
+
+    (* ascending comparator for the ordered (BST) structures *)
+    fun ltInt a b = a < b
+
+    (* Knuth multiplicative hash; always non-negative, for the HAMTs *)
+    fun hashInt k = (k * 2654435761) mod 4294967296
+
+    (* MINSTD LCG (a=48271, m=2^31-1). Products stay below 2^47, so the
+     * stream is exact under Troupe integers. Seeds and outputs are in
+     * [1, m-1]; callers pass a nonzero seed. *)
+    val lcgM = 2147483647
+    fun lcgNext x = (48271 * x) mod lcgM
+
+    (* `n` keys in [0, range) from `seed`, deterministic. *)
+    fun keySeq (n, range, seed) =
+        let fun go (0, _, acc) = List.reverse acc
+              | go (k, x, acc) = let val x' = lcgNext x
+                                 in go (k - 1, x', (x' mod range) :: acc) end
+        in go (n, seed, []) end
+
+    (* The exact set {0,...,m-1} in scrambled order. `m` must be a power of
+     * two and `permStride` odd, so i |-> (i*permStride) mod m is a
+     * bijection — a non-degenerate insertion order for the search trees
+     * (ascending inserts would build a right-spine list). *)
+    val permStride = 2531
+    fun permSeq m = List.map (fn i => (i * permStride) mod m) (List.range m)
+
+    (* independent references over a key stream, via sort + adjacent scan *)
+    fun countDistinct ks =
+        let fun go ([], _, c)       = c
+              | go (x :: rs, prev, c) =
+                  case prev of
+                    []  => go (rs, [x], c + 1)
+                  | [p] => go (rs, [x], if x = p then c else c + 1)
+        in go (List.sort ltInt ks, [], 0) end
+
+    fun sumDistinct ks =
+        let fun go ([], _, s)       = s
+              | go (x :: rs, prev, s) =
+                  case prev of
+                    []  => go (rs, [x], s + x)
+                  | [p] => go (rs, [x], if x = p then s else s + x)
+        in go (List.sort ltInt ks, [], 0) end
+
+    (* Reference for the mixed schedule: replay op = i mod 3 over the key
+     * stream against a Vector presence model (an independent structure),
+     * returning (finalSize, hits). op 0 inserts, op 1 looks up; op 2
+     * deletes when `withDelete`, otherwise inserts again (an overwrite —
+     * the same insert semantics as op 0, adding the key if absent).
+     * O(n log dom), well within a check. *)
+    fun mixedRef (n, seed, dom, withDelete) =
+        let val ks = keySeq (n, dom, seed)
+            fun step (key, (i, present, size, hits)) =
+                let val op = i mod 3
+                in if op = 0
+                   then if Vector.sub (present, key) = 1
+                        then (i + 1, present, size, hits)
+                        else (i + 1, Vector.update (present, key, 1), size + 1, hits)
+                   else if op = 1
+                   then (i + 1, present, size, hits + Vector.sub (present, key))
+                   else if withDelete
+                   then if Vector.sub (present, key) = 1
+                        then (i + 1, Vector.update (present, key, 0), size - 1, hits)
+                        else (i + 1, present, size, hits)
+                   else if Vector.sub (present, key) = 1   (* overwrite = insert *)
+                   then (i + 1, present, size, hits)
+                   else (i + 1, Vector.update (present, key, 1), size + 1, hits)
+                end
+            val present0 = Vector.tabulate dom (fn _ => 0)
+            val (_, _, size, hits) = List.foldl step (0, present0, 0, 0) ks
+        in (size, hits) end
+
+    (* fixed domains: prebuilt sizes (powers of two) and lookup key ranges *)
+    val lookTree  = 4096       val lookTreeR  = 8192     (* BST lookup base / range *)
+    val lookHash  = 16384      val lookHashR  = 32768    (* HAMT lookup base / range *)
+    val mixTree   = 4096       (* BST mixed key domain *)
+    val mixHash   = 16384      (* HAMT mixed key domain *)
+    val insRange  = 1000000    (* insert-heavy key range: mostly distinct *)
+    val baseVec   = 4096       (* Vector random-access base size *)
+    val foldPasses = 30        (* iteration profile: fold/traversal passes *)
+
+    (*==================== map-insert ====================*)
+    (* Insert-heavy: fold `n` LCG keys (value = key) into an empty search
+     * tree. Stresses the BST insertion path — comparisons and per-level
+     * node copying — and structural growth. Result is the final size;
+     * checked against the independent distinct-key count. *)
+    val mapInsert =
+        let val seed = 10007
+    fun bench n =
+        let val ks = keySeq (n, insRange, seed)
+        in Map.size (List.foldl (fn (k, m) => Map.insert m k k) (Map.empty ltInt) ks)
+        end
+        in { name = "map-insert"
+           , bench = bench
+           , check = fn n => fn r => r = countDistinct (keySeq (n, insRange, seed))
+           , sizes = [4000, 16000, 64000]
+           } end
+
+    (*==================== map-lookup ====================*)
+    (* Lookup-heavy: `n` membership queries against a prebuilt tree holding
+     * exactly {0,...,lookTree-1}; half the queries hit (keys drawn in
+     * [0, 2*lookTree)). Stresses the query path. The prebuild is inside the
+     * timed thunk (the descriptor protocol times the whole `bench n`), but
+     * its size is fixed so it amortizes as `n` grows. Result is the hit
+     * count; checked against the closed form (# queries below lookTree,
+     * since the present keys are exactly {0,...,lookTree-1}). *)
+    val mapLookup =
+        let val seed = 20011
+    fun bench n =
+        let val base = List.foldl (fn (k, m) => Map.insert m k k)
+                                  (Map.empty ltInt) (permSeq lookTree)
+            val qs = keySeq (n, lookTreeR, seed)
+        in List.foldl (fn (q, h) => h + (if Map.mem base q then 1 else 0)) 0 qs
+        end
+        in { name = "map-lookup"
+           , bench = bench
+           , check = fn n => fn r =>
+        r = List.length (List.filter (fn q => q < lookTree)
+                                     (keySeq (n, lookTreeR, seed)))
+           , sizes = [40000, 160000, 640000]
+           } end
+
+    (*==================== map-mixed ====================*)
+    (* Mixed insert / lookup / overwrite over a small key domain, so
+     * operations collide. op = i mod 3: insert, lookup, and (op 2)
+     * overwrite — a second insert stream, standing in for delete because
+     * lib/Map's `remove` is defective (see the header). Stresses churn on a
+     * shared working set. Result is (finalSize, hits); checked against the
+     * Vector-model replay of the same schedule. *)
+    val mapMixed =
+        let val seed = 30011
+    fun bench n =
+        let val ks = keySeq (n, mixTree, seed)
+            fun step (key, (i, m, hits)) =
+                let val op = i mod 3
+                in if op = 0 then (i + 1, Map.insert m key i, hits)
+                   else if op = 1 then (i + 1, m, hits + (if Map.mem m key then 1 else 0))
+                   else (i + 1, Map.insert m key (i + insRange), hits)
+                end
+            val (_, m, hits) = List.foldl step (0, Map.empty ltInt, 0) ks
+        in (Map.size m, hits) end
+        in { name = "map-mixed"
+           , bench = bench
+           , check = fn n => fn r => r = mixedRef (n, seed, mixTree, false)
+           , sizes = [8000, 32000, 128000]
+           } end
+
+    (*==================== map-iterate ====================*)
+    (* Iteration: build a tree of `n` entries (value = key), then fold over
+     * all pairs foldPasses times, summing values. Stresses full in-order
+     * traversal. Result is the accumulated sum; checked against
+     * foldPasses * (sum of distinct keys), since the value stored for each
+     * distinct key is the key itself. *)
+    val mapIterate =
+        let val seed = 40009
+    fun bench n =
+        let val ks = keySeq (n, insRange, seed)
+            val m = List.foldl (fn (k, mm) => Map.insert mm k k) (Map.empty ltInt) ks
+        in List.foldl (fn (_, acc) => acc + Map.foldl (fn ((_, v), a) => v + a) 0 m)
+                      0 (List.range foldPasses)
+        end
+        in { name = "map-iterate"
+           , bench = bench
+           , check = fn n => fn r => r = foldPasses * sumDistinct (keySeq (n, insRange, seed))
+           , sizes = [2000, 8000, 32000]
+           } end
+
+    (*==================== hashmap-insert ====================*)
+    (* Insert-heavy over the HAMT: fold `n` LCG keys into an empty HashMap.
+     * Stresses hashing, trie descent, and stencil-vector node updates.
+     * Result is the final size; checked against the distinct-key count. *)
+    val hashmapInsert =
+        let val seed = 50021
+    fun bench n =
+        let val ks = keySeq (n, insRange, seed)
+        in HashMap.size
+             (List.foldl (fn (k, m) => HashMap.insert m k k) (HashMap.empty hashInt) ks)
+        end
+        in { name = "hashmap-insert"
+           , bench = bench
+           , check = fn n => fn r => r = countDistinct (keySeq (n, insRange, seed))
+           , sizes = [16000, 64000, 256000]
+           } end
+
+    (*==================== hashmap-lookup ====================*)
+    (* Lookup-heavy over the HAMT: `n` queries against a prebuilt map of
+     * {0,...,lookHash-1}; half hit. Stresses the trie query path. Prebuild
+     * is inside the timed thunk but fixed-size (amortized). Result is the
+     * hit count; checked against the closed form. *)
+    val hashmapLookup =
+        let val seed = 60013
+    fun bench n =
+        let val base = List.foldl (fn (k, m) => HashMap.insert m k k)
+                                  (HashMap.empty hashInt) (permSeq lookHash)
+            val qs = keySeq (n, lookHashR, seed)
+        in List.foldl (fn (q, h) => h + (if HashMap.mem base q then 1 else 0)) 0 qs
+        end
+        in { name = "hashmap-lookup"
+           , bench = bench
+           , check = fn n => fn r =>
+        r = List.length (List.filter (fn q => q < lookHash)
+                                     (keySeq (n, lookHashR, seed)))
+           , sizes = [200000, 800000, 3200000]
+           } end
+
+    (*==================== hashmap-mixed ====================*)
+    (* Mixed insert / lookup / delete over a small key domain. op = i mod 3;
+     * the HAMT `remove` is correct, so op 2 genuinely deletes. Stresses
+     * insertion, query, and deletion churn — including the trie's
+     * node-collapse on removal. Result is (finalSize, hits); checked
+     * against the Vector-model replay of the same schedule. *)
+    val hashmapMixed =
+        let val seed = 70019
+    fun bench n =
+        let val ks = keySeq (n, mixHash, seed)
+            fun step (key, (i, m, hits)) =
+                let val op = i mod 3
+                in if op = 0 then (i + 1, HashMap.insert m key i, hits)
+                   else if op = 1 then (i + 1, m, hits + (if HashMap.mem m key then 1 else 0))
+                   else (i + 1, HashMap.remove m key, hits)
+                end
+            val (_, m, hits) = List.foldl step (0, HashMap.empty hashInt, 0) ks
+        in (HashMap.size m, hits) end
+        in { name = "hashmap-mixed"
+           , bench = bench
+           , check = fn n => fn r => r = mixedRef (n, seed, mixHash, true)
+           , sizes = [32000, 128000, 512000]
+           } end
+
+    (*==================== hashmap-iterate ====================*)
+    (* Iteration over the HAMT: build `n` entries, then fold over all pairs
+     * foldPasses times, summing values. Stresses full trie traversal.
+     * Result is the accumulated sum; checked against
+     * foldPasses * (sum of distinct keys). *)
+    val hashmapIterate =
+        let val seed = 80021
+    fun bench n =
+        let val ks = keySeq (n, insRange, seed)
+            val m = List.foldl (fn (k, mm) => HashMap.insert mm k k) (HashMap.empty hashInt) ks
+        in List.foldl (fn (_, acc) => acc + HashMap.fold (fn ((_, v), a) => v + a) 0 m)
+                      0 (List.range foldPasses)
+        end
+        in { name = "hashmap-iterate"
+           , bench = bench
+           , check = fn n => fn r => r = foldPasses * sumDistinct (keySeq (n, insRange, seed))
+           , sizes = [8000, 32000, 128000]
+           } end
+
+    (*==================== set-insert ====================*)
+    (* Insert-heavy over the ordered set (a Map with unit values). Stresses
+     * the BST insertion path. Result is the final size; checked against the
+     * distinct-element count. *)
+    val setInsert =
+        let val seed = 90023
+    fun bench n =
+        let val ks = keySeq (n, insRange, seed)
+        in Set.size (List.foldl (fn (k, s) => Set.insert s k) (Set.empty ltInt) ks)
+        end
+        in { name = "set-insert"
+           , bench = bench
+           , check = fn n => fn r => r = countDistinct (keySeq (n, insRange, seed))
+           , sizes = [4000, 16000, 64000]
+           } end
+
+    (*==================== set-lookup ====================*)
+    (* Lookup-heavy over the ordered set: `n` membership queries against a
+     * prebuilt set of {0,...,lookTree-1}; half hit. Stresses the query
+     * path. Result is the hit count; checked against the closed form. *)
+    val setLookup =
+        let val seed = 100003
+    fun bench n =
+        let val base = List.foldl (fn (k, s) => Set.insert s k)
+                                  (Set.empty ltInt) (permSeq lookTree)
+            val qs = keySeq (n, lookTreeR, seed)
+        in List.foldl (fn (q, h) => h + (if Set.mem base q then 1 else 0)) 0 qs
+        end
+        in { name = "set-lookup"
+           , bench = bench
+           , check = fn n => fn r =>
+        r = List.length (List.filter (fn q => q < lookTree)
+                                     (keySeq (n, lookTreeR, seed)))
+           , sizes = [40000, 160000, 640000]
+           } end
+
+    (*==================== set-mixed ====================*)
+    (* Mixed insert / lookup / overwrite over a small element domain. op 2
+     * re-inserts (an overwrite), standing in for delete because lib/Set's
+     * `remove` is defective (it delegates to lib/Map's; see the header).
+     * Stresses churn on a shared working set. Result is (finalSize, hits);
+     * checked against the Vector-model replay. *)
+    val setMixed =
+        let val seed = 110017
+    fun bench n =
+        let val ks = keySeq (n, mixTree, seed)
+            fun step (key, (i, s, hits)) =
+                let val op = i mod 3
+                in if op = 0 then (i + 1, Set.insert s key, hits)
+                   else if op = 1 then (i + 1, s, hits + (if Set.mem s key then 1 else 0))
+                   else (i + 1, Set.insert s key, hits)
+                end
+            val (_, s, hits) = List.foldl step (0, Set.empty ltInt, 0) ks
+        in (Set.size s, hits) end
+        in { name = "set-mixed"
+           , bench = bench
+           , check = fn n => fn r => r = mixedRef (n, seed, mixTree, false)
+           , sizes = [8000, 32000, 128000]
+           } end
+
+    (*==================== set-iterate ====================*)
+    (* Iteration over the ordered set: build `n` elements, then fold over
+     * all elements foldPasses times, summing them. Stresses full in-order
+     * traversal. Result is the accumulated sum; checked against
+     * foldPasses * (sum of distinct elements). *)
+    val setIterate =
+        let val seed = 120011
+    fun bench n =
+        let val ks = keySeq (n, insRange, seed)
+            val s = List.foldl (fn (k, ss) => Set.insert ss k) (Set.empty ltInt) ks
+        in List.foldl (fn (_, acc) => acc + Set.foldl (fn (k, a) => k + a) 0 s)
+                      0 (List.range foldPasses)
+        end
+        in { name = "set-iterate"
+           , bench = bench
+           , check = fn n => fn r => r = foldPasses * sumDistinct (keySeq (n, insRange, seed))
+           , sizes = [2000, 8000, 32000]
+           } end
+
+    (*==================== hashset-insert ====================*)
+    (* Insert-heavy over the HAMT set. Stresses hashing and trie updates.
+     * Result is the final size; checked against the distinct-element
+     * count. *)
+    val hashsetInsert =
+        let val seed = 130007
+    fun bench n =
+        let val ks = keySeq (n, insRange, seed)
+        in HashSet.size
+             (List.foldl (fn (k, s) => HashSet.insert s k) (HashSet.empty hashInt) ks)
+        end
+        in { name = "hashset-insert"
+           , bench = bench
+           , check = fn n => fn r => r = countDistinct (keySeq (n, insRange, seed))
+           , sizes = [16000, 64000, 256000]
+           } end
+
+    (*==================== hashset-lookup ====================*)
+    (* Lookup-heavy over the HAMT set: `n` queries against a prebuilt set of
+     * {0,...,lookHash-1}; half hit. Stresses the trie query path. Result is
+     * the hit count; checked against the closed form. *)
+    val hashsetLookup =
+        let val seed = 140009
+    fun bench n =
+        let val base = List.foldl (fn (k, s) => HashSet.insert s k)
+                                  (HashSet.empty hashInt) (permSeq lookHash)
+            val qs = keySeq (n, lookHashR, seed)
+        in List.foldl (fn (q, h) => h + (if HashSet.mem base q then 1 else 0)) 0 qs
+        end
+        in { name = "hashset-lookup"
+           , bench = bench
+           , check = fn n => fn r =>
+        r = List.length (List.filter (fn q => q < lookHash)
+                                     (keySeq (n, lookHashR, seed)))
+           , sizes = [200000, 800000, 3200000]
+           } end
+
+    (*==================== hashset-mixed ====================*)
+    (* Mixed insert / lookup / delete over a small element domain. The HAMT
+     * `remove` is correct, so op 2 genuinely deletes. Stresses insert /
+     * query / delete churn. Result is (finalSize, hits); checked against
+     * the Vector-model replay. *)
+    val hashsetMixed =
+        let val seed = 150013
+    fun bench n =
+        let val ks = keySeq (n, mixHash, seed)
+            fun step (key, (i, s, hits)) =
+                let val op = i mod 3
+                in if op = 0 then (i + 1, HashSet.insert s key, hits)
+                   else if op = 1 then (i + 1, s, hits + (if HashSet.mem s key then 1 else 0))
+                   else (i + 1, HashSet.remove s key, hits)
+                end
+            val (_, s, hits) = List.foldl step (0, HashSet.empty hashInt, 0) ks
+        in (HashSet.size s, hits) end
+        in { name = "hashset-mixed"
+           , bench = bench
+           , check = fn n => fn r => r = mixedRef (n, seed, mixHash, true)
+           , sizes = [32000, 128000, 512000]
+           } end
+
+    (*==================== hashset-iterate ====================*)
+    (* Iteration over the HAMT set: build `n` elements, then fold over all
+     * elements foldPasses times, summing them. Stresses full trie
+     * traversal. Result is the accumulated sum; checked against
+     * foldPasses * (sum of distinct elements). *)
+    val hashsetIterate =
+        let val seed = 160001
+    fun bench n =
+        let val ks = keySeq (n, insRange, seed)
+            val s = List.foldl (fn (k, ss) => HashSet.insert ss k) (HashSet.empty hashInt) ks
+        in List.foldl (fn (_, acc) => acc + HashSet.fold (fn (k, a) => k + a) 0 s)
+                      0 (List.range foldPasses)
+        end
+        in { name = "hashset-iterate"
+           , bench = bench
+           , check = fn n => fn r => r = foldPasses * sumDistinct (keySeq (n, insRange, seed))
+           , sizes = [8000, 32000, 128000]
+           } end
+
+    (*==================== vector-update ====================*)
+    (* Insert-heavy analogue for the immutable vector: `n` point updates at
+     * LCG indices into a zeroed vector of length `n`, each setting its slot
+     * to 1. Stresses `update`'s per-level path copying. Result is the sum
+     * of the final vector (= number of distinct indices touched); checked
+     * against the distinct-index count. *)
+    val vectorUpdate =
+        let val seed = 170003
+    fun bench n =
+        let val idx = keySeq (n, n, seed)
+            val v0 = Vector.tabulate n (fn _ => 0)
+            val v = List.foldl (fn (i, vv) => Vector.update (vv, i, 1)) v0 idx
+        in List.foldl (fn (x, a) => x + a) 0 (Vector.toList v) end
+        in { name = "vector-update"
+           , bench = bench
+           , check = fn n => fn r => r = countDistinct (keySeq (n, n, seed))
+           , sizes = [4000, 16000, 64000]
+           } end
+
+    (*==================== vector-sub ====================*)
+    (* Lookup-heavy analogue: `n` random-access `sub` reads at LCG indices
+     * into a fixed vector where slot i holds i. Stresses the indexed read
+     * path. Result is the sum of the fetched values; checked against the
+     * sum of the index stream (since v[i] = i). *)
+    val vectorSub =
+        let val seed = 180001
+    fun bench n =
+        let val v = Vector.tabulate baseVec (fn i => i)
+            val idx = keySeq (n, baseVec, seed)
+        in List.foldl (fn (i, acc) => acc + Vector.sub (v, i)) 0 idx end
+        in { name = "vector-sub"
+           , bench = bench
+           , check = fn n => fn r =>
+        r = List.foldl (fn (i, a) => i + a) 0 (keySeq (n, baseVec, seed))
+           , sizes = [40000, 160000, 640000]
+           } end
+
+    (*==================== vector-rmw ====================*)
+    (* Mixed read-modify-write: `n` increments at LCG indices into a vector
+     * where slot i starts at i — each op does a `sub` then an `update`.
+     * (The immutable vector has no delete, so this stands in for the
+     * insert/lookup/delete mix; noted as a deviation.) Stresses interleaved
+     * reads and writes. Result is the final sum; checked against the closed
+     * form n*(n-1)/2 + n (each of the n increments adds exactly one). *)
+    val vectorRmw =
+        let val seed = 190021
+    fun bench n =
+        let val idx = keySeq (n, n, seed)
+            val v0 = Vector.tabulate n (fn i => i)
+            val v = List.foldl (fn (i, vv) => Vector.update (vv, i, Vector.sub (vv, i) + 1))
+                               v0 idx
+        in List.foldl (fn (x, a) => x + a) 0 (Vector.toList v) end
+        in { name = "vector-rmw"
+           , bench = bench
+           , check = fn n => fn r => r = (n * (n - 1)) div 2 + n
+           , sizes = [8000, 32000, 128000]
+           } end
+
+    (*==================== vector-iterate ====================*)
+    (* Iteration: build a vector of `n` elements (slot i = i), then `toList`
+     * and sum it foldPasses times. Stresses the full left-to-right
+     * traversal that flattens the tree. Result is the accumulated sum;
+     * checked against foldPasses * n*(n-1)/2. *)
+    val vectorIterate =
+        let val seed = 200003
+    fun bench n =
+        let val v = Vector.tabulate n (fn i => i)
+        in List.foldl (fn (_, acc) => acc + List.foldl (fn (x, a) => x + a) 0 (Vector.toList v))
+                      0 (List.range foldPasses)
+        end
+        in { name = "vector-iterate"
+           , bench = bench
+           , check = fn n => fn r => r = foldPasses * ((n * (n - 1)) div 2)
+           , sizes = [4000, 16000, 64000]
+           } end
+
+    (** All descriptors, grouped by structure. *)
+    val all = [ mapInsert,     mapLookup,     mapMixed,     mapIterate
+              , hashmapInsert, hashmapLookup, hashmapMixed, hashmapIterate
+              , setInsert,     setLookup,     setMixed,     setIterate
+              , hashsetInsert, hashsetLookup, hashsetMixed, hashsetIterate
+              , vectorUpdate,  vectorSub,     vectorRmw,    vectorIterate ]
+
+in [ ("all", all) ]
+end

@@ -81,7 +81,7 @@ propRoundTrip =
 
 progExpr :: IRExpr -> IRProgram
 progExpr e =
-  IRProgram (Core.Atoms []) [noLoc (FunDef (HFN "main") (mkVN "arg") [] body)]
+  IRProgram [noLoc (FunDef (HFN "main") (mkVN "arg") [] body)]
   where body = BB [mkLInst (Assign (VN "r") e)] (mkLTerm (LibExport (mkV "r")))
 
 progLit :: Core.Lit -> IRProgram
@@ -108,12 +108,13 @@ unOpCases =
 
 varAccessCases :: [(String, IRProgram)]
 varAccessCases =
-  [ ("VarLocal",      progExpr (Tuple [lva (VarLocal (VN "x"))]))
-  , ("VarEnv",        progExpr (Tuple [lva (VarEnv (VN "$env.y"))]))
-  , ("VarFunSelfRef", progExpr (Tuple [lva VarFunSelfRef]))
+  [ ("VarLocal",      progExpr (Tuple [lva (VarLocal (VN "x"))] False))
+  , ("VarEnv",        progExpr (Tuple [lva (VarEnv (VN "$env.y"))] False))
+  , ("VarFunSelfRef", progExpr (Tuple [lva VarFunSelfRef] False))
   , ("mixed",         progExpr (Tuple [ lva (VarLocal (VN "a"))
                                       , lva (VarEnv (VN "b"))
-                                      , lva VarFunSelfRef ]))
+                                      , lva VarFunSelfRef ] False))
+  , ("variant",       progExpr (Tuple [lva (VarLocal (VN "x"))] True))
   ]
 
 ------------------------------------------------------------
@@ -139,7 +140,6 @@ litCases =
   , ("bool-true",      progLit (Core.LBool True))
   , ("bool-false",     progLit (Core.LBool False))
   , ("unit",           progLit Core.LUnit)
-  , ("atom",           progLit (Core.LAtom "myAtom"))
   , ("label-string",   progLit (Core.LLabel "{alice, bob}"))
   ]
 
@@ -174,20 +174,15 @@ dcLabelCases =
   ]
 
 ------------------------------------------------------------
--- Structural extras: atoms, consts, mkclos, nested control flow, projections.
+-- Structural extras: consts, mkclos, nested control flow, projections.
 ------------------------------------------------------------
 
 progFun :: FunDef -> IRProgram
-progFun f = IRProgram (Core.Atoms []) [noLoc f]
+progFun f = IRProgram [noLoc f]
 
 structuralCases :: [(String, IRProgram)]
 structuralCases =
-  [ ( "atoms-nonempty"
-    , IRProgram (Core.Atoms ["Red", "Green", "Blue"])
-        [noLoc (FunDef (HFN "main") (mkVN "arg") []
-          (BB [] (mkLTerm (Ret (mkV "r")))))]
-    )
-  , ( "consts-nonempty"
+  [ ( "consts-nonempty"
     , progFun (FunDef (HFN "main") (mkVN "$$authorityarg")
         [ (VN "k1", Core.LNumeric (Core.NumInt 7))
         , (VN "k2", Core.LString "s")
@@ -236,5 +231,5 @@ structuralCases =
   ]
   where
     progTerm tr =
-      IRProgram (Core.Atoms []) [noLoc (FunDef (HFN "main") (mkVN "arg") [] (BB [] (mkLTerm tr)))]
+      IRProgram [noLoc (FunDef (HFN "main") (mkVN "arg") [] (BB [] (mkLTerm tr)))]
     constInt n = Const (Core.LNumeric (Core.NumInt n))

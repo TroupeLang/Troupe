@@ -1,0 +1,63 @@
+(* Labeled variant of the Counting Actor benchmark (IFC dimension of the
+ * Savina study).
+ *
+ * Unlike pingpong-labeled (secret payload) this variant leaks through
+ * message *presence*: the main process sends 10 public INC messages, then
+ * decides based on an `{alice}`-labeled secret whether to send an 11th.
+ * Every INC payload is public, yet the count reveals the secret.
+ *
+ * Troupe's mailbox semantics makes this explicit. A plain `receive` is a
+ * point receive at the current pc, so a public-pc counter never even sees
+ * the secret-presence message (the naive port deadlocks — observed). To
+ * count such messages the counter must raise its mailbox clearance
+ * (`raisembox`) and use a ranged receive (`rcv`), and the monitor then
+ * taints the resulting count with the receive's upper bound: presence
+ * provenance cannot be counted away.
+ *
+ * Note also that the branch on the secret taints the sender's pc for the
+ * rest of its execution (including the later GET), so the receiving side of
+ * the request/reply must use ranged receives as well.
+ *
+ * Both processes keep their clearance raised for their whole lifetime: after
+ * a ranged receive of secret-presence data the pc is tainted, and lowering
+ * the clearance at that point is a downgrade the monitor rejects (attempting
+ * it also exposes a runtime bug — the rejection crashes with an empty
+ * ImplementationError instead of an IFC diagnostic; see the study report).
+ * The runtime prints a warning at process exit about the unrestored
+ * clearance; that warning is expected here.
+ *
+ *   ./local.sh examples/savina/counting-labeled.trp
+ *
+ * Expected: count 11; alice flows into the count's level.
+ *)
+
+import List
+
+datatype Atoms = INC | GET | RESULT
+
+let val publicIncs = 10
+    val secret = (1 raisedTo `{alice}`) > 0   (* alice-labeled boolean *)
+    val clr = `<alice;#null-integrity>`       (* clearance covering secret presence *)
+
+    fun counter c =
+        rcv (`{}`, clr,
+             [ hn INC      => counter (c + 1)
+             , hn (GET, p) => send (p, (RESULT, c)) ])
+
+    val cnt = spawn (fn () => (raisembox clr; counter 0))
+
+    val _ = raisembox clr
+
+    fun produce k = if k = 0 then () else (send (cnt, INC); produce (k - 1))
+    val _ = produce publicIncs
+
+    (* the send below happens only on a secret-dependent branch *)
+    val _ = if secret then send (cnt, INC) else ()
+
+    val _ = send (cnt, (GET, self ()))
+    val count = rcv (`{}`, clr, [ hn (RESULT, c) => c ])
+in
+    printWithLabels ("count", count);
+    print ("count value ok (11): ", count = 11);
+    print ("alice flows into the count: ", flowsTo (`{alice}`, levelOf count))
+end

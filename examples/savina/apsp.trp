@@ -1,0 +1,31 @@
+(* Savina benchmark: All-Pairs Shortest Path (parallelism group).
+ *
+ * Floyd-Warshall in n synchronized rounds: in round k the master
+ * partitions the rows among 6 workers, each worker relaxes its rows
+ * through vertex k against the round-start distance matrix, and the
+ * master reassembles the matrix before starting round k+1 (the per-round
+ * barrier of the original, expressed as collecting all worker replies).
+ * Using the round-start snapshot is exact for Floyd-Warshall: row k and
+ * column k are invariant in round k. The matrix is a lib/Vector of row
+ * vectors (no constant-time arrays; the log factor is the documented
+ * deviation).
+ *
+ * The graph is deterministic: edge weights are a fixed function of the
+ * endpoints, with about a quarter of the edges absent. Verification
+ * folds the same row-relaxation function sequentially and compares
+ * matrices element-for-element.
+ *
+ *   ./local.sh examples/savina/apsp.trp              # default sizes
+ *   ./local.sh examples/savina/apsp.trp -- 16 32     # explicit sizes
+ *
+ * Result: true iff the parallel result equals the reference.
+ *)
+
+import List
+import Bench
+import "./Savina"
+
+let val d = case List.filter (fn d => d.name = "apsp") Savina.all of [d] => d
+    val sizes = Bench.sizesFromArgs (getCliArgs authority) d.sizes
+in Bench.run authority d.name sizes 3 d.bench d.check
+end

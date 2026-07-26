@@ -1,0 +1,15 @@
+(* labels propagate through bigint operations, and bigint literals
+ * evaluated under a secret pc are tainted like number literals *)
+import BigInt
+
+let val product = BigInt.mul (5n raisedTo `{alice}`, 7n)
+    val _ = printWithLabels product
+    val _ = print (flowsTo (`{alice}`, levelOf product))
+
+    val secret = (1 raisedTo `{bob}`) > 0
+    val fromNum = if secret then 1 else 2
+    val fromBig = if secret then 1n else 2n
+    val _ = printWithLabels fromNum
+    val _ = printWithLabels fromBig
+    val _ = print (flowsTo (`{bob}`, levelOf fromBig))
+in () end

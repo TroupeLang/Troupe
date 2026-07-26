@@ -1,0 +1,599 @@
+(* bench — the one-place runner for the interpreter-overhead benchmark study.
+ *
+ * Re-runs, in one reproducible program, every measurement of the study:
+ *
+ *   macro       the literature's benchmarks (fac, fib, tak, ack, power; see
+ *               interpreter-benchmarks.trp for the sources) under the naive
+ *               Z-combinator interpreter, against native Troupe twins;
+ *   strategies  fib under the recursion strategies of Reynolds'
+ *               "Definitional Interpreters" (zcomb / unroll / meta / cps /
+ *               machine; see definitional-interpreters.trp);
+ *   envs        fib under three environment representations on the unroll
+ *               interpreter (assoc-list / Map / lexical addressing);
+ *   micros      per-construct cost probes after Romer et al. (ASPLOS 1996):
+ *               microseconds per interpreted AST node, by node kind.
+ *
+ * Usage (program arguments follow `--`; both output-hygiene flags silence
+ * the runtime's own stdout lines, so json output pipes clean):
+ *
+ *   ./local.sh examples/variants/bench.trp --localonly \
+ *       --suppress-local-info-message --suppress-main-thread-finished-message \
+ *       -- [format=md|json] [suites=macro,strategies,envs,micros] \
+ *          [fib=N] [reps=K] [iters=N]
+ *
+ *   format  md (markdown tables, default) or json (Json.prettyPrint of the
+ *           result record -- schema troupe-interp-bench/1)
+ *   suites  comma-separated subset to run; default all
+ *   fib     workload size for the strategies and envs suites (default 18)
+ *   reps    best-of-K timed calls per strategy/env row (default 3)
+ *   iters   loop iterations for the micros suite (default 2000)
+ *
+ * Example, a machine-readable baseline before an optimization:
+ *
+ *   ./local.sh examples/variants/bench.trp --localonly \
+ *       --suppress-local-info-message --suppress-main-thread-finished-message \
+ *       -- format=json > baseline.json
+ *
+ * Every row carries an `ok` flag (the interpreted result equals the native
+ * one), so a later optimization that changes behaviour, not just speed, is
+ * caught in the same run.  Timing methodology: macro rows and micros use
+ * batches grown until a batch exceeds 300 ms (ms per call); strategy and
+ * env rows use one untimed warmup call then the best of `reps` timed calls.
+ * Timings are wall-clock and vary between runs.  The full default run takes
+ * on the order of a minute, dominated by tak under the naive interpreter.
+ *)
+
+import List
+import Map
+import Json
+import String
+
+datatype term = var of string
+              | lam of string * term
+              | fixt of string * string * term
+              | app of term * term
+              | lit of int
+              | add of term * term
+              | sub of term * term
+              | mul of term * term
+              | leq of term * term
+              | ite of term * term * term
+
+(* first-order values and environments (zcomb, unroll, machine; and the
+   macro suite's interpreter) *)
+datatype value = num of int
+              | clo of string * term * env
+              | rclo of string * string * term * env
+     and env   = empty | bind of string * value * env
+
+(* higher-order values (meta, cps): the payload is a Troupe function *)
+datatype 'f hval = hnum of int | hfun of 'f
+
+(* Map-environment values: the payload holds the captured Map *)
+datatype mvalue = mnum of int
+               | mclo of string * term * int
+               | mrclo of string * string * term * int
+
+(* nameless terms and values (lexical addressing) *)
+datatype dterm = idx of int
+              | dlam of dterm
+              | dfix of dterm
+              | dapp of dterm * dterm
+              | dlit of int
+              | dadd of dterm * dterm
+              | dsub of dterm * dterm
+              | dmul of dterm * dterm
+              | dleq of dterm * dterm
+              | dite of dterm * dterm * dterm
+
+datatype dvalue = dnum of int | dclo of dterm * denv | drclo of dterm * denv
+     and denv   = dempty | dbind of dvalue * denv
+
+(* first-order continuations of the machine strategy *)
+datatype prim = padd | psub | pmul | pleq
+datatype kont = halt
+              | karg  of term * env * kont
+              | kcall of value * kont
+              | kbin1 of prim * term * env * kont
+              | kbin2 of prim * value * kont
+              | kite  of term * term * env * kont
+
+let (* =================== shared first-order helpers ==================== *)
+    fun lookup empty x               = ("unbound", x)
+      | lookup (bind (y, v, rest)) x = if x = y then v else lookup rest x
+
+    fun numOf (num n) = n
+      | numOf _       = 0
+
+    (* =================== strategy zcomb (also the macro interpreter) === *)
+    fun evalz rho (var x)         = lookup rho x
+      | evalz rho (lit n)         = num n
+      | evalz rho (lam (x, body)) = clo (x, body, rho)
+      | evalz rho (add (a, b))    = num (numOf (evalz rho a) + numOf (evalz rho b))
+      | evalz rho (sub (a, b))    = num (numOf (evalz rho a) - numOf (evalz rho b))
+      | evalz rho (mul (a, b))    = num (numOf (evalz rho a) * numOf (evalz rho b))
+      | evalz rho (leq (a, b))    = if numOf (evalz rho a) <= numOf (evalz rho b)
+                                    then num 1 else num 0
+      | evalz rho (ite (c, t, f)) = (case evalz rho c of
+                                       num 0 => evalz rho f
+                                     | _     => evalz rho t)
+      | evalz rho (app (f, a))    =
+          (case evalz rho f of
+             clo (x, body, cenv) => evalz (bind (x, evalz rho a, cenv)) body
+           | _                   => num 0)
+
+    (* =================== strategy unroll =============================== *)
+    fun evalr rho (var x)         = lookup rho x
+      | evalr rho (lit n)         = num n
+      | evalr rho (lam (x, body)) = clo (x, body, rho)
+      | evalr rho (fixt (f, x, body)) = rclo (f, x, body, rho)
+      | evalr rho (add (a, b))    = num (numOf (evalr rho a) + numOf (evalr rho b))
+      | evalr rho (sub (a, b))    = num (numOf (evalr rho a) - numOf (evalr rho b))
+      | evalr rho (mul (a, b))    = num (numOf (evalr rho a) * numOf (evalr rho b))
+      | evalr rho (leq (a, b))    = if numOf (evalr rho a) <= numOf (evalr rho b)
+                                    then num 1 else num 0
+      | evalr rho (ite (c, t, f)) = (case evalr rho c of
+                                       num 0 => evalr rho f
+                                     | _     => evalr rho t)
+      | evalr rho (app (f, a))    =
+          (case evalr rho f of
+             clo (x, body, cenv) => evalr (bind (x, evalr rho a, cenv)) body
+           | rclo (g, x, body, cenv) =>
+               evalr (bind (g, rclo (g, x, body, cenv),
+                            bind (x, evalr rho a, cenv))) body
+           | _                   => num 0)
+
+    (* =================== strategy meta ================================= *)
+    fun hnumOf (hnum n) = n
+      | hnumOf _        = 0
+
+    fun emptyh x        = hnum 0
+    fun extend rho x v  = fn y => if y = x then v else rho y
+
+    fun evalh rho (var x)         = rho x
+      | evalh rho (lit n)         = hnum n
+      | evalh rho (lam (x, body)) = hfun (fn v => evalh (extend rho x v) body)
+      | evalh rho (fixt (f, x, body)) =
+          let fun self v = evalh (extend (extend rho f (hfun self)) x v) body
+          in hfun self end
+      | evalh rho (add (a, b))    = hnum (hnumOf (evalh rho a) + hnumOf (evalh rho b))
+      | evalh rho (sub (a, b))    = hnum (hnumOf (evalh rho a) - hnumOf (evalh rho b))
+      | evalh rho (mul (a, b))    = hnum (hnumOf (evalh rho a) * hnumOf (evalh rho b))
+      | evalh rho (leq (a, b))    = if hnumOf (evalh rho a) <= hnumOf (evalh rho b)
+                                    then hnum 1 else hnum 0
+      | evalh rho (ite (c, t, f)) = (case evalh rho c of
+                                       hnum 0 => evalh rho f
+                                     | _      => evalh rho t)
+      | evalh rho (app (f, a))    =
+          (case evalh rho f of
+             hfun g => g (evalh rho a)
+           | v      => v)
+
+    (* =================== strategy cps ================================== *)
+    fun evalc rho (var x) k         = k (rho x)
+      | evalc rho (lit n) k         = k (hnum n)
+      | evalc rho (lam (x, body)) k =
+          k (hfun (fn v => fn k2 => evalc (extend rho x v) body k2))
+      | evalc rho (fixt (f, x, body)) k =
+          let fun self v = fn k2 =>
+                evalc (extend (extend rho f (hfun self)) x v) body k2
+          in k (hfun self) end
+      | evalc rho (add (a, b)) k    =
+          evalc rho a (fn va => evalc rho b (fn vb =>
+            k (hnum (hnumOf va + hnumOf vb))))
+      | evalc rho (sub (a, b)) k    =
+          evalc rho a (fn va => evalc rho b (fn vb =>
+            k (hnum (hnumOf va - hnumOf vb))))
+      | evalc rho (mul (a, b)) k    =
+          evalc rho a (fn va => evalc rho b (fn vb =>
+            k (hnum (hnumOf va * hnumOf vb))))
+      | evalc rho (leq (a, b)) k    =
+          evalc rho a (fn va => evalc rho b (fn vb =>
+            k (if hnumOf va <= hnumOf vb then hnum 1 else hnum 0)))
+      | evalc rho (ite (c, t, f)) k =
+          evalc rho c (fn vc => case vc of
+                                  hnum 0 => evalc rho f k
+                                | _      => evalc rho t k)
+      | evalc rho (app (f, a)) k    =
+          evalc rho f (fn fv => evalc rho a (fn av =>
+            case fv of
+              hfun g => g av k
+            | v      => k v))
+
+    (* =================== strategy machine ============================== *)
+    fun delta padd (num a) (num b) = num (a + b)
+      | delta psub (num a) (num b) = num (a - b)
+      | delta pmul (num a) (num b) = num (a * b)
+      | delta pleq (num a) (num b) = if a <= b then num 1 else num 0
+      | delta _    _       _       = num 0
+
+    fun evalk rho (var x) k         = continuek k (lookup rho x)
+      | evalk rho (lit n) k         = continuek k (num n)
+      | evalk rho (lam (x, body)) k = continuek k (clo (x, body, rho))
+      | evalk rho (fixt (f, x, body)) k = continuek k (rclo (f, x, body, rho))
+      | evalk rho (add (a, b)) k    = evalk rho a (kbin1 (padd, b, rho, k))
+      | evalk rho (sub (a, b)) k    = evalk rho a (kbin1 (psub, b, rho, k))
+      | evalk rho (mul (a, b)) k    = evalk rho a (kbin1 (pmul, b, rho, k))
+      | evalk rho (leq (a, b)) k    = evalk rho a (kbin1 (pleq, b, rho, k))
+      | evalk rho (ite (c, t, f)) k = evalk rho c (kite (t, f, rho, k))
+      | evalk rho (app (f, a)) k    = evalk rho f (karg (a, rho, k))
+    and continuek halt v                     = v
+      | continuek (karg (a, rho, k)) fv      = evalk rho a (kcall (fv, k))
+      | continuek (kcall (fv, k)) av         = applyk fv av k
+      | continuek (kbin1 (p, b, rho, k)) va  = evalk rho b (kbin2 (p, va, k))
+      | continuek (kbin2 (p, va, k)) vb      = continuek k (delta p va vb)
+      | continuek (kite (t, f, rho, k)) vc   = (case vc of
+                                                  num 0 => evalk rho f k
+                                                | _     => evalk rho t k)
+    and applyk (clo (x, body, cenv)) av k    = evalk (bind (x, av, cenv)) body k
+      | applyk (rclo (g, x, body, cenv)) av k =
+          evalk (bind (g, rclo (g, x, body, cenv), bind (x, av, cenv))) body k
+      | applyk _ av k                        = continuek k (num 0)
+
+    (* =================== env representation: Map ======================= *)
+    fun mnumOf (mnum n) = n
+      | mnumOf _        = 0
+
+    val emptyM = Map.empty (fn a => fn b => a < b)
+
+    fun evalm rho (var x)         = Map.findOrDefault rho x (mnum 0)
+      | evalm rho (lit n)         = mnum n
+      | evalm rho (lam (x, body)) = mclo (x, body, rho)
+      | evalm rho (fixt (f, x, body)) = mrclo (f, x, body, rho)
+      | evalm rho (add (a, b))    = mnum (mnumOf (evalm rho a) + mnumOf (evalm rho b))
+      | evalm rho (sub (a, b))    = mnum (mnumOf (evalm rho a) - mnumOf (evalm rho b))
+      | evalm rho (mul (a, b))    = mnum (mnumOf (evalm rho a) * mnumOf (evalm rho b))
+      | evalm rho (leq (a, b))    = if mnumOf (evalm rho a) <= mnumOf (evalm rho b)
+                                    then mnum 1 else mnum 0
+      | evalm rho (ite (c, t, f)) = (case evalm rho c of
+                                       mnum 0 => evalm rho f
+                                     | _      => evalm rho t)
+      | evalm rho (app (f, a))    =
+          (case evalm rho f of
+             mclo (x, body, cenv) => evalm (Map.insert cenv x (evalm rho a)) body
+           | mrclo (g, x, body, cenv) =>
+               evalm (Map.insert (Map.insert cenv x (evalm rho a))
+                                 g (mrclo (g, x, body, cenv))) body
+           | _                   => mnum 0)
+
+    (* =================== env representation: lexical addressing ======== *)
+    fun pos (y::rest) x = if x = y then 0 else 1 + pos rest x
+      | pos []        x = 0 - 1
+
+    fun comp ns (var x)             = idx (pos ns x)
+      | comp ns (lit n)             = dlit n
+      | comp ns (lam (x, body))     = dlam (comp (x::ns) body)
+      | comp ns (fixt (f, x, body)) = dfix (comp (f::x::ns) body)
+      | comp ns (add (a, b))        = dadd (comp ns a, comp ns b)
+      | comp ns (sub (a, b))        = dsub (comp ns a, comp ns b)
+      | comp ns (mul (a, b))        = dmul (comp ns a, comp ns b)
+      | comp ns (leq (a, b))        = dleq (comp ns a, comp ns b)
+      | comp ns (ite (c, t, f))     = dite (comp ns c, comp ns t, comp ns f)
+      | comp ns (app (f, a))        = dapp (comp ns f, comp ns a)
+
+    fun nthv (dbind (v, _)) 0    = v
+      | nthv (dbind (_, r)) i    = nthv r (i - 1)
+      | nthv dempty         _    = dnum 0
+
+    fun dnumOf (dnum n) = n
+      | dnumOf _        = 0
+
+    fun evald rho (idx i)        = nthv rho i
+      | evald rho (dlit n)       = dnum n
+      | evald rho (dlam body)    = dclo (body, rho)
+      | evald rho (dfix body)    = drclo (body, rho)
+      | evald rho (dadd (a, b))  = dnum (dnumOf (evald rho a) + dnumOf (evald rho b))
+      | evald rho (dsub (a, b))  = dnum (dnumOf (evald rho a) - dnumOf (evald rho b))
+      | evald rho (dmul (a, b))  = dnum (dnumOf (evald rho a) * dnumOf (evald rho b))
+      | evald rho (dleq (a, b))  = if dnumOf (evald rho a) <= dnumOf (evald rho b)
+                                   then dnum 1 else dnum 0
+      | evald rho (dite (c, t, f)) = (case evald rho c of
+                                        dnum 0 => evald rho f
+                                      | _      => evald rho t)
+      | evald rho (dapp (f, a))  =
+          (case evald rho f of
+             dclo (body, cenv)  => evald (dbind (evald rho a, cenv)) body
+           | drclo (body, cenv) =>
+               evald (dbind (drclo (body, cenv),
+                             dbind (evald rho a, cenv))) body
+           | _                  => dnum 0)
+
+    (* =================== the benchmark programs ======================== *)
+    val zc =
+        let val half = lam ("x",
+                         app (var "f",
+                              lam ("v", app (app (var "x", var "x"), var "v"))))
+        in lam ("f", app (half, half))
+        end
+
+    fun ap2 f a b   = app (app (f, a), b)
+    fun ap3 f a b c = app (app (app (f, a), b), c)
+
+    val facT = app (zc,
+        lam ("self", lam ("n",
+          ite (leq (var "n", lit 0), lit 1,
+               mul (var "n", app (var "self", sub (var "n", lit 1)))))))
+
+    val fibT = app (zc,
+        lam ("self", lam ("n",
+          ite (leq (var "n", lit 1), var "n",
+               add (app (var "self", sub (var "n", lit 1)),
+                    app (var "self", sub (var "n", lit 2)))))))
+
+    val takT = app (zc,
+        lam ("self", lam ("x", lam ("y", lam ("z",
+          ite (leq (var "x", var "y"), var "z",
+               ap3 (var "self")
+                   (ap3 (var "self") (sub (var "x", lit 1)) (var "y") (var "z"))
+                   (ap3 (var "self") (sub (var "y", lit 1)) (var "z") (var "x"))
+                   (ap3 (var "self") (sub (var "z", lit 1)) (var "x") (var "y"))))))))
+
+    val ackT = app (zc,
+        lam ("self", lam ("m", lam ("n",
+          ite (leq (var "m", lit 0), add (var "n", lit 1),
+               ite (leq (var "n", lit 0),
+                    ap2 (var "self") (sub (var "m", lit 1)) (lit 1),
+                    ap2 (var "self") (sub (var "m", lit 1))
+                        (ap2 (var "self") (var "m") (sub (var "n", lit 1)))))))))
+
+    val powerT = app (zc,
+        lam ("self", lam ("x", lam ("n",
+          ite (leq (var "n", lit 0), lit 1,
+               mul (var "x", ap2 (var "self") (var "x") (sub (var "n", lit 1))))))))
+
+    val loopNullT = app (zc,
+        lam ("self", lam ("n",
+          ite (leq (var "n", lit 0), lit 0,
+               app (var "self", sub (var "n", lit 1))))))
+
+    val loopAddT = app (zc,
+        lam ("self", lam ("n",
+          ite (leq (var "n", lit 0), lit 0,
+               add (sub (add (lit 1, lit 2), add (lit 1, lit 2)),
+                    app (var "self", sub (var "n", lit 1)))))))
+
+    val loopCallT = app (zc,
+        lam ("self", lam ("n",
+          ite (leq (var "n", lit 0), lit 0,
+               app (var "self",
+                    sub (app (lam ("w", var "w"), var "n"), lit 1))))))
+
+    val fibFix =
+        fixt ("fib", "n",
+          ite (leq (var "n", lit 1),
+              var "n",
+              add (app (var "fib", sub (var "n", lit 1)),
+                   app (var "fib", sub (var "n", lit 2)))))
+
+    val fibD = comp [] fibFix
+
+    (* =================== native twins ================================== *)
+    fun nfac n = if n <= 0 then 1 else n * nfac (n - 1)
+    fun nfib n = if n <= 1 then n else nfib (n - 1) + nfib (n - 2)
+    fun ntak x y z = if x <= y then z
+                     else ntak (ntak (x - 1) y z) (ntak (y - 1) z x)
+                               (ntak (z - 1) x y)
+    fun nack m n = if m <= 0 then n + 1
+                   else if n <= 0 then nack (m - 1) 1
+                   else nack (m - 1) (nack m (n - 1))
+    fun npower x n = if n <= 0 then 1 else x * npower x (n - 1)
+
+    (* =================== timing ======================================== *)
+    fun timeMs f =
+        let val start  = getTime ()
+            val result = f ()
+            val finish = getTime ()
+        in (result, finish - start)
+        end
+
+    fun repeat 0 _ = ()
+      | repeat k f = (f (); repeat (k - 1) f)
+
+    (* ms per call, batches grown until one batch exceeds 300 ms *)
+    fun perCallMs f =
+        let fun go reps =
+                let val (_, el) = timeMs (fn () => repeat reps f)
+                in if el >= 300 then el / reps else go (reps * 4)
+                end
+        in go 1
+        end
+
+    (* one untimed warmup call, then the best of k timed calls *)
+    fun bestOfMs k f =
+        let val _ = f ()
+            fun go 0 best = best
+              | go i best =
+                  let val (_, ms) = timeMs f
+                  in go (i - 1) (if ms < best then ms else best)
+                  end
+        in go k (10 * 1000 * 1000)
+        end
+
+    (* =================== CLI parsing =================================== *)
+    fun splitOn sep s =
+        let fun go [] cur acc      =
+                  List.reverse (String.implode (List.reverse cur) :: acc)
+              | go (c::cs) cur acc =
+                  if c = sep
+                  then go cs [] (String.implode (List.reverse cur) :: acc)
+                  else go cs (c::cur) acc
+        in go (String.explode s) [] []
+        end
+
+    fun kvOf s = case splitOn "=" s of
+                   [k, v] => (k, v)
+                 | _      => (s, "")
+
+    fun optStr kvs key dflt =
+        case List.filter (fn (k, _) => k = key) kvs of
+          ((_, v) :: _) => v
+        | _             => dflt
+
+    fun optInt kvs key dflt =
+        case List.filter (fn (k, _) => k = key) kvs of
+          ((_, v) :: _) => stringToInt v
+        | _             => dflt
+
+    fun wants suites name =
+        List.length (List.filter (fn s => s = name) suites) > 0
+
+    (* =================== the suites ==================================== *)
+    (* each row: {name, source, interpreted_ms, native_ms, slowdown, ok} *)
+    fun macroSuite () =
+        let fun mrow name source fi fn_ =
+                let val okv = fi () = fn_ ()
+                    val i   = perCallMs fi
+                    val n   = perCallMs fn_
+                in { name = name, source = source, interpreted_ms = i,
+                     native_ms = n, slowdown = i / n, ok = okv }
+                end
+        in [ mrow "fac 18" "Amin & Rompf, POPL 2018"
+                  (fn () => numOf (evalz empty (app (facT, lit 18))))
+                  (fn () => nfac 18)
+           , mrow "fib 18" "Ertl & Gregg, JILP 2003 (worst-case shape)"
+                  (fn () => numOf (evalz empty (app (fibT, lit 18))))
+                  (fn () => nfib 18)
+           , mrow "tak 18 12 6" "Gabriel Lisp suite"
+                  (fn () => numOf (evalz empty (ap3 takT (lit 18) (lit 12) (lit 6))))
+                  (fn () => ntak 18 12 6)
+           , mrow "ack 3 3" "partial-evaluation tradition (Mix)"
+                  (fn () => numOf (evalz empty (ap2 ackT (lit 3) (lit 3))))
+                  (fn () => nack 3 3)
+           , mrow "power 2 20" "Jones, Gomard & Sestoft, 1993"
+                  (fn () => numOf (evalz empty (ap2 powerT (lit 2) (lit 20))))
+                  (fn () => npower 2 20)
+           ]
+        end
+
+    (* each row: {name, ms, slowdown, ok}; fibZ recursion for zcomb, fibFix
+       for the rest *)
+    fun strategySuite fibN reps =
+        let val expected = nfib fibN
+            val nativeMs = perCallMs (fn () => nfib fibN)
+            fun srow name f =
+                let val okv = f fibN = expected
+                    val ms  = bestOfMs reps (fn () => f fibN)
+                in { name = name, ms = ms, slowdown = ms / nativeMs, ok = okv }
+                end
+            val rows =
+                [ srow "zcomb"
+                       (fn n => numOf (evalz empty (app (fibT, lit n))))
+                , srow "unroll"
+                       (fn n => numOf (evalr empty (app (fibFix, lit n))))
+                , srow "meta"
+                       (fn n => hnumOf (evalh emptyh (app (fibFix, lit n))))
+                , srow "cps"
+                       (fn n => hnumOf (evalc emptyh (app (fibFix, lit n)) (fn v => v)))
+                , srow "machine"
+                       (fn n => numOf (evalk empty (app (fibFix, lit n)) halt))
+                ]
+        in { native_ms = nativeMs, rows = rows }
+        end
+
+    fun envSuite fibN reps =
+        let val expected = nfib fibN
+            val nativeMs = perCallMs (fn () => nfib fibN)
+            fun erow name f =
+                let val okv = f fibN = expected
+                    val ms  = bestOfMs reps (fn () => f fibN)
+                in { name = name, ms = ms, slowdown = ms / nativeMs, ok = okv }
+                end
+            val rows =
+                [ erow "assoc"
+                       (fn n => numOf (evalr empty (app (fibFix, lit n))))
+                , erow "map"
+                       (fn n => mnumOf (evalm emptyM (app (fibFix, lit n))))
+                , erow "index"
+                       (fn n => dnumOf (evald dempty (dapp (fibD, dlit n))))
+                ]
+        in { native_ms = nativeMs, rows = rows }
+        end
+
+    fun microSuite iters =
+        let val nullMs = perCallMs (fn () =>
+                           numOf (evalz empty (app (loopNullT, lit iters))))
+            val addMs  = perCallMs (fn () =>
+                           numOf (evalz empty (app (loopAddT, lit iters))))
+            val callMs = perCallMs (fn () =>
+                           numOf (evalz empty (app (loopCallT, lit iters))))
+        in { iters = iters
+           , base_iteration_us = 1000 * nullMs / iters
+           , arith_node_us     = 1000 * (addMs - nullMs) / (4 * iters)
+           , application_us    = 1000 * (callMs - nullMs) / iters
+           }
+        end
+
+    (* =================== renderers ===================================== *)
+    fun say s = fwrite (stdout authority, s ^ "\n")
+
+    fun mdMacro rows =
+        ( say ""
+        ; say "## macro: literature benchmarks, naive Z-combinator interpreter"
+        ; say ""
+        ; say "| benchmark | source | interpreted ms/call | native ms/call | slowdown | ok |"
+        ; say "|---|---|---|---|---|---|"
+        ; List.map (fn r =>
+            say ("| " ^ r.name ^ " | " ^ r.source ^ " | "
+                 ^ toString r.interpreted_ms ^ " | " ^ toString r.native_ms
+                 ^ " | " ^ toString r.slowdown ^ " | " ^ toString r.ok ^ " |"))
+            rows
+        ; () )
+
+    fun mdRows title fibN s =
+        ( say ""
+        ; say ("## " ^ title ^ " (fib " ^ toString fibN ^ "; native "
+               ^ toString s.native_ms ^ " ms/call)")
+        ; say ""
+        ; say "| variant | ms (best of reps) | slowdown | ok |"
+        ; say "|---|---|---|---|"
+        ; List.map (fn r =>
+            say ("| " ^ r.name ^ " | " ^ toString r.ms ^ " | "
+                 ^ toString r.slowdown ^ " | " ^ toString r.ok ^ " |"))
+            s.rows
+        ; () )
+
+    fun mdMicros m =
+        ( say ""
+        ; say ("## micros: cost per interpreted AST node ("
+               ^ toString m.iters ^ " iterations)")
+        ; say ""
+        ; say "| probe | us |"
+        ; say "|---|---|"
+        ; say ("| base iteration (leq+ite+sub+app+2var) | "
+               ^ toString m.base_iteration_us ^ " |")
+        ; say ("| arithmetic node | " ^ toString m.arith_node_us ^ " |")
+        ; say ("| application | " ^ toString m.application_us ^ " |")
+        )
+
+in let val kvs    = List.map kvOf (getCliArgs authority)
+       val format = optStr kvs "format" "md"
+       val suites = splitOn "," (optStr kvs "suites" "macro,strategies,envs,micros")
+       val fibN   = optInt kvs "fib" 18
+       val reps   = optInt kvs "reps" 3
+       val iters  = optInt kvs "iters" 2000
+
+       val macroR = if wants suites "macro"      then macroSuite ()           else ()
+       val stratR = if wants suites "strategies" then strategySuite fibN reps else ()
+       val envR   = if wants suites "envs"       then envSuite fibN reps      else ()
+       val microR = if wants suites "micros"     then microSuite iters        else ()
+
+   in if format = "json"
+      then say (Json.prettyPrint 2
+             { schema       = "troupe-interp-bench/1"
+             , timestamp_ms = getTime ()
+             , config       = { fib_n = fibN, reps = reps, micro_iters = iters
+                              , suites = suites }
+             , results      = { macro = macroR, strategies = stratR
+                              , envs = envR, micros = microR }
+             })
+      else ( say "# Interpreter overhead benchmarks"
+           ; say ""
+           ; say ("config: fib=" ^ toString fibN ^ " reps=" ^ toString reps
+                  ^ " iters=" ^ toString iters)
+           ; (if wants suites "macro"      then mdMacro macroR                  else ())
+           ; (if wants suites "strategies" then mdRows "strategies" fibN stratR else ())
+           ; (if wants suites "envs"       then mdRows "envs" fibN envR         else ())
+           ; (if wants suites "micros"     then mdMicros microR                 else ())
+           )
+   end
+end

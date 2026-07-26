@@ -1,0 +1,125 @@
+(* Unit tests for lib/Html.trp
+ *
+ * The escaping and URL-blocking behaviour here is the library's security
+ * contract, stated in its header comment. Markdown exercises the accepting path
+ * incidentally, but it filters dangerous URLs before it ever builds a node, so
+ * the rejecting path had no test until this one.
+ *)
+
+import Unit
+import Html
+import Option
+
+let val q = "\x22"   (* double quote *)
+
+    (* Attribute names the library sanitizes, one representative element each. *)
+    val danger = "javascript:alert(1)"
+
+    val tests = Unit.group "Html" [
+
+        Unit.group "escapeHtml" [
+            Unit.it "escapes ampersand, less-than and greater-than"
+                    (Unit.isEq "a &amp; b &lt; c &gt; d" (Html.escapeHtml "a & b < c > d"))
+          , Unit.it "leaves a double quote alone in text content"
+                    (Unit.isEq (q ^ "x" ^ q) (Html.escapeHtml (q ^ "x" ^ q)))
+          , Unit.it "leaves ordinary text alone"
+                    (Unit.isEq "plain" (Html.escapeHtml "plain"))
+          , Unit.it "escapes an already-escaped entity again"
+                    (Unit.isEq "&amp;amp;" (Html.escapeHtml "&amp;"))
+        ],
+
+        Unit.group "escapeAttr" [
+            Unit.it "escapes a single quote, which delimits attribute values"
+                    (Unit.isEq "it&#39;s" (Html.escapeAttr "it's"))
+          , Unit.it "escapes ampersand and less-than as well"
+                    (Unit.isEq "a &amp; b &lt; c" (Html.escapeAttr "a & b < c"))
+        ],
+
+        Unit.group "escapeScriptContent" [
+            Unit.it "breaks up a closing tag sequence"
+                    (Unit.isEq "<\x5c/script>" (Html.escapeScriptContent "</script>"))
+          , Unit.it "leaves content without a closing sequence alone"
+                    (Unit.isEq "var x = 1 < 2;" (Html.escapeScriptContent "var x = 1 < 2;"))
+        ],
+
+        Unit.group "sanitizeUrl" [
+            Unit.it "accepts an absolute http url"
+                    (Unit.isEq (SOME "http://example.com") (Html.sanitizeUrl "http://example.com"))
+          , Unit.it "accepts a relative path"
+                    (Unit.isEq (SOME "/a/b") (Html.sanitizeUrl "/a/b"))
+          , Unit.it "rejects javascript:"
+                    (Unit.isEq NONE (Html.sanitizeUrl danger))
+          , Unit.it "rejects javascript: whatever the case"
+                    (Unit.isEq NONE (Html.sanitizeUrl "JaVaScRiPt:alert(1)"))
+          , Unit.it "rejects vbscript:"
+                    (Unit.isEq NONE (Html.sanitizeUrl "vbscript:x"))
+          , Unit.it "rejects data:text/html"
+                    (Unit.isEq NONE (Html.sanitizeUrl "data:text/html,x"))
+          , Unit.it "accepts a data url that is not text/html"
+                    (Unit.isEq (SOME "data:image/png;base64,iVBOR")
+                               (Html.sanitizeUrl "data:image/png;base64,iVBOR"))
+        ],
+
+        Unit.group "isDangerousUrl" [
+            Unit.it "accepts javascript:"  (Unit.isTrue  (Html.isDangerousUrl danger))
+          , Unit.it "rejects https"        (Unit.isFalse (Html.isDangerousUrl "https://x"))
+        ],
+
+        Unit.group "url attributes are sanitized when rendered" [
+            Unit.it "a safe href survives"
+                    (Unit.isEq "<a href='http://x'>l</a>"
+                               (Html.render (Html.a {href = "http://x"} [Html.text "l"])))
+          , Unit.it "a dangerous href becomes empty"
+                    (Unit.isEq "<a href=''>l</a>"
+                               (Html.render (Html.a {href = danger} [Html.text "l"])))
+          , Unit.it "a dangerous src becomes empty"
+                    (Unit.isEq "<img src='' alt='a' />"
+                               (Html.render (Html.img {src = danger, alt = "a"})))
+          , Unit.it "a dangerous cite becomes empty"
+                    (Unit.isEq "<blockquote cite=''></blockquote>"
+                               (Html.render (Html.blockquote {cite = danger} [])))
+          , Unit.it "an attribute that is not a url is left alone"
+                    (Unit.isEq "<div title='javascript:alert(1)'></div>"
+                               (Html.render (Html.divElem {title = danger} [])))
+          , Unit.it "an attribute value is escaped after sanitizing"
+                    (Unit.isEq "<div title='it&#39;s'></div>"
+                               (Html.render (Html.divElem {title = "it's"} [])))
+        ],
+
+        Unit.group "node rendering" [
+            Unit.it "a text node is escaped"
+                    (Unit.isEq "a &amp; b" (Html.render (Html.text "a & b")))
+          , Unit.it "a raw node is not escaped"
+                    (Unit.isEq "<b>x</b>" (Html.render (Html.raw "<b>x</b>")))
+          , Unit.it "an element with no attributes or children"
+                    (Unit.isEq "<div></div>" (Html.render (Html.divElem {} [])))
+          , Unit.it "an element with an attribute and a child"
+                    (Unit.isEq "<div class='c'>x</div>"
+                               (Html.render (Html.divElem {class = "c"} [Html.text "x"])))
+          , Unit.it "a void element is self-closing"
+                    (Unit.isEq "<br />" (Html.render (Html.br {})))
+          , Unit.it "renderAll concatenates"
+                    (Unit.isEq "ab" (Html.renderAll [Html.text "a", Html.text "b"]))
+        ],
+
+        Unit.group "script and style content" [
+            Unit.it "text inside script cannot close the tag"
+                    (Unit.isEq "<script>var s = 1; <\x5c/script></script>"
+                               (Html.render (Html.script {} [Html.text "var s = 1; </script>"])))
+          , Unit.it "raw inside script is still escaped against closing"
+                    (Unit.isEq "<script><\x5c/script><img></script>"
+                               (Html.render (Html.script {} [Html.raw "</script><img>"])))
+          , Unit.it "an element child of script is dropped"
+                    (Unit.isEq "<script></script>"
+                               (Html.render (Html.script {} [Html.divElem {} []])))
+        ],
+
+        Unit.group "document" [
+            Unit.it "wraps head and body in a doctype"
+                    (Unit.isEq "<!DOCTYPE html><html><head><title>T</title></head><body>B</body></html>"
+                               (Html.document [Html.title {} [Html.text "T"]] [Html.text "B"]))
+        ]
+
+    ]
+
+in Unit.run authority tests end

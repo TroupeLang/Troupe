@@ -1,0 +1,32 @@
+(* A constructor value is indistinguishable from its hand-written desugared tuple
+   everywhere except printing (semantics.md, the derived-vs-decided guard). The
+   tag string below is the real content-addressed tag the compiler emits for
+   `green` in this declaration; it was read from the generated JS of a program
+   using the constructor, and is deterministic, so hard-coding it here is exactly
+   what a peer on another node would carry. Indistinguishability is computed
+   in-language and reported as booleans, so the golden stays stable if value
+   printing shifts. *)
+
+datatype colour = red | green of int
+
+let val v = green 3
+    val t = ("2cfc0t99sisjbr2bhq2i7bng9iq5hcr30ohcsda9e1un4uv6oqb0#colour#green", 3)
+
+    (* Round both through the serialization boundary. *)
+    val _  = save (authority, "synvar-transparency-v", v)
+    val _  = save (authority, "synvar-transparency-t", t)
+    val rv = restore ("synvar-transparency-v")
+    val rt = restore ("synvar-transparency-t")
+in print (v = t);                              (* equality, both directions *)
+   print (t = v);
+   print (isTuple v);                          (* a variant IS a tuple *)
+   print (case v of (a, b) => b | _ => 0);     (* variant matches a tuple pattern *)
+   print (case t of green n => n | _ => 0);    (* tuple matches a constructor pattern *)
+   print (levelOf v = levelOf t);              (* same label under the same pc *)
+   print (rv = rt);                            (* restored values still equal *)
+   print (rv = v);                             (* and equal to the originals *)
+   print (rt = t);
+   print (case rv of green n => n | _ => 0);   (* restored variant still matches *)
+   print v;                                    (* the one exception: printing *)
+   print t                                     (* differs -- constructor vs tuple *)
+end

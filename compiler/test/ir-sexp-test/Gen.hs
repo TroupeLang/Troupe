@@ -96,7 +96,6 @@ genLit = oneof
   , Core.LString  <$> genName
   , Core.LBool    <$> arbitrary
   , pure Core.LUnit
-  , Core.LAtom    <$> genName
   , Core.LLabel   <$> genName
   , Core.LDCLabel <$> genDCLabel
   ]
@@ -129,7 +128,7 @@ genExpr :: Gen IRExpr
 genExpr = oneof
   [ Bin <$> genBinOp <*> genLVA <*> genLVA
   , Un  <$> genUnOp  <*> genLVA
-  , Tuple      <$> genSmallList genLVA
+  , Tuple      <$> genSmallList genLVA <*> elements [False, True]
   , Record     <$> genSmallList genField
   , WithRecord <$> genLVA <*> genSmallList genField
   , ProjField  <$> genLVA <*> genName
@@ -188,6 +187,5 @@ genFun = do
 
 genProg :: Gen IRProgram
 genProg = do
-  atoms <- Core.Atoms <$> genSmallList genName
   funs  <- do k <- choose (1, 3); vectorOf k (noLoc <$> genFun)
-  return (IRProgram atoms funs)
+  return (IRProgram funs)

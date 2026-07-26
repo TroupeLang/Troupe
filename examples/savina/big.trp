@@ -1,0 +1,24 @@
+(* Savina benchmark: Big (concurrency group).
+ *
+ * w workers exchange ping/pong messages all-to-all: each worker sends 100
+ * pings one at a time to randomly chosen peers, answering incoming pings
+ * while it waits for its own pong. A sink collects per-worker pong counts,
+ * then broadcasts EXIT. Measures many-to-many messaging and contention.
+ *
+ * The size parameter is the number of workers w (message volume is
+ * proportional to w).
+ *
+ *   ./local.sh examples/savina/big.trp              # default sizes
+ *   ./local.sh examples/savina/big.trp -- 10 40     # explicit sizes
+ *
+ * Result: total pongs collected by the sink; ok iff it equals w * 100.
+ *)
+
+import List
+import Bench
+import "./Savina"
+
+let val d = case List.filter (fn d => d.name = "big") Savina.all of [d] => d
+    val sizes = Bench.sizesFromArgs (getCliArgs authority) d.sizes
+in Bench.run authority d.name sizes 3 d.bench d.check
+end

@@ -1,0 +1,1 @@
+tests/cmp/synvar/forward-ref-across-groups.trp:3:14: unbound type name: b

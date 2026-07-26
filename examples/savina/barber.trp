@@ -1,0 +1,29 @@
+(* Savina benchmark: Sleeping Barber (concurrency group).
+ *
+ * n customer actors try to enter a waiting room with capacity 4. A
+ * customer finding the room full sleeps briefly and retries; a customer
+ * in the room eventually gets a haircut from the barber actor, reports to
+ * the main process, and terminates. The room dispatches one customer at a
+ * time to the barber. Measures admission control and retry churn around a
+ * bounded queue.
+ *
+ *   ./local.sh examples/savina/barber.trp                # default sizes
+ *   ./local.sh examples/savina/barber.trp -- 500 2000    # explicit sizes
+ *
+ * Result: number of customers served; ok iff it equals n.
+ *
+ * Note: all n customers arrive at once, so nearly everyone spends time in
+ * the FULL-retry loop; the run cost is dominated by the resulting
+ * sleep/retry churn (thousands of live timers), which grows superlinearly
+ * with n. Default sizes are chosen to complete quickly; see the study
+ * report.
+ *)
+
+import List
+import Bench
+import "./Savina"
+
+let val d = case List.filter (fn d => d.name = "barber") Savina.all of [d] => d
+    val sizes = Bench.sizesFromArgs (getCliArgs authority) d.sizes
+in Bench.run authority d.name sizes 3 d.bench d.check
+end

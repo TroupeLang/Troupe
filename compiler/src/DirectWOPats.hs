@@ -7,8 +7,6 @@ module DirectWOPats ( Lambda (..)
               , Numeric(..)
               , Lit(..)
               , LFields
-              , AtomName
-              , Atoms(..)
               , Prog(..)
               )
 where
@@ -50,7 +48,6 @@ data Lit
     | LDCLabel DCLabelExp
     | LUnit
     | LBool Bool
-    | LAtom AtomName
   deriving (Eq, Show)
 
 -- | Lambda - uses Located wrapper for body and for argument names
@@ -66,7 +63,7 @@ data Term
     | Let [Decl] LTerm
     | If LTerm LTerm LTerm
     | AssertElseError LTerm LTerm LTerm    -- position from Located wrapper
-    | Tuple [LTerm]
+    | Tuple [LTerm] SynVariantTag
     | Record LFields
     | WithRecord LTerm LFields
     | ProjField LTerm FieldName
@@ -78,10 +75,7 @@ data Term
     | Error LTerm                           -- position from Located wrapper
     deriving (Eq)
 
-data Atoms = Atoms [AtomName]
-      deriving (Eq, Show)
-
-data Prog = Prog Imports Atoms LTerm
+data Prog = Prog Imports LTerm
   deriving (Eq, Show)
 
 -- Note: GetPosInfo for LTerm is provided by TroupePositionInfo's
@@ -108,15 +102,10 @@ instance ShowDebug Prog where
 
 
 ppProg :: Prog -> PP PP.Doc
-ppProg (Prog (Imports imports) (Atoms atoms) lterm) = do
+ppProg (Prog (Imports imports) lterm) = do
   ltermDoc <- ppLTerm 0 lterm
-  let ppAtoms =
-        if null atoms
-          then PP.empty
-          else (text "datatype Atoms = ") <+>
-               (hsep $ PP.punctuate (text " |") (map text atoms))
-      ppImports = if null imports then PP.empty else text "<<imports>>\n"
-  pure $ ppImports $$ ppAtoms $$ ltermDoc
+  let ppImports = if null imports then PP.empty else text "<<imports>>\n"
+  pure $ ppImports $$ ltermDoc
 
 -- | Pretty print a Located Term
 ppLTerm :: Precedence -> LTerm -> PP PP.Doc
@@ -138,7 +127,7 @@ ppTerm' (Error lt) = do
   d <- ppLTerm 0 lt
   pure $ text "error " PP.<> d
 
-ppTerm' (Tuple lts) = do
+ppTerm' (Tuple lts _) = do
   ds <- mapM (ppLTerm 0) lts
   pure $ PP.parens $ PP.hcat $ PP.punctuate (text ",") ds
 
@@ -270,14 +259,13 @@ ppLit (LDCLabel dc) = ppDCLabelExpLit dc
 ppLit LUnit         = text "()"
 ppLit (LBool True)  = text "true"
 ppLit (LBool False) = text "false"
-ppLit (LAtom a) = text a
 
 
 
 
 termPrec :: Term -> Precedence
 termPrec (Lit _)           = maxPrec
-termPrec (Tuple _)         = maxPrec
+termPrec (Tuple _ _)       = maxPrec
 termPrec (List _)          = maxPrec
 termPrec (Var _)           = maxPrec
 termPrec (App _ _)         = appPrec

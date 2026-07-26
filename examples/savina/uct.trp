@@ -1,0 +1,30 @@
+(* Savina benchmark: Unbalanced Cobwebbed Tree (parallelism group).
+ *
+ * A tree of actors grows dynamically to n nodes: every node spawns a left
+ * child (indices come from the master, which stops handing them out at
+ * n), and a right child when a hash of its index says so — producing an
+ * unbalanced spine-with-bushes shape. The Savina original relies on
+ * *urgent* messages that jump the mailbox queue; Troupe mailboxes are
+ * FIFO, so this port demonstrates the priority-receive emulation: a node
+ * probes for queued URGENT messages by sending itself a marker and
+ * receiving until the marker arrives (any URGENT already in the mailbox
+ * is served first — the after-0 idiom of pre-priority-message Erlang),
+ * and selective receive answers URGENT while a node waits for the
+ * master's allocation replies. The master probes random known nodes with
+ * URGENT status requests throughout the run.
+ *
+ *   ./local.sh examples/savina/uct.trp                # default sizes
+ *   ./local.sh examples/savina/uct.trp -- 2000 8000   # explicit sizes
+ *
+ * Result: (allocated, completed, probes, acks); ok iff exactly n nodes
+ * were allocated, all n completed, and every urgent probe was answered.
+ *)
+
+import List
+import Bench
+import "./Savina"
+
+let val d = case List.filter (fn d => d.name = "uct") Savina.all of [d] => d
+    val sizes = Bench.sizesFromArgs (getCliArgs authority) d.sizes
+in Bench.run authority d.name sizes 3 d.bench d.check
+end

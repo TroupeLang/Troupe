@@ -1,0 +1,5 @@
+(* A type variable in an `of` clause that is not in the datatype's
+   parameter list is a static error. *)
+datatype 'a box = BOX of 'b
+
+let val x = BOX 3 in print x end

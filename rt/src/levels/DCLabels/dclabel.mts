@@ -57,9 +57,16 @@ export class DCLabel extends AbstractLevel<DCLabel> {
         <S_1, I_1> flowsto <S_2, I_2>
 
         assuming this = <S_1, I_1>
-    	
+
         */
-        return implies(other.confidentiality, this.confidentiality) 
+        // Reflexivity (a ⊑ a) and the lattice bounds (⊥ ⊑ x, x ⊑ ⊤), decided by
+        // pointer identity: labels are immutable and IFC_BOT/IFC_TOP are canonical
+        // singletons, so these checks are sound; the CNF entailment below remains
+        // the general case.
+        if (this === other || this === IFC_BOT || other === IFC_TOP) {
+            return true;
+        }
+        return implies(other.confidentiality, this.confidentiality)
             && implies(this.integrity, other.integrity);
 
     }
@@ -211,10 +218,21 @@ export class DCLabel extends AbstractLevel<DCLabel> {
     */
 
     join (other:DCLabel): DCLabel {
-        return new DCLabel (
-             conjunction (this.confidentiality, other.confidentiality)
-           , disjunction (this.integrity, other.integrity)
-        )
+        // Unit (⊥ ⊔ x = x) and idempotence (x ⊔ x = x): the operand object is
+        // the result. Returning it — not an equal fresh label — preserves
+        // pointer identity through join chains, which is what keeps the
+        // identity fast paths of flowsTo effective downstream.
+        if (this === other || this === IFC_BOT) { return other; }
+        if (other === IFC_BOT) { return this; }
+        const conf = conjunction (this.confidentiality, other.confidentiality);
+        const intg = disjunction (this.integrity, other.integrity);
+        // Absorption: conjunction/disjunction return a dominating operand's
+        // component unchanged; when both of an operand's components are
+        // preserved, that operand is the join. Labels are immutable, so
+        // sharing the object is sound.
+        if (conf === this.confidentiality && intg === this.integrity) { return this; }
+        if (conf === other.confidentiality && intg === other.integrity) { return other; }
+        return new DCLabel (conf, intg)
     }
 
     meet (other:DCLabel): DCLabel {

@@ -1,0 +1,25 @@
+(* Savina benchmark: Bitonic Sort (parallelism group).
+ *
+ * The bitonic sorting network expressed as a recursive actor tree: a
+ * sorter actor sorts its two halves in opposite directions through child
+ * sorters, producing a bitonic sequence, and hands it to a merger actor;
+ * a merger compare-exchanges the halves and merges each half through
+ * child mergers. The sequence of compare-exchange operations is exactly
+ * the bitonic network's; n must be a power of two. Measures deep
+ * divide-and-conquer actor trees with list payloads.
+ *
+ *   ./local.sh examples/savina/bitonicsort.trp               # default sizes
+ *   ./local.sh examples/savina/bitonicsort.trp -- 256 1024   # explicit sizes
+ *
+ * Result: the network's output; ok iff it equals List.sort of the input
+ * element for element.
+ *)
+
+import List
+import Bench
+import "./Savina"
+
+let val d = case List.filter (fn d => d.name = "bitonicsort") Savina.all of [d] => d
+    val sizes = Bench.sizesFromArgs (getCliArgs authority) d.sizes
+in Bench.run authority d.name sizes 3 d.bench d.check
+end

@@ -1,0 +1,184 @@
+(* Progress.trp — a single-line progress bar for a batch whose size is known in advance.
+ *
+ * The bar state is an ordinary value threaded by the caller: `start` returns a state, `step`
+ * returns the next state, `finish` closes the line off. Nothing is stored on the side, so the
+ * state composes with `List.foldl` as one component of a fold accumulator.
+ *
+ *     val p0        = Progress.start auth "Rendering" (List.length docs)
+ *     val (p, out)  = List.foldl (fn (d, (p, acc)) => (Progress.step p, render d :: acc))
+ *                                (p0, []) docs
+ *     val _         = Progress.finish p
+ *
+ * A state carries the authority it draws with, so only `start` takes one.
+ *
+ * Drawing is throttled: a step redraws only when the output would differ from what is on the
+ * line already — when the number of filled cells changes, when the displayed second changes, or
+ * on the step that reaches the total. `redraws` reports how many draws a run performed.
+ *
+ * Two output modes:
+ *
+ *   - bar mode (the default) rewrites one line in place with a leading "\r". Correct on a
+ *     terminal, wrong in a file.
+ *   - plain mode (`plain = true`) writes each update as its own complete line. Correct in a
+ *     file.
+ *
+ * Neither the terminal width nor whether stdout is a terminal can be queried from Troupe, so
+ * both are caller-supplied: the bar width is an option field, and the caller selects the mode.
+ *)
+
+import String
+import Number
+import Time
+
+let
+    val intDiv = Number.intDiv
+
+    val filledChar = "#"
+    val emptyChar  = "."
+
+    (* An ETA is extrapolated from the observed rate over the run so far. Below these thresholds
+     * there is not enough of a sample to extrapolate from, and the ETA field reads "--:--"
+     * instead of carrying a number. *)
+    val etaMinCount  = 3
+    val etaMinMillis = 250
+
+    (** Option defaults: no label, 40 cells, bar mode. Override with a record update, e.g.
+     *  `{ Progress.defaults with width = 20, plain = true }`. *)
+    val defaults = { label = "", width = 40, plain = false }
+
+    fun pad2 n = String.padLeft 2 "0" (intToString n)
+
+    (* "m:ss", or "h:mm:ss" from an hour on. *)
+    fun formatClock ms =
+        let val ms'      = if ms < 0 then 0 else ms
+            val totalSec = intDiv ms' 1000
+            val h        = intDiv totalSec 3600
+            val m        = intDiv (totalSec mod 3600) 60
+            val s        = totalSec mod 60
+        in if h > 0
+           then intToString h ^ ":" ^ pad2 m ^ ":" ^ pad2 s
+           else intToString m ^ ":" ^ pad2 s
+        end
+
+    (* Filled cells for the current count. A total of zero has nothing to wait for, so its bar
+     * is full from the start. *)
+    fun filledCells st =
+        if st.total <= 0 then st.width
+        else let val c = intDiv (st.count * st.width) st.total
+             in if c > st.width then st.width else if c < 0 then 0 else c
+             end
+
+    fun percentOf st = if st.total <= 0 then 100 else intDiv (st.count * 100) st.total
+
+    (* The ETA field: empty once there is nothing left, "--:--" until the sample is large
+     * enough, otherwise elapsed-per-item scaled by the items remaining. *)
+    fun etaField st elapsed =
+        let val remaining = st.total - st.count
+        in if remaining <= 0 then ""
+           else if st.count < etaMinCount orelse elapsed < etaMinMillis then "ETA --:--"
+           else "ETA " ^ formatClock (floor ((elapsed / st.count) * remaining))
+        end
+
+    fun renderLine st nowMs =
+        let val elapsed  = nowMs - st.startMs
+            val cells    = filledCells st
+            val bar      = "[" ^ String.repeat cells filledChar
+                               ^ String.repeat (st.width - cells) emptyChar ^ "]"
+            val totalStr = intToString st.total
+            val counts   = String.padLeft (String.size totalStr) " " (intToString st.count)
+                           ^ "/" ^ totalStr
+            val pct      = String.padLeft 4 " " (intToString (percentOf st) ^ "%")
+            val prefix   = if st.label = "" then "" else st.label ^ " "
+            val eta      = etaField st elapsed
+            val etaPart  = if eta = "" then "" else "  " ^ eta
+        in prefix ^ bar ^ " " ^ counts ^ " " ^ pct ^ "  " ^ formatClock elapsed ^ etaPart
+        end
+
+    (* Write the line and record what is on it. In bar mode the line is padded out to the
+     * length of the previous one, because "\r" alone leaves a shorter line's tail behind. *)
+    fun draw st nowMs =
+        let val line = renderLine st nowMs
+            val out  = stdout st.auth
+            val _    = if st.plain
+                       then fwrite (out, line ^ "\n")
+                       else fwrite (out, "\r" ^ String.padRight st.lastLen " " line)
+        in { st with lastCount = st.count
+                   , lastCells = filledCells st
+                   , lastSecs  = intDiv (nowMs - st.startMs) 1000
+                   , lastLen   = String.size line
+                   , redraws   = st.redraws + 1
+           }
+        end
+
+    fun maybeDraw st nowMs =
+        let val cells = filledCells st
+            val secs  = intDiv (nowMs - st.startMs) 1000
+        in if st.count = st.lastCount then st
+           else if cells <> st.lastCells orelse secs <> st.lastSecs orelse st.count = st.total
+           then draw st nowMs
+           else st
+        end
+
+    fun nowMillis () = Time.toEpochMillis (Time.now ())
+
+    (** `startWith auth opts total` begins a bar of `total` items under `opts` and draws it at
+     *  zero. A `total` below zero is treated as zero, a `width` below one as one. *)
+    fun startWith auth opts total =
+        let val nowMs = nowMillis ()
+            val st = { auth      = auth
+                     , total     = if total < 0 then 0 else total
+                     , count     = 0
+                     , label     = opts.label
+                     , width     = if opts.width < 1 then 1 else opts.width
+                     , plain     = opts.plain
+                     , startMs   = nowMs
+                     , lastCount = 0 - 1
+                     , lastCells = 0 - 1
+                     , lastSecs  = 0 - 1
+                     , lastLen   = 0
+                     , redraws   = 0
+                     }
+        in draw st nowMs
+        end
+
+    (** `start auth label total` is `startWith` under `defaults` with that label. *)
+    fun start auth label total = startWith auth { defaults with label = label } total
+
+    (** `stepBy n st` advances the count by `n`, clamped to `[0, total]`, redrawing if the line
+     *  would change. *)
+    fun stepBy n st =
+        let val c  = st.count + n
+            val c' = if c > st.total then st.total else if c < 0 then 0 else c
+        in maybeDraw { st with count = c' } (nowMillis ())
+        end
+
+    (** One item done. *)
+    fun stepOne st = stepBy 1 st
+
+    (** Draws the state one last time if the line is behind the count, then ends the line, so
+     *  later output starts on a fresh one. Returns unit: the state is finished with. *)
+    fun finish st =
+        let val st' = if st.count = st.lastCount then st else draw st (nowMillis ())
+        in if st'.plain then () else fwrite (stdout st'.auth, "\n")
+        end
+
+    (** Items counted so far. *)
+    fun count st = st.count
+
+    (** Items the bar was started for. *)
+    fun total st = st.total
+
+    (** How many times the bar has been drawn, `start` included. *)
+    fun redraws st = st.redraws
+
+in [ ("defaults", defaults)
+   , ("start", start)
+   , ("startWith", startWith)
+   , ("step", stepOne)
+   , ("stepBy", stepBy)
+   , ("finish", finish)
+   , ("count", count)
+   , ("total", total)
+   , ("redraws", redraws)
+   ]
+end

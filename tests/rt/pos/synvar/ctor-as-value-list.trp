@@ -1,0 +1,9 @@
+(* Constructors used as first-class values, held in a list and applied;
+   printing the resulting applied variants. *)
+datatype shape = CIRCLE of int | SQUARE of int
+
+let val makers = [CIRCLE, SQUARE]
+    fun build (m::ms) (v::vs) = (m v) :: build ms vs
+      | build _ _ = []
+in print (build makers [3, 7])   (* [(CIRCLE 3), (SQUARE 7)] *)
+end

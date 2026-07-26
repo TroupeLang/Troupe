@@ -16,8 +16,6 @@ module Core (   Lambda (..)
               , Lit(..)
               , litEq
               , litNeq
-              , AtomName
-              , Atoms(..)
               , Prog(..)
               , VarAccess(..)
               , lowerProg
@@ -39,7 +37,7 @@ import           Control.Monad.Except
 
 import qualified Text.PrettyPrint.HughesPJ as PP
 import           Text.PrettyPrint.HughesPJ (
-   (<+>), ($$), text, hsep, vcat, nest, nest)
+   (<+>), ($$), text, vcat, nest)
 import           ShowIndent
 
 import           TroupePositionInfo (Located(..), getLoc, PosInf(..))
@@ -91,7 +89,6 @@ data Lit
     | LDCLabel DCLabelExp
     | LUnit
     | LBool Bool
-    | LAtom AtomName
   deriving (Show, Generic)
 instance Serialize Lit
 instance Eq Lit where
@@ -100,7 +97,6 @@ instance Eq Lit where
   (LLabel l) == (LLabel l') = l == l'
   LUnit == LUnit = True
   (LBool x) == (LBool y) = x == y
-  (LAtom x) == (LAtom y) = x == y
   (LDCLabel dc) == (LDCLabel dc') = dc == dc'
   _ == _ = False
 instance Ord Lit where
@@ -109,7 +105,6 @@ instance Ord Lit where
   compare (LLabel x) (LLabel y) = compare x y
   compare LUnit LUnit = EQ
   compare (LBool x) (LBool y) = compare x y
-  compare (LAtom x) (LAtom y) = compare x y
   compare (LDCLabel x) (LDCLabel y) = compare x y
   -- Cross-type ordering (for canonical ordering of different literal types)
   compare (LNumeric _) _ = LT
@@ -122,8 +117,6 @@ instance Ord Lit where
   compare _ LUnit = GT
   compare (LBool _) _ = LT
   compare _ (LBool _) = GT
-  compare (LAtom _) _ = LT
-  compare _ (LAtom _) = GT
 
 -- Note: Lit no longer has embedded position info. Position comes from the
 -- Located wrapper around terms containing literals.
@@ -138,7 +131,6 @@ litEq (LString s) (LString s') = s == s'
 litEq (LLabel l) (LLabel l') = v1LabelEq l l'
 litEq LUnit LUnit = True
 litEq (LBool x) (LBool y) = x == y
-litEq (LAtom x) (LAtom y) = x == y
 litEq (LDCLabel dc) (LDCLabel dc') = dcLabelEq dc dc'
 -- Cross-syntax comparison: V1 labels vs DC labels
 litEq (LLabel l) (LDCLabel dc) = dcLabelEq (v1LabelToDCLabelExp l) dc
@@ -167,7 +159,7 @@ data Term
     | Let Decl LTerm
     | If LTerm LTerm LTerm
     | AssertElseError LTerm LTerm LTerm
-    | Tuple [LTerm]
+    | Tuple [LTerm] SynVariantTag
     | Record LFields
     | WithRecord LTerm LFields
     | ProjField LTerm FieldName
@@ -180,12 +172,7 @@ data Term
   deriving (Eq)
 
 
-data Atoms = Atoms [AtomName]
-  deriving (Eq, Show, Generic)
-instance Serialize Atoms
-
-
-data Prog = Prog Imports Atoms LTerm
+data Prog = Prog Imports LTerm
   deriving (Eq, Show)
 
 -- Note: GetPosInfo instance for LTerm comes from TroupePositionInfo's
@@ -214,14 +201,11 @@ The module also contains pretty printing for the Core representation.
 -- 1. Lowering
 --------------------------------------------------
 
-lowerProg (D.Prog imports atms lterm) = Prog imports (transAtoms atms) (lower lterm)
+lowerProg (D.Prog imports lterm) = Prog imports (lower lterm)
 
 
 
 -- the rest of the declarations in this part are not exported
-
-transAtoms :: D.Atoms -> Atoms
-transAtoms (D.Atoms atms) = Atoms atms
 
 -- | Lower a lambda, producing Located terms for nested abstractions
 lowerLam :: D.Lambda -> Lambda
@@ -241,7 +225,6 @@ lowerLit (D.LLabel s) = LLabel s
 lowerLit (D.LDCLabel dc) = LDCLabel dc
 lowerLit D.LUnit = LUnit
 lowerLit (D.LBool b) = LBool b
-lowerLit (D.LAtom n) = LAtom n
 
 -- | Lower DirectWOPats.LTerm (Located Term) to Core.LTerm
 -- Position is now extracted from the Located wrapper
@@ -269,7 +252,7 @@ lower (Loc pos (D.Let decls le)) =
 -- lower (D.Case t patTermLst) = Case (lower t) (map (\(p,t) -> (lowerDeclPat p, lower t)) patTermLst)
 lower (Loc pos (D.If le1 le2 le3)) = Loc pos (If (lower le1) (lower le2) (lower le3))
 lower (Loc pos (D.AssertElseError le1 le2 le3)) = Loc pos (AssertElseError (lower le1) (lower le2) (lower le3))
-lower (Loc pos (D.Tuple lterms)) = Loc pos (Tuple (map lower lterms))
+lower (Loc pos (D.Tuple lterms tag)) = Loc pos (Tuple (map lower lterms) tag)
 lower (Loc pos (D.Record lfields)) = Loc pos (Record (map (\(f, lt) -> (f, lower lt)) lfields))
 lower (Loc pos (D.WithRecord le lfields)) = Loc pos (WithRecord (lower le) (map (\(f, lt) -> (f, lower lt)) lfields))
 lower (Loc pos (D.ProjField lt f)) = Loc pos (ProjField (lower lt) f)
@@ -292,14 +275,13 @@ lower (Loc pos (D.Un op le)) = Loc pos (Un op (lower le))
 -- This is the only function that is exported here
 
 renameProg :: Prog -> Except String Prog
-renameProg (Prog imports (Atoms atms) term) =
-  let alist = map (\ a -> (a, a)) atms
-      initEnv    = Map.fromList alist
+renameProg (Prog imports term) =
+  let initEnv    = Map.empty
       initReader = mapFromImports imports
       initState  = 0
   in do
       (term', _, _) <- runRWST (rename term initEnv) initReader initState
-      return $ Prog imports (Atoms atms) term'
+      return $ Prog imports term'
 
 -- The rest of the declarations here are not exported
 
@@ -346,32 +328,57 @@ mapFromImports (Imports imports) =
       Just alias -> alias
       Nothing -> importLib imp
 
+    -- The name codegen addresses the import by: the library name, or the
+    -- content-addressed module identity ("module:<hash>") for a module import.
+    -- ProcessImports has, by this point, resolved a module import's path to its
+    -- IR hash and stored it in importPath, so the reference is location-free and
+    -- Merkle (it carries the dependency's hash inline).
+    codegenName imp = case importPath imp of
+      Just hash -> LibName ("module:" ++ hash)
+      Nothing   -> importLib imp
+
     -- Build unqualified environment (only unqualified imports)
     -- Maps each exported function name to the original library
     unqualifiedImports = [imp | imp <- imports, importMode imp == Unqualified]
     unqualEnv = foldl insLib Map.empty unqualifiedImports
       where
         insLib m imp =
-          let lib = importLib imp
+          let lib = codegenName imp
               defs = effectiveExports imp
           in foldl (\m' def -> Map.insert def lib m') m defs
 
     -- Build map from effective name (alias or original) to (original lib, effective exports)
     -- This is used for resolving and validating A.foo() syntax
     libExports = Map.fromList
-      [ (effectiveName imp, (importLib imp, Set.fromList (effectiveExports imp)))
+      [ (effectiveName imp, (codegenName imp, Set.fromList (effectiveExports imp)))
       | imp <- imports
       ]
   in
     (unqualEnv, libExports)
 
 
--- | Sanitize variable names to be JavaScript-compatible identifiers
+-- | Sanitize variable names to be JavaScript-compatible identifiers.
+-- Ordinary names only need their primes replaced. Operator names (and the
+-- generated names derived from them, like <+>_arg1) contain characters that
+-- are not legal in JavaScript identifiers; they are encoded under a "$op"
+-- prefix with one mnemonic per character. '$'-only operators ($, $$) need no
+-- encoding: '$' is a legal JavaScript identifier character, and the
+-- uniqueness counter appended by 'unique' keeps them distinct from
+-- compiler-internal '$'-prefixed names.
 sanitizeForJS :: VarName -> VarName
-sanitizeForJS = map sanitizeChar
+sanitizeForJS v
+  | any (`elem` jsHostileOpChars) v = "$op" ++ concatMap opCharCode v
+  | otherwise                       = map sanitizeChar v
   where
     sanitizeChar '\'' = '_'  -- Replace single quotes with underscores
     sanitizeChar c = c        -- Keep other characters as-is
+    opCharCode c = case c of
+      '<' -> "$lt";   '>' -> "$gt";    '=' -> "$eq";    '+' -> "$plus"
+      '-' -> "$minus";'*' -> "$star";  '/' -> "$slash"; '^' -> "$caret"
+      '@' -> "$at";   '|' -> "$bar";   '&' -> "$amp";   '$' -> "$dollar"
+      '%' -> "$pct";  '!' -> "$bang";  '~' -> "$tilde"; '?' -> "$quest"
+      ':' -> "$colon";'.' -> "$dot";   '\'' -> "_"
+      _   -> [c]
 
 unique :: VarName -> S VarName
 unique v = do
@@ -392,7 +399,16 @@ lookforgen v m =
           (unqualEnv, _) <- ask
           case Map.lookup v unqualEnv of
             Just lib' -> return $ LibVar lib' v
-            Nothing -> return  $ BaseName v
+            -- An unresolved ordinary name falls through to the ambient
+            -- builtins (BaseName). No builtin has an operator name, and the
+            -- fallthrough would emit the invalid JavaScript rt.<+>, so an
+            -- unresolved operator is an error here.
+            Nothing
+              | isOperatorName v ->
+                  lift $ throwError $
+                    "unbound operator '" ++ v ++ "': it is neither defined"
+                    ++ " in this file nor imported unqualified"
+              | otherwise -> return $ BaseName v
 
 
 extend :: VarName -> VarName -> Env -> Env
@@ -440,9 +456,9 @@ renameTerm _ (AssertElseError t1 t2 t3) m = do
   return $ AssertElseError t1' t2' t3'
 
 
-renameTerm _ (Tuple terms) m = do
+renameTerm _ (Tuple terms tag) m = do
   terms' <- mapM (flip rename m) terms
-  return $ Tuple terms'
+  return $ Tuple terms' tag
 
 renameTerm _ (Record fields) m = do
   fields' <- mapM renameField fields
@@ -547,16 +563,10 @@ instance ShowDebug Prog where
 
 
 ppProg :: Prog -> PP PP.Doc
-ppProg (Prog (Imports imports) (Atoms atoms) term) = do
+ppProg (Prog (Imports imports) term) = do
   termDoc <- ppLTerm 0 term
-  let ppAtoms =
-        if null atoms
-          then PP.empty
-          else (text "datatype Atoms = ") <+>
-               (hsep $ PP.punctuate (text " |") (map text atoms))
-
-      ppImports = if null imports then PP.empty else text "<<imports>>\n"
-  pure $ ppImports $$ ppAtoms $$ termDoc
+  let ppImports = if null imports then PP.empty else text "<<imports>>\n"
+  pure $ ppImports $$ termDoc
 
 -- | Pretty print a Located Term
 ppLTerm :: Precedence -> LTerm -> PP PP.Doc
@@ -579,7 +589,7 @@ ppTerm' (Error lt) = do
   d <- ppLTerm 0 lt
   pure $ text "error " PP.<> d
 
-ppTerm' (Tuple lts) = do
+ppTerm' (Tuple lts _) = do
   ds <- mapM (ppLTerm 0) lts
   pure $ PP.parens $ PP.hcat $ PP.punctuate (text ",") ds
 
@@ -718,13 +728,12 @@ ppLit (LLabel s)    = PP.braces (text s)
 ppLit LUnit         = text "()"
 ppLit (LBool True)  = text "true"
 ppLit (LBool False) = text "false"
-ppLit (LAtom a) = text a
 ppLit (LDCLabel dc) = ppDCLabelExpLit dc
 
 
 termPrec :: Term -> Precedence
 termPrec (Lit _)           = maxPrec
-termPrec (Tuple _)         = maxPrec
+termPrec (Tuple _ _)       = maxPrec
 termPrec (List _)          = maxPrec
 termPrec (Var _)           = maxPrec
 termPrec (App _ _)         = appPrec

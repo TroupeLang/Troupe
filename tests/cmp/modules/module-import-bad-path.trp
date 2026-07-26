@@ -1,0 +1,7 @@
+(* A quoted module import path must be relative: it must start with "./" or
+ * "../". (A "../" path is allowed now that identity is content-addressed, not
+ * location-based; resolution alone decides whether it names a real file.) *)
+import "ModuleEscape"
+
+let val _ = ()
+in () end

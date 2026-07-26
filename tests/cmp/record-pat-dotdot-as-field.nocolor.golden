@@ -1,5 +1,3 @@
-Found 2 parse errors:
-
 tests/cmp/record-pat-dotdot-as-field.trp:3:13: parse error
   3 |     val {.. = x, b} = r
     |             ^
@@ -7,11 +5,4 @@ tests/cmp/record-pat-dotdot-as-field.trp:3:13: parse error
   expected '}'
 
 Suggestion: Mismatched braces - missing '}'?
-
-----------------------------------------
-
-tests/cmp/record-pat-dotdot-as-field.trp:3:16: parse error
-  3 |     val {.. = x, b} = r
-    |                ^
-  unexpected ','
 

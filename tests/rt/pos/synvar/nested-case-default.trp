@@ -1,0 +1,14 @@
+(* A case with a default branch and nested constructor patterns
+   (a constructor pattern inside another constructor pattern). *)
+datatype 'a option = NONE | SOME of 'a
+
+let fun classify x =
+        case x of
+          SOME (SOME n) => n     (* C inside C *)
+        | SOME NONE     => 0
+        | _             => 100   (* default branch *)
+in
+  print (classify (SOME (SOME 7)));   (* 7   *)
+  print (classify (SOME NONE));       (* 0   *)
+  print (classify NONE)               (* 100 *)
+end

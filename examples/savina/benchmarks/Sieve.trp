@@ -1,0 +1,47 @@
+(* Savina sieve: a growing chain of prime filters counts the primes up to n.
+ * Exports `descriptor`. *)
+
+import List
+
+datatype msg = Cand of int | Prime | StopChain | ChainDone
+
+let (* number of primes up to n, for the sizes this benchmark supports *)
+    val primeCounts = [ (1000, 168), (2000, 303), (5000, 669), (10000, 1229) ]
+    fun filterActor (p, counter) =
+        let fun loop next =
+                receive
+                  [ hn (Cand c) =>
+                      if c mod p = 0 then loop next
+                      else (case next of
+                              [] =>
+                                let val _ = send (counter, Prime)
+                                    val nf = spawn (fn () => filterActor (c, counter))
+                                in loop [nf] end
+                            | nf :: _ => (send (nf, Cand c); loop next))
+                  , hn StopChain =>
+                      (case next of
+                         []      => send (counter, ChainDone)
+                       | nf :: _ => send (nf, StopChain)) ]
+        in loop [] end
+    fun bench n =
+        let val main = self ()
+            val first = spawn (fn () => filterActor (2, main))
+            fun stream c =
+                if c > n then send (first, StopChain)
+                else (send (first, Cand c); stream (c + 2))
+            val _ = stream 3
+            fun collect primes =
+                receive [ hn Prime     => collect (primes + 1)
+                        , hn ChainDone => primes ]
+        in 1 + collect 0   (* the first filter's prime, 2, is not counted via Prime *)
+        end
+    fun check n found =
+        case List.filter (fn (m, _) => m = n) primeCounts of
+          [(_, expected)] => found = expected
+        | _               => false   (* no reference for this size: refuse to claim ok *)
+    val descriptor =
+        { name  = "sieve"
+        , bench = bench
+        , check = check
+        , sizes = [1000, 2000, 5000] }
+in [ ("descriptor", descriptor) ] end

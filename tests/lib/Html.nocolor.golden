@@ -1,0 +1,58 @@
+2026-07-25T13:59:34.758Z [RTM] info: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+[34mbegin [0mHtml
+  [34mbegin [0mescapeHtml
+      [33m[ TEST ][0m it escapes ampersand, less-than and greater-than      [32m[ PASS ][0m it escapes ampersand, less-than and greater-than
+      [33m[ TEST ][0m it leaves a double quote alone in text content      [32m[ PASS ][0m it leaves a double quote alone in text content
+      [33m[ TEST ][0m it leaves ordinary text alone      [32m[ PASS ][0m it leaves ordinary text alone
+      [33m[ TEST ][0m it escapes an already-escaped entity again      [32m[ PASS ][0m it escapes an already-escaped entity again
+  [34mend [0m
+  [34mbegin [0mescapeAttr
+      [33m[ TEST ][0m it escapes a single quote, which delimits attribute values      [32m[ PASS ][0m it escapes a single quote, which delimits attribute values
+      [33m[ TEST ][0m it escapes ampersand and less-than as well      [32m[ PASS ][0m it escapes ampersand and less-than as well
+  [34mend [0m
+  [34mbegin [0mescapeScriptContent
+      [33m[ TEST ][0m it breaks up a closing tag sequence      [32m[ PASS ][0m it breaks up a closing tag sequence
+      [33m[ TEST ][0m it leaves content without a closing sequence alone      [32m[ PASS ][0m it leaves content without a closing sequence alone
+  [34mend [0m
+  [34mbegin [0msanitizeUrl
+      [33m[ TEST ][0m it accepts an absolute http url      [32m[ PASS ][0m it accepts an absolute http url
+      [33m[ TEST ][0m it accepts a relative path      [32m[ PASS ][0m it accepts a relative path
+      [33m[ TEST ][0m it rejects javascript:      [32m[ PASS ][0m it rejects javascript:
+      [33m[ TEST ][0m it rejects javascript: whatever the case      [32m[ PASS ][0m it rejects javascript: whatever the case
+      [33m[ TEST ][0m it rejects vbscript:      [32m[ PASS ][0m it rejects vbscript:
+      [33m[ TEST ][0m it rejects data:text/html      [32m[ PASS ][0m it rejects data:text/html
+      [33m[ TEST ][0m it accepts a data url that is not text/html      [32m[ PASS ][0m it accepts a data url that is not text/html
+  [34mend [0m
+  [34mbegin [0misDangerousUrl
+      [33m[ TEST ][0m it accepts javascript:      [32m[ PASS ][0m it accepts javascript:
+      [33m[ TEST ][0m it rejects https      [32m[ PASS ][0m it rejects https
+  [34mend [0m
+  [34mbegin [0murl attributes are sanitized when rendered
+      [33m[ TEST ][0m it a safe href survives      [32m[ PASS ][0m it a safe href survives
+      [33m[ TEST ][0m it a dangerous href becomes empty      [32m[ PASS ][0m it a dangerous href becomes empty
+      [33m[ TEST ][0m it a dangerous src becomes empty      [32m[ PASS ][0m it a dangerous src becomes empty
+      [33m[ TEST ][0m it a dangerous cite becomes empty      [32m[ PASS ][0m it a dangerous cite becomes empty
+      [33m[ TEST ][0m it an attribute that is not a url is left alone      [32m[ PASS ][0m it an attribute that is not a url is left alone
+      [33m[ TEST ][0m it an attribute value is escaped after sanitizing      [32m[ PASS ][0m it an attribute value is escaped after sanitizing
+  [34mend [0m
+  [34mbegin [0mnode rendering
+      [33m[ TEST ][0m it a text node is escaped      [32m[ PASS ][0m it a text node is escaped
+      [33m[ TEST ][0m it a raw node is not escaped      [32m[ PASS ][0m it a raw node is not escaped
+      [33m[ TEST ][0m it an element with no attributes or children      [32m[ PASS ][0m it an element with no attributes or children
+      [33m[ TEST ][0m it an element with an attribute and a child      [32m[ PASS ][0m it an element with an attribute and a child
+      [33m[ TEST ][0m it a void element is self-closing      [32m[ PASS ][0m it a void element is self-closing
+      [33m[ TEST ][0m it renderAll concatenates      [32m[ PASS ][0m it renderAll concatenates
+  [34mend [0m
+  [34mbegin [0mscript and style content
+      [33m[ TEST ][0m it text inside script cannot close the tag      [32m[ PASS ][0m it text inside script cannot close the tag
+      [33m[ TEST ][0m it raw inside script is still escaped against closing      [32m[ PASS ][0m it raw inside script is still escaped against closing
+      [33m[ TEST ][0m it an element child of script is dropped      [32m[ PASS ][0m it an element child of script is dropped
+  [34mend [0m
+  [34mbegin [0mdocument
+      [33m[ TEST ][0m it wraps head and body in a doctype      [32m[ PASS ][0m it wraps head and body in a doctype
+  [34mend [0m
+[34mend [0m
+
+Total:  33
+Passes: 33
+>>> Main thread finished with value: true@{}%{}

@@ -1,0 +1,28 @@
+(* Savina benchmark: Online Facility Location (parallelism group).
+ *
+ * Random 2D points stream through a growing chain of facility actors.
+ * Each facility accepts points within radius 100 of its center; a point
+ * rejected by every facility becomes a new facility at the end of the
+ * chain (like the sieve, with a geometric predicate). Measures streaming
+ * through a dynamically growing pipeline with numeric work per stage.
+ *
+ * This port keeps the online-clustering core of the Savina benchmark and
+ * drops its quadrant-tree partitioning; the chain is the degenerate
+ * single-branch case.
+ *
+ *   ./local.sh examples/savina/facloc.trp                # default sizes
+ *   ./local.sh examples/savina/facloc.trp -- 1000 4000   # explicit sizes
+ *
+ * Result: facility reports; ok iff accepted counts sum to n and every
+ * input point lies within the radius of some facility center (rechecked
+ * sequentially against the collected centers).
+ *)
+
+import List
+import Bench
+import "./Savina"
+
+let val d = case List.filter (fn d => d.name = "facloc") Savina.all of [d] => d
+    val sizes = Bench.sizesFromArgs (getCliArgs authority) d.sizes
+in Bench.run authority d.name sizes 3 d.bench d.check
+end

@@ -1,0 +1,24 @@
+(* Savina benchmark: Concurrent Dictionary (concurrency group).
+ *
+ * A dictionary server actor (backed by lib/Map) serves 10 worker actors.
+ * Each worker performs n operations — every 10th a write to its own key,
+ * the rest reads of random keys — waiting for the reply each time, then
+ * finishes by writing a sentinel to its own key and reading it back. The
+ * server is the serialization point; this measures request/reply
+ * contention on shared state modeled as an actor.
+ *
+ *   ./local.sh examples/savina/concdict.trp                # default sizes
+ *   ./local.sh examples/savina/concdict.trp -- 1000 4000   # explicit sizes
+ *
+ * Result: (workers whose read-back was correct, server op count); ok iff
+ * all 10 workers verified and the server processed 10n + 20 operations.
+ *)
+
+import List
+import Bench
+import "./Savina"
+
+let val d = case List.filter (fn d => d.name = "concdict") Savina.all of [d] => d
+    val sizes = Bench.sizesFromArgs (getCliArgs authority) d.sizes
+in Bench.run authority d.name sizes 3 d.bench d.check
+end

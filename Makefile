@@ -1,4 +1,5 @@
-.PHONY: rt trp-rt compiler lib p2p-tools npm clean test dist check-compiler notebook
+.PHONY: rt trp-rt compiler lib p2p-tools npm clean test dist check-compiler notebook \
+        dev-planning-to-html
 
 # TODO: Rename to 'build/*' ?
 all: npm compiler rt trp-rt p2p-tools lib
@@ -26,12 +27,61 @@ p2p-tools:
 
 lib: check-compiler
 	cd lib; $(MAKE) build
+	@touch lib/out/.build-stamp
+
+# Rebuild the libraries only when a library source or the compiler is newer than the last build.
+# lib/Makefile's build target is one unconditional sequence whose order encodes the dependency
+# graph between the libraries, so the whole set is rebuilt when any of it changed -- but nothing
+# is rebuilt when nothing has. Depend on this rather than on `lib` to avoid paying for a rebuild
+# on every invocation.
+LIB_SOURCES := $(wildcard lib/*.trp)
+lib/out/.build-stamp: $(LIB_SOURCES) $(COMPILER)
+	cd lib; $(MAKE) build
+	@touch $@
 
 trp-rt: check-compiler
 	cd trp-rt/; $(MAKE) build
 
 notebook:
 	cd notebook; npm install; npm run build
+
+# Regenerate the per-program dependencies files (<main>.deps.json) that pin each
+# benchmark suite's descriptor module by content hash. The hash is over the
+# module's codegened IR, so re-run after changing a descriptor module or
+# rebuilding the compiler, then commit the updated pins (a normal build enforces
+# them). Each consumer is a program that imports a program-relative module.
+benchmark-deps: check-compiler
+	@for f in `grep -rlE '^import "\./' --include='*.trp' examples/`; do \
+		echo "  pinning $$f"; ./bin/troupec --update-deps "$$f" >/dev/null; \
+	done
+
+# Compile the planning notes into a browsable HTML tree with examples/md-navigator, and
+# write it to out/md-navigator/. The run prints the page to open.
+#
+# _dev_planning/ is a separate repository, so it is absent from a worktree of this one; point
+# IOROOT at a checkout that has it to generate from elsewhere:
+#
+#   make dev-planning-to-html IOROOT=/path/to/Troupe \
+#       CONFIG=.claude/worktrees/<name>/examples/md-navigator/config.json
+#
+# The io-root must contain the source directory, the output directory and the config file, all of
+# which the config names relative to it -- which is why it is the repository root rather than
+# _dev_planning/ itself.
+# Depends on the library build stamp rather than only on the compiler: the program imports
+# SimpleFileIO and Markdown, so a lib/out/ left over from before a merge fails with
+# "Library 'SimpleFileIO' does not export". The stamp means that costs nothing when the
+# libraries are already current.
+IOROOT ?= $(CURDIR)
+CONFIG ?= examples/md-navigator/config.json
+dev-planning-to-html: lib/out/.build-stamp
+	@if [ ! -d "$(IOROOT)/_dev_planning" ]; then \
+		echo "No _dev_planning/ under $(IOROOT). It is a separate repository and is absent" >&2; \
+		echo "from worktrees; pass IOROOT=<checkout that has it>." >&2; \
+		exit 1; \
+	fi
+	mkdir -p "$(IOROOT)/out"
+	./local.sh examples/md-navigator/md-navigator.trp --localonly \
+		--io-root "$(IOROOT)" -- "$(CONFIG)"
 
 clean: clean/compiler clean/rt clean/trp-rt clean/p2p-tools clean/lib
 clean/compiler:
@@ -49,10 +99,10 @@ ci-test-golden-no-color:
 	mkdir -p out 
 	./bin/golden --no-color
 
-test: test/local test/multinode test/result-socket
+test: test/local test/multinode test/hostile-peer test/result-socket
 
 # Test target for Docker runner (no Haskell toolchain available).
-test/docker: ci-test-golden-no-color test/multinode test/result-socket
+test/docker: ci-test-golden-no-color test/multinode test/hostile-peer test/result-socket
 
 test/local:
 	mkdir -p out
@@ -66,10 +116,8 @@ test/prop-labelrt:
 	cd compiler && stack test :labelrt-prop-test $(STACK_OPTS)
 test/multinode:
 	./scripts/run-multinode-tests.sh
-test/libp2p-migration:
-	./scripts/run-libp2p-migration-tests.sh
-test/libp2p-migration-verbose:
-	./scripts/run-libp2p-migration-tests.sh -v
+test/hostile-peer: rt p2p-tools
+	./scripts/run-hostile-peer-tests.sh
 test/ci-network: rt p2p-tools
 	@echo "Running CI network test..."
 	./tests/ci-network-test.sh

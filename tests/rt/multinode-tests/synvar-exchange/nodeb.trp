@@ -1,0 +1,47 @@
+(* Node B -- receives variant values sent by node A and matches them with its
+   OWN, independently compiled constructor patterns. The datatype group below
+   is COPY-PASTED, identical byte-for-byte, from nodea.trp; there is no shared
+   import. A match succeeds only because A's and B's separate compilations of
+   the same declaration produce the same content-addressed constructor tags,
+   and matching is string equality on those tags.
+
+   B does NOT declare node A's `other` group, so the OTHER value A sends cannot
+   match any known constructor and falls through to the catch-all handler. *)
+
+import List
+
+datatype color = RED | GREEN | BLUE
+datatype shape = Circle of int
+               | Rect of int * int
+               | Group of shape list
+
+let val timeout_pid = spawn (fn () =>
+        let val _ = sleep 8000
+        in exit (authority, 124) (* timeout: a value failed to match *)
+        end)
+
+    (* Receive and match exactly `n` messages, then exit successfully. Counting
+       messages (rather than a sentinel) keeps the test independent of network
+       message ordering. *)
+    fun loop 0 = (print "B: processed all messages, exchange succeeded";
+                  exit (authority, 0))
+      | loop n =
+          receive [
+            hn (Circle r)     => (print ("B: matched Circle " ^ toString r);
+                                  loop (n - 1))
+          , hn (Rect (w, h))  => (print ("B: matched Rect " ^ toString w ^ "x" ^ toString h);
+                                  loop (n - 1))
+          , hn (Group ss)     => (print ("B: matched Group of " ^ toString (List.length ss));
+                                  loop (n - 1))
+          , hn RED            => (print "B: matched color red";   loop (n - 1))
+          , hn GREEN          => (print "B: matched color green"; loop (n - 1))
+          , hn BLUE           => (print "B: matched color blue";  loop (n - 1))
+          , hn _              => (print "B: value did not match any known constructor (catch-all)";
+                                  loop (n - 1))
+          ]
+in
+  let val _ = register ("sink", self (), authority)
+      val _ = print "B: registered sink service"
+  in loop 5
+  end
+end

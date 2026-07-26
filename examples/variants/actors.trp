@@ -1,0 +1,45 @@
+(* Message protocol modelled as a datatype, driving an actor.
+ *
+ * Demonstrates:
+ *   - a datatype used as the message protocol of a process: deposit and
+ *     withdraw carry an integer amount, balance carries the client's pid to
+ *     reply to, and stop is nullary;
+ *   - constructor patterns in receive handlers (hn), including payload-
+ *     carrying ones (hn (deposit amount) => ...);
+ *   - a server loop that threads its state (the balance) through the
+ *     recursion, and a client that drives it and reads a reply back through
+ *     self().
+ *
+ * The reply address is a pid. Troupe has no `pid` primitive type, so the
+ * payload of balance is typed with a type variable ('a) — the account
+ * datatype is parameterised over the reply-address type, and the client
+ * instantiates it with self().
+ *
+ *   ./local.sh examples/variants/actors.trp --localonly
+ *
+ * Expected: after +100, -30, +50 the balance is 120; the client prints that
+ * reply, and the server prints its final balance when it stops.
+ *)
+
+datatype 'a account = deposit of int
+                    | withdraw of int
+                    | balance of 'a
+                    | stop
+
+let (* The account process: bal is the state carried across receives. *)
+    fun serve bal =
+        receive [
+            hn (deposit amount)  => serve (bal + amount)
+          , hn (withdraw amount) => serve (bal - amount)
+          , hn (balance client)  => (send (client, bal); serve bal)
+          , hn stop              => print ("account closed with balance", bal)
+        ]
+
+    val acct = spawn (fn () => serve 0)
+in send (acct, deposit 100)
+ ; send (acct, withdraw 30)
+ ; send (acct, deposit 50)
+ ; send (acct, balance (self ()))
+ ; receive [ hn b => print ("client observed balance", b) ]
+ ; send (acct, stop)
+end

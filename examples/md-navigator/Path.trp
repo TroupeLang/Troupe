@@ -1,0 +1,94 @@
+(* Path.trp — pure path arithmetic for slash-separated relative paths.
+ *
+ * A program-relative module rather than a lib/ addition: md-navigator is the only consumer so
+ * far. Nothing here touches the filesystem; every function is a string operation.
+ *
+ * Paths are relative and use "/" as the separator, matching what SimpleFileIO takes inside the
+ * --io-root subtree. Empty segments are ignored, so "a//b" and "a/b" are the same path.
+ *)
+
+import List
+import String
+
+let (** The non-empty segments of `p`. *)
+    fun split p = List.filter (fn s => s <> "") (String.split "/" p)
+
+    (** Segments joined back into a path. *)
+    fun join segs = String.concatWith "/" segs
+
+    (* Resolve "." and ".." within a segment list. A ".." that would rise above the first
+     * segment is kept, so callers can see that the path leaves its root. *)
+    fun normalizeSegs segs =
+        let fun go []        acc = List.reverse acc
+              | go (s::rest) acc =
+                  if s = "." then go rest acc
+                  else if s = ".."
+                  then (case acc of
+                            []     => go rest (".." :: acc)
+                          | a::acc' => if a = ".." then go rest (".." :: acc)
+                                       else go rest acc')
+                  else go rest (s :: acc)
+        in go segs [] end
+
+    (** `p` with "." and ".." resolved. *)
+    fun normalize p = join (normalizeSegs (split p))
+
+    (** The directory part of `p`, or "" when it has none. *)
+    fun dirname p =
+        let val segs = split p
+            val n    = List.length segs
+        in if n <= 1 then "" else join (List.take (n - 1) segs) end
+
+    (** The final segment of `p`, or "" when there is none. *)
+    fun basename p =
+        let val segs = split p
+            val n    = List.length segs
+        in if n = 0 then "" else List.nth segs (n - 1) end
+
+    (** `rel` interpreted relative to the directory `dir`, normalized. *)
+    fun resolve dir rel = normalize (join (List.append (split dir) (split rel)))
+
+    (** Whether a normalized path rises above its root. *)
+    fun escapes p = (case split p of s::_ => s = ".." | [] => false)
+
+    (* The index of the extension dot in `p`, or -1. A dot in a directory name does not
+     * count. *)
+    fun extDot p =
+        let fun go []        i best = best
+              | go (c::rest) i best =
+                  if c = "." then go rest (i + 1) i
+                  else if c = "/" then go rest (i + 1) (0 - 1)
+                  else go rest (i + 1) best
+        in go (String.explode p) 0 (0 - 1) end
+
+    (** `p` with its extension replaced by `ext` (given without a dot). *)
+    fun withExt p ext =
+        let val d = extDot p
+        in if d < 0 then p ^ "." ^ ext else String.substring (p, 0, d) ^ "." ^ ext end
+
+    (** Whether `p` ends in "." ^ `ext`. *)
+    fun hasExt p ext = String.endsWith ("." ^ ext) p
+
+    (** A relative path leading from the directory `fromDir` to the file `toPath`, both given
+     *  relative to the same root. *)
+    fun relativeTo fromDir toPath =
+        let fun dropCommon (a::as') (b::bs') =
+                  if a = b then dropCommon as' bs' else (a::as', b::bs')
+              | dropCommon a b = (a, b)
+            val (upFrom, down) = dropCommon (split fromDir) (split toPath)
+            val ups = List.map (fn _ => "..") upFrom
+            val r   = join (List.append ups down)
+        in if r = "" then "." else r end
+
+in [ ("split", split)
+   , ("join", join)
+   , ("normalize", normalize)
+   , ("dirname", dirname)
+   , ("basename", basename)
+   , ("resolve", resolve)
+   , ("escapes", escapes)
+   , ("withExt", withExt)
+   , ("hasExt", hasExt)
+   , ("relativeTo", relativeTo)
+   ]
+end

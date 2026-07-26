@@ -1,0 +1,13 @@
+(* Two datatypes sharing a constructor name (DEG); the datatype-qualified
+   forms t.C in both expression and pattern position resolve the ambiguity. *)
+datatype celsius    = DEG of int
+datatype fahrenheit = DEG of int
+
+let val c = celsius.DEG 100
+    val f = fahrenheit.DEG 212
+in
+  print (case c of celsius.DEG n    => n | _ => 0);   (* 100 *)
+  print (case f of fahrenheit.DEG n => n | _ => 0);   (* 212 *)
+  print c;   (* printing shows the last tag segment: (DEG 100) *)
+  print f    (* (DEG 212) *)
+end

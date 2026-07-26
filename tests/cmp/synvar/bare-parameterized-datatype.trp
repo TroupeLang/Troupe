@@ -1,0 +1,6 @@
+(* A bare, unapplied reference to a parameterized datatype is a static
+   error (partial/zero application is ill-formed). *)
+datatype 'a box = BOX of 'a
+datatype bad = B of box
+
+let val x = B (BOX 3) in print x end

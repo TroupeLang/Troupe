@@ -1,0 +1,55 @@
+(* Savina philosophers: an arbitrator grants/denies forks to 20 philosophers
+ * doing n eating rounds; result is the total meals. Exports `descriptor`. *)
+
+import List
+
+datatype 'a msg = Hungry of 'a * int | Eat | Denied
+                | DoneEat of int | Finished | Report of int * int
+
+let val numPhil = 20
+    fun setNth (xs, i, v) = List.mapi (fn (j, x) => if j = i then v else x) xs
+    fun arbitrator (forks, finished) =
+        if finished = numPhil then ()
+        else receive
+          [ hn (Hungry (p, i)) =>
+              let val l = i
+                  val r = (i + 1) mod numPhil
+              in if List.nth forks l andalso List.nth forks r
+                 then (send (p, Eat);
+                       arbitrator (setNth (setNth (forks, l, false), r, false),
+                                   finished))
+                 else (send (p, Denied); arbitrator (forks, finished))
+              end
+          , hn (DoneEat i) =>
+              let val l = i
+                  val r = (i + 1) mod numPhil
+              in arbitrator (setNth (setNth (forks, l, true), r, true), finished)
+              end
+          , hn Finished => arbitrator (forks, finished + 1) ]
+    fun philosopher (arb, main, i, rounds) =
+        let fun loop (r, eaten, denied) =
+                if r = 0
+                then (send (arb, Finished); send (main, Report (eaten, denied)))
+                else (send (arb, Hungry (self (), i));
+                      receive [ hn Eat =>
+                                  (send (arb, DoneEat i);
+                                   loop (r - 1, eaten + 1, denied))
+                              , hn Denied => loop (r, eaten, denied + 1) ])
+        in loop (rounds, 0, 0) end
+    fun bench n =
+        let val main = self ()
+            val forks = List.map (fn _ => true) (List.range numPhil)
+            val arb = spawn (fn () => arbitrator (forks, 0))
+            val _ = List.map
+                      (fn i => spawn (fn () => philosopher (arb, main, i, n)))
+                      (List.range numPhil)
+            fun collect (k, eaten) =
+                if k = 0 then eaten
+                else receive [ hn (Report (e, d)) => collect (k - 1, eaten + e) ]
+        in collect (numPhil, 0) end
+    val descriptor =
+        { name  = "philosophers"
+        , bench = bench
+        , check = fn n => fn r => r = numPhil * n
+        , sizes = [10, 20, 50] }
+in [ ("descriptor", descriptor) ] end

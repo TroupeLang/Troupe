@@ -1,0 +1,52 @@
+(* Savina barber: sleeping-barber with a bounded waiting room (capacity 4);
+ * n customers are eventually served. Exports `descriptor`. *)
+
+import List
+
+datatype 'a msg = Enter of 'a | Full | Cut | Served
+                | Next of 'a | Done | Stop | Init of 'a
+
+let val capacity = 4
+    fun customer (room, main) =
+        (send (room, Enter (self ()));
+         receive [ hn Full => (sleep 1; customer (room, main))
+                 , hn Cut  => send (main, Served) ])
+    fun barber room =
+        receive [ hn (Next p) =>
+                    (send (p, Cut); send (room, Done); barber room)
+                , hn Stop => () ]
+    fun room barberPid =
+        let fun loop (queue, qLen, busy) =
+                receive
+                  [ hn (Enter p) =>
+                      if qLen >= capacity
+                      then (send (p, Full); loop (queue, qLen, busy))
+                      else if busy
+                      then loop (List.append queue [p], qLen + 1, true)
+                      else (send (barberPid, Next p); loop (queue, qLen, true))
+                  , hn Done =>
+                      (case queue of
+                         []      => loop ([], 0, false)
+                       | p :: ps => (send (barberPid, Next p);
+                                     loop (ps, qLen - 1, true)))
+                  , hn Stop => send (barberPid, Stop) ]
+        in loop ([], 0, false) end
+    fun bench n =
+        let val main = self ()
+            (* room and barber reference each other; wire the room second *)
+            val roomPid = spawn (fn () =>
+                receive [ hn (Init b) => room b ])
+            val barberPid = spawn (fn () => barber roomPid)
+            val _ = send (roomPid, Init barberPid)
+            val _ = List.map (fn _ => spawn (fn () => customer (roomPid, main)))
+                             (List.range n)
+            fun collect k =
+                if k = 0 then (send (roomPid, Stop); n)
+                else receive [ hn Served => collect (k - 1) ]
+        in collect n end
+    val descriptor =
+        { name  = "barber"
+        , bench = bench
+        , check = fn n => fn r => r = n
+        , sizes = [200, 500, 1000] }
+in [ ("descriptor", descriptor) ] end

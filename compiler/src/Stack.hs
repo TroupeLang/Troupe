@@ -18,8 +18,6 @@ import qualified IR (FunDef (..))
 import Raw (RawExpr (..), RawVar (..), MonComponent(..),
             ppRawExpr, Assignable (..), Consts, ppConsts, RTAssertion(..), ppRTAssertion)
 
-import qualified Core                      as C
-
 import           Text.PrettyPrint.HughesPJ (nest, text, vcat, ($$), (<+>))
 import qualified Text.PrettyPrint.HughesPJ as PP
 import           TroupePositionInfo (Located(..))
@@ -82,13 +80,11 @@ data FunDef = FunDef
                     IR.FunDef      -- original definition for serialization
                 deriving (Eq)
 
--- An IR program is just a collection of atoms declarations
--- and function definitions
-data StackProgram = StackProgram C.Atoms [LFunDef]
+-- An IR program is just a collection of function definitions
+data StackProgram = StackProgram [LFunDef]
 
 data StackUnit
   = FunStackUnit LFunDef
-  | AtomStackUnit C.Atoms
   | ProgramStackUnit StackProgram
 
 -----------------------------------------------------------
@@ -96,7 +92,7 @@ data StackUnit
 -----------------------------------------------------------
 
 ppProg :: StackProgram -> PP PP.Doc
-ppProg (StackProgram atoms funs) =
+ppProg (StackProgram funs) =
   vcatMapPP ppLFunDef funs
 
 instance Show StackProgram where

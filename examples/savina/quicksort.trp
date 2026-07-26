@@ -1,0 +1,23 @@
+(* Savina benchmark: Quicksort (parallelism group).
+ *
+ * A sorter actor partitions its list around a pivot, spawns two child
+ * sorters for the halves, and merges their tagged replies; lists at or
+ * below a cutoff length are sorted directly. The input is a list of n
+ * random integers. Measures divide-and-conquer actor trees with list
+ * payloads in messages.
+ *
+ *   ./local.sh examples/savina/quicksort.trp                # default sizes
+ *   ./local.sh examples/savina/quicksort.trp -- 2000 8000   # explicit sizes
+ *
+ * Result: (sorted output, input length, input sum); ok iff the output is
+ * sorted (non-decreasing), has length n, and its sum equals the input's.
+ *)
+
+import List
+import Bench
+import "./Savina"
+
+let val d = case List.filter (fn d => d.name = "quicksort") Savina.all of [d] => d
+    val sizes = Bench.sizesFromArgs (getCliArgs authority) d.sizes
+in Bench.run authority d.name sizes 3 d.bench d.check
+end

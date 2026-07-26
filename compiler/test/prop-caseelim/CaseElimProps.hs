@@ -61,7 +61,6 @@ data V = VInt Integer
        | VBool Bool
        | VString String
        | VUnit
-       | VAtom String
        | VTuple [V]
        | VList [V]
        | VRecord [(String, V)]   -- keys kept unique (map semantics)
@@ -77,7 +76,6 @@ litToV (S.LNumeric (S.NumInt n)) = VInt n
 litToV (S.LBool b)               = VBool b
 litToV S.LUnit                   = VUnit
 litToV (S.LString s)             = VString s
-litToV (S.LAtom a)               = VAtom a
 litToV l = error ("litToV: literal not in generator domain: " ++ show l)
 
 -- ---------------------------------------------------------------------------
@@ -186,7 +184,7 @@ evalT env (T.ProjField e f) = do
   case v of
     VRecord kvs -> maybe (Left (Stuck ("ProjField missing " ++ f))) Right (lookup f kvs)
     _ -> Left (Stuck "ProjField on non-record")
-evalT env (T.Tuple es) = VTuple <$> mapM (eval env) es
+evalT env (T.Tuple es _) = VTuple <$> mapM (eval env) es
 evalT env (T.List es)  = VList  <$> mapM (eval env) es
 evalT env (T.ListCons h t) = do
   hv <- eval env h
@@ -239,7 +237,6 @@ litTToV (T.LNumeric (T.NumInt n)) = VInt n
 litTToV (T.LString s)             = VString s
 litTToV (T.LBool b)               = VBool b
 litTToV T.LUnit                   = VUnit
-litTToV (T.LAtom a)               = VAtom a
 litTToV l = error ("litTToV: unexpected literal " ++ show l)
 
 -- ---------------------------------------------------------------------------
@@ -248,10 +245,10 @@ litTToV l = error ("litTToV: unexpected literal " ++ show l)
 
 buildProg :: S.LDeclPattern -> S.Prog
 buildProg lp =
-  let body   = Loc NoPos (S.Tuple [ Loc NoPos (S.Var x) | x <- binders (unLoc lp) ])
+  let body   = Loc NoPos (S.Tuple [ Loc NoPos (S.Var x) | x <- binders (unLoc lp) ] False)
       scrut  = Loc NoPos (S.Var "$scrut")
       caseE  = Loc NoPos (S.Case scrut [(lp, body)])
-  in S.Prog (Imports []) (S.Atoms []) caseE
+  in S.Prog (Imports []) [] caseE
 
 prop_match :: Property
 prop_match = forAllShrinkShow genCase shrinkCase showCase check
@@ -260,7 +257,7 @@ prop_match = forAllShrinkShow genCase shrinkCase showCase check
     check (lp, v) =
       case runExcept (trans CompileMode.Library (buildProg lp)) of
         Left err -> counterexample ("trans failed to compile: " ++ err) False
-        Right (T.Prog _ _ term) ->
+        Right (T.Prog _ term) ->
           let ref = refMatch (unLoc lp) v
               got = eval [("$scrut", v)] term
           in agree lp v ref got
@@ -310,7 +307,6 @@ showLit (S.LNumeric (S.NumInt n)) = show n
 showLit (S.LBool b)   = if b then "true" else "false"
 showLit S.LUnit       = "()"
 showLit (S.LString s) = show s
-showLit (S.LAtom a)   = a
 showLit l             = "<lit:" ++ show l ++ ">"
 
 -- ---------------------------------------------------------------------------
@@ -370,8 +366,7 @@ genLit = elements
   [ S.LNumeric (S.NumInt (-1)), S.LNumeric (S.NumInt 0)
   , S.LNumeric (S.NumInt 1),    S.LNumeric (S.NumInt 2)
   , S.LBool True, S.LBool False, S.LUnit
-  , S.LString "", S.LString "a", S.LString "b"
-  , S.LAtom "red", S.LAtom "green" ]
+  , S.LString "", S.LString "a", S.LString "b" ]
 
 -- Assign globally-unique names to every VarPattern binder and every record
 -- field, so all binders are distinct and no record has duplicate fields.
@@ -476,8 +471,7 @@ genArb n
       [ VInt    <$> elements [-1, 0, 1, 2]
       , VBool   <$> arbitrary
       , VString <$> elements ["", "a", "b"]
-      , pure VUnit
-      , VAtom   <$> elements ["red", "green"] ]
+      , pure VUnit ]
     smallList = do k <- choose (0, 3); replicateM k (genArb (n `div` 2))
     genArbRecord m = do
       k  <- choose (0, 3)
@@ -494,7 +488,6 @@ perturb v = frequency [ (2, sized genArb), (3, structural v) ]
     structural (VBool b)   = pure (VBool (not b))
     structural (VString s) = pure (VString (s ++ "!"))
     structural VUnit       = sized genArb
-    structural (VAtom a)   = pure (VAtom (a ++ "_"))
     structural (VTuple xs) = frequency
       [ (1, VTuple <$> dropOne xs), (1, VTuple <$> addOne xs), (2, VTuple <$> perturbElem xs) ]
     structural (VList xs)  = frequency
@@ -540,7 +533,6 @@ shrinkV (VInt n)     = VInt <$> shrink n
 shrinkV (VBool b)    = [VBool (not b)]
 shrinkV (VString s)  = VString <$> shrink s
 shrinkV VUnit        = []
-shrinkV (VAtom _)    = [VUnit]
 shrinkV (VTuple xs)  = [VTuple ys | ys <- shrinkList shrinkV xs]
 shrinkV (VList xs)   = [VList ys  | ys <- shrinkList shrinkV xs]
 shrinkV (VRecord fs) =

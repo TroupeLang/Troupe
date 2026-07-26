@@ -1,0 +1,8 @@
+2026-07-25T13:45:42.154Z [RTM] info: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+("SOME", "987654321987654321987654321")
+"NONE"
+("SOME", 42)
+("SOME", 9007199254740991)
+"NONE"
+"NONE"
+>>> Main thread finished with value: ()@{}%{}

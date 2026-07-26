@@ -6,12 +6,21 @@ module Direct ( Lambda (..)
               , Lit(..)
               , DeclPattern(..)
               , RecordPatternMode(..)
-              , AtomName
-              , Atoms(..)
               , Prog(..)
               , Handler(..)
               , FieldName
+              -- Syntactic-variant declaration surface syntax
+              , QName
+              , SynTyExp(..)
+              , SynCtor(..)
+              , SynDataDecl(..)
+              , SynDataGroup(..)
               , ppLit
+              , ppName
+              , nameStr
+              -- Printer helpers shared with the Surface (parse-phase) printer
+              , ppSynDataGroup
+              , ppLDeclPattern
               -- Located type aliases
               , LTerm
               , LDecl
@@ -27,25 +36,7 @@ import DCLabels
 import Text.PrettyPrint.HughesPJ (
     (<+>), ($$), text, hsep, vcat, nest)
 import           ShowIndent
-import           TroupePositionInfo (Located(..))
-
-
-data PrimType
-    = TUnit
-    | TInt
-    | TBool
-    | TString
-  deriving (Eq, Ord, Show)
-
-data Ty
-    = TAny
-    | TParam String
-    | TPrim PrimType
-    | TFun Ty [Ty]
-    | TTuple [Ty]
-    | TList Ty
-  deriving (Eq)
-
+import           TroupePositionInfo (Located(..), PosInf(..))
 
 
 -- | Located type aliases for the Direct AST
@@ -66,7 +57,6 @@ data Lit
     | LString String
     | LLabel String
     | LDCLabel DCLabelExp
-    | LAtom AtomName
   deriving (Eq, Show)
 
 data RecordPatternMode = ExactMatch | WildcardMatch
@@ -81,6 +71,12 @@ data DeclPattern
     | ConsPattern LDeclPattern LDeclPattern
     | ListPattern [LDeclPattern]
     | RecordPattern [(FieldName, Maybe LDeclPattern)] RecordPatternMode
+    -- | Constructor-application pattern for syntactic variants:
+    -- @C p@ (bare, one segment), @T.C p@ / @M.T.C p@ (qualified), or a
+    -- nullary qualified constructor @T.C@ / @M.T.C@ (payload 'Nothing').
+    -- A bare nullary constructor is an ordinary 'VarPattern' and resolved
+    -- to a constructor in a later pass.
+    | ConPattern QName (Maybe LDeclPattern)
     | ErrorPattern                                    -- Error recovery placeholder
       deriving (Eq)
 
@@ -113,7 +109,7 @@ data Term
     | Let [Decl] LTerm
     | Case LTerm [(LDeclPattern, LTerm)]
     | If LTerm LTerm LTerm
-    | Tuple [LTerm]
+    | Tuple [LTerm] SynVariantTag
     | Record LFields
     | WithRecord LTerm LFields
     | ProjField LTerm FieldName
@@ -126,11 +122,45 @@ data Term
     | Error LTerm
           deriving (Eq)
 
-data Atoms = Atoms [AtomName]
-      deriving (Eq, Show)
+-- | A dotted name: a nonempty list of segments, the last being the base
+-- name and any preceding segments its qualifiers. For example @X.Y.t@ is
+-- @["X","Y","t"]@. Used for qualified type names and qualified constructor
+-- occurrences in the syntactic-variant surface syntax.
+type QName = [String]
+
+-- | A type expression in a @datatype@ constructor's @of@ clause (spec §2).
+-- These are parsed and stored but not yet lowered.
+data SynTyExp
+    = STyVar String            -- ^ a type variable @'a@ (stored without the tick)
+    | STyName QName            -- ^ a type name: primitive, built-in, or datatype
+                               --   (possibly qualified); resolved in a later pass
+    | STyProd [SynTyExp]       -- ^ an n-ary product @t1 * ... * tn@ (n >= 2), flat
+    | STyApp [SynTyExp] QName  -- ^ postfix application: @ty name@ (one argument)
+                               --   or @(t1, ..., tn) name@ (several)
+    | STyRecord [(String, SynTyExp)]
+                               -- ^ a record type @{l1 : t1, ..., ln : tn}@ (n >= 0),
+                               --   fields in source order; duplicate labels are
+                               --   rejected during payload resolution
+  deriving (Eq, Show)
+
+-- | A single constructor: the source position of its name, its name, and its
+-- optional payload type. The position is carried for diagnostics; payload
+-- resolution errors are reported against the enclosing constructor's name.
+data SynCtor = SynCtor PosInf String (Maybe SynTyExp)
+  deriving (Eq, Show)
+
+-- | One @datatype@ declaration: the source position of its datatype name, the
+-- type parameters (each stored without its leading tick), the datatype name,
+-- and its constructors (at least one). The position is carried for diagnostics.
+data SynDataDecl = SynDataDecl PosInf [String] String [SynCtor]
+  deriving (Eq, Show)
+
+-- | An @and@-group of one or more mutually recursive datatype declarations.
+newtype SynDataGroup = SynDataGroup [SynDataDecl]
+  deriving (Eq, Show)
 
 
-data Prog = Prog Imports Atoms LTerm
+data Prog = Prog Imports [SynDataGroup] LTerm
   deriving (Eq, Show)
 
 
@@ -150,18 +180,19 @@ instance ShowIndent Prog where
 
 
 ppProg :: Prog -> PP.Doc
-ppProg (Prog (Imports imports) (Atoms atoms) term) =
-  let ppAtoms =
-        if null atoms
-          then PP.empty
-          else (text "datatype Atoms = ") <+>
-               (hsep $ PP.punctuate (text " |") (map text atoms))
+ppProg (Prog (Imports imports) groups term) =
+  let ppGroups =
+        if null groups then PP.empty
+        else vcat (map ppSynDataGroup groups)
 
       ppImports =
         if null imports then PP.empty
         else
           let ppLibName imp =
-                let LibName s = importLib imp
+                let LibName ln = importLib imp
+                    s = case importPath imp of
+                          Just p  -> "\"" ++ p ++ "\""
+                          Nothing -> ln
                     modeText = case importMode imp of
                       Qualified -> text "import qualified" <+> text s
                       Unqualified -> text "import" <+> text s
@@ -175,8 +206,48 @@ ppProg (Prog (Imports imports) (Atoms atoms) term) =
           in
             (vcat $ (map ppLibName imports)) $$ PP.text ""
   in vcat [ ppImports
-          , ppAtoms
+          , ppGroups
           , ppLTerm 0 term ]
+
+-- | Pretty print an @and@-group of datatype declarations.
+ppSynDataGroup :: SynDataGroup -> PP.Doc
+ppSynDataGroup (SynDataGroup []) = PP.empty
+ppSynDataGroup (SynDataGroup (d:ds)) =
+  ppSynDataDecl (text "datatype") d $$
+  vcat (map (ppSynDataDecl (text "and")) ds)
+
+ppSynDataDecl :: PP.Doc -> SynDataDecl -> PP.Doc
+ppSynDataDecl kw (SynDataDecl _ params name ctors) =
+  kw <+> ppParams params <+> text name <+> text "=" <+>
+    hsep (PP.punctuate (text " |") (map ppSynCtor ctors))
+  where
+    ppParams [] = PP.empty
+    ppParams [p] = text ('\'' : p)
+    ppParams ps = PP.parens (hsep (PP.punctuate (text ",") (map (text . ('\'':)) ps)))
+
+ppSynCtor :: SynCtor -> PP.Doc
+ppSynCtor (SynCtor _ cn Nothing)   = text cn
+ppSynCtor (SynCtor _ cn (Just ty)) = text cn <+> text "of" <+> ppSynTyExp ty
+
+-- | Pretty print a type expression. Products and applications are shown
+-- with parentheses where nesting requires them.
+ppSynTyExp :: SynTyExp -> PP.Doc
+ppSynTyExp = ppTy False
+  where
+    ppQName = text . intercalateDot
+    intercalateDot = foldr1 (\a b -> a ++ "." ++ b)
+    -- the Bool marks a context where a bare product must be parenthesized
+    ppTy _ (STyVar v)  = text ('\'' : v)
+    ppTy _ (STyName q) = ppQName q
+    ppTy paren (STyProd tys) =
+      let d = hsep (PP.punctuate (text " *") (map (ppTy True) tys))
+      in if paren then PP.parens d else d
+    ppTy _ (STyApp [t] q) = ppTy True t <+> ppQName q
+    ppTy _ (STyApp ts q)  =
+      PP.parens (hsep (PP.punctuate (text ",") (map (ppTy False) ts))) <+> ppQName q
+    ppTy _ (STyRecord flds) =
+      PP.braces (hsep (PP.punctuate (text ",")
+        [ text l <+> text ":" <+> ppTy False t | (l, t) <- flds ]))
 
 -- | Pretty print a located term at given precedence
 ppLTerm :: Precedence -> LTerm -> PP.Doc
@@ -196,7 +267,7 @@ ppTerm' (Lit literal) = ppLit literal
 
 ppTerm' (Error t) = text "error " PP.<> ppLTerm 0 t
 
-ppTerm'  (Tuple ts) =
+ppTerm'  (Tuple ts _) =
   PP.parens $
   PP.hcat $
   PP.punctuate (text ",") (map (ppLTerm 0) ts)
@@ -222,7 +293,7 @@ ppTerm'  (List ts) =
 ppTerm' (ListCons hd tl) =
    ppLTerm consPrec hd PP.<> text "::" PP.<> ppLTerm consPrec tl
 
-ppTerm' (Var x) = text x
+ppTerm' (Var x) = ppName x
 ppTerm' (Abs lam) =
   let (ppArgs, ppBody) = qqLambda lam
   in text "fn" <+> ppArgs <+> text "=>" <+> ppBody
@@ -326,8 +397,8 @@ ppDecl (FunDecs fs) = ppFuns fs
   where
     ppLFunDecl _ (Loc _ (FunDecl _ [])) = error "empty fun list"
     ppLFunDecl prefix (Loc _ (FunDecl fname (first:rest))) =
-      let ppFirstOption = ppFunOptions (prefix ++ " " ++ fname)
-          ppOtherOption = ppFunOptions ("  | " ++ fname)
+      let ppFirstOption = ppFunOptions (prefix ++ " " ++ nameStr fname)
+          ppOtherOption = ppFunOptions ("  | " ++ nameStr fname)
       in ppFirstOption first $$ vcat (map ppOtherOption rest)
 
 
@@ -351,7 +422,7 @@ ppLDeclPattern :: LDeclPattern -> PP.Doc
 ppLDeclPattern (Loc _ p) = ppDeclPattern p
 
 ppDeclPattern :: DeclPattern -> PP.Doc
-ppDeclPattern (VarPattern x) = text x
+ppDeclPattern (VarPattern x) = ppName x
 ppDeclPattern Wildcard = text "_"
 ppDeclPattern (AtPattern p l) = ppLDeclPattern p PP.<> text ("@ " ++ l)
 ppDeclPattern (ValPattern literal) = ppLit literal
@@ -366,6 +437,11 @@ ppDeclPattern (ListPattern pats) =
 ppDeclPattern (ConsPattern headPattern tailPattern) =
   PP.parens $
   ppLDeclPattern headPattern PP.<> text "::" PP.<> ppLDeclPattern tailPattern
+ppDeclPattern (ConPattern qname mpayload) =
+  let con = text (foldr1 (\a b -> a ++ "." ++ b) qname)
+  in case mpayload of
+       Nothing -> con
+       Just p  -> PP.parens (con <+> ppLDeclPattern p)
 ppDeclPattern (RecordPattern fields mode) =
   PP.braces $
     PP.hsep $
@@ -377,6 +453,16 @@ ppDeclPattern (RecordPattern fields mode) =
                 WildcardMatch -> [text ".."]
 ppDeclPattern ErrorPattern = text "<error>"
 
+-- | Print a binder or variable name: operator names are parenthesized with
+-- inner spaces ('( <+> )', '( * )'), which keeps the printed form
+-- re-lexable — '(*' would otherwise start a comment.
+ppName :: VarName -> PP.Doc
+ppName x = text (nameStr x)
+
+nameStr :: VarName -> String
+nameStr x | isOperatorName x = "( " ++ x ++ " )"
+          | otherwise               = x
+
 ppLit :: Lit -> PP.Doc
 ppLit (LNumeric (NumInt i))  = PP.integer i
 ppLit (LNumeric (NumFloat f)) = PP.double f
@@ -386,12 +472,11 @@ ppLit LUnit       = text "()"
 ppLit (LBool True)  = text "true"
 ppLit (LBool False) = text "false"
 ppLit (LLabel s) = PP.braces (text s)
-ppLit (LAtom s) = text s
 
 
 termPrec :: Term -> Precedence
 termPrec (Lit _)         = maxPrec
-termPrec (Tuple _)       = maxPrec
+termPrec (Tuple _ _)     = maxPrec
 termPrec (List _)        = maxPrec
 termPrec (Var _)         = maxPrec
 termPrec (App _ _)       = appPrec

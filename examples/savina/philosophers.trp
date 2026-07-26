@@ -1,0 +1,24 @@
+(* Savina benchmark: Dining Philosophers (concurrency group).
+ *
+ * 20 philosophers coordinate fork acquisition through an arbitrator actor.
+ * A hungry philosopher asks the arbitrator for its two forks; the arbitrator
+ * answers EAT when both are free and DENIED otherwise, and a denied
+ * philosopher immediately retries. Each philosopher eats `n` rounds (the
+ * size parameter). Measures coordination through a central arbiter under
+ * contention; the number of DENIED round trips is nondeterministic.
+ *
+ *   ./local.sh examples/savina/philosophers.trp             # default sizes
+ *   ./local.sh examples/savina/philosophers.trp -- 10 50    # explicit sizes
+ *
+ * Result: total rounds eaten across all philosophers; ok iff it equals
+ * 20 * n.
+ *)
+
+import List
+import Bench
+import "./Savina"
+
+let val d = case List.filter (fn d => d.name = "philosophers") Savina.all of [d] => d
+    val sizes = Bench.sizesFromArgs (getCliArgs authority) d.sizes
+in Bench.run authority d.name sizes 3 d.bench d.check
+end

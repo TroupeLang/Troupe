@@ -56,103 +56,121 @@ function sourceToErrorKind(source: AssertionSource): ErrorKind {
 
 /**
  * Reports an error from an assertion failure.
+ *
+ * `source` is the semantic origin tag (generated user code vs runtime
+ * built-in) and determines the error kind. `pos`, when the assertion was
+ * invoked from generated user code, carries the source position of that
+ * operation; recording it in the machine's own position state
+ * (`lastCallSourcePos`) is what lets the error reporter point at the
+ * operation. When invoked from a built-in, `pos` is null and the machine
+ * keeps the position it already had (the user-level call into the built-in).
+ * The position write happens only on the failure path, which terminates the
+ * thread. The two parameters are deliberately independent: origin is a
+ * semantic fact, position availability is a mechanism fact.
  * @param msg The error message
  * @param source Where the assertion was called from (determines error kind)
+ * @param pos The source position of the user-code operation, or null
  */
-function err(msg: string, source: AssertionSource) {
+function err(msg: string, source: AssertionSource, pos: string | null) {
+    if (pos != null) {
+        _thread().lastCallSourcePos = pos;
+    }
     const errorKind = sourceToErrorKind(source);
     _thread().threadError(msg, false, null, errorKind);
 }
-export function assertIsAtom (x: any, source: AssertionSource = AssertionSource.AssertInBuiltIn) {
+export function assertIsBigInt(x: any, source: AssertionSource = AssertionSource.AssertInBuiltIn, pos: string | null = null) {
     _thread().raiseBlockingThreadLev(x.tlev)
-    if (x.val._troupeType != TroupeType.ATOM ) {
-        err ("value " + __stringRep(x) + " is not an atom", source)
+    if (x.val._troupeType != TroupeType.BIGINT ) {
+        err ("value " + __stringRep(x) + " is not a bigint", source, pos)
     }
 }
 
-export function rawAssertIsNumber (x, source: AssertionSource = AssertionSource.AssertInBuiltIn) {
+export function rawAssertIsNumber (x, source: AssertionSource = AssertionSource.AssertInBuiltIn, pos: string | null = null) {
     if (typeof x != 'number') {
-        err("value " + __stringRep(x) + " is not a number", source)
+        err("value " + __stringRep(x) + " is not a number", source, pos)
     }
 }
 
-export function assertIsNumber(x: any, source: AssertionSource = AssertionSource.AssertInBuiltIn) {
+export function assertIsNumber(x: any, source: AssertionSource = AssertionSource.AssertInBuiltIn, pos: string | null = null) {
     _thread().raiseBlockingThreadLev(x.tlev)
     if (typeof x.val != 'number') {
-        err("value " + __stringRep(x) + " is not a number", source)
+        err("value " + __stringRep(x) + " is not a number", source, pos)
     }
 }
 
-export function assertIsBoolean(x: any, source: AssertionSource = AssertionSource.AssertInBuiltIn) {
+export function assertIsBoolean(x: any, source: AssertionSource = AssertionSource.AssertInBuiltIn, pos: string | null = null) {
     _thread().raiseBlockingThreadLev(x.tlev);
     if (typeof x.val != 'boolean') {
-        err("value " + __stringRep(x) + " is not a boolean", source)
+        err("value " + __stringRep(x) + " is not a boolean", source, pos)
     }
 }
 
-export function rawAssertIsBoolean(x: any, source: AssertionSource = AssertionSource.AssertInBuiltIn) {
+export function rawAssertIsBoolean(x: any, source: AssertionSource = AssertionSource.AssertInBuiltIn, pos: string | null = null) {
     if (typeof x != 'boolean') {
-        err("value " + __stringRep(x) + " is not a boolean", source)
+        err("value " + __stringRep(x) + " is not a boolean", source, pos)
     }
 }
 
-export function assertIsFunction(x: any, internal = false, source: AssertionSource = AssertionSource.AssertInBuiltIn) {
+export function assertIsFunction(x: any, internal = false, source: AssertionSource = AssertionSource.AssertInBuiltIn, pos: string | null = null) {
     _thread().raiseBlockingThreadLev(x.tlev);
-    rawAssertIsFunction (x.val, internal, source)
+    rawAssertIsFunction (x.val, internal, source, pos)
 }
 
-export function rawAssertIsFunction(x, internal = false, source: AssertionSource = AssertionSource.AssertInBuiltIn) {
+export function rawAssertIsFunction(x, internal = false, source: AssertionSource = AssertionSource.AssertInBuiltIn, pos: string | null = null) {
     if (x._troupeType != TroupeType.CLOSURE) {
+        if (pos != null) {
+            _thread().lastCallSourcePos = pos;
+        }
         const errorKind = sourceToErrorKind(source);
         _thread().threadError("value " + __stringRep(x) + " is not a function", internal, null, errorKind)
     }
 }
 
 
-export function assertIsLocalObject(x: any, source: AssertionSource = AssertionSource.AssertInBuiltIn) {
+export function assertIsLocalObject(x: any, source: AssertionSource = AssertionSource.AssertInBuiltIn, pos: string | null = null) {
     _thread().raiseBlockingThreadLev(x.tlev);
     if (x.val._troupeType != TroupeType.LOCALOBJECT) {
-        err("value " + __stringRep(x) + " is not a local object", source)
+        err("value " + __stringRep(x) + " is not a local object", source, pos)
     }
 }
 
-export function assertIsHandler(x: any, source: AssertionSource = AssertionSource.AssertInBuiltIn) {
+export function assertIsHandler(x: any, source: AssertionSource = AssertionSource.AssertInBuiltIn, pos: string | null = null) {
     _thread().raiseBlockingThreadLev(x.tlev);
     if (x.val._troupeType != TroupeType.CLOSURE) {
-        err("value " + __stringRep(x) + " is not a handler", source)
+        err("value " + __stringRep(x) + " is not a handler", source, pos)
     }
 }
 
-export function assertIsUnit(x: any, source: AssertionSource = AssertionSource.AssertInBuiltIn) {
+export function assertIsUnit(x: any, source: AssertionSource = AssertionSource.AssertInBuiltIn, pos: string | null = null) {
     _thread().raiseBlockingThreadLev(x.tlev);
     if (!x.val._is_unit) {
-        err("value " + __stringRep(x) + " is not unit", source)
+        err("value " + __stringRep(x) + " is not unit", source, pos)
     }
 }
 
 
-export function assertIsListOrTuple(x: any, source: AssertionSource = AssertionSource.AssertInBuiltIn) {
+export function assertIsListOrTuple(x: any, source: AssertionSource = AssertionSource.AssertInBuiltIn, pos: string | null = null) {
     _thread().raiseBlockingThreadLev(x.lev);;
     if (!((isListFlagSet(x.val) || isTupleFlagSet(x.val)))) {
-        err("value " + __stringRep(x) + " is not a list or tuple", source)
+        err("value " + __stringRep(x) + " is not a list or tuple", source, pos)
     }
 }
 
-export function assertIsList(x: any, source: AssertionSource = AssertionSource.AssertInBuiltIn) {
+export function assertIsList(x: any, source: AssertionSource = AssertionSource.AssertInBuiltIn, pos: string | null = null) {
     _thread().raiseBlockingThreadLev(x.lev);;
-    rawAssertIsList(x.val, source)
+    rawAssertIsList(x.val, source, pos)
 }
 
-export function rawAssertIsList (x: any, source: AssertionSource = AssertionSource.AssertInBuiltIn) {
+export function rawAssertIsList (x: any, source: AssertionSource = AssertionSource.AssertInBuiltIn, pos: string | null = null) {
     if (!isListFlagSet(x)) {
-        err("value " + __stringRep(x) + " is not a list", source)
+        err("value " + __stringRep(x) + " is not a list", source, pos)
     }
 }
 
-export function assertIsNTuple(x: any, n: number, source: AssertionSource = AssertionSource.AssertInBuiltIn) {
+export function assertIsNTuple(x: any, n: number, source: AssertionSource = AssertionSource.AssertInBuiltIn, pos: string | null = null) {
     _thread().raiseBlockingThreadLev(x.lev);
     if (!(Array.isArray(x.val) && isTupleFlagSet(x.val) && x.val.length == n)) {
-        err("value " + __stringRep(x) + " is not a " + n + "-tuple", source)
+        err("value " + __stringRep(x) + " is not a " + n + "-tuple", source, pos)
     }
 }
 
@@ -163,169 +181,170 @@ export function assertIsNTuple(x: any, n: number, source: AssertionSource = Asse
 export function assertIsTupleWithArity(
     x: any,
     allowedArities: number[],
-    source: AssertionSource = AssertionSource.AssertInBuiltIn
+    source: AssertionSource = AssertionSource.AssertInBuiltIn,
+    pos: string | null = null
 ) {
     _thread().raiseBlockingThreadLev(x.lev);  // Critical: preserve blocking level
     if (!(Array.isArray(x.val) && isTupleFlagSet(x.val))) {
-        err("value " + __stringRep(x) + " is not a tuple", source);
+        err("value " + __stringRep(x) + " is not a tuple", source, pos);
     }
     if (!allowedArities.includes(x.val.length)) {
         const aritiesStr = allowedArities.join(" or ");
-        err(`expected ${aritiesStr}-tuple, got ${x.val.length}-tuple`, source);
+        err(`expected ${aritiesStr}-tuple, got ${x.val.length}-tuple`, source, pos);
     }
 }
 
 
-export function assertIsNTupleR3 (x:TroupeRawValue, lev:Level, tlev:Level, n:number, source: AssertionSource = AssertionSource.AssertInBuiltIn) {
+export function assertIsNTupleR3 (x:TroupeRawValue, lev:Level, tlev:Level, n:number, source: AssertionSource = AssertionSource.AssertInBuiltIn, pos: string | null = null) {
     _thread().raiseBlockingThreadLev(lev);
     if (!(Array.isArray(x) && isTupleFlagSet(x) && x.length == n)) {
-        err("value " + __stringRep(x) + " is not a " + n + "-tuple", source)
+        err("value " + __stringRep(x) + " is not a " + n + "-tuple", source, pos)
     }
 }
 
-export function rawAssertIsTuple (x, source: AssertionSource = AssertionSource.AssertInBuiltIn)  {
+export function rawAssertIsTuple (x, source: AssertionSource = AssertionSource.AssertInBuiltIn, pos: string | null = null)  {
     if (!(Array.isArray(x) && isTupleFlagSet(x) )) {
-        err("value " + __stringRep(x) + " is not a tuple", source)
+        err("value " + __stringRep(x) + " is not a tuple", source, pos)
     }
 }
 
 /**
  * Assumes `x` is a tuple and asserts it has at least length `n`.
  */
-export function rawAssertTupleLengthGreaterThan (x, n: number, source: AssertionSource = AssertionSource.AssertInBuiltIn) {
+export function rawAssertTupleLengthGreaterThan (x, n: number, source: AssertionSource = AssertionSource.AssertInBuiltIn, pos: string | null = null) {
     if (x.length <= n) {
-        err("Index out of bounds: tuple " + __stringRep(x) + " does not have length more than " + n, source)
+        err("Index out of bounds: tuple " + __stringRep(x) + " does not have length more than " + n, source, pos)
     }
 }
 
 
-export function rawAssertRecordHasField (x, field: string, source: AssertionSource = AssertionSource.AssertInBuiltIn) {
+export function rawAssertRecordHasField (x, field: string, source: AssertionSource = AssertionSource.AssertInBuiltIn, pos: string | null = null) {
     if (!x.hasField(field)) {
-        err (`record ${__stringRep(x)} does not have field \'${field}\'`, source)
+        err (`record ${__stringRep(x)} does not have field \'${field}\'`, source, pos)
     }
 }
 
 
-export function assertIsRecord (x: any, source: AssertionSource = AssertionSource.AssertInBuiltIn) {
+export function assertIsRecord (x: any, source: AssertionSource = AssertionSource.AssertInBuiltIn, pos: string | null = null) {
     _thread().raiseBlockingThreadLev(x.lev);
     if (x.val._troupeType != TroupeType.RECORD) {
-        err (`value ${__stringRep(x)} is not a record`, source)
+        err (`value ${__stringRep(x)} is not a record`, source, pos)
     }
 }
 
-export function rawAssertIsRecord (x: any, source: AssertionSource = AssertionSource.AssertInBuiltIn) {
+export function rawAssertIsRecord (x: any, source: AssertionSource = AssertionSource.AssertInBuiltIn, pos: string | null = null) {
     if (x._troupeType != TroupeType.RECORD) {
-        err (`value ${__stringRep(x)} is not a record`, source)
+        err (`value ${__stringRep(x)} is not a record`, source, pos)
     }
 }
 
-export function assertIsString(x: any, source: AssertionSource = AssertionSource.AssertInBuiltIn) {
+export function assertIsString(x: any, source: AssertionSource = AssertionSource.AssertInBuiltIn, pos: string | null = null) {
     _thread().raiseBlockingThreadLev(x.tlev);
     if (typeof x.val != 'string') {
-        err("value " + __stringRep(x) + " is not a string", source)
+        err("value " + __stringRep(x) + " is not a string", source, pos)
     }
 }
 
-export function rawAssertIsString(x: any, source: AssertionSource = AssertionSource.AssertInBuiltIn) {
+export function rawAssertIsString(x: any, source: AssertionSource = AssertionSource.AssertInBuiltIn, pos: string | null = null) {
     if (typeof x != 'string') {
-        err("value " + __stringRep(x) + " is not a string", source)
+        err("value " + __stringRep(x) + " is not a string", source, pos)
     }
 }
 
-export function rawAssertNotZero(x: any, source: AssertionSource = AssertionSource.AssertInBuiltIn) {
+export function rawAssertNotZero(x: any, source: AssertionSource = AssertionSource.AssertInBuiltIn, pos: string | null = null) {
     if (x === 0) {
-        err("Division by zero error", source)
+        err("Division by zero error", source, pos)
     }
 }
 
 
-export function assertIsNode(x: any, source: AssertionSource = AssertionSource.AssertInBuiltIn) {
+export function assertIsNode(x: any, source: AssertionSource = AssertionSource.AssertInBuiltIn, pos: string | null = null) {
     _thread().raiseBlockingThreadLev(x.tlev);
     if (typeof x.val != 'string') {
-        err("value " + __stringRep(x) + " is not a node string", source) // todo: check for it being a proper nodeid format?
+        err("value " + __stringRep(x) + " is not a node string", source, pos) // todo: check for it being a proper nodeid format?
     }
     if (x.val.startsWith("@")) {
         if (!__nodeManager.aliases[x.val.substring(1)]) {
-            err(`${x.val} is not a defined alias`, source)
+            err(`${x.val} is not a defined alias`, source, pos)
         }
     }
 }
 
-export function assertIsProcessId(x: any, source: AssertionSource = AssertionSource.AssertInBuiltIn) {
+export function assertIsProcessId(x: any, source: AssertionSource = AssertionSource.AssertInBuiltIn, pos: string | null = null) {
     _thread().raiseBlockingThreadLev(x.tlev);
     if (!(x.val instanceof ProcessID)) {
-        err("value " + __stringRep(x) + " is not a process id", source)
+        err("value " + __stringRep(x) + " is not a process id", source, pos)
     }
 }
 
 
-export function assertIsCapability(x: any, source: AssertionSource = AssertionSource.AssertInBuiltIn) {
+export function assertIsCapability(x: any, source: AssertionSource = AssertionSource.AssertInBuiltIn, pos: string | null = null) {
     _thread().raiseBlockingThreadLev(x.tlev);
     if (!(x.val instanceof Capability)) {
-        err("value " + __stringRep(x) + " is not a capability of lowering the mailbox clearance", source)
+        err("value " + __stringRep(x) + " is not a capability of lowering the mailbox clearance", source, pos)
     }
 }
 
-export function assertIsLevel(x: any, source: AssertionSource = AssertionSource.AssertInBuiltIn) {
+export function assertIsLevel(x: any, source: AssertionSource = AssertionSource.AssertInBuiltIn, pos: string | null = null) {
     _thread().raiseBlockingThreadLev(x.tlev);
     if (!(x.val instanceof AbstractLevel)) {
-        err("value " + __stringRep(x) + " is not a level", source);
+        err("value " + __stringRep(x) + " is not a level", source, pos);
     }
 }
 
-export function rawAssertIsLevel (x: any, source: AssertionSource = AssertionSource.AssertInBuiltIn) {
+export function rawAssertIsLevel (x: any, source: AssertionSource = AssertionSource.AssertInBuiltIn, pos: string | null = null) {
     if (!(x instanceof AbstractLevel)) {
-        err("value " + __stringRep(x) + " is not a level", source);
+        err("value " + __stringRep(x) + " is not a level", source, pos);
     }
 }
 
-export function assertIsRootAuthority(x: any, source: AssertionSource = AssertionSource.AssertInBuiltIn) {
+export function assertIsRootAuthority(x: any, source: AssertionSource = AssertionSource.AssertInBuiltIn, pos: string | null = null) {
     let isTop = actsFor(x.val.authorityLevel, levels.ROOT);
     if (!isTop) {
         let errorMessage =
             "Provided authority is not ROOT\n" +
             ` | level of the provided authority: ${x.val.authorityLevel.stringRep()}`
-        err(errorMessage, source);
+        err(errorMessage, source, pos);
     }
 }
 
-export function assertIsAuthority(x: any, source: AssertionSource = AssertionSource.AssertInBuiltIn) {
+export function assertIsAuthority(x: any, source: AssertionSource = AssertionSource.AssertInBuiltIn, pos: string | null = null) {
     _thread().raiseBlockingThreadLev(x.tlev);
     if (!(x.val instanceof Authority)) {
-        err("value " + __stringRep(x) + " is not a authority", source);
+        err("value " + __stringRep(x) + " is not a authority", source, pos);
     }
 }
 
-export function assertIsAuthorityR3(x, lev, tlev, source: AssertionSource = AssertionSource.AssertInBuiltIn) {
+export function assertIsAuthorityR3(x, lev, tlev, source: AssertionSource = AssertionSource.AssertInBuiltIn, pos: string | null = null) {
     _thread().raiseBlockingThreadLev(x.tlev);
     if (!(x instanceof Authority)){
-        err("value " + __stringRep(x) + " is not a authority", source);
+        err("value " + __stringRep(x) + " is not a authority", source, pos);
     }
 }
 
-export function assertIsEnv(x: any, source: AssertionSource = AssertionSource.AssertInBuiltIn) {
+export function assertIsEnv(x: any, source: AssertionSource = AssertionSource.AssertInBuiltIn, pos: string | null = null) {
     _thread().raiseBlockingThreadLev(x.tlev);
     if (!(x.val._is_rt_env)) {
-        err("value " + __stringRep(x) + " is not an environment", source);
+        err("value " + __stringRep(x) + " is not an environment", source, pos);
     }
 }
 
-export function assertNormalState(s: string, source: AssertionSource = AssertionSource.AssertInBuiltIn) {
+export function assertNormalState(s: string, source: AssertionSource = AssertionSource.AssertInBuiltIn, pos: string | null = null) {
     if (!_thread().handlerState.isNormal()) {
-        err("invalid handler state in " + s + " -- side effects are prohbited in handler pattern matching or sandboxed code", source)
+        err("invalid handler state in " + s + " -- side effects are prohbited in handler pattern matching or sandboxed code", source, pos)
     }
 }
 
-export function assertDeclassificationAllowed(s: string, source: AssertionSource = AssertionSource.AssertInBuiltIn) {
+export function assertDeclassificationAllowed(s: string, source: AssertionSource = AssertionSource.AssertInBuiltIn, pos: string | null = null) {
     if (!_thread().handlerState.declassificationAllowed()) {
-        err("invalid handler state in " + s + ": declassification prohibited in handler pattern matching", source)
+        err("invalid handler state in " + s + ": declassification prohibited in handler pattern matching", source, pos)
     }
 }
 
 
-export function assertPairAreNumbers(x: any, y: any, source: AssertionSource = AssertionSource.AssertInBuiltIn) {
-    assertIsNumber(x, source);
-    assertIsNumber(y, source);
+export function assertPairAreNumbers(x: any, y: any, source: AssertionSource = AssertionSource.AssertInBuiltIn, pos: string | null = null) {
+    assertIsNumber(x, source, pos);
+    assertIsNumber(y, source, pos);
 }
 
 /*
@@ -334,16 +353,16 @@ export function assertPairAreStringsOrNumbers(x: any, y: any) {
     switch (typeof x.val) {
         case 'number': assertIsNumber(y); break;
         case 'string': assertIsString(y); break;
-        default: err("values " + __stringRep(x) + " and " + __stringRep(y) + " are of different types")
+        default: err("values " + __stringRep(x) + " and " + __stringRep(y) + " are of different types", AssertionSource.AssertInBuiltIn, null)
     }
 }
 */
 
-export function rawAssertPairsAreStringsOrNumbers (x: any, y: any, source: AssertionSource = AssertionSource.AssertInBuiltIn) {
+export function rawAssertPairsAreStringsOrNumbers (x: any, y: any, source: AssertionSource = AssertionSource.AssertInBuiltIn, pos: string | null = null) {
     switch (typeof x) {
-        case 'number': rawAssertIsNumber(y, source); break
-        case 'string': rawAssertIsString(y, source); break
-        default: err("value " + __stringRep(x) + " is not a number or a string", source)
-        // default: err("values " + __stringRep(x) + " and " + __stringRep(y) + " are of different types", source)
+        case 'number': rawAssertIsNumber(y, source, pos); break
+        case 'string': rawAssertIsString(y, source, pos); break
+        default: err("value " + __stringRep(x) + " is not a number or a string", source, pos)
+        // default: err("values " + __stringRep(x) + " and " + __stringRep(y) + " are of different types", source, pos)
     }
 }

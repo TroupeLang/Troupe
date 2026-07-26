@@ -1,0 +1,27 @@
+(* Savina benchmark: Recursive Matrix Multiplication (parallelism group).
+ *
+ * The product of two n-by-n matrices is computed by a recursive actor
+ * tree over row ranges: an actor whose range exceeds the cutoff spawns
+ * two children for the halves and concatenates their tagged replies;
+ * ranges at the cutoff are computed directly. Matrices are lib/Vector
+ * vectors of row vectors, giving logarithmic indexed access (Troupe has
+ * no constant-time arrays; the log factor is the documented deviation
+ * from the original's flat arrays).
+ *
+ * Verification computes the same product sequentially with the same
+ * row function and compares element-for-element.
+ *
+ *   ./local.sh examples/savina/recmatmul.trp             # default sizes
+ *   ./local.sh examples/savina/recmatmul.trp -- 16 32    # explicit sizes
+ *
+ * Result: the product as a list of rows; ok iff it equals the reference.
+ *)
+
+import List
+import Bench
+import "./Savina"
+
+let val d = case List.filter (fn d => d.name = "recmatmul") Savina.all of [d] => d
+    val sizes = Bench.sizesFromArgs (getCliArgs authority) d.sizes
+in Bench.run authority d.name sizes 3 d.bench d.check
+end

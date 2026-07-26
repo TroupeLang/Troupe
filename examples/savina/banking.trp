@@ -1,0 +1,25 @@
+(* Savina benchmark: Bank Transaction (concurrency group).
+ *
+ * A teller issues n transfers between 20 account actors: the teller asks
+ * the randomly chosen source account to transfer a random amount to a
+ * random destination; the source debits itself and passes the credit on;
+ * the destination credits itself and confirms to the teller, which then
+ * issues the next transfer (the Savina original's synchronous-transaction
+ * emulation, expressed as ordinary request/reply chains). At the end the
+ * teller collects every balance.
+ *
+ *   ./local.sh examples/savina/banking.trp                # default sizes
+ *   ./local.sh examples/savina/banking.trp -- 2000 8000   # explicit sizes
+ *
+ * Result: (sum of final balances, transfers completed); ok iff money is
+ * conserved — the sum equals 20 * 10000 — and all n transfers completed.
+ *)
+
+import List
+import Bench
+import "./Savina"
+
+let val d = case List.filter (fn d => d.name = "banking") Savina.all of [d] => d
+    val sizes = Bench.sizesFromArgs (getCliArgs authority) d.sizes
+in Bench.run authority d.name sizes 3 d.bench d.check
+end

@@ -3,19 +3,36 @@
 > **Scope:** how Troupe is structured internally — the compilation pipeline, the runtime, the
 > information-flow-control model, and file extensions. For making changes (e.g. adding a built-in)
 > see [CONTRIBUTING.md](CONTRIBUTING.md); for the networking layer see [NETWORKING.md](NETWORKING.md).
+> The module system and syntactic variants each have their own document —
+> [MODULES.md](MODULES.md) and [VARIANTS.md](VARIANTS.md).
 
 ## Compilation pipeline
 
-The compiler driver is `compiler/app/Main.hs`; its `process` function runs the stages below in
-order. The list is a simplification — consult `Main.hs` for the authoritative sequence.
+The compiler driver is `compiler/app/Main.hs`. `main` resolves the file's module graph and then
+calls `process` once per module (dependencies before consumers) and once for the file itself;
+`process` runs the stages below in order. The list is a simplification — consult `Main.hs` for the
+authoritative sequence.
 
-1. **Parsing** (`Parser.y`, `Lexer.x`) — parse `.trp` files into an AST.
+0. **Module graph** (`main`, `ProcessImports.discoverModules`) — for a non-library compile,
+   discover the program-relative modules the file imports transitively and load the pins recorded
+   in `<main>.deps.json` (`DepsFile.hs`). Each module is compiled first, as a content-hashed
+   library artifact. See [MODULES.md](MODULES.md).
+1. **Parsing** (`Parser.y`, `Lexer.x`) — parse `.trp` files into the parse-phase AST
+   (`Surface.hs`): expressions carry flat operator chains with no precedence commitment, and the
+   file header may carry fixity declarations. See [OPERATORS.md](OPERATORS.md).
 2. **Front end:**
+   - Import processing (`ProcessImports.hs`) — resolve library and module imports, read their
+     `.exports` interfaces, and either enforce or establish the dependency pins.
+   - Operator re-association (`OpReassoc.hs`) — translate `Surface` into the `Direct` AST,
+     rebuilding each operator chain from the fixity environment (built-ins seeded; user
+     operators from the header declarations and the imported `fixity` interface lines).
+   - Export extraction (`Exports.hs`) when compiling a library or module (`-l`).
+   - Syntactic-variant folding (`SynVarFolding.hs`, hashing in `SynVarHash.hs`) — process
+     `datatype` groups, rewriting constructor occurrences and constructor patterns into tagged
+     tuples and tuple patterns. See [VARIANTS.md](VARIANTS.md). This runs before ambient-method
+     injection, so a constructor may shadow an ambient built-in.
    - Ambient-method injection (`AddAmbientMethods.hs`, Normal compile mode only).
-   - Import processing (`ProcessImports.hs`).
-   - Export extraction (`Exports.hs`) when compiling a library (`-l`).
 3. **Core transformations:**
-   - Atom folding (`AtomFolding.hs`).
    - Pattern-match / case elimination (`CaseElimination.hs`). `DirectWOPats.hs` is the
      pattern-free AST representation these produce, not a driver pass.
    - Function/let lowering and alpha renaming (`Core.hs`).
@@ -29,6 +46,18 @@ order. The list is a simplification — consult `Main.hs` for the authoritative 
    - Raw optimization (`RawOpt.hs`), unless `--no-rawopt` is passed.
    - Raw → Stack (`Raw2Stack.hs`).
    - Stack → JavaScript (`Stack2JS.hs`), with optional source-map embedding (`-m`).
+   - For a library or module compile, the `.exports` interface is written alongside the `.js`.
+
+`IRSexp.hs` prints and parses the optimized IR as s-expression text. It is not part of the default
+path: `--emit-ir-sexp` stops after IR optimization and writes the text, `--verify-ir-sexp` prints
+and re-parses it and checks the position-erased ASTs match, and `--ingest-ir-sexp` reads such a file
+and runs stage 4 on it.
+
+With `-v`, each stage writes a dump into `out/` under the working directory: `out.syntax`,
+`out.opreassoc`, `out.nopats`, `out.lowered`, `out.alpha`, `out.cps`, `out.cpsopt`, `out.ir`,
+`out.iropt`, `out.rawout`, `out.rawopt`, `out.stack`. `out.rawopt` is not written under
+`--no-rawopt`. Dumps are
+written for the top-level file only, not for the modules compiled ahead of it.
 
 ## Runtime architecture
 
@@ -42,15 +71,76 @@ The runtime implements:
 
 Key components:
 
-| File                   | Role                                 |
-|------------------------|--------------------------------------|
-| `troupe.mts`           | Main entry point                     |
-| `runtimeMonitored.mts` | Gluing point for most of the runtime |
-| `Scheduler.mts`        | Scheduler                            |
-| `MailboxProcessor.mts` | Message handling                     |
-| `TrustManager.mts`     | Trust and security management        |
-| `p2p/p2p.mts`          | P2P networking layer                 |
-| `builtins/`            | Language built-ins                   |
+| File                   | Role                                                          |
+|------------------------|---------------------------------------------------------------|
+| `troupe.mts`           | Main entry point                                              |
+| `runtimeMonitored.mts` | Gluing point for most of the runtime                          |
+| `Scheduler.mts`        | Scheduler                                                     |
+| `MailboxProcessor.mts` | Message handling                                              |
+| `TrustManager.mts`     | Trust and security management                                 |
+| `TroupeCliArgs.mts`    | Runtime command-line options                                  |
+| `loadLibsAsync.mts`    | Loads the compiled libraries and modules a program imports    |
+| `moduleResolver.mts`   | Maps a module's content hash to its artifact (see MODULES.md) |
+| `serialize.mts`        | Value serialization for the wire                              |
+| `deserialize.mts`      | Value deserialization from the wire                           |
+| `p2p/p2p.mts`          | P2P networking layer                                          |
+| `builtins/`            | Language built-ins                                            |
+
+`loadLibs.mts` is marked deprecated in its own header and is not imported anywhere under `rt/src/`.
+
+## External resource access
+
+Every runtime operation that reaches outside the program — standard streams, persistence, the
+network registry, and file I/O — is gated on authority rather than on ordinary label flow. With the
+exception of `send` (governed by wire label/trust checks), these operations require **full (ROOT)
+authority**: `stdio` defaults its level to ROOT, and `persist`, `cliargs`, `exit`, `register`, and
+the `SimpleFileIO` primitives call `assertIsRootAuthority`.
+
+### File I/O (`SimpleFileIO`)
+
+Whole-file read/write lives in `rt/src/builtins/simplefileio.mts`. It is a **placeholder** — a
+deliberately small surface (`readFile`, `writeFile`, `appendFile`, `fileExists`) that exists to
+support document-processing programs and is expected to be superseded by a labelled-path model.
+
+- **Authority.** Every operation requires ROOT authority (mirrors `persist`). Untrusted code cannot
+  reach the filesystem at all, so per-write confidentiality checks and per-path levels are deferred
+  rather than half-answered.
+- **Labeling.** Read content is labeled at ROOT ("we trust our own files"), exactly as `persist`
+  labels restored data. Each primitive returns a tagged record
+  (`{tag="Ok", value=…}` / `{tag="Err", error={reason, path}}`), so a missing file or rejected path
+  never crashes the thread. The standard library reports failure with `Option` and `Outcome`; the
+  runtime still builds tagged records here and in the bigint conversion built-ins, and those two are
+  the only places the encoding survives.
+- **Sandbox.** `--io-root <dir>` (`rt/src/TroupeCliArgs.mts`) bounds path reachability, orthogonal
+  to authority: `..`, absolute-outside, and symlink escapes are rejected before any filesystem
+  access, so even a bug in ROOT code cannot write outside the subtree. When unset, a per-invocation
+  scratch directory is used, keeping observable output hermetic without a runtime flag. Error
+  payloads carry the caller-supplied (io-root-relative) path, never the resolved absolute path.
+- **Deferred to the revision:** non-ROOT/parameterized I/O levels, per-path label manifests,
+  write-confidentiality checks, bounded-integrity read content, quarantine integration, and
+  streaming/handle-based access.
+
+## Arbitrary-precision integers (bigint)
+
+Bigints are a base value type backed by JavaScript BigInt, distinct from numbers.
+
+- **Syntax.** A bigint literal is a decimal digit run with an `n` suffix (`123n`). The parser
+  desugars the literal to the `bigFromLiteral` built-in, so no compiler phase past parsing knows
+  about bigints. Literals are expressions only; they are not accepted in patterns.
+- **Operations.** All bigint arithmetic goes through named built-ins (`rt/src/builtins/bigint.mts`),
+  surfaced by [lib/BigInt.trp](../lib/BigInt.trp) (`add`, `sub`, `mul`, `quot`, `rem`, `neg`,
+  `cmp`, comparison predicates, conversions). The ordinary arithmetic operators are number-only and
+  reject bigints at their type asserts; there is no implicit mixing.
+- **Semantics.** `getType` reports `"bigint"`. Equality is kind-first: two bigints compare by
+  value; a bigint never equals a number or a string. Bigints print in literal form (`5n`);
+  `BigInt.show` yields the plain decimal digits. The built-ins `bigFromString` and `bigToInt` return
+  tagged records built in the runtime; `BigInt.fromString` and `BigInt.toInt` convert those to an
+  `Option`, so `NONE` reports failure (`toInt` fails beyond exact double range).
+- **Representation.** A bigint is boxed (`rt/src/TroupeBigInt.mts`) so it can carry the runtime
+  type tag; the label rides the enclosing labeled value like every base type, and every built-in
+  joins the current pc into its result label, matching the labeling of number literals. On the
+  wire (`serialize.mts`/`deserialize.mts`) a bigint travels as a decimal string.
+- `getNanoTime` returns a bigint (nanoseconds); it was unusable before this type existed.
 
 ## Information flow control
 
@@ -121,8 +211,36 @@ The user guide currently uses the V1 label syntax `` `{alice}` ``, which the pre
 
 ## File extensions
 
-| Extension  | Meaning                     |
-|------------|-----------------------------|
-| `.trp`     | Troupe source files         |
-| `.golden`  | Expected test outputs       |
-| `.exports` | Library export definitions  |
+Source and compiler artifacts:
+
+| Extension    | Meaning                                                          |
+|--------------|------------------------------------------------------------------|
+| `.trp`       | Troupe source files                                              |
+| `.js`        | Compiled output                                                  |
+| `.exports`   | Interface of a compiled library or module, written next to `.js` |
+| `.deps.json` | A program's module dependencies file                             |
+| `.tpnb`      | Notebook file (JSON), read and written by `notebook/`            |
+
+A library or module compile writes its `.js` and `.exports` to `<dir>/out/<name>`; a program compile
+writes to `-o`'s argument, or to `out/out.stack.js` under the working directory when `-o` is absent.
+With `-m` the source map is embedded in the `.js`; no separate `.map` file is produced.
+
+An `.exports` file is a line-oriented text interface (`compiler/src/Exports.hs`): an optional
+leading `module-hash <hash>` line carrying a module artifact's own content-addressed identity (a
+standard-library compile emits none), then one exported value name per line, then one
+`datatype <group-hash> <canonical-form>` line per exported datatype group in declaration order, then
+one `fixity <l|r|n> <level> <name>` line per exported operator — mandatory for a symbolic export, see
+[OPERATORS.md](OPERATORS.md).
+
+A program that imports program-relative modules has a `<main>.deps.json` next to it, pinning each
+resolved module by path, content hash, and display name. See [MODULES.md](MODULES.md) and
+[VARIANTS.md](VARIANTS.md).
+
+Test-corpus artifacts (see [CONTRIBUTING.md](CONTRIBUTING.md#test-suite-layout)):
+
+| Extension         | Meaning                                                     |
+|-------------------|-------------------------------------------------------------|
+| `.golden`         | Expected test output, compared against a colored run        |
+| `.nocolor.golden` | Expected test output under `bin/golden --no-color`          |
+| `.trp.input`      | Standard input fed to the test program                      |
+| `.trp.options`    | Extra `local.sh` arguments; `#` lines are comments          |

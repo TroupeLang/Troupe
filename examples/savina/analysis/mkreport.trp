@@ -1,0 +1,69 @@
+(* mkreport — re-analyze an existing Savina results file: parse the
+ * Bench measurement lines and regenerate the markdown summary and SVG
+ * chart sheet via examples/savina/SavinaReport.trp. The normal path is
+ * examples/savina/runall.trp, which runs the suite and writes these
+ * artifacts itself; this tool exists to reprocess previously collected
+ * results (e.g. from another machine or an older runtime).
+ *
+ *   ./local.sh examples/savina/analysis/mkreport.trp --io-root out \
+ *       -- savina-results.txt
+ *
+ * The hand-rolled line/token splitting below is a recorded language
+ * gap: String has no split/lines/startsWith.
+ *)
+
+import Outcome
+import { readFile, writeFile } SimpleFileIO
+import List
+import "../SavinaReport"
+
+let val args = getCliArgs authority
+    val inputFile = case args of f :: _ => f | [] => "savina-results.txt"
+
+    fun splitOn (sepCode, s) =
+        let val n = strlen s
+            fun piece (start, i, acc) =
+                if i > start then substring (s, start, i) :: acc else acc
+            fun go (i, start, acc) =
+                if i >= n then List.reverse (piece (start, i, acc))
+                else if charCodeAtWithDefault (s, i, 0) = sepCode
+                then go (i + 1, i + 1, piece (start, i, acc))
+                else go (i + 1, start, acc)
+        in go (0, 0, []) end
+
+    val newline = 10
+    val space = 32
+    val equals = 61
+
+    fun fieldValue tok =
+        case splitOn (equals, tok) of
+          [_, v] => v
+
+    fun parseLine line =
+        case splitOn (space, line) of
+          [name, nTok, _, msTok, okTok] =>
+            [(name, stringToInt (fieldValue nTok),
+              stringToInt (fieldValue msTok),
+              fieldValue okTok = "true")]
+        | _ => []
+
+    fun parseAll text =
+        let fun go ([], acc)      = List.reverse acc
+              | go (l :: ls, acc) = go (ls, List.append (List.reverse (parseLine l)) acc)
+        in go (splitOn (newline, text), []) end
+
+    fun save (path, content) =
+        case writeFile (authority, path, content) of
+          OK _ => print ("wrote", path)
+        | ERR e => print ("write error", path, e.reason)
+
+in case readFile (authority, inputFile) of
+     ERR e => print ("cannot read input: ", e.reason)
+   | OK text =>
+       let val summaries = SavinaReport.summarize (parseAll text)
+           val _ = save ("savina-report.md",
+                         SavinaReport.markdown ("Savina results", summaries) ^ "\n")
+           val _ = save ("savina-charts.svg", SavinaReport.svg summaries)
+       in print (List.length summaries, "benchmarks summarized")
+       end
+end

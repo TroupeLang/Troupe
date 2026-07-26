@@ -1,0 +1,2 @@
+(* the number operators reject bigints: no implicit mixing *)
+1 + 2n

@@ -14,7 +14,7 @@ import Basics
 
 
 mkP :: IRExpr -> IRProgram
-mkP e = IRProgram (Core.Atoms []) [Loc NoPos (FunDef (HFN "main") (mkVN "arg") [] body)]
+mkP e = IRProgram [Loc NoPos (FunDef (HFN "main") (mkVN "arg") [] body)]
   where body = BB [mkLInst (Assign (VN "r") e)] (mkLTerm (LibExport (mkV "r"))) -- need to use assigned variable so that it is not optimized away
 
 tcs :: [(String, IRProgram)]
@@ -24,9 +24,9 @@ tcs = map (second mkP) $
   [ ("Const", Const (Core.LString "testlit"))
   , ("Base (authorityarg)", Base "$$authorityarg")
   , ("Base (general)", Base "somevar")
-  , ("Tuple0", Tuple [])
-  , ("Tuple1", Tuple [mkV "v"])
-  , ("Tuple2", Tuple [mkV "v1", mkV "v2"])
+  , ("Tuple0", Tuple [] False)
+  , ("Tuple1", Tuple [mkV "v"] False)
+  , ("Tuple2", Tuple [mkV "v1", mkV "v2"] False)
   , ("List0", List [])
   , ("List1", List [mkV "v"])
   , ("List2", List [mkV "v1", mkV "v2"])

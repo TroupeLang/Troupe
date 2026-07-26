@@ -1,0 +1,12 @@
+(* bigint equality is by value and kind-first: a bigint never equals a
+ * number or a string of the same digits *)
+let val _ = print (123n = 123n)
+    val _ = print (123n = 124n)
+    val _ = print (123 = 123n)
+    val _ = print (123n = 123)
+    val _ = print (2n = "2")
+    val _ = print ((1n, 2n) = (1n, 2n))
+    val _ = print ((1n, 2n) = (1n, 3n))
+    val _ = print ([1n, 2n] = [1n, 2n])
+    val _ = print ([1n] = [1])
+in () end

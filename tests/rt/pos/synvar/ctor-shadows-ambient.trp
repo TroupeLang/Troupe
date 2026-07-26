@@ -1,0 +1,13 @@
+(* A datatype constructor named `print` shadows the ambient `print`
+   builtin (SML-style). After the declaration, bare `print` is the
+   constructor in both expression and pattern position; the ambient
+   `print` is unreachable bare, so output goes through `printString`,
+   which stays reachable. *)
+datatype colour = print of int
+
+let fun describe (print 0) = "zero"
+      | describe (print _) = "nonzero"
+in
+  printString (describe (print 0));
+  printString (describe (print 7))
+end

@@ -1,0 +1,93 @@
+(* runall — run the LabeledSavina IFC-monitoring study from one place.
+ *
+ * Runs every descriptor in the LabeledSavina module (or a subset named on the
+ * command line) at its single size, one untimed warmup plus three timed
+ * repetitions, prints the Bench measurement lines as it goes, and writes three
+ * artifacts via SimpleFileIO under --io-root:
+ *
+ *   labeled-savina-results.txt   the raw measurement rows
+ *   labeled-savina-report.md     per-descriptor medians and per-unit costs
+ *   labeled-savina-charts.svg    small-multiple charts
+ *
+ * The descriptors and the report renderer are both program-relative modules
+ * (recompiled with the whole import graph on every run), so nothing needs
+ * publishing first:
+ *
+ *   ./local.sh examples/benchmarks/labeled-savina/runall.trp --io-root out
+ *   ./local.sh examples/benchmarks/labeled-savina/runall.trp --io-root out -- \
+ *       pingpong-k0 pingpong-k1 pingpong-k2 pingpong-k4 pingpong-k8
+ *
+ * LabeledSavina.all is a function of authority (a library-mode module has no
+ * ambient authority); this main-mode program applies it with its own root
+ * authority. The report renderer is Savina's SavinaReport module, reused
+ * verbatim; its title is passed in, so this suite renders under its own name.
+ *
+ * The whole suite runs in a single Troupe process; between descriptors the main
+ * mailbox is drained (a self-sent marker behind FIFO delivery bounds the
+ * drain), so a descriptor that leaked a message cannot confuse the next one — a
+ * nonzero drain count is reported.
+ *)
+
+import Outcome
+import { writeFile } SimpleFileIO
+import List
+import String
+import Bench
+import "../../savina/SavinaReport"
+import "./LabeledSavina"
+
+datatype Atoms = FLUSHMARK
+
+let val args = getCliArgs authority
+    (* LabeledSavina.all is a function of authority (the module holds no ambient
+     * authority); apply it with this program's root authority. *)
+    val descriptors = LabeledSavina.all authority
+
+    val selected =
+        if List.length args = 0 then descriptors
+        else List.filter (fn d => List.length
+                                    (List.filter (fn a => a = d.name) args) > 0)
+                         descriptors
+
+    val unknown =
+        List.filter (fn a => List.length
+                               (List.filter (fn d => d.name = a) descriptors) = 0)
+                    args
+
+    fun flushMailbox () =
+        let val _ = send (self (), FLUSHMARK)
+            fun drain n =
+                receive [ hn FLUSHMARK => n
+                        , hn _         => drain (n + 1) ]
+        in drain 0 end
+
+    fun runOne d =
+        let val rows = Bench.collectRows authority d.name d.sizes 3 d.bench d.check
+            val leaked = flushMailbox ()
+            val _ = if leaked > 0
+                    then print (d.name, "leaked messages into main mailbox:", leaked)
+                    else ()
+        in List.map (fn (n, _, ms, ok) => (d.name, n, ms, ok)) rows end
+
+    fun runAll ([], acc)      = List.reverse acc
+      | runAll (d :: ds, acc) =
+          runAll (ds, List.append (List.reverse (runOne d)) acc)
+
+    fun save (path, content) =
+        case writeFile (authority, path, content) of
+          OK _ => print ("wrote", path)
+        | ERR e => print ("write error", path, e.reason)
+
+in if List.length unknown > 0
+   then print ("unknown benchmarks:", unknown)
+   else
+     let val rows = runAll (selected, [])
+         val summaries = SavinaReport.summarize rows
+         val _ = save ("labeled-savina-results.txt", SavinaReport.resultLines rows ^ "\n")
+         val _ = save ("labeled-savina-report.md", SavinaReport.markdown ("Labeled Savina results", summaries) ^ "\n")
+         val _ = save ("labeled-savina-charts.svg", SavinaReport.svg summaries)
+         val failed = List.filter (fn (_, ok, _) => not ok) summaries
+     in print (List.length summaries, "descriptors run,",
+               List.length failed, "with failures")
+     end
+end

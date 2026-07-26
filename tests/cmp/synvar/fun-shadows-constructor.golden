@@ -1,0 +1,1 @@
+tests/cmp/synvar/fun-shadows-constructor.trp:5:9: RED is a constructor of datatype color and cannot be used as a function name

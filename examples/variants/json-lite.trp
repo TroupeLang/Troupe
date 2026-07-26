@@ -1,0 +1,47 @@
+(* A JSON-like value model with a recursive datatype and a renderer.
+ *
+ * Demonstrates:
+ *   - a recursive datatype (value) modelling JSON scalars and arrays, where
+ *     arr of value list gives an array as a list of values. The payload type
+ *     applies the built-in list type constructor to the user datatype value,
+ *     which the recursion goes through;
+ *   - a renderer defined by constructor patterns, mapping over the array
+ *     payload with the standard-library List module.
+ *
+ * Type application in `of` clauses: a payload may apply the built-in `list`
+ * constructor to a user datatype (`value list`, as arr does here) or apply a
+ * user-defined parameterised datatype to arguments (e.g. `int box` for a
+ * `datatype 'a box`). The applied argument count must match the target's
+ * declared parameter count.
+ *
+ *   ./local.sh examples/variants/json-lite.trp --localonly
+ *
+ * Expected: two sample values rendered as JSON text.
+ *)
+
+import List
+import String
+
+datatype value = null
+               | bool of bool
+               | num of int
+               | str of string
+               | arr of value list
+
+let val q = "\x22"                              (* a double-quote character *)
+
+    (* Render a value to a JSON string. *)
+    fun render null      = "null"
+      | render (bool b)  = if b then "true" else "false"
+      | render (num n)   = toString n
+      | render (str s)   = q ^ s ^ q
+      | render (arr xs)  = "[" ^ String.concatWith "," (List.map render xs) ^ "]"
+
+    val v1 = arr [null, bool true, num 42, str "hello"]
+    val v2 = arr [ num 1
+                 , arr [bool false, str "nested"]
+                 , null
+                 ]
+in print (render v1)
+ ; print (render v2)
+end

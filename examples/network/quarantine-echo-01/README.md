@@ -9,9 +9,15 @@ This example demonstrates trust-based information flow control between two nodes
 
 When the client sends information labeled at `{alice}` to the server:
 1. The client can send because it trusts the server at that level
-2. When the server receives the message, it gets downgraded to `BOT` because the server doesn't trust the client
+2. Because the server does not trust the client, the message arrives with null integrity and a
+   per-message **quarantine authority** in its metadata record. The server's gate — `raisembox`, a
+   ranged `rcv`, then `lowermbox`, `blockdown` and explicit `downgrade` calls with its own authority
+   — brings the payload back to `{}` before use, and it sends the reply under that quarantine
+   authority (`invokeAtLevel`). The client extracts `quarantineAuth` from the reply metadata with
+   `rcvp` and calls `endorse` on the response it receives.
 
-This demonstrates runtime trust-based downgrading of information.
+This demonstrates quarantining data from an untrusted peer: nothing arrives usable, and each side
+has to downgrade or endorse explicitly. Both nodes run with `--debugquarantine`.
 
 ## Trust Configuration Approaches
 
@@ -67,11 +73,16 @@ make clean   # Removes generated files and kills any running server
 
 ## Expected Output
 
+Each side prints the values it handles with `printWithLabels`, so the labels appear next to the
+data rather than on lines of their own.
+
 **Server output:**
 ```
 SERVER: waiting for messages...
-SERVER: Received echo request: Hello from alice
-SERVER: Level of received msg: <;>   # BOT level - downgraded!
+SERVER: Received echo request
+SERVER: Sending node id
+SERVER: Received msg with labels:
+<the received string, printed with its labels>
 SERVER: Sent reply
 ```
 
@@ -79,13 +90,16 @@ SERVER: Sent reply
 ```
 CLIENT: Starting echo client
 CLIENT: Found echo server
-CLIENT: Level of test_msg: <alice;alice>
+CLIENT: test_msg with labels:
 CLIENT: Sending message at level {alice}
-CLIENT: Received response: Hello from alice
-CLIENT: Level of response: ...
+CLIENT: Received response (raw) with labels:
+CLIENT: Got quarantine authority:
+CLIENT: Response after endorsement with labels:
+CLIENT: Echo test completed
 ```
 
-The key observation is that the server sees the message at `BOT` level (`<;>`) even though the client sent it at `{alice}` level, because the server doesn't trust the client.
+The key observation is that data from an untrusted peer arrives with null integrity and a quarantine
+authority attached, so the client's response is unusable until it endorses it with that authority.
 
 ## Next Steps
 

@@ -81,9 +81,6 @@ function buildArchyTree(
         case TroupeType.STRING:
             return { label: c.stringValue(`"${rawVal}"`) + labels }
 
-        case TroupeType.ATOM:
-            return { label: rawVal.atom + labels }
-
         case TroupeType.LEVEL:
             return { label: rawVal.stringRep() + labels }
 

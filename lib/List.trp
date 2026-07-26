@@ -1,3 +1,5 @@
+import Option
+
 let (* -- List Access -- *)
 
     (** Returns the head of the list, i.e. `nth 0 l`. This results in a runtime error if the list is
@@ -82,12 +84,34 @@ let (* -- List Access -- *)
       | sublist 0 n x::xs = x::(sublist 0 (n - 1) xs)
       | sublist m n x::xs = sublist (m - 1) (n - 1) xs
 
+    (** The first `n` elements of `xs`, or all of `xs` when it is shorter. `n <= 0` yields `[]`.
+     *  Not tail-recursive. *)
+    fun take n xs =
+        let fun go 0 _     = []
+              | go _ []    = []
+              | go k y::ys = y::(go (k - 1) ys)
+        in if n <= 0 then [] else go n xs
+        end
+
+    (** `xs` without its first `n` elements; `[]` when `xs` is shorter. `n <= 0` yields `xs`.
+     *  Tail-recursive. *)
+    fun drop n xs =
+        let fun go 0 ys    = ys
+              | go _ []    = []
+              | go k _::ys = go (k - 1) ys
+        in if n <= 0 then xs else go n xs
+        end
+
     (** Catenate `ys` to `xs` at `index` (zero indexed). Not tail-recursive. *)
     fun appendAt xs ys index =
         let val xsFront = sublist 0 index xs
             val xsBack  = sublist index (length xs) xs
         in append xsFront (append ys xsBack)
         end
+
+    (** Catenate all lists in `xss`, in order. Not tail-recursive. *)
+    fun concat []      = []
+      | concat xs::xss = append xs (concat xss)
 
     (* -- List Iterators -- *)
 
@@ -112,11 +136,25 @@ let (* -- List Access -- *)
     (** Left-fold of `f` on a non-empty list using the head as the initial value. *)
     fun foldl1 f x::xs = foldl f x xs
 
-    (* TODO: foldr *)
+    (** Right-fold of `f` with start `y` over a list. Tail-recursive (folds left
+        over the reversed list). *)
+    fun foldr f y xs = foldl f y (reverse xs)
 
     (** Returns the sublist of elements that satisfy `f`. Not tail-recursive. *)
     fun filter f []    = []
       | filter f x::xs = let val xs' = filter f xs in if f x then x::xs' else xs' end
+
+    (** Returns `SOME x` for the first element that satisfies `f`;
+        otherwise `NONE`. Tail-recursive. *)
+    fun find f []    = NONE
+      | find f x::xs = if f x then SOME x else find f xs
+
+    (** Map `f` over the list, keeping the values of the `SOME` results
+        and dropping the `NONE` ones. Not tail-recursive. *)
+    fun mapPartial f []    = []
+      | mapPartial f x::xs = case f x of
+                               SOME v => v :: mapPartial f xs
+                             | NONE   => mapPartial f xs
 
     (** Same as `List.filter` but `f` is applied to the index of the element as first argument
         (counting from 0), and the element itself as second argument. Not tail-recursive. *)
@@ -143,6 +181,21 @@ let (* -- List Access -- *)
         in (reverse a, reverse b)
         end
 
+    (** The longest prefix of `xs` whose elements all satisfy `f`. Not tail-recursive. *)
+    fun takeWhile f []    = []
+      | takeWhile f x::xs = if f x then x::(takeWhile f xs) else []
+
+    (** `xs` without the longest prefix whose elements all satisfy `f`. Tail-recursive. *)
+    fun dropWhile f []    = []
+      | dropWhile f x::xs = if f x then dropWhile f xs else x::xs
+
+    (** `(takeWhile f xs, dropWhile f xs)`, computed in one pass. Tail-recursive. *)
+    fun span f xs =
+        let fun go acc []    = (reverse acc, [])
+              | go acc y::ys = if f y then go (y::acc) ys else (reverse acc, y::ys)
+        in go [] xs
+        end
+
     (* -- List Generation -- *)
 
     (** Returns the list of elements `[0, .., n-1]`. Tail-recursive. *)
@@ -152,6 +205,9 @@ let (* -- List Access -- *)
                        |  rng k acc = rng (k-1) (k::acc)
                   in rng (n-1) []
                   end
+
+    (** Returns `[f 0, f 1, ..., f (n-1)]`. Not tail-recursive (uses `map`). *)
+    fun tabulate n f = map f (range n)
 
     (* -- Sorting -- *)
 
@@ -228,6 +284,11 @@ in [ ("head", head)
    , ("revAppend", revAppend)
    , ("appendAt", appendAt)
    , ("sublist", sublist)
+   , ("take", take)
+   , ("drop", drop)
+   , ("takeWhile", takeWhile)
+   , ("dropWhile", dropWhile)
+   , ("span", span)
    , ("map", map)
    , ("mapi", mapi)
    , ("foldl", foldl)
@@ -240,5 +301,10 @@ in [ ("head", head)
    , ("max", max)
    , ("min", min)
    , ("sort", sort)
+   , ("foldr", foldr)
+   , ("concat", concat)
+   , ("find", find)
+   , ("mapPartial", mapPartial)
+   , ("tabulate", tabulate)
    ]
 end

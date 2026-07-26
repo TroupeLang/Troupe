@@ -1,5 +1,6 @@
 import Number
 import List
+import Option
 
 
 let
@@ -47,13 +48,17 @@ let
      * if it a string of length 1. *)
     fun str c = c
 
-    (* TODO: `strCode` where 'c' is a charCode that is converted. *)
+    (** The one-character string for the given Unicode code point `c` (0..0x10FFFF); the inverse of
+     *  `subCode`. Code points beyond the basic plane produce the corresponding surrogate pair. *)
+    fun strCode c = charFromCode c
 
     (** Returns the string containing the characters in the list `xs`. This is equivalent to
      *  `concat (List.map str xs)`. *)
     val implode = concat
 
-    (* TODO: `implodeCode` to create a string from a list of charCodes (with or without NULL). *)
+    (** Returns the string built from the list of code points `xs`, i.e. `concat (List.map strCode
+     *  xs)`. *)
+    fun implodeCode xs = concat (List.map strCode xs)
 
     (** Returns the list of characters in the string `s`. *)
     fun explode s = let fun go 0 acc = acc
@@ -62,15 +67,39 @@ let
 
     (* TODO: `explodeCode` where one obtaing the list of all charCodes (with NULL termination?). *)
 
-    (** Applies `f` to each element of `f` from left to right, returning the resulting string. *)
-    fun map f s = implode(List.map f (explode s))
+    (** Returns the string generated from `s` by mapping each character in `s` by `f`.
+     *
+     * Scanned in place rather than exploded into a list: the characters `f` leaves alone are
+     * copied as whole runs, so a translation that touches a few characters of a long string --
+     * escaping, mostly -- allocates once per touched character rather than once per character.
+     * `f` is still applied to every character, as a one-character string. *)
+    fun translate f s =
+        let val n = size s
+            (* `from` is the start of the run not yet copied into `acc`. *)
+            fun go i from acc =
+                if i >= n then acc ^ substring (s, from, n)
+                else let val c = sub (s, i)
+                         val r = f c
+                     in if r = c then go (i + 1) from acc
+                        else go (i + 1) (i + 1) (acc ^ substring (s, from, i) ^ r)
+                     end
+        in go 0 0 "" end
+
+    (* TODO: `translateCode` where one maps over charCodes instead. `translate` still builds a
+     * one-character string per position to pass to `f`, which a code-point version would not. *)
+
+    (** Applies `f` to each character of `s` from left to right, returning the resulting string.
+     *
+     * The same operation as `translate`, which does not require `f` to return a single
+     * character. *)
+    val map = translate
 
     (* TODO: `mapCode` where one maps over charCodes instead. *)
 
-    (** Returns the string generated from `s` by mapping each character in `s` by `f`.  *)
-    fun translate f s = concat(List.map f (explode s))
+    (*--- Repetition ---*)
 
-    (* TODO: `translateCode` where one maps over charCodes instead. *)
+    (** The string `s` repeated `n` times; the empty string when `n <= 0`. *)
+    fun repeat n s = if n <= 0 then "" else s ^ repeat (n - 1) s
 
     (*--- Padding ---*)
 
@@ -78,18 +107,78 @@ let
      *  If `s` is already at least `n` characters, returns `s` unchanged. *)
     fun padLeft n c s =
         let val len = size s
-            fun repeat 0 = ""
-              | repeat k = c ^ repeat (k - 1)
-        in if len >= n then s else repeat (n - len) ^ s
+        in if len >= n then s else repeat (n - len) c ^ s
         end
 
     (** Pad string `s` on the right with character `c` to reach width `n`.
      *  If `s` is already at least `n` characters, returns `s` unchanged. *)
     fun padRight n c s =
         let val len = size s
-            fun repeat 0 = ""
-              | repeat k = c ^ repeat (k - 1)
-        in if len >= n then s else s ^ repeat (n - len)
+        in if len >= n then s else s ^ repeat (n - len) c
+        end
+
+    (*--- Prefixes, suffixes, and searching ---*)
+
+    (** Returns true if `s` begins with `prefix`. *)
+    fun startsWith prefix s =
+        let val pl = size prefix
+        in if size s < pl then false else substring (s, 0, pl) = prefix
+        end
+
+    (** Returns true if `s` ends with `suffix`. *)
+    fun endsWith suffix s =
+        let val sl = size suffix
+            val n  = size s
+        in if n < sl then false else substring (s, n - sl, n) = suffix
+        end
+
+    (** Returns `SOME i` for the least `i` at which `needle` occurs in
+     *  `s`; otherwise `NONE`. The empty needle matches at 0. *)
+    fun indexOf needle s =
+        let val nl = size needle
+            val n  = size s
+            fun go i = if i + nl > n then NONE
+                       else if substring (s, i, i + nl) = needle then SOME i
+                       else go (i + 1)
+        in go 0 end
+
+    (*--- Splitting ---*)
+
+    (** Splits `s` into the maximal substrings separated by occurrences of the
+     *  separator `sep`. Consecutive separators yield empty strings; a leading
+     *  or trailing separator yields a leading or trailing empty string. An
+     *  empty separator does not split (`split "" s` is `[s]`). Not
+     *  tail-recursive. *)
+    fun split sep s =
+        let val sl = size sep
+            val n  = size s
+            fun go start i =
+                if i + sl > n
+                then [substring (s, start, n)]
+                else if substring (s, i, i + sl) = sep
+                then substring (s, start, i) :: go (i + sl) (i + sl)
+                else go start (i + 1)
+        in if sl = 0 then [s] else go 0 0
+        end
+
+    (** Splits `s` on newlines. Inverse of `unlines`. *)
+    fun lines s = split "\n" s
+
+    (** Joins `xs` with newlines. Inverse of `lines`. *)
+    fun unlines xs = concatWith "\n" xs
+
+    (*--- Trimming ---*)
+
+    (** Removes leading and trailing ASCII whitespace (space, tab, newline,
+     *  carriage return) from `s`. *)
+    fun trim s =
+        let val n = size s
+            fun isSpace c = c = " " orelse c = "\t" orelse c = "\n" orelse c = "\r"
+            fun startIdx i = if i < n andalso isSpace (sub (s, i)) then startIdx (i + 1) else i
+            fun endIdx j = if j > 0 andalso isSpace (sub (s, j - 1)) then endIdx (j - 1) else j
+            val a = startIdx 0
+            val b = endIdx n
+        in if a >= b then "" else substring (s, a, b)
         end
 
 in [ ("maxSize", maxSize)
@@ -100,11 +189,21 @@ in [ ("maxSize", maxSize)
    , ("concat", concat)
    , ("concatWith", concatWith)
    , ("str", str)
+   , ("strCode", strCode)
    , ("implode", implode)
+   , ("implodeCode", implodeCode)
    , ("explode", explode)
    , ("map", map)
    , ("translate", translate)
    , ("padLeft", padLeft)
    , ("padRight", padRight)
+   , ("repeat", repeat)
+   , ("startsWith", startsWith)
+   , ("endsWith", endsWith)
+   , ("indexOf", indexOf)
+   , ("split", split)
+   , ("lines", lines)
+   , ("unlines", unlines)
+   , ("trim", trim)
    ]
 end

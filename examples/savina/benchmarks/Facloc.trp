@@ -1,0 +1,62 @@
+(* Savina facloc: online facility location; a chain of open facilities each
+ * either accepts a point in radius or forwards it, opening new facilities.
+ * Checks every point is covered and counts match. Exports `descriptor`. *)
+
+import List
+
+datatype msg = Point of float * float | StopChain
+             | Report of float * float * int | ChainDone
+
+let val radius2 = 10000.0   (* radius 100, squared *)
+    val range = 1000.0
+    fun facility (cx, cy, main) =
+        let fun loop (next, accepted) =
+                receive
+                  [ hn (Point (x, y)) =>
+                      let val dx = x - cx
+                          val dy = y - cy
+                      in if dx * dx + dy * dy <= radius2
+                         then loop (next, accepted + 1)
+                         else case next of
+                                [] => loop ([spawn (fn () => facility (x, y, main))],
+                                            accepted)
+                              | nf :: _ => (send (nf, Point (x, y));
+                                            loop (next, accepted))
+                      end
+                  , hn StopChain =>
+                      (send (main, Report (cx, cy, accepted));
+                       case next of
+                         []      => send (main, ChainDone)
+                       | nf :: _ => send (nf, StopChain)) ]
+        in loop ([], 1) end   (* the founding point counts as accepted *)
+    fun bench n =
+        let val main = self ()
+            val points = List.map (fn _ => (random () * range, random () * range))
+                                  (List.range n)
+            val (x0, y0) = List.head points
+            val root = spawn (fn () => facility (x0, y0, main))
+            val _ = List.map (fn (x, y) => send (root, Point (x, y)))
+                             (List.tail points)
+            val _ = send (root, StopChain)
+            fun collect (centers, total) =
+                receive
+                  [ hn (Report (cx, cy, c)) =>
+                      collect ((cx, cy) :: centers, total + c)
+                  , hn ChainDone => (centers, total) ]
+            val (centers, total) = collect ([], 0)
+            fun covered (x, y) =
+                let fun go [] = false
+                      | go ((cx, cy) :: cs) =
+                          let val dx = x - cx
+                              val dy = y - cy
+                          in dx * dx + dy * dy <= radius2 orelse go cs end
+                in go centers end
+            fun allCovered [] = true
+              | allCovered ((x, y) :: ps) = covered (x, y) andalso allCovered ps
+        in (total, allCovered points) end
+    val descriptor =
+        { name  = "facloc"
+        , bench = bench
+        , check = fn n => fn (total, cov) => total = n andalso cov
+        , sizes = [1000, 4000, 10000] }
+in [ ("descriptor", descriptor) ] end

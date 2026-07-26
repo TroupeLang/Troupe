@@ -40,7 +40,7 @@ type CC = RWS
             FreshCounter                  -- state:  the counter for fresh name generation
 
 
-type CCEnv   = (CompileMode, C.Atoms, NestingLevel, Map VarName VarLevel, Maybe VarName)
+type CCEnv   = (CompileMode, NestingLevel, Map VarName VarLevel, Maybe VarName)
 type Frees   = [(VarName, NestingLevel)]
 type FunDefs = [CCIR.LFunDef]
 type ConstEntry = (VarName, C.Lit)
@@ -54,9 +54,8 @@ consBB:: CCIR.LIRInst -> CCIR.IRBBTree -> CCIR.IRBBTree
 consBB i (BB insts t) = BB (i:insts) t
 
 insVar :: VarName -> CCEnv -> CCEnv
-insVar vn (compileMode, atms, lev, vmap, fname) =
+insVar vn (compileMode, lev, vmap, fname) =
     ( compileMode
-    , atms
     , lev
     , Map.insert vn (VarNested lev) vmap
     , fname
@@ -68,12 +67,12 @@ insVars vars ccenv =
 
 
 askLev = do
-  (_, _, lev, _, _) <- ask
+  (_, lev, _, _) <- ask
   return lev
 
 
-incLev fname (compileMode, atms, lev, vmap, _) =
-    (compileMode, atms, lev + 1, vmap, (Just fname))
+incLev fname (compileMode, lev, vmap, _) =
+    (compileMode, lev + 1, vmap, (Just fname))
 
 
 -- this helper function looks up the variable name
@@ -82,7 +81,7 @@ incLev fname (compileMode, atms, lev, vmap, _) =
 
 transVar :: VarName -> CC VarAccess
 transVar v@(VN vname) = do
-  (_, C.Atoms atms, lev, vmap, maybe_fname) <- ask
+  (_, lev, vmap, maybe_fname) <- ask
   case maybe_fname of
     Just fname | fname == v  -> return $ VarFunSelfRef
     _ ->
@@ -95,9 +94,7 @@ transVar v@(VN vname) = do
           else
             return $ VarLocal v
         Nothing ->
-          if vname `elem` atms
-            then return $ VarLocal v
-            else internalError $ "undeclared variable: " ++ (show v)
+          internalError $ "undeclared variable: " ++ (show v)
 
 -- | Translate a Located VarName (LVarName) to Located VarAccess (LVarAccess)
 -- Preserves the source position from the input
@@ -178,9 +175,9 @@ cpsToIR (Loc pos (CPS.LetSimple vname@(VN ident) (Loc stPos st) lkt)) = do
         CPS.Un unop lv -> do
           lv' <- transLVar lv
           return $ Just $ Loc stPos $ CCIR.Assign vname (Un unop lv')
-        CPS.Tuple lst -> do
+        CPS.Tuple lst tag -> do
           lst' <- transLVars lst
-          return $ Just $ Loc stPos $ CCIR.Assign vname (Tuple lst')
+          return $ Just $ Loc stPos $ CCIR.Assign vname (Tuple lst' tag)
         CPS.Record fields -> do
           fields' <- transLFields fields
           return $ Just $ Loc stPos $ CCIR.Assign vname (Record fields')
@@ -244,7 +241,7 @@ cpsToIR (Loc _pos (CPS.LetFun lfdefs lkt)) = do
 cpsToIR (Loc pos (CPS.Halt v)) = do
     v' <- transVar v
     let lv' = Loc pos v'  -- Wrap VarAccess with position to create LVarAccess
-    (compileMode,_ , _ , _, _ ) <- ask
+    (compileMode, _, _, _) <- ask
     let terminator =
           case compileMode of
               -- Compiling library, then generate export instruction
@@ -300,10 +297,8 @@ cpsToIR (Loc pos (CPS.Error v)) = do
 ------------------------------------------------------------
 
 closureConvert :: CompileMode -> CPS.Prog -> Except String CCIR.IRProgram
-closureConvert compileMode (CPS.Prog (C.Atoms atms) lkt) =
-  let atms' = C.Atoms atms
-      initEnv = ( compileMode
-                , atms'
+closureConvert compileMode (CPS.Prog lkt) =
+  let initEnv = ( compileMode
                 , 0 -- initial nesting counter
                 , Map.empty
                 , Nothing -- top level code has no function name
@@ -324,7 +319,7 @@ closureConvert compileMode (CPS.Prog (C.Atoms atms) lkt) =
       -- Wrap FunDef with Located (NoPos since it's compiler-generated)
       main = Loc NoPos $ FunDef (HFN toplevel) (Loc NoPos (VN argumentName)) consts bb
 
-      irProg = CCIR.IRProgram (C.Atoms atms) $ fdefs++[main]
+      irProg = CCIR.IRProgram $ fdefs++[main]
     in do CCIR.wfIRProg irProg
           return irProg
     -- then irProg

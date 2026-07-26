@@ -1,0 +1,9 @@
+(* A bare constructor whose name matches both a local datatype's constructor
+   and an imported one, with DISTINCT tags (different groups), is ambiguous.
+   Qualification (hue.RED or VariantsDemo.color.RED) resolves it; used bare it
+   is a static error. *)
+import VariantsDemo
+
+datatype hue = RED | AMBER
+
+let val x = RED in describe x end

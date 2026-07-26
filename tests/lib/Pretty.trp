@@ -1,0 +1,64 @@
+import Unit
+import Pretty
+
+let val t = Pretty.text
+    val tests = Unit.group "Pretty" [
+            Unit.group "beside and above" [
+                Unit.it "beside concatenates"
+                        (Unit.isEq "ab" (Pretty.render 80 (t "a" <.> t "b")))
+              , Unit.it "beside-space separates"
+                        (Unit.isEq "f (a)" (Pretty.render 80 (t "f" <+> Pretty.parens (t "a"))))
+              , Unit.it "above stacks"
+                        (Unit.isEq "a\nb" (Pretty.render 80 (t "a" $$ t "b")))
+              , Unit.it "operators group at the HughesPJ levels"
+                        (Unit.isEq "ab\ncd" (Pretty.render 80 (t "a" <.> t "b" $$ t "c" <.> t "d")))
+              , Unit.it "beside hangs at the right operand's start column"
+                        (Unit.isEq "abc\n  d" (Pretty.render 80 (t "ab" <.> (t "c" $$ t "d"))))
+            ],
+            Unit.group "empty is an identity" [
+                Unit.it "no leading space"  (Unit.isEq "x" (Pretty.render 80 (Pretty.empty <+> t "x")))
+              , Unit.it "no trailing space" (Unit.isEq "x" (Pretty.render 80 (t "x" <+> Pretty.empty)))
+              , Unit.it "no blank line"     (Unit.isEq "x" (Pretty.render 80 (Pretty.empty $$ t "x")))
+            ],
+            Unit.group "nest and hang" [
+                Unit.it "nest indents lines after a break"
+                        (Unit.isEq "head\n  body"
+                                   (Pretty.render 80 (t "head" $$ Pretty.nest 2 (t "body"))))
+              , Unit.it "nest is invisible beside"
+                        (Unit.isEq "ab" (Pretty.render 80 (t "a" <.> Pretty.nest 2 (t "b"))))
+              , Unit.it "hang hangs under the head"
+                        (Unit.isEq "let\n    x" (Pretty.render 80 (Pretty.hang (t "let") 4 (t "x"))))
+            ],
+            Unit.group "sep and cat" [
+                Unit.it "sep fits on one line"
+                        (Unit.isEq "f a b" (Pretty.render 80 (Pretty.sep [t "f", t "a", t "b"])))
+              , Unit.it "sep stacks when narrow"
+                        (Unit.isEq "f\na\nb" (Pretty.render 3 (Pretty.sep [t "f", t "a", t "b"])))
+              , Unit.it "cat concatenates when it fits"
+                        (Unit.isEq "fab" (Pretty.render 80 (Pretty.cat [t "f", t "a", t "b"])))
+              , Unit.it "nested sep fits as a whole"
+                        (Unit.isEq "aaaa bb cc"
+                                   (Pretty.render 10 (Pretty.sep [t "aaaa", Pretty.sep [t "bb", t "cc"]])))
+              , Unit.it "stacked sep respects nesting"
+                        (Unit.isEq "f\n  a\n  b"
+                                   (Pretty.render 3 (t "f" $$ Pretty.nest 2 (Pretty.sep [t "a", t "b"]))))
+            ],
+            Unit.group "hsep hcat vcat punctuate" [
+                Unit.it "hsep" (Unit.isEq "a b" (Pretty.render 1 (Pretty.hsep [t "a", t "b"])))
+              , Unit.it "hcat" (Unit.isEq "ab" (Pretty.render 1 (Pretty.hcat [t "a", t "b"])))
+              , Unit.it "vcat" (Unit.isEq "a\nb" (Pretty.render 80 (Pretty.vcat [t "a", t "b"])))
+              , Unit.it "punctuate"
+                        (Unit.isEq "a,b,c"
+                                   (Pretty.render 80 (Pretty.hcat (Pretty.punctuate Pretty.comma [t "a", t "b", t "c"]))))
+            ],
+            Unit.group "wrappers and constants" [
+                Unit.it "brackets" (Unit.isEq "[x]" (Pretty.render 80 (Pretty.brackets (t "x"))))
+              , Unit.it "braces"   (Unit.isEq "{x}" (Pretty.render 80 (Pretty.braces (t "x"))))
+              , Unit.it "quotes"   (Unit.isEq "'x'" (Pretty.render 80 (Pretty.quotes (t "x"))))
+              , Unit.it "named aliases match the operators"
+                        (Unit.isEq "ab\ncd"
+                                   (Pretty.render 80 (Pretty.above (Pretty.beside (t "a") (t "b"))
+                                                                   (Pretty.beside (t "c") (t "d")))))
+            ]
+        ]
+in Unit.run authority tests end

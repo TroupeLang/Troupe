@@ -1,0 +1,26 @@
+(* Savina benchmark: Thread Ring (microbenchmark group).
+ *
+ * R actors form a ring; a token holding a hop countdown is passed around the
+ * ring n times in total. Measures point-to-point message forwarding and
+ * scheduler behavior under many always-ready processes.
+ *
+ * The ring is wired in two phases: actors are spawned first, then each
+ * receives its successor pid and its own index. Termination propagates as a
+ * STOP message with its own countdown so no message is ever sent to a
+ * terminated process.
+ *
+ *   ./local.sh examples/savina/threadring.trp                 # default sizes
+ *   ./local.sh examples/savina/threadring.trp -- 10000 50000  # explicit sizes
+ *
+ * Result: index of the actor holding the token after n hops; ok iff it
+ * equals n mod R (ring size R = 100).
+ *)
+
+import List
+import Bench
+import "./Savina"
+
+let val d = case List.filter (fn d => d.name = "threadring") Savina.all of [d] => d
+    val sizes = Bench.sizesFromArgs (getCliArgs authority) d.sizes
+in Bench.run authority d.name sizes 3 d.bench d.check
+end

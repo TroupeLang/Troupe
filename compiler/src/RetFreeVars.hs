@@ -4,7 +4,6 @@
 module RetFreeVars where
 
 import RetCPS as CPS
-import qualified Core as C
 import Data.Set (Set)
 import qualified Data.Set as Set
 import TroupePositionInfo (Located(..), unLoc)
@@ -39,7 +38,6 @@ instance FreeNames LKTerm where
 
 instance FreeNames SVal where
   freeVars (KAbs klam) = freeVars klam
-  freeVars (Lit (C.LAtom nm)) = FreeVars (Set.singleton $ VN nm)
   freeVars _ = emptyFreeVars
 
 instance FreeNames ContDef where
@@ -60,7 +58,7 @@ instance FreeNames SimpleTerm where
   freeVars (Bin _ lv1 lv2) = FreeVars (Set.fromList [unLocVar lv1, unLocVar lv2])
   freeVars (Un _ lv) = FreeVars (Set.singleton (unLocVar lv))
   freeVars (ValSimpleTerm sval) = freeVars sval
-  freeVars (Tuple lvs) = FreeVars (Set.fromList (map unLocVar lvs))
+  freeVars (Tuple lvs _) = FreeVars (Set.fromList (map unLocVar lvs))
   freeVars (List lvs)  = FreeVars (Set.fromList (map unLocVar lvs))
   freeVars (ListCons lv1 lv2) = FreeVars (Set.fromList [unLocVar lv1, unLocVar lv2])
   freeVars (Base _ ) = FreeVars $ Set.empty

@@ -10,7 +10,7 @@ import qualified Basics
 
 
 mkP :: IRInst -> IRProgram
-mkP inst = IRProgram (Core.Atoms []) [Loc NoPos (FunDef (HFN "main") (mkVN "arg") [] body)]
+mkP inst = IRProgram [Loc NoPos (FunDef (HFN "main") (mkVN "arg") [] body)]
   where body = BB [mkLInst inst] (mkLTerm (LibExport (mkV "r")))
 
 tcs :: [(String, IRProgram)]

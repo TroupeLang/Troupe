@@ -1,0 +1,20 @@
+(* A local datatype whose payload references an imported type. The reference to
+   `shape` becomes an `ext` node carrying VariantsDemo's group hash, so nested
+   values built and matched here interoperate with the library's `area`. This
+   exercises the cross-module dependency-closure (Ext) mechanism end to end. *)
+import List
+import VariantsDemo
+
+datatype tagged = LABELED of string * shape | BLANK
+
+let val items = [ LABELED ("disc", CIRCLE 4), BLANK, LABELED ("box", RECT (2, 3)) ]
+
+    fun report (LABELED (name, _)) = name
+      | report BLANK               = "blank"
+
+    fun measure (LABELED (_, sh)) = area sh   (* area is the imported function *)
+      | measure BLANK             = 0
+in print (LABELED ("x", CIRCLE 1));   (* a nested imported-constructor value *)
+   print (map report items);
+   print (map measure items)
+end

@@ -1,0 +1,8 @@
+(* bigints travel in messages between processes *)
+let val main = self ()
+    val p = spawn (fn () =>
+        receive [ hn x => send (main, bigAdd (x, 1n)) ])
+    val _ = send (p, 41n)
+    val echoed = receive [ hn r => r ]
+in print echoed
+end

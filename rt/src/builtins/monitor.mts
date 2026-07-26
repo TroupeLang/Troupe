@@ -14,7 +14,7 @@ export function BuiltinMonitors <TBase extends Constructor<UserRuntimeZero>> (Ba
 
             // 1. find the thread corresponding to that tid 
 
-            let t = this.runtime.__sched.__alive[tid.toString()];
+            let t = this.runtime.__sched.__alive.get(tid.toString());
             // 2. update the monitor state of that thread
 
             let r = this.runtime.rt_mkuuid();

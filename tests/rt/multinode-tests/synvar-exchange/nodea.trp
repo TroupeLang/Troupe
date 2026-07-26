@@ -1,0 +1,42 @@
+(* Node A -- constructs variant values and sends them across the network to
+   node B. The datatype group below is COPY-PASTED, identical byte-for-byte,
+   into nodeb.trp. There is no shared import: A and B are compiled separately
+   and agree on the constructor tags purely by content addressing (the tag in
+   variant slot 0 embeds a SHA-256 of the declaration). If B's independently
+   compiled patterns match A's sent values, the hashes agree. *)
+
+datatype color = RED | GREEN | BLUE
+datatype shape = Circle of int
+               | Rect of int * int
+               | Group of shape list
+
+(* Node B does NOT declare this group. A value of `other` sent to B must fail
+   to match any of B's shape/color patterns and fall through to B's catch-all. *)
+datatype other = OTHER of int
+
+let val timeout_pid = spawn (fn () =>
+        let val _ = sleep 8000
+        in exit (authority, 124) (* timeout *)
+        end)
+in
+  let val _ = print "A: starting"
+      val _ = sleep 500 (* give B time to register its service *)
+      val sink = whereis ("@nodeb", "sink")
+      val _ = print "A: found sink service on node B"
+
+      (* applied constructor with an int payload *)
+      val _ = send (sink, Circle 7)
+      (* applied constructor with a tuple payload *)
+      val _ = send (sink, Rect (4, 5))
+      (* a variant nested inside another variant, inside a list *)
+      val _ = send (sink, Group [Circle 1, Rect (2, 2)])
+      (* nullary constructor *)
+      val _ = send (sink, GREEN)
+      (* a constructor from a group B does not declare -- must not match *)
+      val _ = send (sink, OTHER 99)
+
+      val _ = print "A: sent 5 values"
+      val _ = sleep 1000 (* allow delivery before exit *)
+  in exit (authority, 0)
+  end
+end

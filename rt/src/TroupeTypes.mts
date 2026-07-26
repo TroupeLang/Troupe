@@ -7,8 +7,9 @@ export const enum TroupeType {
   LEVEL=5,
   AUTHORITY=6,
   CAPABILITY=7,
-  ATOM=8,  
-  /* up until this point only base types */  
+  /* slot 8 is retired (was ATOM, a serialization tag) and must not be reused */
+  BIGINT=9,
+  /* up until this point only base types */
 
   /* aggregate types */
   CLOSURE=100,
@@ -62,7 +63,7 @@ export function getTroupeType (x:any) {
 
 /*
 export function isBaseType (t:TroupeType) {
-  return t <= TroupeType.ATOM
+  return t <= TroupeType.BIGINT
 }
 
 export function isAggregate(t:TroupeType) {

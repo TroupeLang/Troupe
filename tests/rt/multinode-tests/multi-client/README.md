@@ -13,9 +13,7 @@ The server processes requests from both clients and responds to each individuall
 ## Key Configuration Options
 
 - **coordination**: "parallel" - All nodes start simultaneously
-- **start_delay**: 
-  - Client1: 2 seconds - First client connects
-  - Client2: 3 seconds - Second client connects slightly later
-- **timeout**: 60 seconds - Allows for multiple message exchanges
+- **start_delay**: 1 second for both clients; the server has none
+- **timeout**: 45 seconds - Allows for multiple message exchanges
 - **expected_exit_code**: 0 for all nodes - Validates all communications succeeded
-- **ports**: Unique ports (6789-6791) prevent connection conflicts
+- **ports**: Unique ports (6791-6793) prevent connection conflicts

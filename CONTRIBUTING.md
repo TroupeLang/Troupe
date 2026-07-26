@@ -2,6 +2,10 @@
 
 Thank you for considering a contribution to Troupe! To ensure a smooth and productive workflow, please follow the guidelines below when opening pull requests or submitting code.
 
+This file covers the pull-request policy. For the test-suite layout and a worked example of adding
+a built-in function, see [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md); for build and test commands,
+see [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
+
 ## Pull Request Policy
 
 To maintain a clean and maintainable codebase, all pull requests must adhere to the following rules:

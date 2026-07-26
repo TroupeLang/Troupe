@@ -1,0 +1,1 @@
+tests/cmp/synvar/dup-datatype-in-group.trp:6:10: duplicate datatype t in declaration group (first declared at tests/cmp/synvar/dup-datatype-in-group.trp:5:10)

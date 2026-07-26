@@ -1,0 +1,72 @@
+2026-07-26T08:49:17.740Z [RTM] info: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+[34mbegin [0mSexp
+  [34mbegin [0mprint
+      [33m[ TEST ][0m it an atom prints as itself      [32m[ PASS ][0m it an atom prints as itself
+      [33m[ TEST ][0m it a string prints quoted      [32m[ PASS ][0m it a string prints quoted
+      [33m[ TEST ][0m it a list prints space-separated      [32m[ PASS ][0m it a list prints space-separated
+      [33m[ TEST ][0m it the empty list prints as ()      [32m[ PASS ][0m it the empty list prints as ()
+      [33m[ TEST ][0m it nesting prints with inner parentheses      [32m[ PASS ][0m it nesting prints with inner parentheses
+      [33m[ TEST ][0m it a string escapes quote, backslash, newline, tab, and return      [32m[ PASS ][0m it a string escapes quote, backslash, newline, tab, and return
+  [34mend [0m
+  [34mbegin [0mparse leaves
+      [33m[ TEST ][0m it an atom      [32m[ PASS ][0m it an atom
+      [33m[ TEST ][0m it punctuation is atom material      [32m[ PASS ][0m it punctuation is atom material
+      [33m[ TEST ][0m it a number stays an uninterpreted atom      [32m[ PASS ][0m it a number stays an uninterpreted atom
+      [33m[ TEST ][0m it a string literal      [32m[ PASS ][0m it a string literal
+      [33m[ TEST ][0m it an empty string literal      [32m[ PASS ][0m it an empty string literal
+      [33m[ TEST ][0m it escapes decode      [32m[ PASS ][0m it escapes decode
+  [34mend [0m
+  [34mbegin [0mparse lists
+      [33m[ TEST ][0m it the empty list      [32m[ PASS ][0m it the empty list
+      [33m[ TEST ][0m it nested lists      [32m[ PASS ][0m it nested lists
+      [33m[ TEST ][0m it mixed leaf kinds      [32m[ PASS ][0m it mixed leaf kinds
+      [33m[ TEST ][0m it whitespace is insignificant      [32m[ PASS ][0m it whitespace is insignificant
+      [33m[ TEST ][0m it a comment runs to end of line      [32m[ PASS ][0m it a comment runs to end of line
+      [33m[ TEST ][0m it leading and trailing atmosphere is skipped      [32m[ PASS ][0m it leading and trailing atmosphere is skipped
+      [33m[ TEST ][0m it deep nesting is accepted and round-trips      [32m[ PASS ][0m it deep nesting is accepted and round-trips
+  [34mend [0m
+  [34mbegin [0mparseAll
+      [33m[ TEST ][0m it reads every form in order      [32m[ PASS ][0m it reads every form in order
+      [33m[ TEST ][0m it one form      [32m[ PASS ][0m it one form
+      [33m[ TEST ][0m it empty input yields no forms      [32m[ PASS ][0m it empty input yields no forms
+      [33m[ TEST ][0m it atmosphere alone yields no forms      [32m[ PASS ][0m it atmosphere alone yields no forms
+      [33m[ TEST ][0m it a malformed form stops the sequence      [32m[ PASS ][0m it a malformed form stops the sequence
+  [34mend [0m
+  [34mbegin [0mround trip
+      [33m[ TEST ][0m it parse inverts print on the corpus      [32m[ PASS ][0m it parse inverts print on the corpus
+      [33m[ TEST ][0m it no corpus member fails      [32m[ PASS ][0m it no corpus member fails
+      [33m[ TEST ][0m it print inverts parse on a nested source      [32m[ PASS ][0m it print inverts parse on a nested source
+  [34mend [0m
+  [34mbegin [0merrors
+      [33m[ TEST ][0m it unterminated string points at the opening quote      [32m[ PASS ][0m it unterminated string points at the opening quote
+      [33m[ TEST ][0m it unterminated list points at its opening parenthesis      [32m[ PASS ][0m it unterminated list points at its opening parenthesis
+      [33m[ TEST ][0m it an unterminated outer list is reported, not the closed inner one      [32m[ PASS ][0m it an unterminated outer list is reported, not the closed inner one
+      [33m[ TEST ][0m it a close parenthesis with no list open      [32m[ PASS ][0m it a close parenthesis with no list open
+      [33m[ TEST ][0m it a second form is trailing input      [32m[ PASS ][0m it a second form is trailing input
+      [33m[ TEST ][0m it empty input      [32m[ PASS ][0m it empty input
+      [33m[ TEST ][0m it atmosphere with no form, at the end offset      [32m[ PASS ][0m it atmosphere with no form, at the end offset
+      [33m[ TEST ][0m it an unknown escape points at the escaped character      [32m[ PASS ][0m it an unknown escape points at the escaped character
+      [33m[ TEST ][0m it a backslash at end of input points at the backslash      [32m[ PASS ][0m it a backslash at end of input points at the backslash
+  [34mend [0m
+  [34mbegin [0mpretty
+      [33m[ TEST ][0m it a list that fits stays on one line      [32m[ PASS ][0m it a list that fits stays on one line
+      [33m[ TEST ][0m it a list that does not fit breaks between every element      [32m[ PASS ][0m it a list that does not fit breaks between every element
+      [33m[ TEST ][0m it breaking the outer list leaves the inner ones flat      [32m[ PASS ][0m it breaking the outer list leaves the inner ones flat
+      [33m[ TEST ][0m it the whole form fits at a wide width      [32m[ PASS ][0m it the whole form fits at a wide width
+      [33m[ TEST ][0m it an atom wider than the width is still emitted whole      [32m[ PASS ][0m it an atom wider than the width is still emitted whole
+      [33m[ TEST ][0m it the empty list never breaks      [32m[ PASS ][0m it the empty list never breaks
+      [33m[ TEST ][0m it a string leaf is printed escaped      [32m[ PASS ][0m it a string leaf is printed escaped
+      [33m[ TEST ][0m it toDoc composes with other documents      [32m[ PASS ][0m it toDoc composes with other documents
+      [33m[ TEST ][0m it a broken list hangs under its opening parenthesis      [32m[ PASS ][0m it a broken list hangs under its opening parenthesis
+  [34mend [0m
+  [34mbegin [0minformation flow
+      [33m[ TEST ][0m it a labeled input yields a labeled value      [32m[ PASS ][0m it a labeled input yields a labeled value
+      [33m[ TEST ][0m it reprinting a labeled input keeps the label      [32m[ PASS ][0m it reprinting a labeled input keeps the label
+      [33m[ TEST ][0m it a labeled leaf taints the printed output      [32m[ PASS ][0m it a labeled leaf taints the printed output
+      [33m[ TEST ][0m it printing public data stays public      [32m[ PASS ][0m it printing public data stays public
+  [34mend [0m
+[34mend [0m
+
+Total:  49
+Passes: 49
+>>> Main thread finished with value: true@{alice}%{alice}

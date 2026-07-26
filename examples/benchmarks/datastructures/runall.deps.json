@@ -1,0 +1,6 @@
+{
+  "deps": [
+    {"path": "../../savina/SavinaReport", "hash": "nki815r3j6sde8eljkkqv84qfrtmitpfj6h2ng177nd2r4prf5n0", "name": "../../savina/SavinaReport"},
+    {"path": "DataStructures", "hash": "56r4bpgemcsv3v00l2g689575e4750qf34q7om8mncrivgk0i8f0", "name": "DataStructures"}
+  ]
+}

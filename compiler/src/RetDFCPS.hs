@@ -32,10 +32,10 @@ transFunDecl (Core.FunDecl fname (Core.Nullary le) pos) = do
   return $ Loc pos $ CPS.Fun (VN fname) (CPS.Nullary e')
 
 transProg :: Core.Prog -> CPS.Prog
-transProg (Core.Prog imports atoms lt) =
+transProg (Core.Prog imports lt) =
   let pos = posInfo lt
   -- trans now passes LVarName; extract VarName for Halt
-  in Prog atoms $ evalState (trans lt (\(Loc _ z) -> return $ Loc pos (Halt z))) 1
+  in Prog $ evalState (trans lt (\(Loc _ z) -> return $ Loc pos (Halt z))) 1
 
 
 -- | Transform LFields in a context (non-explicit)
@@ -143,14 +143,14 @@ transExplicit (Loc pos (Core.AssertElseError le0 le1 le2)) = do
       return $ Loc pos $ AssertElseError v0 e1' v2))
 
 
-transExplicit (Loc pos (Core.Tuple lts))  =
+transExplicit (Loc pos (Core.Tuple lts tag))  =
   transTuple lts []
   where
     -- Now uses LVarName for position tracking
     transTuple :: [Core.LTerm] -> [CPS.LVarName] -> S CPS.LKTerm
     transTuple [] acc  = do
       v <- freshV
-      return $ Loc pos $ LetSimple v (Loc pos (Tuple (reverse acc))) (Loc pos (KontReturn v))
+      return $ Loc pos $ LetSimple v (Loc pos (Tuple (reverse acc) tag)) (Loc pos (KontReturn v))
     transTuple (lt:rest) acc  =
       trans lt (\lv -> transTuple rest (lv:acc) )
 
@@ -287,14 +287,14 @@ trans (Loc pos (Core.AssertElseError le0 le1 le2)) context = do
 
 
 
-trans (Loc pos (Core.Tuple lts)) context =
+trans (Loc pos (Core.Tuple lts tag)) context =
   transTuple lts [] context
   where
     -- Now uses LVarName for position tracking
     transTuple [] acc ctx = do
       v <- freshV
       e' <- ctx (Loc pos v)
-      return $ Loc pos $ LetSimple v (Loc pos (Tuple (reverse acc))) e'
+      return $ Loc pos $ LetSimple v (Loc pos (Tuple (reverse acc) tag)) e'
     transTuple (lt:rest) acc ctx =
       trans lt (\lv -> transTuple rest (lv:acc) ctx)
 

@@ -1,0 +1,11 @@
+(* The spec 6.3 evaluator -- a datatype referencing an earlier group,
+   nested constructor patterns with a tuple payload, computing an arithmetic
+   result. *)
+datatype binop = ADD | SUB
+datatype expr  = LIT of int | BIN of binop * expr * expr
+
+let fun eval (LIT n)             = n
+      | eval (BIN (ADD, e1, e2)) = eval e1 + eval e2
+      | eval (BIN (SUB, e1, e2)) = eval e1 - eval e2
+in print (eval (BIN (ADD, LIT 8, BIN (SUB, LIT 10, LIT 4))))  (* 8 + (10 - 4) = 14 *)
+end

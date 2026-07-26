@@ -1,0 +1,7 @@
+(* Mid module of the diamond tests; imports a sibling module from a
+ * subdirectory, resolved relative to this file. *)
+import "./util/ModuleDiamondFmt"
+
+let fun greet name = ModuleDiamondFmt.bang ("hello " ^ name)
+in [ ("greet", greet) ]
+end

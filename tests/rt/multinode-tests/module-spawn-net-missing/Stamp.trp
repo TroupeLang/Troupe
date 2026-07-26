@@ -1,0 +1,5 @@
+(* Module the spawner has and the target does not. Identical to the SEND
+   repro's Stamp.trp, so its content-addressed hash matches. *)
+let fun stamp s = "[" ^ s ^ "]"
+in [ ("stamp", stamp) ]
+end

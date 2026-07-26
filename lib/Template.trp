@@ -1,0 +1,584 @@
+(* Template.trp - A Jinja/Nunjucks-style text templating engine for Troupe.
+ *
+ * Renders a template string against a context record. The engine is a piece of
+ * data-driven code operating over labeled data: the label of the rendered string
+ * is automatically the join of the labels of every context value it interpolates,
+ * so a template cannot launder a secret into a public output.
+ *
+ * SYNTAX (v1):
+ *   {{ expr }}              interpolation, HTML-escaped through Html.escapeHtml
+ *   {{ expr | safe }}       interpolation without escaping (the audited escape hatch)
+ *   {% if e %}..{% elif e %}..{% else %}..{% endif %}
+ *   {% for x in e %}..{% else %}..{% endfor %}   (else renders on an empty collection)
+ *   {# comment #}           removed from the output
+ *
+ * EXPRESSIONS:
+ *   dotted variable paths (user.name); string/number/boolean literals;
+ *   comparisons == != < > <= >=; boolean and/or/not; truthiness for if/for;
+ *   filters via | : safe, upper, lower, length, default(x).
+ *
+ * MISSING-VARIABLE POLICY: resolving a path that is absent (or descends into a
+ * non-record) produces an Err naming the path, rather than silently emitting the
+ * empty string. Use `| default(x)` to supply a fallback for a possibly-absent path.
+ *
+ * IFC NOTE (record-structure taint): dynamic path resolution uses the recordToList
+ * builtin, which labels each field name at the record's own label and each value at
+ * lub(value, recordLabel). Resolving a path therefore taints the result with the
+ * label of every record descended through -- field presence is itself information.
+ * A path lookup into a secret-structured context yields a secret result; this is by
+ * design and cannot be bypassed.
+ *)
+
+import List
+import String
+import Outcome
+import Html
+
+let
+    (* ===== Character classification ===== *)
+
+    fun charCode c = charCodeAtWithDefault (c, 0, 0)
+
+    fun isDigit c = let val k = charCode c in k >= 48 andalso k <= 57 end
+
+    fun isAlpha c =
+        let val k = charCode c
+        in (k >= 65 andalso k <= 90) orelse (k >= 97 andalso k <= 122) orelse k = 95 end
+
+    fun isIdentStart c = isAlpha c
+
+    fun isIdentChar c = isAlpha c orelse isDigit c orelse c = "."
+
+    fun isSpace c = c = " " orelse c = "\t" orelse c = "\n" orelse c = "\r"
+
+    (* The double-quote character. Troupe source cannot write it as a literal (the
+     * lexer has no string escapes), but toString wraps a string in double quotes,
+     * so the first character of `toString ""` is a lone double-quote. Computed on
+     * demand rather than at module top level. *)
+    fun dquoteChar () = substring (toString "", 0, 1)
+
+    (* ===== Small string helpers ===== *)
+
+    (* Split a dotted variable path into its segments. *)
+    fun splitDots s =
+        let val chars = String.explode s
+            fun go [] cur acc = List.reverse ((String.concat (List.reverse cur)) :: acc)
+              | go (c::cs) cur acc =
+                  if c = "." then go cs [] ((String.concat (List.reverse cur)) :: acc)
+                  else go cs (c :: cur) acc
+        in go chars [] [] end
+
+    (* Index of the first occurrence of the 2-char pattern `pat` in `s` at or after
+     * `from`, or -1 if none. *)
+    fun indexOf2 (s, pat, from) =
+        let val n = String.size s
+            fun go i = if i + 2 > n then (0 - 1)
+                       else if substring (s, i, i + 2) = pat then i
+                       else go (i + 1)
+        in go from end
+
+    fun toLowerChar c =
+        let val k = charCode c
+        in if k >= 65 andalso k <= 90 then String.sub ("abcdefghijklmnopqrstuvwxyz", k - 65) else c end
+
+    fun toUpperChar c =
+        let val k = charCode c
+        in if k >= 97 andalso k <= 122 then String.sub ("ABCDEFGHIJKLMNOPQRSTUVWXYZ", k - 97) else c end
+
+    fun upperStr s = String.map toUpperChar s
+    fun lowerStr s = String.map toLowerChar s
+
+    (* ===== Value helpers ===== *)
+
+    (* Convert a value to its output string form. *)
+    fun valueToString v =
+        case getType v of
+            "string"  => v
+          | "number"  => intToString v
+          | "boolean" => if v then "true" else "false"
+          | _         => toString v
+
+    (* Truthiness used by if/for and by and/or/not. *)
+    fun truthy v =
+        case getType v of
+            "boolean" => v
+          | "string"  => v <> ""
+          | "number"  => v <> 0
+          | "list"    => not (List.null v)
+          | "unit"    => false
+          | _         => true
+
+    (* Length filter: strings and lists only. *)
+    fun lengthOf v =
+        case getType v of
+            "string" => OK (String.size v)
+          | "list"   => OK (List.length v)
+          | _        => ERR {reason = "length expects a string or list", offset = 0}
+
+    (* Compare two evaluated values under a comparison operator. *)
+    fun compareVals op a b =
+        if op = "==" then a = b
+        else if op = "!=" then a <> b
+        else if op = "<" then a < b
+        else if op = ">" then a > b
+        else if op = "<=" then a <= b
+        else if op = ">=" then a >= b
+        else false
+
+    (* True if the top-level filter chain of an expression contains `safe`. *)
+    fun hasSafe expr =
+        case expr.tag of
+            "Filter" => if expr.name = "safe" then true else hasSafe expr.e
+          | _        => false
+
+    fun isKnownFilter name =
+        name = "safe" orelse name = "upper" orelse name = "lower"
+        orelse name = "length" orelse name = "default"
+
+    fun isCmpOp op =
+        op = "==" orelse op = "!=" orelse op = "<" orelse op = ">"
+        orelse op = "<=" orelse op = ">="
+
+    fun mkVar name = {tag = "Var", path = splitDots name, raw = name}
+
+    (* ===== Expression lexer =====
+     * Produces a token list. Tokens:
+     *   {tag="Ident", name=..}  identifiers, keywords, dotted paths
+     *   {tag="Str",   s=..}     string literal value
+     *   {tag="Num",   n=..}     numeric literal value
+     *   {tag="Op",    op=..}    operators and punctuation
+     *)
+    fun lexExpr baseOff s =
+        let val n = String.size s
+            val dquote = dquoteChar ()
+            fun lex i acc =
+                if i >= n then OK (List.reverse acc)
+                else
+                  let val c = substring (s, i, i + 1)
+                  in if isSpace c then lex (i + 1) acc
+                     else if c = dquote then lexString (i + 1) [] acc i
+                     else if isDigit c then lexNumber i acc
+                     else if c = "-" andalso isDigit (substring (s, i + 1, i + 2)) then lexNumber i acc
+                     else if isIdentStart c then lexIdent i acc
+                     else lexOp i acc c
+                  end
+            and lexString j chars acc startPos =
+                if j >= n then ERR {reason = "unterminated string literal", offset = baseOff + startPos}
+                else
+                  let val c = substring (s, j, j + 1)
+                  in if c = dquote then lex (j + 1) ({tag = "Str", s = String.concat (List.reverse chars)} :: acc)
+                     else if c = "\\" then
+                       let val d = substring (s, j + 1, j + 2)
+                           val ch = if d = "n" then "\n"
+                                    else if d = "t" then "\t"
+                                    else if d = dquote then dquote
+                                    else if d = "\\" then "\\"
+                                    else d
+                       in lexString (j + 2) (ch :: chars) acc startPos end
+                     else lexString (j + 1) (c :: chars) acc startPos
+                  end
+            and lexNumber i acc =
+                let val start = i
+                    fun go j = if j < n andalso (isDigit (substring (s, j, j + 1)) orelse substring (s, j, j + 1) = ".")
+                               then go (j + 1) else j
+                    val jend = go (if substring (s, i, i + 1) = "-" then i + 1 else i)
+                    val numStr = substring (s, start, jend)
+                in lex jend ({tag = "Num", n = stringToInt numStr} :: acc) end
+            and lexIdent i acc =
+                let fun go j = if j < n andalso isIdentChar (substring (s, j, j + 1)) then go (j + 1) else j
+                    val jend = go i
+                in lex jend ({tag = "Ident", name = substring (s, i, jend)} :: acc) end
+            and lexOp i acc c =
+                let val two = substring (s, i, i + 2)
+                in if two = "==" orelse two = "!=" orelse two = "<=" orelse two = ">="
+                   then lex (i + 2) ({tag = "Op", op = two} :: acc)
+                   else if c = "<" orelse c = ">" orelse c = "|" orelse c = "(" orelse c = ")" orelse c = ","
+                   then lex (i + 1) ({tag = "Op", op = c} :: acc)
+                   else ERR {reason = "unexpected character in expression: " ^ c, offset = baseOff + i}
+                end
+        in lex 0 [] end
+
+    (* ===== Expression parser (recursive descent) =====
+     * Precedence, loosest to tightest: or, and, not, comparison, filter, primary.
+     * Each parser returns an Outcome of (expr, remainingTokens).
+     *)
+    (* Token predicates. Guarded field access: a token always has .tag; the
+     * type-specific fields (.name, .op, .s, .n) are read only after checking .tag,
+     * so short-circuit evaluation never touches an absent field. These use plain
+     * cons patterns and `if` on fields rather than record patterns in match
+     * position -- the latter make the pattern-match compiler blow up. *)
+    fun isIdentTok t nm = t.tag = "Ident" andalso t.name = nm
+    fun isOpTok t o = t.tag = "Op" andalso t.op = o
+
+    fun parseOr ts =
+        Outcome.andThen (fn (l, ts1) => parseOrTail l ts1) (parseAnd ts)
+    and parseOrTail l ts =
+        case ts of
+            t :: ts1 =>
+              if isIdentTok t "or"
+              then Outcome.andThen (fn (r, ts2) => parseOrTail {tag = "Or", l = l, r = r} ts2) (parseAnd ts1)
+              else OK (l, ts)
+          | _ => OK (l, ts)
+    and parseAnd ts =
+        Outcome.andThen (fn (l, ts1) => parseAndTail l ts1) (parseNot ts)
+    and parseAndTail l ts =
+        case ts of
+            t :: ts1 =>
+              if isIdentTok t "and"
+              then Outcome.andThen (fn (r, ts2) => parseAndTail {tag = "And", l = l, r = r} ts2) (parseNot ts1)
+              else OK (l, ts)
+          | _ => OK (l, ts)
+    and parseNot ts =
+        case ts of
+            t :: ts1 =>
+              if isIdentTok t "not"
+              then Outcome.map (fn (e, ts2) => ({tag = "Not", e = e}, ts2)) (parseNot ts1)
+              else parseCmp ts
+          | _ => parseCmp ts
+    and parseCmp ts =
+        Outcome.andThen (fn (l, ts1) =>
+            case ts1 of
+                t :: ts2 =>
+                  if t.tag = "Op" andalso isCmpOp t.op
+                  then Outcome.map (fn (r, ts3) => ({tag = "Cmp", op = t.op, l = l, r = r}, ts3)) (parseFilter ts2)
+                  else OK (l, ts1)
+              | _ => OK (l, ts1))
+          (parseFilter ts)
+    and parseFilter ts =
+        Outcome.andThen (fn (l, ts1) => parseFilterTail l ts1) (parsePrimary ts)
+    and parseFilterTail l ts =
+        case ts of
+            t :: ts1 =>
+              if isOpTok t "|"
+              then (case ts1 of
+                       ft :: ts2 =>
+                         if ft.tag = "Ident"
+                         then (if isKnownFilter ft.name
+                               then Outcome.andThen (fn (args, ts3) => parseFilterTail {tag = "Filter", e = l, name = ft.name, args = args} ts3)
+                                                   (parseFilterArgs ts2)
+                               else ERR {reason = "unknown filter: " ^ ft.name, offset = 0})
+                         else ERR {reason = "expected filter name after |", offset = 0}
+                     | _ => ERR {reason = "expected filter name after |", offset = 0})
+              else OK (l, ts)
+          | _ => OK (l, ts)
+    and parseFilterArgs ts =
+        case ts of
+            t :: ts1 => if isOpTok t "(" then parseArgList ts1 [] else OK ([], ts)
+          | _ => OK ([], ts)
+    and parseArgList ts acc =
+        Outcome.andThen (fn (e, ts1) =>
+            case ts1 of
+                t :: ts2 =>
+                  if isOpTok t ")" then OK (List.reverse (e :: acc), ts2)
+                  else if isOpTok t "," then parseArgList ts2 (e :: acc)
+                  else ERR {reason = "expected , or ) in filter arguments", offset = 0}
+              | _ => ERR {reason = "expected , or ) in filter arguments", offset = 0})
+          (parseOr ts)
+    and parsePrimary ts =
+        case ts of
+            t :: r =>
+              if t.tag = "Str" then OK ({tag = "Str", s = t.s}, r)
+              else if t.tag = "Num" then OK ({tag = "Num", n = t.n}, r)
+              else if isIdentTok t "true" then OK ({tag = "Bool", b = true}, r)
+              else if isIdentTok t "false" then OK ({tag = "Bool", b = false}, r)
+              else if isOpTok t "(" then
+                Outcome.andThen (fn (e, r1) =>
+                    case r1 of
+                        t2 :: r2 =>
+                          if isOpTok t2 ")" then OK (e, r2)
+                          else ERR {reason = "expected ) in expression", offset = 0}
+                      | _ => ERR {reason = "expected ) in expression", offset = 0})
+                  (parseOr r)
+              else if t.tag = "Ident" then OK (mkVar t.name, r)
+              else ERR {reason = "unexpected token in expression", offset = 0}
+          | _ => ERR {reason = "unexpected token in expression", offset = 0}
+
+    (* Parse a full expression from a token list, requiring all tokens consumed. *)
+    fun parseExprAll baseOff toks =
+        Outcome.andThen (fn (expr, rest) =>
+            case rest of
+                [] => OK expr
+              | _  => ERR {reason = "unexpected trailing tokens in expression", offset = baseOff})
+          (parseOr toks)
+
+    (* Parse a full expression from a string. *)
+    fun parseExprStr baseOff s =
+        Outcome.andThen (parseExprAll baseOff) (lexExpr baseOff s)
+
+    (* ===== Template tokenizer =====
+     * Splits a template into chunks:
+     *   {tag="TextChunk",   text=..}
+     *   {tag="InterpChunk", body=.., offset=..}
+     *   {tag="TagChunk",    body=.., offset=..}
+     * Comments {# .. #} are dropped.
+     *)
+    fun tokenizeTemplate s =
+        let val n = String.size s
+            fun mkText textStart i acc =
+                if i > textStart then {tag = "TextChunk", text = substring (s, textStart, i)} :: acc else acc
+            fun scan i textStart acc =
+                if i >= n then OK (List.reverse (mkText textStart n acc))
+                else
+                  let val two = substring (s, i, i + 2)
+                  in if two = "{{" then handleDelim i textStart acc "}}" "InterpChunk"
+                     else if two = "{%" then handleDelim i textStart acc "%}" "TagChunk"
+                     else if two = "{#" then
+                       let val closeIdx = indexOf2 (s, "#}", i + 2)
+                       in if closeIdx < 0 then ERR {reason = "unclosed comment (missing #})", offset = i}
+                          else scan (closeIdx + 2) (closeIdx + 2) (mkText textStart i acc)
+                       end
+                     else scan (i + 1) textStart acc
+                  end
+            and handleDelim i textStart acc close kind =
+                let val closeIdx = indexOf2 (s, close, i + 2)
+                in if closeIdx < 0
+                   then ERR {reason = "unclosed " ^ (if kind = "TagChunk" then "tag (missing %})" else "interpolation (missing }})"),
+                                    offset = i}
+                   else let val inner = substring (s, i + 2, closeIdx)
+                            val acc1 = mkText textStart i acc
+                            val chunk = if kind = "InterpChunk" then {tag = "InterpChunk", body = inner, offset = i}
+                                        else {tag = "TagChunk", body = inner, offset = i}
+                        in scan (closeIdx + 2) (closeIdx + 2) (chunk :: acc1) end
+                end
+        in scan 0 0 [] end
+
+    (* ===== Block parser =====
+     * Folds a chunk list into an AST node list. Each parser returns
+     * an Outcome of (nodes, remainingChunks); parseSeq stops (leaving the chunk unconsumed)
+     * when it reaches a branch/close tag (elif/else/endif/endfor).
+     *)
+    fun parseSeq chunks =
+        case chunks of
+            [] => OK ([], [])
+          | c :: rest =>
+              (case c.tag of
+                  "TextChunk" =>
+                    Outcome.map (fn (nodes, rem) => ({tag = "TextNode", text = c.text} :: nodes, rem)) (parseSeq rest)
+                | "InterpChunk" =>
+                    Outcome.andThen (fn expr =>
+                        Outcome.map (fn (nodes, rem) => ({tag = "InterpNode", expr = expr, safe = hasSafe expr} :: nodes, rem))
+                                   (parseSeq rest))
+                      (parseExprStr c.offset c.body)
+                | "TagChunk" =>
+                    Outcome.andThen (fn toks =>
+                        case toks of
+                            t :: tokRest =>
+                              if t.tag <> "Ident" then ERR {reason = "malformed tag", offset = c.offset}
+                              else
+                                let val kw = t.name
+                                in if kw = "elif" orelse kw = "else" orelse kw = "endif" orelse kw = "endfor"
+                                   then OK ([], chunks)
+                                   else if kw = "if" then
+                                     Outcome.andThen (fn (ifNode, rem) =>
+                                         Outcome.map (fn (nodes, rem2) => (ifNode :: nodes, rem2)) (parseSeq rem))
+                                       (parseIf c tokRest rest)
+                                   else if kw = "for" then
+                                     Outcome.andThen (fn (forNode, rem) =>
+                                         Outcome.map (fn (nodes, rem2) => (forNode :: nodes, rem2)) (parseSeq rem))
+                                       (parseFor c tokRest rest)
+                                   else ERR {reason = "unknown tag: " ^ kw, offset = c.offset}
+                                end
+                          | _ => ERR {reason = "malformed tag", offset = c.offset})
+                      (lexExpr c.offset c.body)
+                | _ => ERR {reason = "internal: unknown chunk", offset = 0})
+    and parseIf c condToks chunks =
+        Outcome.andThen (fn cond =>
+            Outcome.andThen (fn (body, rem) => collectIf c ((cond, body) :: []) rem)
+              (parseSeq chunks))
+          (parseExprAll c.offset condToks)
+    and collectIf c branchesRev rem =
+        case rem of
+            [] => ERR {reason = "unclosed if (missing endif)", offset = c.offset}
+          | t :: rest =>
+              Outcome.andThen (fn toks =>
+                  case toks of
+                      bt :: elifRest =>
+                        if isIdentTok bt "endif" then
+                            OK ({tag = "IfNode", branches = List.reverse branchesRev, elseBody = []}, rest)
+                        else if isIdentTok bt "elif" then
+                            Outcome.andThen (fn cond =>
+                                Outcome.andThen (fn (body, rem2) => collectIf c ((cond, body) :: branchesRev) rem2)
+                                  (parseSeq rest))
+                              (parseExprAll t.offset elifRest)
+                        else if isIdentTok bt "else" then
+                            Outcome.andThen (fn (elseBody, rem2) =>
+                                case rem2 of
+                                    et :: rest2 =>
+                                      Outcome.andThen (fn toks2 =>
+                                          case toks2 of
+                                              et2 :: _ =>
+                                                if isIdentTok et2 "endif"
+                                                then OK ({tag = "IfNode", branches = List.reverse branchesRev, elseBody = elseBody}, rest2)
+                                                else ERR {reason = "expected endif after else", offset = et.offset}
+                                            | _ => ERR {reason = "expected endif after else", offset = et.offset})
+                                        (lexExpr et.offset et.body)
+                                  | _ => ERR {reason = "unclosed if (missing endif after else)", offset = c.offset})
+                              (parseSeq rest)
+                        else ERR {reason = "expected elif/else/endif", offset = t.offset}
+                    | _ => ERR {reason = "malformed tag", offset = t.offset})
+                (lexExpr t.offset t.body)
+    and parseFor c toks chunks =
+        case toks of
+            vt :: it :: collToks =>
+              if vt.tag = "Ident" andalso isIdentTok it "in"
+              then Outcome.andThen (fn coll =>
+                       Outcome.andThen (fn (body, rem) => collectFor c vt.name coll body rem)
+                         (parseSeq chunks))
+                     (parseExprAll c.offset collToks)
+              else ERR {reason = "malformed for (expected: for VAR in EXPR)", offset = c.offset}
+          | _ => ERR {reason = "malformed for (expected: for VAR in EXPR)", offset = c.offset}
+    and collectFor c varName coll body rem =
+        case rem of
+            [] => ERR {reason = "unclosed for (missing endfor)", offset = c.offset}
+          | t :: rest =>
+              Outcome.andThen (fn toks =>
+                  case toks of
+                      bt :: _ =>
+                        if isIdentTok bt "endfor" then
+                            OK ({tag = "ForNode", var = varName, coll = coll, body = body, elseBody = []}, rest)
+                        else if isIdentTok bt "else" then
+                            Outcome.andThen (fn (elseBody, rem2) =>
+                                case rem2 of
+                                    et :: rest2 =>
+                                      Outcome.andThen (fn toks2 =>
+                                          case toks2 of
+                                              et2 :: _ =>
+                                                if isIdentTok et2 "endfor"
+                                                then OK ({tag = "ForNode", var = varName, coll = coll, body = body, elseBody = elseBody}, rest2)
+                                                else ERR {reason = "expected endfor after for/else", offset = et.offset}
+                                            | _ => ERR {reason = "expected endfor after for/else", offset = et.offset})
+                                        (lexExpr et.offset et.body)
+                                  | _ => ERR {reason = "unclosed for (missing endfor after else)", offset = c.offset})
+                              (parseSeq rest)
+                        else ERR {reason = "expected else/endfor", offset = t.offset}
+                    | _ => ERR {reason = "malformed tag", offset = t.offset})
+                (lexExpr t.offset t.body)
+
+    (* ===== Variable resolution ===== *)
+
+    fun findScope seg [] = ERR {reason = "__scope_miss", offset = 0}
+      | findScope seg ((k, v) :: rest) = if k = seg then OK v else findScope seg rest
+
+    (* Look up `key` in a record value using the recordToList builtin. *)
+    fun lookupKey rec key raw =
+        if getType rec <> "record"
+        then ERR {reason = "missing variable: " ^ raw, path = raw, offset = 0}
+        else let val pairs = recordToList rec
+                 fun find [] = ERR {reason = "missing variable: " ^ raw, path = raw, offset = 0}
+                   | find ((k, v) :: rest) = if k = key then OK v else find rest
+             in find pairs end
+
+    (* Descend the remaining path segments into an already-resolved value. *)
+    fun descend r [] raw = r
+      | descend r (seg :: segs) raw =
+          descend (Outcome.andThen (fn v => lookupKey v seg raw) r) segs raw
+
+    (* Resolve a dotted path: first segment from the loop scope, else the context
+     * record; remaining segments descend via lookupKey. *)
+    fun resolvePath scope ctx path raw =
+        case path of
+            [] => ERR {reason = "empty variable path", path = raw, offset = 0}
+          | seg :: segs =>
+              let val firstR = Outcome.orElse (fn _ => lookupKey ctx seg raw) (findScope seg scope)
+              in descend firstR segs raw end
+
+    (* ===== Expression evaluation ===== *)
+
+    fun eval scope ctx expr =
+        case expr.tag of
+            "Str"  => OK expr.s
+          | "Num"  => OK expr.n
+          | "Bool" => OK expr.b
+          | "Var"  => resolvePath scope ctx expr.path expr.raw
+          | "Not"  => Outcome.map (fn v => not (truthy v)) (eval scope ctx expr.e)
+          | "And"  => Outcome.andThen (fn a => Outcome.map (fn b => (truthy a) andalso (truthy b)) (eval scope ctx expr.r))
+                                     (eval scope ctx expr.l)
+          | "Or"   => Outcome.andThen (fn a => Outcome.map (fn b => (truthy a) orelse (truthy b)) (eval scope ctx expr.r))
+                                     (eval scope ctx expr.l)
+          | "Cmp"  => Outcome.andThen (fn a => Outcome.map (fn b => compareVals expr.op a b) (eval scope ctx expr.r))
+                                     (eval scope ctx expr.l)
+          | "Filter" => evalFilter scope ctx expr
+          | _ => ERR {reason = "internal: unknown expression", offset = 0}
+    and evalFilter scope ctx expr =
+        let val name = expr.name
+        in if name = "safe" then eval scope ctx expr.e
+           else if name = "default" then
+             let val r = eval scope ctx expr.e
+             in if Outcome.isOk r then r
+                else (case expr.args of
+                          a :: _ => eval scope ctx a
+                        | []     => ERR {reason = "default requires an argument", offset = 0})
+             end
+           else if name = "upper" then Outcome.map (fn v => upperStr (valueToString v)) (eval scope ctx expr.e)
+           else if name = "lower" then Outcome.map (fn v => lowerStr (valueToString v)) (eval scope ctx expr.e)
+           else if name = "length" then Outcome.andThen (fn v => lengthOf v) (eval scope ctx expr.e)
+           else ERR {reason = "unknown filter: " ^ name, offset = 0}
+        end
+
+    (* ===== Rendering ===== *)
+
+    fun renderNode scope ctx node =
+        case node.tag of
+            "TextNode" => OK node.text
+          | "InterpNode" =>
+              Outcome.map (fn v => if node.safe then valueToString v else Html.escapeHtml (valueToString v))
+                         (eval scope ctx node.expr)
+          | "IfNode"  => renderIf scope ctx node.branches node.elseBody
+          | "ForNode" => renderFor scope ctx node.var node.coll node.body node.elseBody
+          | _ => ERR {reason = "internal: unknown node", offset = 0}
+    and renderSeq scope ctx nodes =
+        let fun go [] acc = OK (String.concat (List.reverse acc))
+              | go (n :: ns) acc =
+                  Outcome.andThen (fn str => go ns (str :: acc)) (renderNode scope ctx n)
+        in go nodes [] end
+    and renderIf scope ctx branches elseBody =
+        case branches of
+            [] => renderSeq scope ctx elseBody
+          | ((cond, body) :: rest) =>
+              Outcome.andThen (fn v => if truthy v then renderSeq scope ctx body
+                                      else renderIf scope ctx rest elseBody)
+                             (eval scope ctx cond)
+    and renderFor scope ctx varName collExpr body elseBody =
+        Outcome.andThen (fn coll =>
+            if getType coll = "list"
+            then (if List.null coll then renderSeq scope ctx elseBody
+                  else renderEach scope ctx varName coll body)
+            else ERR {reason = "for expects a list", offset = 0})
+          (eval scope ctx collExpr)
+    and renderEach scope ctx varName items body =
+        let fun go [] acc = OK (String.concat (List.reverse acc))
+              | go (x :: xs) acc =
+                  let val scope' = (varName, x) :: scope
+                  in Outcome.andThen (fn str => go xs (str :: acc)) (renderSeq scope' ctx body)
+                  end
+        in go items [] end
+
+    (* ===== Public API ===== *)
+
+    (** Parse a template string into a reusable compiled form. On a parse error
+     *  (unclosed {% %}/{{ }}/{# #}, unknown filter, malformed expression) returns
+     *  an Err carrying {reason, offset}, where offset is a byte position in the
+     *  template. *)
+    fun compile s =
+        Outcome.andThen (fn chunks =>
+            Outcome.andThen (fn (nodes, rem) =>
+                case rem of
+                    [] => OK {tag = "Template", nodes = nodes}
+                  | t :: _ => ERR {reason = "unexpected close/branch tag", offset = t.offset})
+              (parseSeq chunks))
+          (tokenizeTemplate s)
+
+    (** Render a compiled template against a context record. Returns Ok with the
+     *  rendered string, or Err {reason, path} if a referenced variable is missing.
+     *  The output string's label is the join of the labels of every interpolated
+     *  context value. *)
+    fun renderCompiled tmpl ctx = renderSeq [] ctx tmpl.nodes
+
+    (** Compile and render in one call. *)
+    fun render s ctx = Outcome.andThen (fn tmpl => renderCompiled tmpl ctx) (compile s)
+
+in [ ("compile", compile)
+   , ("renderCompiled", renderCompiled)
+   , ("render", render)
+   ]
+end

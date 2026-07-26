@@ -1,0 +1,17 @@
+(* A datatype may shadow a primitive type name (spec §2). In 'box' the
+   payload 'of int' means the primitive int; a later 'datatype int' shadows it,
+   so 'user's 'of int' references that datatype. Type names have no runtime
+   semantics -- this test pins that both forms compile and their constructors
+   work; the differing hashes are not observable. *)
+datatype box  = MK of int          (* int = primitive here            *)
+datatype int  = WRAP of string     (* 'int' now names a datatype      *)
+datatype user = U of int           (* int = the datatype above (shadow) *)
+
+let val a = MK 42
+    val b = WRAP "wrapped"
+    val c = U (WRAP "inner")
+in
+  print a;   (* (MK 42)          *)
+  print b;   (* (WRAP "wrapped") *)
+  print c    (* (U (WRAP "inner")) *)
+end

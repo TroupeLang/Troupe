@@ -1,0 +1,28 @@
+(* Savina benchmark: Successive Over-Relaxation (parallelism group).
+ *
+ * An actor per grid cell relaxes a g-by-g grid for 16 Jacobi iterations:
+ * each iteration a cell sends its value to its neighbors (tagged with the
+ * sender's direction relative to the receiver), collects one value per
+ * existing neighbor by direction-selective receive, and averages. The
+ * per-iteration synchronization of the original is carried by the
+ * message pattern itself: per-sender FIFO delivery keeps rounds aligned
+ * without iteration tags, because a neighbor can run at most one round
+ * ahead and its values are consumed oldest-first per direction.
+ *
+ * Values are summed in a fixed direction order, so verification against
+ * a sequential Jacobi sweep of the same grid is exact float equality.
+ *
+ *   ./local.sh examples/savina/sor.trp             # default sizes
+ *   ./local.sh examples/savina/sor.trp -- 8 12     # explicit sizes
+ *
+ * Result: true iff every cell's final value equals the reference.
+ *)
+
+import List
+import Bench
+import "./Savina"
+
+let val d = case List.filter (fn d => d.name = "sor") Savina.all of [d] => d
+    val sizes = Bench.sizesFromArgs (getCliArgs authority) d.sizes
+in Bench.run authority d.name sizes 3 d.bench d.check
+end

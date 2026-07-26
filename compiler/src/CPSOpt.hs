@@ -66,7 +66,7 @@ instance Substitutable SimpleTerm where
       -- Now using LVarName (Located VarName), need to preserve the Located wrapper
       Bin op lv1 lv2 -> Bin op (fwdL lv1) (fwdL lv2)
       Un op lv -> Un op (fwdL lv)
-      Tuple lvs -> Tuple (map fwdL lvs)
+      Tuple lvs tag -> Tuple (map fwdL lvs) tag
       Record fields -> Record (fwdLFields fields)
       WithRecord lx fields -> WithRecord (fwdL lx) (fwdLFields fields)
       ProjField lx f -> ProjField (fwdL lx) f
@@ -150,7 +150,7 @@ instance CensusCollectible SimpleTerm where
       Bin _ v1 v2 -> updateCensus [v1,v2]
       Un _ v -> updateCensus v
       ValSimpleTerm sv -> updateCensus sv
-      Tuple vs -> updateCensus vs
+      Tuple vs _ -> updateCensus vs
       Record fs -> let (_,vs) = unzip fs in updateCensus vs
       WithRecord v fs -> updateCensus v >> (let (_,vs) = unzip fs in updateCensus vs )
       ProjField v _ -> updateCensus v
@@ -349,7 +349,7 @@ simplifySimpleTerm t =
     v <- lookL operand
     -- TODO should write out all cases
     case (op,v) of
-        (Basics.IsTuple, St (Tuple _))          -> _ret __trueLit
+        (Basics.IsTuple, St (Tuple _ _))          -> _ret __trueLit
         (Basics.IsTuple, St (Record _))         -> _ret __falseLit
         (Basics.IsTuple, St (WithRecord _ _))   -> _ret __falseLit
         (Basics.IsTuple, St (List _))           -> _ret __falseLit
@@ -359,7 +359,7 @@ simplifySimpleTerm t =
 
         (Basics.IsRecord, St (Record _))        -> _ret __trueLit
         (Basics.IsRecord, St (WithRecord _ _))  -> _ret __trueLit
-        (Basics.IsRecord, St (Tuple _))         -> _ret __falseLit
+        (Basics.IsRecord, St (Tuple _ _))         -> _ret __falseLit
         (Basics.IsRecord, St (List _))          -> _ret __falseLit
         (Basics.IsRecord, St (ListCons _ _))    -> _ret __falseLit
         (Basics.IsRecord, St (ValSimpleTerm _)) -> _ret __falseLit
@@ -369,7 +369,7 @@ simplifySimpleTerm t =
         (Basics.IsList, St (ListCons _ _))    -> _ret __trueLit
         (Basics.IsList, St (Record _))        -> _ret __falseLit
         (Basics.IsList, St (WithRecord _ _))  -> _ret __falseLit
-        (Basics.IsList, St (Tuple _))         -> _ret __falseLit
+        (Basics.IsList, St (Tuple _ _))         -> _ret __falseLit
         (Basics.IsList, St (ValSimpleTerm _)) -> _ret __falseLit
 
         -- Not: constant folding
@@ -388,7 +388,7 @@ simplifySimpleTerm t =
         (Basics.Not, St (Bin Basics.Gt v1 v2))  -> _ret $ Bin Basics.Le v1 v2
         (Basics.Not, St (Bin Basics.Ge v1 v2))  -> _ret $ Bin Basics.Lt v1 v2
 
-        (Basics.TupleLength, St (Tuple xs)) ->
+        (Basics.TupleLength, St (Tuple xs _)) ->
             _ret $ lit (C.LNumeric (NumInt (fromIntegral (length xs))))
         -- 2023-08 Revision: Added this case
         (Basics.ListLength, St (List xs)) ->
@@ -405,7 +405,7 @@ simplifySimpleTerm t =
   ProjIdx x idx -> do
     t' <- lookL x
     case t' of
-      St (Tuple vs) | fromIntegral (length vs) > idx ->
+      St (Tuple vs _) | fromIntegral (length vs) > idx ->
         _substL (vs !! fromIntegral idx)
       _ -> _nochange
 
@@ -434,7 +434,7 @@ failFree st = case st of
   Bin op _ _ ->  op `elem` [Basics.Eq, Basics.Neq] -- Equality comparisons are safe (return boolean)
   Un _ _ -> False  -- Unary operations can fail (e.g., head on empty list, arithmetic on non-numbers)
   ValSimpleTerm _ -> True
-  Tuple _ -> True
+  Tuple _ _ -> True
   Record _ -> True
   WithRecord _ _ -> True
   ProjField _ _ -> False  -- Field projection can fail if field doesn't exist
@@ -588,5 +588,5 @@ iter lkt =
                            iter lkt'
 
 rewrite :: Prog -> Prog
-rewrite (Prog atoms lkterm) =
- Prog atoms (iter lkterm)
+rewrite (Prog lkterm) =
+ Prog (iter lkterm)

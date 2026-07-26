@@ -6,9 +6,10 @@ import * as Ty from './TroupeTypes.mjs'
 import { __exitInitiated } from './runtimeMonitored.mjs';
 import { LVal } from './Lval.mjs';
 import { mkTuple, mkList } from './ValuesUtil.mjs';
+import { isWellFormedSynVariant } from './RawTuple.mjs';
 import { ProcessID } from './process.mjs';
 import { Authority } from './Authority.mjs';
-import { Atom } from './Atom.mjs';
+import { TroupeBigInt } from './TroupeBigInt.mjs';
 import { __unitbase }from './UnitBase.mjs'
 import { mkLevel } from './Level.mjs';
 import { RuntimeInterface } from './RuntimeInterface.mjs';
@@ -188,6 +189,18 @@ function asDeserializationError(cause: unknown): DeserializationError {
     return new DeserializationError(`cannot deserialize inbound value: ${details}`);
 }
 
+// The list of exceptions expected when processing untrusted inbound data: a
+// value we cannot reconstruct or link (e.g. a closure naming a module or
+// library this node does not have). A receiving boundary drops these and keeps
+// serving. This is deliberately narrow by type but wide in intent: adversarial
+// inputs are expected here, so they must be handled rather than crash the node.
+// Anything not on this list is unexpected and must surface (see the node's
+// fail-fast policy), so a genuine bug is exposed rather than silently swallowed.
+// Extend this predicate as further expected inbound-error classes are added.
+export function isExpectedInboundError(e: unknown): boolean {
+    return e instanceof DeserializationError;
+}
+
 // Wrapper around the reconstruction logic: any failure to reconstruct an
 // inbound value is reported through the current errback (rejecting the
 // promise returned by `deserialize`) instead of crashing the node.
@@ -203,6 +216,7 @@ function constructCurrentUnchecked(compilerOutput: string) {
     __isCurrentlyUsingCompiler = false;
     let serobj = __currentDeserializedJson;
     let desercb = __currentCallback;
+    let deserErrback = __currentErrback;
 
     // 1. reconstruct the namespaces
     let snippets = compilerOutput.split("\n\n");
@@ -219,7 +233,6 @@ function constructCurrentUnchecked(compilerOutput: string) {
         let ns = serobj.namespaces[i]
         let nsFun = HEADER
 
-        let atomSet = new Set<string>()
         // Collect source maps from all snippets in this namespace
         let namespaceMappings: any[] = []
 
@@ -230,30 +243,18 @@ function constructCurrentUnchecked(compilerOutput: string) {
             let snippetJson = JSON.parse(snippets[k++]);
             nsFun += snippetJson.code;
 
-            for (let atom of snippetJson.atoms) {
-                atomSet.add(atom)
-            }
             // Collect source map from snippet if available
             if (snippetJson.sourceMap) {
                 namespaceMappings.push(snippetJson.sourceMap)
             }
         }
-        let argNames = Array.from(atomSet);
-        let argValues = argNames.map( argName => {return new Atom(argName)})
-        argNames.unshift('rt')
-        argNames.push(nsFun)
-        // Observe that there is some serious level of
-        // reflection going on in here
-        //    Arguments to Function are
-        //             'rt', ATOM1, ..., ATOMk, nsFun
-        //
-        //
+        let argNames: string[] = ['rt', nsFun]
+        // The namespace function takes only the runtime object as its argument.
         let NS: any = Reflect.construct (Function, argNames)
 
         // We now construct an instance of the newly constructed object
-        // that takes the runtime object + atoms as its arguments
-
-        argValues.unshift(__rtObj)
+        // that takes the runtime object as its argument
+        let argValues: any[] = [__rtObj]
         ctxt.namespaces[i] = Reflect.construct (NS, argValues)
         // Mark namespace as restored code for error reporting
         Object.defineProperty(ctxt.namespaces[i], '__isDynamic', {
@@ -410,8 +411,18 @@ function constructCurrentUnchecked(compilerOutput: string) {
                         return Record.mkRecord(a);
                     case Ty.TroupeType.LIST:
                         return mkList(this.deserializeArray(obj));
-                    case Ty.TroupeType.TUPLE:
-                        return mkTuple(this.deserializeArray(obj));
+                    case Ty.TroupeType.TUPLE: {
+                        const isSynVariant = obj.isSynVariant === true;
+                        const vals = this.deserializeArray(obj.vals);
+                        // A flagged tuple must carry the (tag) / (tag, payload)
+                        // shape; a malformed one is corrupt inbound data and is
+                        // dropped like any other, rather than crashing the
+                        // printer later.
+                        if (isSynVariant && !isWellFormedSynVariant(vals)) {
+                            throw new CorruptDataException();
+                        }
+                        return mkTuple(vals, isSynVariant);
+                    }
                     case Ty.TroupeType.CLOSURE:
                         return mkClosure(obj.ClosureID);
                     case Ty.TroupeType.NUMBER:
@@ -428,8 +439,9 @@ function constructCurrentUnchecked(compilerOutput: string) {
                         return mkLevel(obj.lev);
                     case Ty.TroupeType.LVAL:
                         return this.mkValue(obj);
-                    case Ty.TroupeType.ATOM:
-                        return new Atom(obj.atom, obj.creation_uuid);
+                    case Ty.TroupeType.BIGINT:
+                        // wire form is the decimal string (see serialize.mts)
+                        return new TroupeBigInt(BigInt(obj));
                     case Ty.TroupeType.UNIT:
                         return __unitbase;
                     default:
@@ -515,7 +527,14 @@ function constructCurrentUnchecked(compilerOutput: string) {
 
     function loadLib(i: number, cb) {
         if (i < ctxt.namespaces.length) {
-            __rtObj.linkLibs(ctxt.namespaces[i]).then(() => loadLib(i + 1, cb))
+            // Relinking a received closure's libraries can fail cleanly — most
+            // notably when it names a module the receiver does not have (not
+            // locally discoverable). Route that to the deserialization errback
+            // so it surfaces as a DeserializationError rather than an unhandled
+            // rejection that crashes the node.
+            __rtObj.linkLibs(ctxt.namespaces[i])
+                   .then(() => loadLib(i + 1, cb))
+                   .catch((e) => deserErrback(asDeserializationError(e)))
         } else {
             cb();
         }

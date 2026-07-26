@@ -1,0 +1,17 @@
+(* Variant values sent between processes -- spawn a worker, send it
+   variant messages, and match them with constructor patterns in receive. *)
+datatype msg = PUT of int | DONE
+
+let fun collector total =
+        receive [
+          hn (PUT n) => collector (total + n)
+        , hn DONE    => printWithLabels total
+        ]
+in
+  let val p = spawn (fn () => collector 0)
+      val _ = send (p, PUT 10)
+      val _ = send (p, PUT 32)
+      val _ = send (p, DONE)
+  in ()
+  end
+end

@@ -1,5 +1,5 @@
 import { UserRuntimeZero, Constructor, mkBase, mkService } from './UserRuntimeZero.mjs'
-import { assertNormalState, assertIsNTuple, assertIsLevel, assertIsList, assertIsAtom, assertIsNumber, assertIsUnit, assertIsFunction } from '../Asserts.mjs'
+import { assertNormalState, assertIsNTuple, assertIsLevel, assertIsList, assertIsNumber, assertIsUnit, assertIsFunction } from '../Asserts.mjs'
 import { flowsTo, lub, glb, BOT } from '../Level.mjs';
 import { RuntimeInterface } from '../RuntimeInterface.mjs';
 import { ReceiveTaintAction } from '../ReceiveTaintAction.mjs';

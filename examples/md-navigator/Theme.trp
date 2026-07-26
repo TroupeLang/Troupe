@@ -1,0 +1,376 @@
+(* Theme.trp — the stylesheet, and the themes it is parameterised by.
+ *
+ * Every rule reads a custom property; not one of them names a colour. A theme is therefore a
+ * set of values for those properties, and adding one means adding a `*Vars` binding plus a
+ * `:root[data-theme=...]` line in `themeCss` — nothing else in the program changes.
+ *
+ * A program-relative module of examples/md-navigator; not a lib/ candidate, since the rules are
+ * specific to that page structure.
+ *)
+
+let
+    (* --- Theme engine ----------------------------------------------------------------
+     *
+     * No rule below this block names a colour: every one of them reads a custom property, and
+     * a theme is nothing but a set of values for those properties. Adding a theme means adding
+     * one `themeVars` entry, and nothing else.
+     *
+     * `:root` carries the light values, a prefers-color-scheme query supplies dark for anyone
+     * who has expressed no preference, and an explicit `data-theme` beats both on specificity
+     * whichever order they appear in.
+     *)
+    val lightVars =
+        "  --bg: #ffffff; --fg: #1a1a1a; --fg-muted: #555555; --fg-dim: #888888;\n"
+      ^ "  --fg-faint: #bbbbbb; --link: #0b5cad;\n"
+      ^ "  --surface: #fafafa; --surface-2: #f4f4f4; --surface-3: #f7f7f7;\n"
+      ^ "  --border: #e3e3e3; --border-light: #eeeeee; --border-strong: #cccccc;\n"
+      ^ "  --border-table: #dddddd;\n"
+      ^ "  --accent-bg: #1a1a1a; --accent-fg: #ffffff;\n"
+      (* Recency and danger sit on the blue-violet axis, which dichromatic vision preserves:
+       * #4f46b5 simulates to #4747b5 under protanopia and #4949b4 under deuteranopia, and its
+       * three gutter strengths stay apart at dE 45 / 26 / 21. The vermillion this replaced
+       * simulated to a murky #5c5c12. Nothing relies on colour alone in any case: the gutter
+       * carries meaning by position, and broken links and Delete are labelled in words. *)
+      ^ "  --recent: #4f46b5;\n"
+      ^ "  --note-bg: #fff8e1; --note-border: #e6b800;\n"
+      ^ "  --sel-bg: #e3ecfd; --sel-border: #3f74c8;\n"
+      ^ "  --danger: #a3306e; --shadow: rgba(0,0,0,0.14);\n"
+
+    val darkVars =
+        "  --bg: #16181d; --fg: #e6e6e6; --fg-muted: #a8adb8; --fg-dim: #878d99;\n"
+      ^ "  --fg-faint: #5c6270; --link: #6fa8e6;\n"
+      ^ "  --surface: #1b1e24; --surface-2: #22262e; --surface-3: #1e2128;\n"
+      ^ "  --border: #2c313a; --border-light: #262b33; --border-strong: #3a414d;\n"
+      ^ "  --border-table: #333a45;\n"
+      ^ "  --accent-bg: #e6e6e6; --accent-fg: #16181d;\n"
+      ^ "  --recent: #9a9bf0;\n"
+      ^ "  --note-bg: #33301c; --note-border: #a8892a;\n"
+      ^ "  --sel-bg: #1f2b40; --sel-border: #4a7fc8;\n"
+      ^ "  --danger: #e58ab8; --shadow: rgba(0,0,0,0.5);\n"
+
+    val sepiaVars =
+        "  --bg: #f6f1e7; --fg: #33302a; --fg-muted: #6b6558; --fg-dim: #8a8375;\n"
+      ^ "  --fg-faint: #b5ae9e; --link: #35618f;\n"
+      ^ "  --surface: #efe8db; --surface-2: #e8e0d0; --surface-3: #eee7d9;\n"
+      ^ "  --border: #ddd4c2; --border-light: #e6ddcc; --border-strong: #c9bfa9;\n"
+      ^ "  --border-table: #d5cbb6;\n"
+      ^ "  --accent-bg: #33302a; --accent-fg: #f6f1e7;\n"
+      ^ "  --recent: #4a49a0;\n"
+      ^ "  --note-bg: #f5e9c8; --note-border: #bfa14a;\n"
+      ^ "  --sel-bg: #e2e7f0; --sel-border: #6b86b5;\n"
+      ^ "  --danger: #91345f; --shadow: rgba(0,0,0,0.18);\n"
+
+    val themeCss =
+        ":root {\n" ^ lightVars ^ "}\n"
+      ^ "@media (prefers-color-scheme: dark) { :root {\n" ^ darkVars ^ "} }\n"
+      ^ ":root[data-theme=light] {\n" ^ lightVars ^ "}\n"
+      ^ ":root[data-theme=dark] {\n" ^ darkVars ^ "}\n"
+      ^ ":root[data-theme=sepia] {\n" ^ sepiaVars ^ "}\n"
+      ^ "html { color-scheme: light dark; }\n"
+      (* Two faces, split by what the text *is* rather than by which region it sits in. The mono
+       * face is for machine-readable strings: paths, hashes, code, the terse time scale. The
+       * serif is for language wherever it appears - document prose, headings, the site title,
+       * table cells, contents entries, control labels. A table is mostly prose, and the
+       * identifiers inside it are already marked up as code, so setting the whole table in mono
+       * erased the very distinction the backticks were carrying. Both stacks are resident,
+       * since a page opened from the filesystem can fetch nothing. *)
+      ^ ":root {\n"
+      ^ "  --serif: Charter, 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;\n"
+      ^ "  --mono: 'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;\n"
+      ^ "}\n"
+
+    val css =
+        themeCss
+      ^         "* { box-sizing: border-box; }\n"
+      ^ "body { margin: 0; font: 16.5px/1.7 var(--serif); color: var(--fg);\n"
+      ^ "  background: var(--bg); }\n"
+      ^ ".layout { display: flex; align-items: flex-start; }\n"
+      (* Layout widths, both draggable and both remembered. Not colours, but they belong with
+       * the other tunables rather than hard-coded into the rules that read them. *)
+      ^ ":root { --sidebar-w: 20rem; --main-w: 52rem; }\n"
+      ^ ".sidebar { width: var(--sidebar-w); flex: 0 0 var(--sidebar-w); height: 100vh;\n"
+      ^ "  position: sticky; top: 0; overflow-y: auto; background: var(--surface);\n"
+      ^ "  border-right: 1px solid var(--border); padding: 0.75rem 0.6rem 2rem;\n"
+      ^ "  font-family: var(--mono); }\n"
+      (* --- sidebar chrome: four rows, each doing one job ------------------------------- *)
+      ^ ".sbhead { display: flex; align-items: baseline; justify-content: space-between;\n"
+      ^ "  gap: 0.5rem; }\n"
+      ^ ".sbhead .brand { font-family: var(--serif); font-size: 1rem; color: var(--fg);\n"
+      ^ "  text-decoration: none; font-weight: 600; letter-spacing: -0.01em; }\n"
+      ^ ".themesel { font: inherit; font-size: 0.68rem; border: 0; background: none;\n"
+      ^ "  color: var(--fg-dim); padding: 0; }\n"
+      ^ ".sbnav { display: flex; gap: 0.6rem; margin: 0.4rem 0 0.5rem;\n"
+      ^ "  font-family: var(--serif); font-size: 0.8rem; }\n"
+      ^ ".sbnav a { color: var(--fg-muted); text-decoration: none; }\n"
+      ^ ".sbnav a:hover { color: var(--fg); }\n"
+      ^ ".sidebar input#filter { width: 100%; font-family: var(--serif); font-size: 0.82rem;\n"
+      ^ "  padding: 0.3rem 0.4rem; background: var(--bg); color: var(--fg);\n"
+      ^ "  border: 1px solid var(--border); border-radius: 3px; }\n"
+      ^ ".sbfilters { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem;\n"
+      ^ "  margin: 0.45rem 0 0.6rem; font-size: 0.68rem; }\n"
+      (* Text toggles, not pills: a row of ten pills is what made this feel like a control
+       * panel rather than an index. *)
+      (* Interactive labels sit at --fg-muted, which clears 4.5:1 against the sidebar ground;
+       * --fg-faint measures 1.7:1 at this size and reads as disabled rather than quiet. *)
+      ^ ".sbfilters .tog { font-family: var(--mono); font-size: 0.68rem; border: 0;\n"
+      ^ "  background: none; padding: 0; color: var(--fg-muted); cursor: pointer; }\n"
+      ^ "#expandall, #collapseall, #archivetoggle { font-family: var(--serif);\n"
+      ^ "  font-size: 0.78rem; }\n"
+      ^ ".sbfilters .tog:hover { color: var(--fg); }\n"
+      ^ ".sbfilters .tog.on { color: var(--fg); text-decoration: underline;\n"
+      ^ "  text-underline-offset: 0.2em; }\n"
+      ^ ".sbfilters .sep { width: 100%; height: 0; }\n"
+      ^ ".sbfilters input[type=number] { width: 2.2rem; font: inherit; font-size: 0.68rem;\n"
+      ^ "  padding: 0 0.15rem; background: var(--bg); color: var(--fg);\n"
+      ^ "  border: 1px solid var(--border); border-radius: 2px; }\n"
+      ^ ".sbfilters select { font: inherit; font-size: 0.68rem; border: 0; background: none;\n"
+      ^ "  color: var(--fg-dim); padding: 0; }\n"
+      ^ "#shown { color: var(--fg-faint); }\n"
+      (* --- the tree ------------------------------------------------------------------- *)
+      ^ ".tree, .tree ul { list-style: none; margin: 0; padding-left: 0; }\n"
+      ^ ".sidebar select, .sidebar option, .sidebar button, .sidebar input\n"
+      ^ "  { font-family: var(--mono); }\n"
+      ^ ".tree { font-size: 0.72rem; line-height: 1.75; border-top: 1px solid var(--border);\n"
+      ^ "  padding-top: 0.5rem; }\n"
+      ^ ".tree li { margin: 0; }\n"
+      (* A hairline down the open directory's children carries the nesting, in place of a
+       * disclosure triangle on every one of twenty rows. *)
+      ^ ".tree details > ul { margin-left: 0.5rem; padding-left: 0.55rem;\n"
+      ^ "  border-left: 1px solid var(--border-strong); }\n"
+      ^ ".tree summary { list-style: none; cursor: pointer; display: flex;\n"
+      ^ "  align-items: baseline; justify-content: space-between; gap: 0.5rem; }\n"
+      ^ ".tree summary::-webkit-details-marker { display: none; }\n"
+      ^ ".tree summary::marker { content: none; }\n"
+      ^ ".tree .dirname { color: var(--fg); font-weight: 600; text-decoration: none; }\n"
+      ^ ".tree details[open] > summary .dirname { color: var(--fg-muted); }\n"
+      ^ ".tree summary:hover .dirname { color: var(--fg); }\n"
+      ^ ".tree .dcount { color: var(--fg-faint); font-size: 0.68rem; font-variant-numeric: tabular-nums; }\n"
+      (* Recency reads as a dot on a three-slot track flush with the right edge. The left of a
+       * tree already carries nesting, and two horizontal-position signals on the same side
+       * compete with one another: the left is hierarchy, the right is state.
+       *
+       * The track runs like a time axis, older to the left and newer to the right, so the last
+       * week sits nearest the name and the last hour hard against the edge, where a mark is
+       * easiest to find. Position is a channel colour blindness cannot affect, and the hue's
+       * strength says the same thing again, so either cue alone carries it. The document being
+       * read is marked by its ground, which leaves the track free. *)
+      ^ ".tree a { color: var(--fg-muted); text-decoration: none; }\n"
+      ^ ".tree a[id^=doc] { display: block; position: relative; padding-right: 1.6rem;\n"
+      ^ "  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n"
+      ^ ".tree a[id^=doc]::before { content: ''; position: absolute; top: 50%; width: 4.5px;\n"
+      ^ "  height: 4.5px; border-radius: 50%; transform: translateY(-50%); }\n"
+      ^ ".tree a.month::before { right: 17.5px;\n"
+      ^ "  background: color-mix(in srgb, var(--recent) 34%, transparent); }\n"
+      ^ ".tree a.week::before { right: 12px;\n"
+      ^ "  background: color-mix(in srgb, var(--recent) 56%, transparent); }\n"
+      ^ ".tree a.day::before { right: 6.5px;\n"
+      ^ "  background: color-mix(in srgb, var(--recent) 78%, transparent); }\n"
+      ^ ".tree a.hour::before { right: 1px; background: var(--recent); }\n"
+      ^ ".tree a:hover { color: var(--fg); }\n"
+      ^ ".tree a.archived { opacity: 0.55; font-style: italic; }\n"
+      ^ ".content { flex: 1 1 auto; min-width: 0; display: flex; align-items: flex-start; }\n"
+      ^ "main { flex: 1 1 auto; min-width: 0; max-width: var(--main-w); padding: 2rem 2.5rem; }\n"
+      ^ ".maindrag { flex: 0 0 6px; align-self: stretch; cursor: col-resize; }\n"
+      ^ ".maindrag:hover { background: var(--border-strong); }\n"
+      ^ ".toc { width: 14rem; flex: 0 0 14rem; position: sticky; top: 0; max-height: 100vh;\n"
+      ^ "  overflow-y: auto; padding: 2.4rem 1rem; font-family: var(--serif);\n"
+      ^ "  font-size: 0.82rem; line-height: 1.45; }\n"
+      ^ ".toc ul { list-style: none; margin: 0; padding: 0; }\n"
+      ^ ".toc a { color: var(--fg-muted); text-decoration: none; display: block; padding: 0.12rem 0; }\n"
+      ^ ".toc a:hover { color: var(--link); }\n"
+      ^ ".toc .lvl3 { padding-left: 0.8rem; }\n"
+      ^ ".toc .lvl4, .toc .lvl5, .toc .lvl6 { padding-left: 1.6rem; }\n"
+      (* The measure sits on the prose, not on the column: a paragraph reads at about seventy
+       * characters while a wide status table still gets the whole width. *)
+      ^ ".rendered > p, .rendered > ul, .rendered > ol, .rendered > blockquote,\n"
+      ^ "main > .crumbs { max-width: 36rem; }\n"
+      ^ ".rendered > ul, .rendered > ol { padding-left: 1.4rem; }\n"
+      ^ "h1, h2, h3, h4 { line-height: 1.2; font-weight: 600; letter-spacing: -0.01em; }\n"
+      ^ "h1 { font-size: 1.85rem; margin: 0 0 1.2rem; }\n"
+      ^ "h2 { font-size: 1.25rem; margin: 2.4rem 0 0.8rem; }\n"
+      ^ "h3 { font-size: 1.05rem; margin: 1.8rem 0 0.6rem; }\n"
+      ^ "h4 { font-size: 0.95rem; margin: 1.4rem 0 0.5rem; }\n"
+      ^ "code { background: var(--surface-2); padding: 0.05rem 0.28rem; border-radius: 3px;\n"
+      ^ "  font-size: 0.82em; font-family: var(--mono); }\n"
+      ^ "pre { background: var(--surface-3); border: 1px solid var(--border-light); border-radius: 5px; padding: 0.8rem; "
+      ^ "overflow-x: auto; }\n"
+      ^ "pre code { background: none; padding: 0; font-size: 0.74rem; }\n"
+      ^ "table { border-collapse: collapse; font-family: var(--serif); font-size: 0.88rem;\n"
+      ^ "  font-variant-numeric: tabular-nums; width: 100%; margin: 1.2rem 0; }\n"
+      ^ "td.date { white-space: nowrap; }\n"
+      ^ "th, td { border: 1px solid var(--border-table); padding: 0.35rem 0.6rem; text-align: left; "
+      ^ "vertical-align: top; }\n"
+      ^ "th { background: var(--surface-2); }\n"
+      ^ "blockquote { margin: 1rem 0; padding: 0.1rem 1rem; border-left: 3px solid var(--border-table); "
+      ^ "color: var(--fg-muted); }\n"
+      ^ "del { color: var(--fg-dim); }\n"
+      ^ "a { color: var(--link); }\n"
+      ^ ".task-list-item { list-style: none; margin-left: -1.2rem; }\n"
+      ^ ".task-list-item input { margin-right: 0.4rem; }\n"
+      ^ "footer { margin-top: 2rem; padding-top: 1rem; font-family: var(--mono);\n"
+      ^ "  border-top: 1px solid var(--border-light); color: var(--fg-dim);\n"
+      ^ "  font-size: 0.68rem; }\n"
+      ^ ".broken { color: var(--danger); }\n"
+      ^ ".hit { padding: 0.6rem 0; border-bottom: 1px solid var(--border-light); }\n"
+      ^ ".hit .path { color: var(--fg-dim); font-size: 0.8rem; }\n"
+      ^ ".tree details > summary { list-style: revert; cursor: pointer; }\n"
+      ^ ".tree details > summary::marker { color: var(--fg-faint); }\n"
+      ^ ".tree summary a.dirlink { color: var(--fg-muted); font-weight: 600; text-decoration: none; }\n"
+      ^ ".tree summary a.dirlink:hover { color: var(--link); text-decoration: underline; }\n"
+      ^ ".crumbs { font-family: var(--mono); font-size: 0.68rem; color: var(--fg-dim);\n"
+      ^ "  margin-bottom: 1.6rem; }\n"
+      ^ ".crumbs a { color: var(--fg-muted); text-decoration: none; }\n"
+      ^ ".crumbs a:hover { color: var(--link); text-decoration: underline; }\n"
+      ^ ".crumbs .sep { color: var(--border-strong); }\n"
+      ^ ".crumbs .here { color: var(--fg); }\n"
+      ^ ".prevnext { display: flex; justify-content: space-between; gap: 1rem;\n"
+      ^ "  margin-top: 3rem; font-family: var(--mono); font-size: 0.7rem; }\n"
+      ^ ".prevnext a { text-decoration: none; }\n"
+      ^ ".prevnext a:hover { text-decoration: underline; }\n"
+      ^ ".prevnext .next::after { content: ' →'; }\n"
+      (* Source view. white-space: pre-wrap keeps the source verbatim while still wrapping a
+       * long line, so a wide table row does not force the page sideways. *)
+      (* Sticky, so switching between rendered and source stays reachable however far down
+       * the document you have scrolled. *)
+      ^ ".viewtoggle { display: flex; align-items: center; gap: 0.8rem; position: sticky;\n"
+      ^ "  top: 0; z-index: 5; background: var(--bg); padding: 0.6rem 0;\n"
+      ^ "  border-bottom: 1px solid var(--border-light); margin-bottom: 1rem; }\n"
+      ^ ".viewtoggle { font-family: var(--serif); }\n"
+      ^ ".viewtoggle button { font: inherit; font-size: 0.8rem; padding: 0; border: 0;\n"
+      ^ "  background: none; cursor: pointer; color: var(--fg-muted); }\n"
+      ^ ".viewtoggle button:hover { color: var(--fg); }\n"
+      ^ ".viewtoggle button.on { color: var(--fg); text-decoration: underline;\n"
+      ^ "  text-underline-offset: 0.2em; }\n"
+      ^ ".viewtoggle .hint { color: var(--fg-dim); font-size: 0.78rem; }\n"
+      ^ "ol.rawlines { margin: 0; padding: 0 0 0 4.5rem; list-style: decimal;\n"
+      ^ "  font-family: 'SF Mono', Menlo, Consolas, monospace; font-size: 0.8rem;\n"
+      ^ "  line-height: 1.55; color: var(--fg); }\n"
+      (* Wrapping is the default. In nowrap mode the list scrolls sideways instead; the
+       * line numbers are ::marker content in the padding, so they scroll with it. *)
+      ^ "ol.rawlines.nowrap { overflow-x: auto; }\n"
+      ^ "ol.rawlines.nowrap li { white-space: pre; word-break: normal; }\n"
+      ^ "ol.rawlines li { white-space: pre-wrap; word-break: break-word;\n"
+      ^ "  padding-left: 0.5rem; border-left: 1px solid var(--border-light); }\n"
+      ^ "ol.rawlines li::marker { color: var(--fg-faint); font-size: 0.75rem; }\n"
+      ^ "ol.rawlines li:hover { background: var(--surface); }\n"
+      ^ "ol.rawlines li.commented { background: var(--note-bg); border-left-color: var(--note-border); }\n"
+      (* After .commented so it wins: the native selection collapses when the textarea
+       * takes focus, so the range being commented on is marked with a class instead. *)
+      ^ "ol.rawlines li.selecting { background: var(--sel-bg); border-left-color: var(--sel-border); }\n"
+      ^ "ol.rawlines li:empty::after { content: ' '; }\n"
+      (* Comment composer, pinned so it stays put while the selection is above it. *)
+      ^ ".commentbar { display: none; position: fixed; right: 1.5rem; bottom: 1.5rem;\n"
+      ^ "  width: 24rem; max-width: calc(100vw - 3rem); background: var(--bg); z-index: 20;\n"
+      ^ "  border: 1px solid var(--border-strong); border-radius: 6px; padding: 0.8rem;\n"
+      ^ "  box-shadow: 0 4px 20px var(--shadow); }\n"
+      ^ ".commentbar.open { display: block; }\n"
+      ^ ".commentbar .cb-range { font-family: 'SF Mono', Menlo, monospace; font-size: 0.75rem;\n"
+      ^ "  color: var(--fg-dim); margin-bottom: 0.4rem; }\n"
+      ^ ".commentbar textarea { width: 100%; font: inherit; font-size: 0.85rem;\n"
+      ^ "  border: 1px solid var(--border-strong); border-radius: 4px; padding: 0.4rem; resize: vertical; }\n"
+      ^ ".commentbar .cb-actions { margin-top: 0.5rem; text-align: right; }\n"
+      ^ ".commentbar button { font: inherit; font-size: 0.8rem; padding: 0.25rem 0.8rem;\n"
+      ^ "  border: 1px solid var(--border-strong); border-radius: 4px; background: var(--bg); cursor: pointer; }\n"
+      ^ ".commentbar .cb-save { background: var(--accent-bg); border-color: var(--accent-bg);\n"
+      ^ "  color: var(--accent-fg); }\n"
+      (* Comments page. *)
+      ^ ".cactions { display: flex; gap: 0.5rem; align-items: center; margin: 1rem 0; }\n"
+      ^ ".cactions button { font: inherit; font-size: 0.82rem; padding: 0.3rem 0.8rem;\n"
+      ^ "  border: 1px solid var(--border-strong); border-radius: 4px; background: var(--bg); cursor: pointer; }\n"
+      ^ "#clist .centry { border: 1px solid var(--border-light); border-radius: 5px; padding: 0.7rem;\n"
+      ^ "  margin-bottom: 0.8rem; }\n"
+      ^ "#clist .chead { font-family: 'SF Mono', Menlo, monospace; font-size: 0.75rem;\n"
+      ^ "  color: var(--fg-dim); display: flex; justify-content: space-between; gap: 1rem; }\n"
+      ^ "#clist .cdel { font: inherit; font-size: 0.72rem; border: 1px solid var(--border-table);\n"
+      ^ "  background: var(--bg); border-radius: 3px; cursor: pointer; color: var(--danger); }\n"
+      ^ "#clist .cquote { background: var(--note-bg); border: 1px solid var(--note-border); border-radius: 4px;\n"
+      ^ "  padding: 0.5rem; margin: 0.5rem 0; font-size: 0.78rem; overflow-x: auto; }\n"
+      ^ "#clist .cbody { white-space: pre-wrap; font-size: 0.9rem; }\n"
+      ^ "#preview { background: var(--surface-3); border: 1px solid var(--border-light); border-radius: 5px;\n"
+      ^ "  padding: 0.8rem; font-size: 0.78rem; overflow-x: auto; white-space: pre-wrap; }\n"
+      ^ ".hint { color: var(--fg-dim); font-size: 0.8rem; }\n"
+      (* Recency markers. A dot after the name rather than a colour on it, so the link stays
+       * readable and the marker survives the filter hiding rows around it. *)
+      ^ ".tree .dcount { color: var(--fg-faint); font-size: 0.72rem; }\n"
+      ^ "#shown { color: var(--fg-muted); }\n"
+      ^ ".timefilter { display: flex; flex-wrap: wrap; gap: 0.25rem; align-items: center;\n"
+      ^ "  margin: 0.35rem 0; }\n"
+      ^ ".timefilter .chip { font: inherit; font-size: 0.7rem; padding: 0.1rem 0.45rem;\n"
+      ^ "  border: 1px solid var(--border-table); background: var(--bg); border-radius: 10px; cursor: pointer;\n"
+      ^ "  color: var(--fg-muted); }\n"
+      ^ ".timefilter .chip.on { background: var(--accent-bg); border-color: var(--accent-bg);\n"
+      ^ "  color: var(--accent-fg); }\n"
+      ^ ".timefilter input[type=number] { width: 3.2rem; font: inherit; font-size: 0.7rem;\n"
+      ^ "  padding: 0.1rem 0.3rem; border: 1px solid var(--border-table); border-radius: 4px; }\n"
+      ^ ".timefilter select { font: inherit; font-size: 0.7rem; border: 1px solid var(--border-table);\n"
+      ^ "  border-radius: 4px; }\n"
+      ^ "a.hanchor { margin-left: 0.4rem; color: var(--border-table); text-decoration: none;\n"
+      ^ "  font-weight: 400; opacity: 0; transition: opacity 0.1s; }\n"
+      ^ "h2:hover a.hanchor, h3:hover a.hanchor, h4:hover a.hanchor { opacity: 1; }\n"
+      ^ "a.hanchor:hover { color: var(--link); }\n"
+      ^ ".prewrap { position: relative; }\n"
+      ^ ".prewrap .copybtn { position: absolute; top: 0.4rem; right: 0.4rem; font: inherit;\n"
+      ^ "  font-size: 0.7rem; padding: 0.1rem 0.45rem; border: 1px solid var(--border-table);\n"
+      ^ "  background: var(--bg); border-radius: 4px; cursor: pointer; color: var(--fg-muted);\n"
+      ^ "  opacity: 0; transition: opacity 0.1s; }\n"
+      ^ ".prewrap:hover .copybtn { opacity: 1; }\n"
+      ^ ".sbtools { display: flex; align-items: center; gap: 0.3rem; margin: 0.35rem 0; }\n"
+      ^ ".sbtools select { font: inherit; font-size: 0.7rem; background: var(--bg);\n"
+      ^ "  border: 1px solid var(--border-strong); border-radius: 4px; color: var(--fg); }\n"
+      ^ ".sbtools label { font-size: 0.7rem; color: var(--fg-dim); }\n"
+      (* Fixed rather than absolute: the sidebar scrolls and clips its overflow, which
+       * would hide a grip positioned inside it. A fixed element escapes that clipping. *)
+      ^ ".sbdrag { position: fixed; top: 0; left: var(--sidebar-w); width: 6px;\n"
+      ^ "  height: 100vh; cursor: col-resize; z-index: 30; }\n"
+      ^ ".sbdrag:hover { background: var(--border-strong); }\n"
+      ^ ".toc a.active { color: var(--link); font-weight: 600; }\n"
+      ^ "th.sortable { cursor: pointer; user-select: none; }\n"
+      ^ "th.sortable::after { content: ' ⇅'; color: var(--fg-faint); font-size: 0.8em; }\n"
+      ^ "th.sortasc::after { content: ' ↑'; color: var(--fg); }\n"
+      ^ "th.sortdesc::after { content: ' ↓'; color: var(--fg); }\n"
+      ^ "mark { background: var(--note-bg); color: var(--fg); }\n"
+      (* Borders were removed from the controls, so keyboard focus has to be stated. *)
+      ^ ":focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }\n"
+      ^ "@media (prefers-reduced-motion: reduce) {\n"
+      ^ "  * { transition: none !important; animation: none !important; }\n"
+      ^ "}\n"
+      ^ "@media print {\n"
+      ^ "  .sidebar, .toc, .viewtoggle, .prevnext, .commentbar, ol.rawlines,\n"
+      ^ "  .maindrag, .sbdrag { display: none; }\n"
+      ^ "  .layout { display: block; }\n"
+      ^ "  main { max-width: 100%; padding: 0; }\n"
+      ^ "  a { color: var(--fg); text-decoration: none; }\n"
+      ^ "}\n"
+      (* The table of contents is the first thing to go when width runs short, then the
+       * side-by-side layout itself: a fixed sidebar plus a fixed toc leaves a narrow window
+       * with almost no room for the document. *)
+      ^ "@media (max-width: 1100px) { .toc { display: none; } }\n"
+      ^ "@media (max-width: 820px) {\n"
+      (* align-items must go back to stretch: in a column flex container flex-start is the
+       * horizontal axis, which shrink-wraps the content to its widest child. *)
+      ^ "  .layout { flex-direction: column; align-items: stretch; }\n"
+      (* Capped, or the whole document tree pushes the document itself off the screen. *)
+      ^ "  .sidebar { width: 100%; flex: none; height: auto; max-height: 40vh;\n"
+      ^ "             position: static; border-right: none;\n"
+      ^ "             border-bottom: 1px solid var(--border); }\n"
+      ^ "  .content { display: block; width: 100%; }\n"
+      ^ "  .maindrag, .sbdrag { display: none; }\n"
+      ^ "  main { padding: 1.25rem; max-width: 100%; width: 100%; }\n"
+      ^ "}\n"
+
+    (** The rule marking the row of the document being read, for a selector matching that row.
+     *
+     *  Kept out of `css` because it is the one part of the sidebar that differs between pages:
+     *  the markup is identical for every document in a directory and is rendered once per
+     *  directory, so the page names its own row here instead of carrying a marked-up copy. *)
+    fun currentRowRule sel =
+        ".tree " ^ sel ^ " { background-color: var(--surface-2); color: var(--fg);\n"
+      ^ "  font-weight: 600; }\n"
+
+in [ ("css", css)
+   , ("currentRowRule", currentRowRule)
+   , ("lightVars", lightVars)
+   , ("darkVars", darkVars)
+   , ("sepiaVars", sepiaVars)
+   ]
+end

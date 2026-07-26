@@ -98,28 +98,67 @@ class  MboxClearance {
 }
 
 
+/** The mailbox is an array of messages in arrival order, scanned and
+ *  indexed by physical position, plus a head offset marking the first
+ *  live message. Consuming at the head — the common FIFO case — advances
+ *  the offset in O(1) instead of splicing (Array.prototype.splice shifts
+ *  every remaining element, which makes draining a deep mailbox
+ *  quadratic). A FifoQueue cannot be used here because selective receive
+ *  needs positional scanning and mid-queue removal.
+ */
 class Mailbox extends Array {
     mclear : MboxClearance ;
     caps : string;
 
-    peek_cache_index : number 
-    peek_cache_position: number 
-    peek_cache_lowb  : Level 
-    peek_cache_highb : Level 
-    
+    /** Physical index of the first live message; slots below it are
+     *  cleared and reclaimed by compaction in consumeAt. */
+    head : number;
+
+    /** Consumed-prefix length at which compaction is considered. */
+    static readonly COMPACTION_THRESHOLD = 32;
+
+    peek_cache_index : number
+    peek_cache_position: number
+    peek_cache_lowb  : Level
+    peek_cache_highb : Level
+
 
     constructor () {
         super ()
         this.mclear = new MboxClearance (levels.BOT, levels.BOT);
         this.caps = null;
+        this.head = 0;
 
-        this.peek_cache_index = null; 
-        this.peek_cache_position = null;    
-        this.peek_cache_lowb  = null; 
+        this.peek_cache_index = null;
+        this.peek_cache_position = null;
+        this.peek_cache_lowb  = null;
         this.peek_cache_highb = null
     }
     newMessage (x) {
         this.push(x);
+    }
+
+    /** Number of live (unconsumed) messages. */
+    get logicalSize () {
+        return this.length - this.head;
+    }
+
+    /** Remove the message at physical index i. O(1) when i is the head
+     *  (the FIFO case); falls back to splice for out-of-order selective
+     *  consumption. Callers must reset the peek cache first: compaction
+     *  shifts physical positions. */
+    consumeAt (i : number) {
+        if (i === this.head) {
+            this[i] = null;
+            this.head++;
+            if (this.head >= Mailbox.COMPACTION_THRESHOLD
+                && this.head * 2 >= this.length) {
+                this.splice(0, this.head);
+                this.head = 0;
+            }
+        } else {
+            this.splice(i, 1);
+        }
     }
 
 

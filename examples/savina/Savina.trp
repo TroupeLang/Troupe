@@ -1,0 +1,75 @@
+(* Savina — the 30 Savina actor benchmarks as benchmark descriptors
+ * ({name, bench : size -> result, check : size -> result -> bool,
+ * sizes : default size list}).
+ *
+ * Each benchmark lives in its own module under benchmarks/, with its own
+ * message-protocol datatype; this file is a thin aggregator that imports them
+ * and re-exports `all`, the descriptor list in canonical suite order. It is
+ * imported by runall.trp and the thin per-benchmark drivers via
+ * `import "./Savina"`; the whole import graph is recompiled on every run, so
+ * there is no artifact to republish after a benchmark or compiler change.
+ *)
+
+import "./benchmarks/Pingpong"
+import "./benchmarks/Counting"
+import "./benchmarks/Threadring"
+import "./benchmarks/Fibonacci"
+import "./benchmarks/Big"
+import "./benchmarks/Philosophers"
+import "./benchmarks/Prodcons"
+import "./benchmarks/Trapezoid"
+import "./benchmarks/Fjthrput"
+import "./benchmarks/Fjcreate"
+import "./benchmarks/Chameneos"
+import "./benchmarks/Cigsmok"
+import "./benchmarks/Barber"
+import "./benchmarks/Concdict"
+import "./benchmarks/Concsll"
+import "./benchmarks/Sieve"
+import "./benchmarks/Quicksort"
+import "./benchmarks/Radixsort"
+import "./benchmarks/Filterbank"
+import "./benchmarks/Bitonicsort"
+import "./benchmarks/Facloc"
+import "./benchmarks/Nqueenk"
+import "./benchmarks/Logmap"
+import "./benchmarks/Banking"
+import "./benchmarks/Astar"
+import "./benchmarks/Uct"
+import "./benchmarks/Recmatmul"
+import "./benchmarks/Apsp"
+import "./benchmarks/Sor"
+import "./benchmarks/Piprecision"
+
+let val all =
+        [ Pingpong.descriptor
+        , Counting.descriptor
+        , Threadring.descriptor
+        , Fibonacci.descriptor
+        , Big.descriptor
+        , Philosophers.descriptor
+        , Prodcons.descriptor
+        , Trapezoid.descriptor
+        , Fjthrput.descriptor
+        , Fjcreate.descriptor
+        , Chameneos.descriptor
+        , Cigsmok.descriptor
+        , Barber.descriptor
+        , Concdict.descriptor
+        , Concsll.descriptor
+        , Sieve.descriptor
+        , Quicksort.descriptor
+        , Radixsort.descriptor
+        , Filterbank.descriptor
+        , Bitonicsort.descriptor
+        , Facloc.descriptor
+        , Nqueenk.descriptor
+        , Logmap.descriptor
+        , Banking.descriptor
+        , Astar.descriptor
+        , Uct.descriptor
+        , Recmatmul.descriptor
+        , Apsp.descriptor
+        , Sor.descriptor
+        , Piprecision.descriptor ]
+in [ ("all", all) ] end

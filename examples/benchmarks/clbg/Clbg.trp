@@ -1,0 +1,252 @@
+(* Clbg — the allocation/GC-stress subset of the Computer Language
+ * Benchmarks Game (CLBG) as benchmark descriptors ({name, bench, check,
+ * sizes}). This is a program-relative module: it exports `all`, the
+ * descriptor list, and is imported by runall.trp via `import "./Clbg"`.
+ * Structured exactly like examples/savina/Savina.trp. The whole import
+ * graph is recompiled on every run, so there is no artifact to republish
+ * after a benchmark or compiler change.
+ *
+ * These are the single-process (sequential) CLBG problems; the parallel
+ * variants are out of scope. Each descriptor cites its CLBG benchmark and
+ * states the resource it stresses. Where a canonical expected result is
+ * not documented by CLBG itself, the value is computed two independent
+ * ways and marked self-derived in the descriptor comment.
+ *)
+
+import List
+
+datatype tree = LEAF | NODE of tree * tree
+
+let
+    (*==================== binary-trees ====================*)
+    (* CLBG "binary-trees": the flagship allocation stressor. Builds,
+     * checksums, and immediately discards many short-lived *perfect*
+     * binary trees, allocated bottom-up, exactly as the CLBG spec
+     * prescribes (minDepth 4; a stretch tree of maxDepth+1; a long-lived
+     * tree of maxDepth; and, for each depth from minDepth to maxDepth in
+     * steps of 2, 2^(maxDepth-depth+minDepth) trees). Stresses allocation
+     * churn and the garbage collector: transient nodes are born and die
+     * in bulk. `itemCheck` is the node count of a tree (a LEAF-bottomed
+     * node counts 1; an internal node counts 1 + both subtrees), so a
+     * tree of depth d has exactly 2^(d+1)-1 nodes.
+     *
+     * `bench` returns the aggregate checksum: the sum of every itemCheck
+     * computed in a run (stretch + long-lived + all per-depth groups) —
+     * an exact integer that stays well within the exact-integer range
+     * (2^53-1) for the supported sizes, so ordinary numbers suffice.
+     * `check` recomputes that same aggregate purely arithmetically from
+     * the closed form 2^(d+1)-1 for a depth-d tree — a wholly different
+     * algorithmic style (no allocation), so an allocation/traversal bug
+     * cannot pass unnoticed. *)
+    val binarytrees =
+        let val minDepth = 4
+
+    fun bottomUp 0 = NODE (LEAF, LEAF)
+      | bottomUp d = NODE (bottomUp (d - 1), bottomUp (d - 1))
+
+    fun itemCheck (NODE (LEAF, _)) = 1
+      | itemCheck (NODE (l, r))    = 1 + itemCheck l + itemCheck r
+
+    fun pow2 0 = 1
+      | pow2 k = 2 * pow2 (k - 1)
+
+    fun maxDepthOf n = if n > minDepth + 2 then n else minDepth + 2
+
+    fun bench n =
+        let val maxDepth = maxDepthOf n
+            val stretchCheck = itemCheck (bottomUp (maxDepth + 1))
+            val longLived = bottomUp maxDepth
+            fun depthLoop (d, acc) =
+                if d > maxDepth then acc
+                else let val iterations = pow2 (maxDepth - d + minDepth)
+                         fun inner (0, s) = s
+                           | inner (i, s) = inner (i - 1, s + itemCheck (bottomUp d))
+                     in depthLoop (d + 2, acc + inner (iterations, 0)) end
+            val groups = depthLoop (minDepth, 0)
+        in stretchCheck + groups + itemCheck longLived
+        end
+
+    (* the same aggregate, from the closed form; no trees allocated *)
+    fun closed n =
+        let val maxDepth = maxDepthOf n
+            fun go (d, acc) =
+                if d > maxDepth then acc
+                else go (d + 2, acc + pow2 (maxDepth - d + minDepth) * (pow2 (d + 1) - 1))
+        in (pow2 (maxDepth + 2) - 1) + go (minDepth, 0) + (pow2 (maxDepth + 1) - 1)
+        end
+        in { name = "binarytrees"
+           , bench = bench
+           , check = fn n => fn r => r = closed n
+           , sizes = [10, 12, 14]
+           } end
+
+    (*==================== fannkuch-redux ====================*)
+    (* CLBG "fannkuch-redux": permutation flips. Enumerates all n!
+     * permutations of [0..n-1] in the canonical CLBG count-array order,
+     * and for each counts the "flips" — repeatedly reverse the first
+     * perm[0]+1 elements until the head is 0. Stresses tight integer
+     * loops and the list churn of permutation generation and prefix
+     * reversal (each flip and each next-permutation rotation allocates).
+     *
+     * `bench` returns (checksum, maxFlips): maxFlips is the largest flip
+     * count over all permutations (Pfannkuchen(n)); checksum sums the
+     * flip count with the sign of the permutation index's parity, in the
+     * canonical generation order.
+     *
+     * Expected values. maxFlips is OEIS A000375 (6->10, 7->16, 8->22).
+     * The n=7 pair (228, 16) is the sample output stated in the CLBG
+     * problem itself, so it is documented, not guessed. The n=6 (49) and
+     * n=8 (1616) checksums are self-derived: two independent
+     * implementations — this list-based generator and a separate
+     * Vector-based one that reverses in place — were run and agree, and
+     * each maxFlips matches A000375. Since the checksum's sign pattern is
+     * defined by the exact generation order, `check` validates against
+     * this table and refuses to claim ok for an unlisted size. *)
+    val fannkuchredux =
+        let (* n, checksum, maxFlips *)
+    val expected = [ (6, 49, 10), (7, 228, 16), (8, 1616, 22) ]
+
+    (* reverse the first k elements of a list, keeping the rest *)
+    fun revPrefix (k, xs) =
+        let fun go (0, front, rest)  = List.append front rest
+              | go (j, front, y::ys) = go (j - 1, y :: front, ys)
+        in go (k, [], xs) end
+
+    fun countFlips perm =
+        let fun go (p, c) =
+                let val k = List.head p
+                in if k = 0 then c else go (revPrefix (k + 1, p), c + 1) end
+        in go (perm, 0) end
+
+    (* rotate the first (r+1) elements of perm1 left by one *)
+    fun rotate (perm0 :: tail, r) =
+        let fun ins (0, rest)  = perm0 :: rest
+              | ins (j, x::xs) = x :: ins (j - 1, xs)
+        in ins (r, tail) end
+
+    fun getN (x :: _, 0)  = x
+      | getN (_ :: xs, i) = getN (xs, i - 1)
+
+    fun setN (_ :: xs, 0, v) = v :: xs
+      | setN (x :: xs, i, v) = x :: setN (xs, i - 1, v)
+
+    fun bench n =
+        let (* reset counts below r each round: count[r-1..1] := r..2 *)
+            fun resetCount (count, r) =
+                if r = 1 then (count, 1)
+                else resetCount (setN (count, r - 1, r), r - 1)
+            (* advance to the next permutation; carry via the count array *)
+            fun nextPerm (perm1, count, r) =
+                if r = n then (perm1, count, r, true)
+                else let val perm1b = rotate (perm1, r)
+                         val cr = getN (count, r) - 1
+                         val countb = setN (count, r, cr)
+                     in if cr > 0 then (perm1b, countb, r, false)
+                        else nextPerm (perm1b, countb, r + 1)
+                     end
+            val perm1_0 = List.range n
+            val count_0 = List.map (fn _ => 0) (List.range n)
+            fun loop (perm1, count, r, permCount, maxFlips, checksum) =
+                let val (count1, r1) = resetCount (count, r)
+                    val flips = countFlips perm1
+                    val maxFlips2 = if flips > maxFlips then flips else maxFlips
+                    val checksum2 = if permCount mod 2 = 0 then checksum + flips
+                                                           else checksum - flips
+                    val (perm1b, countb, rb, done) = nextPerm (perm1, count1, r1)
+                in if done then (checksum2, maxFlips2)
+                   else loop (perm1b, countb, rb, permCount + 1, maxFlips2, checksum2)
+                end
+        in loop (perm1_0, count_0, n, 0, 0, 0)
+        end
+
+    fun check n (cs, mx) =
+        case List.filter (fn (m, _, _) => m = n) expected of
+          [(_, ecs, emx)] => cs = ecs andalso mx = emx
+        | _               => false   (* no reference for this size: refuse ok *)
+        in { name = "fannkuchredux"
+           , bench = bench
+           , check = check
+           , sizes = [6, 7, 8]
+           } end
+
+    (*==================== spectral-norm ====================*)
+    (* CLBG "spectral-norm": a floating-point kernel. Estimates the
+     * largest singular value (the spectral norm) of the n*n matrix
+     * A(i,j) = 1 / ((i+j)(i+j+1)/2 + i + 1) by power iteration on A^T A,
+     * kept matrix-free — A is never materialized; each step applies A
+     * then A^T. Stresses the float arithmetic and the O(n^2)-per-step
+     * inner loops (10 iterations of two A^T A products).
+     *
+     * `bench` returns the estimated norm. Expected results:
+     *   - Canonical value: at n = 100 the CLBG problem's documented
+     *     sample output is 1.274219991; this implementation returns
+     *     1.2742199912349..., matching within 1e-8. (The larger CLBG
+     *     timed size 5500 gives ~1.274224153 — the norm rises with n —
+     *     and is far too slow to run here; n = 100 is the anchor.)
+     *   - Self-consistency at every size: the power method converges to
+     *     the same dominant eigenvector from any non-degenerate start, so
+     *     a second run from a different start vector (1/(i+1)) with a
+     *     different iteration count (13 vs 10) — an independent path —
+     *     must agree to 1e-9. Runs confirm agreement to ~1e-15. *)
+    val spectralnorm =
+        let fun abs x = if x < 0.0 then 0.0 - x else x
+
+    fun elt (i, j) = 1.0 / (((i + j) * (i + j + 1)) div 2 + i + 1)
+
+    (* out[i] = sum_j A(i,j) * v[j], with v a list of length n *)
+    fun mulAv (v, n) =
+        List.map (fn i =>
+            let fun go (j, vs, acc) =
+                    case vs of
+                      []      => acc
+                    | x :: xs => go (j + 1, xs, acc + elt (i, j) * x)
+            in go (0, v, 0.0) end)
+          (List.range n)
+
+    (* out[i] = sum_j A(j,i) * v[j] (the transpose) *)
+    fun mulAtv (v, n) =
+        List.map (fn i =>
+            let fun go (j, vs, acc) =
+                    case vs of
+                      []      => acc
+                    | x :: xs => go (j + 1, xs, acc + elt (j, i) * x)
+            in go (0, v, 0.0) end)
+          (List.range n)
+
+    fun mulAtAv (v, n) = mulAtv (mulAv (v, n), n)
+
+    fun dot (u, v) =
+        let fun go ([], [], acc)             = acc
+              | go (x :: xs, y :: ys, acc)   = go (xs, ys, acc + x * y)
+        in go (u, v, 0.0) end
+
+    fun specNorm (n, iters, startf) =
+        let val u0 = List.map startf (List.range n)
+            fun loop (k, u, v) =
+                if k = 0 then (u, v)
+                else let val v2 = mulAtAv (u, n)
+                         val u2 = mulAtAv (v2, n)
+                     in loop (k - 1, u2, v2) end
+            val (u, v) = loop (iters, u0, u0)
+        in sqrt (dot (u, v) / dot (v, v)) end
+
+    fun bench n = specNorm (n, 10, fn _ => 1.0)
+
+    fun check n r =
+        let val refv = specNorm (n, 13, fn i => 1.0 / (i + 1))
+            val selfConsistent = abs (r - refv) < 0.000000001
+            val canonical = if n = 100 then abs (r - 1.274219991) < 0.00000001 else true
+        in selfConsistent andalso canonical end
+        in { name = "spectralnorm"
+           , bench = bench
+           , check = check
+           , sizes = [20, 50, 100]
+           } end
+
+    (** All benchmarks, in canonical suite order. *)
+    val all = [ binarytrees
+              , fannkuchredux
+              , spectralnorm ]
+
+in [ ("all", all) ]
+end

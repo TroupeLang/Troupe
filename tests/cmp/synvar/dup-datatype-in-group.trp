@@ -1,0 +1,8 @@
+(* Two members of one 'and' group sharing a name is a static error --
+   they are simultaneously in scope, so there is no "nearest" to prefer.
+   (Re-declaring a name in a *later* group is legal shadowing, tested in
+   tests/rt/pos/synvar/shadow-datatype.trp.) *)
+datatype t = A
+     and t = B
+
+let val x = A in print x end

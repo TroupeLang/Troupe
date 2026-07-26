@@ -103,7 +103,7 @@ data RawExpr
   | Un Basics.UnaryOp RawVar
   | ProjectLVal LVarAccess LValField
   | ProjectState MonComponent
-  | Tuple [LVarAccess]
+  | Tuple [LVarAccess] Basics.SynVariantTag
   | Record LFields
   | WithRecord RawVar LFields
   | ProjField RawVar Basics.FieldName
@@ -173,7 +173,11 @@ data RawTerminator
 -- TODO: 2025-09-19; AA -- this is a bit too hacky 
                         -- we should not be referencing runtime functions 
                         -- by concatenating their names 
-ppRTAssertionCode f a = f (text $ "rt.rawAssert" ++ rtFun) args
+-- | Emit an assertion call. @extraArgs@ are appended after the assertion's own
+-- arguments; the code generator uses this to pass the operation's source
+-- position, which the runtime records for error reporting on a failed
+-- assertion (see 'ppRTAssertion' for the position-free debug rendering).
+ppRTAssertionCode f extraArgs a = f (text $ "rt.rawAssert" ++ rtFun) (args ++ extraArgs)
   where (rtFun, args) = case a of
           AssertType x t -> (case t of
             RawNumber -> "IsNumber"
@@ -194,7 +198,7 @@ ppRTAssertionCode f a = f (text $ "rt.rawAssert" ++ rtFun) args
 
 
 ppRTAssertion :: RTAssertion -> PP.Doc
-ppRTAssertion = ppRTAssertionCode ppFunCall
+ppRTAssertion = ppRTAssertionCode ppFunCall []
 
 type Consts = [(RawVar, C.Lit )]
 
@@ -206,9 +210,8 @@ data FunDef = FunDef
                     IR.FunDef    -- original definition for serialization
                 deriving (Eq)
 
--- An IR program is just a collection of atoms declarations
--- and function definitions
-data RawProgram = RawProgram C.Atoms [LFunDef] 
+-- An IR program is just a collection of function definitions
+data RawProgram = RawProgram [LFunDef]
 
 
 -----------------------------------------------------------
@@ -216,8 +219,7 @@ data RawProgram = RawProgram C.Atoms [LFunDef]
 -----------------------------------------------------------
 data RawUnit
   = FunRawUnit LFunDef
-  | AtomRawUnit C.Atoms
-  | ProgramRawUnit RawProgram 
+  | ProgramRawUnit RawProgram
 
 
 
@@ -272,7 +274,7 @@ instructionType i = case i of
 -----------------------------------------------------------
 
 ppProg :: RawProgram -> PP PP.Doc
-ppProg (RawProgram atoms funs) =
+ppProg (RawProgram funs) =
   vcatMapPP ppLFunDef funs
 
 instance Show RawProgram where
@@ -299,8 +301,11 @@ ppRawExpr (Bin binop _ va1 va2) = -- TODO: 2025-07-31; also print the fast flag
   ppId va1 <+> text (show binop) <+> ppId va2
 ppRawExpr (Un op v) =
   text (show op) <> PP.parens (ppId v)
-ppRawExpr (Tuple vars) =
-  PP.parens $ PP.hsep $ PP.punctuate (text ",") (map ppId vars)
+ppRawExpr (Tuple vars tag) =
+  -- Mark a syntactic-variant tuple distinctly (matching the ir-sexp
+  -- "tuple-variant" naming); a plain tuple keeps the bare @(a, b)@ form.
+  (if tag then text "tuple-variant" else PP.empty)
+    <> (PP.parens $ PP.hsep $ PP.punctuate (text ",") (map ppId vars))
 ppRawExpr (List vars) =
   PP.brackets $ PP.hsep $ PP.punctuate (text ",") (map ppId vars)
 ppRawExpr (ListCons v1 v2) =

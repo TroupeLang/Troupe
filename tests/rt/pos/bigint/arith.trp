@@ -1,0 +1,26 @@
+(* bigint literals and arithmetic through lib/BigInt and the built-ins *)
+import BigInt
+
+let val a = 123n
+    val b = 1000000000000000000000000000000n
+    val _ = print (BigInt.show a)
+    val _ = print (BigInt.show b)
+    val _ = print (BigInt.show (BigInt.add (a, b)))
+    val _ = print (BigInt.show (BigInt.sub (a, b)))
+    val _ = print (BigInt.show (BigInt.mul (b, b)))
+    val _ = print (BigInt.show (BigInt.quot (b, a)))
+    val _ = print (BigInt.show (BigInt.rem (b, a)))
+    val _ = print (BigInt.show (BigInt.neg a))
+    val _ = print (BigInt.cmp (a, b))
+    val _ = print (BigInt.lt (a, b))
+    val _ = print (BigInt.ge (a, b))
+    val _ = print (getType a)
+    val _ = print (5n, "next to a number", 5)
+
+    fun fact n =
+        let fun go (k, acc) =
+                if k = 0 then acc
+                else go (k - 1, BigInt.mul (acc, BigInt.fromInt k))
+        in go (n, 1n) end
+    val _ = print (BigInt.show (fact 50))
+in () end

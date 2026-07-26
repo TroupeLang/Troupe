@@ -1,0 +1,19 @@
+(* Savina benchmark: Ping-Pong (microbenchmark group).
+ *
+ * One pinger and one ponger exchange n request/reply message pairs; the
+ * pinger runs in the main process. Measures two-actor round-trip messaging.
+ *
+ *   ./local.sh examples/savina/pingpong.trp               # default sizes
+ *   ./local.sh examples/savina/pingpong.trp -- 5000 20000 # explicit sizes
+ *
+ * Result: number of PONG replies received; ok iff it equals n.
+ *)
+
+import List
+import Bench
+import "./Savina"
+
+let val d = case List.filter (fn d => d.name = "pingpong") Savina.all of [d] => d
+    val sizes = Bench.sizesFromArgs (getCliArgs authority) d.sizes
+in Bench.run authority d.name sizes 3 d.bench d.check
+end

@@ -1,0 +1,24 @@
+(* Savina benchmark: Radix Sort (parallelism group).
+ *
+ * A pipeline of 16 bit-actors sorts n random 16-bit integers by least
+ * significant digit: each actor forwards values whose bit is 0
+ * immediately and buffers values whose bit is 1 until the flush marker,
+ * then emits them behind the zeros. A sink actor validates order,
+ * count, and checksum as values arrive. Measures pipeline streaming with
+ * per-stage buffering.
+ *
+ *   ./local.sh examples/savina/radixsort.trp                # default sizes
+ *   ./local.sh examples/savina/radixsort.trp -- 2000 8000   # explicit sizes
+ *
+ * Result: (count, sum, sorted) from the sink; ok iff count = n, the sum
+ * matches the input's, and the values arrived in non-decreasing order.
+ *)
+
+import List
+import Bench
+import "./Savina"
+
+let val d = case List.filter (fn d => d.name = "radixsort") Savina.all of [d] => d
+    val sizes = Bench.sizesFromArgs (getCliArgs authority) d.sizes
+in Bench.run authority d.name sizes 3 d.bench d.check
+end

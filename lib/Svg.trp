@@ -1,0 +1,101 @@
+(* Svg.trp - SVG generation library.
+ *
+ * Shares the node model of lib/Html.trp (elements built with
+ * `Html.element`, text with `Html.text`, escaping inherited from Html),
+ * with SVG-specific rendering: attribute names written in camelCase in
+ * attribute records are emitted in SVG's hyphenated form where SVG uses
+ * one (`fontSize` -> `font-size`), while SVG's genuinely camelCase
+ * attributes (`viewBox`, ...) pass through unchanged. Attribute values
+ * are escaped by Html.escapeAttr; text content by the Text node's
+ * escaping at render time.
+ *
+ *   Svg.render (Svg.svg {width = 100, height = 50, viewBox = "0 0 100 50"}
+ *     [ Svg.rect {x = 0, y = 0, width = 100, height = 50, fill = "white"}
+ *     , Svg.text {x = 4, y = 20, fontSize = 11} "hello"
+ *     ])
+ *)
+
+import List
+import String
+import Html
+
+let (* camelCase attribute names that SVG spells hyphenated *)
+    val hyphenated =
+        [ ("fontSize", "font-size")
+        , ("fontFamily", "font-family")
+        , ("fontWeight", "font-weight")
+        , ("strokeWidth", "stroke-width")
+        , ("strokeDasharray", "stroke-dasharray")
+        , ("strokeLinecap", "stroke-linecap")
+        , ("strokeLinejoin", "stroke-linejoin")
+        , ("textAnchor", "text-anchor")
+        , ("dominantBaseline", "dominant-baseline")
+        , ("fillOpacity", "fill-opacity")
+        , ("strokeOpacity", "stroke-opacity")
+        ]
+
+    fun attrName n =
+        case List.filter (fn (c, _) => c = n) hyphenated of
+          [(_, h)] => h
+        | _        => n
+
+    fun valueToString v =
+        if getType v = "string" then v else toString v
+
+    fun renderAttrs attrs =
+        String.concat
+          (List.map (fn (n, v) =>
+               " " ^ attrName n ^ "='" ^ Html.escapeAttr (valueToString v) ^ "'")
+             (recordToList attrs))
+
+    (** Render an SVG node tree to a string. *)
+    fun render node =
+        let val nodeTag = node.tag
+        in if nodeTag = "Element" then
+               "<" ^ node.name ^ renderAttrs node.attrs ^ ">"
+               ^ String.concat (List.map render node.children)
+               ^ "</" ^ node.name ^ ">"
+           else if nodeTag = "VoidElement" then
+               "<" ^ node.name ^ renderAttrs node.attrs ^ "/>"
+           else if nodeTag = "Text" then
+               Html.escapeHtml node.content
+           else (* Raw *) node.content
+        end
+
+    (** The svg root element; sets the xmlns automatically. *)
+    fun svg attrs children =
+        Html.element "svg"
+          (recordExtend (attrs, "xmlns", "http://www.w3.org/2000/svg")) children
+
+    (** Grouping element. *)
+    fun g attrs children = Html.element "g" attrs children
+
+    (** Shape elements (childless). *)
+    fun rect attrs     = Html.voidElement "rect" attrs
+    fun circle attrs   = Html.voidElement "circle" attrs
+    fun line attrs     = Html.voidElement "line" attrs
+    fun polyline attrs = Html.voidElement "polyline" attrs
+    fun polygon attrs  = Html.voidElement "polygon" attrs
+    fun path attrs     = Html.voidElement "path" attrs
+
+    (** A text element with escaped string content. *)
+    fun text attrs content = Html.element "text" attrs [Html.text content]
+
+    (** Format a list of (x, y) pairs as a points attribute value. *)
+    fun points ps =
+        String.concatWith " "
+          (List.map (fn (x, y) => toString x ^ "," ^ toString y) ps)
+
+in [ ("render", render)
+   , ("svg", svg)
+   , ("g", g)
+   , ("rect", rect)
+   , ("circle", circle)
+   , ("line", line)
+   , ("polyline", polyline)
+   , ("polygon", polygon)
+   , ("path", path)
+   , ("text", text)
+   , ("points", points)
+   ]
+end

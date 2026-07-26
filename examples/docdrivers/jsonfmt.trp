@@ -1,0 +1,36 @@
+(* jsonfmt — pretty-print (reformat) a JSON file.
+ *
+ *   troupe jsonfmt.trp --io-root <dir> -- <input.json> <output.json>
+ *
+ * Reads the input file with SimpleFileIO, parses it with the Json library, and
+ * writes the value back indented two spaces per level. A parse error is reported
+ * with its byte offset and nothing is written. Paths resolve relative to
+ * --io-root. *)
+
+import { readFile, writeFile } SimpleFileIO
+import Json
+import List
+import Outcome
+
+let val args = getCliArgs authority
+
+    fun onRead outPath src =
+        case Json.parse src of
+          OK v =>
+            let val pretty = Json.prettyPrint 2 v
+            in case writeFile (authority, outPath, pretty) of
+                 OK _ => print ("wrote " ^ outPath ^ ":\n" ^ pretty)
+               | ERR e => print ("write error: " ^ e.reason ^ " (" ^ e.path ^ ")")
+            end
+        | ERR e =>
+            print ("parse error at offset " ^ toString e.offset ^ ": " ^ e.reason)
+
+in if List.length args < 2
+   then print "usage: jsonfmt --io-root <dir> -- <input.json> <output.json>"
+   else let val inPath  = List.nth args 0
+            val outPath = List.nth args 1
+        in case readFile (authority, inPath) of
+             OK src => onRead outPath src
+           | ERR e => print ("read error: " ^ e.reason ^ " (" ^ e.path ^ ")")
+        end
+end

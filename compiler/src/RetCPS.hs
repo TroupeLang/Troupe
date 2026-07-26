@@ -33,7 +33,7 @@ import qualified Core as C
 import Core (ppLit)
 import qualified Text.PrettyPrint.HughesPJ as PP
 import Text.PrettyPrint.HughesPJ (
-    (<+>), ($$), text, hsep, vcat, nest)
+    (<+>), ($$), text, vcat, nest)
 import           ShowIndent
 
 import TroupePositionInfo (Located(..), noLoc)
@@ -88,7 +88,7 @@ data SimpleTerm
    = Bin BinOp LVarName LVarName
    | Un UnaryOp LVarName
    | ValSimpleTerm SVal
-   | Tuple [LVarName]
+   | Tuple [LVarName] Basics.SynVariantTag
    | Record LFields
    | WithRecord LVarName LFields
    | ProjField LVarName Basics.FieldName
@@ -116,7 +116,7 @@ data KTerm
 
       deriving (Eq, Ord)
 
-data Prog = Prog C.Atoms LKTerm
+data Prog = Prog LKTerm
   deriving (Eq, Show)
 
 -- GetPosInfo instances are now provided by the Located wrapper
@@ -139,14 +139,9 @@ instance ShowDebug Prog where
 --
 
 ppProg :: Prog -> PP PP.Doc
-ppProg (Prog (C.Atoms atoms) lkterm) = do
+ppProg (Prog lkterm) = do
   ktDoc <- ppKTerm 0 lkterm
-  let ppAtoms =
-        if null atoms
-          then PP.empty
-          else (text "datatype Atoms = ") <+>
-               (hsep $ PP.punctuate (text " |") (map text atoms))
-  pure $ ppAtoms $$ ktDoc
+  pure ktDoc
 
 ppKTerm :: Precedence -> LKTerm -> PP PP.Doc
 ppKTerm parentPrec = ppLocated (ppKTermInner parentPrec)
@@ -189,7 +184,7 @@ ppSimpleTerm (ValSimpleTerm (Lit lit)) =
   pure $ ppLit lit
 ppSimpleTerm (ValSimpleTerm (KAbs klam)) =
   ppKLambda klam
-ppSimpleTerm (Tuple vars) = do
+ppSimpleTerm (Tuple vars _) = do
   ds <- mapM textlv vars
   pure $ PP.parens $ PP.hsep $ PP.punctuate (text ",") ds
 ppSimpleTerm (List vars) = do

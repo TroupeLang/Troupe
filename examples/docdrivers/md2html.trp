@@ -1,0 +1,32 @@
+(* md2html — convert a Markdown file to HTML.
+ *
+ *   troupe md2html.trp --io-root <dir> -- <input.md> <output.html>
+ *
+ * Reads the input file with SimpleFileIO, converts it through the Markdown
+ * library (all output routed via Html, so it is escaped and injection-safe),
+ * writes the HTML to the output file, and echoes the result to stdout. Paths are
+ * resolved relative to --io-root. *)
+
+import Outcome
+import { readFile, writeFile } SimpleFileIO
+import Markdown
+import List
+
+let val args = getCliArgs authority
+
+    fun onRead outPath src =
+        let val html = Markdown.toHtml src
+        in case writeFile (authority, outPath, html) of
+             OK _ => print ("wrote " ^ outPath ^ ":\n" ^ html)
+           | ERR e => print ("write error: " ^ e.reason ^ " (" ^ e.path ^ ")")
+        end
+
+in if List.length args < 2
+   then print "usage: md2html --io-root <dir> -- <input.md> <output.html>"
+   else let val inPath  = List.nth args 0
+            val outPath = List.nth args 1
+        in case readFile (authority, inPath) of
+             OK src => onRead outPath src
+           | ERR e => print ("read error: " ^ e.reason ^ " (" ^ e.path ^ ")")
+        end
+end

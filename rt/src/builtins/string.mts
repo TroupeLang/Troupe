@@ -29,6 +29,22 @@ export function BuiltinString <TBase extends Constructor<UserRuntimeZero>> (Base
             return this.runtime.ret (new LVal (s.length, arg.lev))
         })
 
+        // Inverse of charCodeAtWithDefault: build a one-character string from a Unicode
+        // code point. Accepts the full range 0..0x10FFFF (String.fromCodePoint synthesizes
+        // a surrogate pair for astral code points), so callers such as the JSON parser can
+        // decode \uXXXX escapes, including surrogate pairs, into real characters. The result
+        // carries the argument's label.
+        charFromCode = mkBase (arg => {
+            assertIsNumber(arg);
+            let n: number = arg.val;
+            if (!Number.isInteger(n) || n < 0 || n > 0x10FFFF) {
+                this.runtime.$t.threadError(
+                    `charFromCode: ${n} is not a valid Unicode code point (0..0x10FFFF)`);
+                return;
+            }
+            return this.runtime.ret (new LVal (String.fromCodePoint(n), arg.lev))
+        })
+
         substring = mkBase (arg => {
             assertIsNTuple(arg, 3)
             assertIsString(arg.val[0])

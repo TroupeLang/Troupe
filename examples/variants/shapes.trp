@@ -1,0 +1,58 @@
+(* Geometry over a shape datatype, using floating-point payloads.
+ *
+ * Demonstrates:
+ *   - a datatype whose constructors carry tuple payloads of floats
+ *     (circle of float, rect of float * float, tri of the three side
+ *     lengths);
+ *   - area and perimeter functions defined by constructor patterns that
+ *     destructure those tuples;
+ *   - mapping a function over a list of shapes and folding the results to
+ *     totals with the standard-library List module.
+ *
+ * Triangle area uses Heron's formula; circle area and circumference use a
+ * literal approximation of pi. sqrt is a runtime primitive.
+ *
+ *   ./local.sh examples/variants/shapes.trp --localonly
+ *
+ * Expected: a per-shape line with name, area, and perimeter, then the summed
+ * total area and total perimeter over the list.
+ *)
+
+import List
+
+datatype shape = circle of float
+               | rect of float * float
+               | tri of float * float * float
+
+let val pi = 3.14159265
+
+    fun area (circle r)      = pi * r * r
+      | area (rect (w, h))   = w * h
+      | area (tri (a, b, c)) =
+          let val s = (a + b + c) / 2.0            (* semi-perimeter *)
+          in sqrt (s * (s - a) * (s - b) * (s - c))
+          end
+
+    fun perimeter (circle r)      = 2.0 * pi * r
+      | perimeter (rect (w, h))   = 2.0 * (w + h)
+      | perimeter (tri (a, b, c)) = a + b + c
+
+    fun name (circle _) = "circle"
+      | name (rect _)   = "rectangle"
+      | name (tri _)    = "triangle"
+
+    fun describe s =
+        print (name s, "area =", area s, "perimeter =", perimeter s)
+
+    val shapes = [ circle 2.0
+                 , rect (3.0, 4.0)
+                 , tri (3.0, 4.0, 5.0)
+                 ]
+
+    val _ = List.map describe shapes
+
+    val totalArea      = List.foldl (fn (s, acc) => acc + area s) 0.0 shapes
+    val totalPerimeter = List.foldl (fn (s, acc) => acc + perimeter s) 0.0 shapes
+in print ("total area =", totalArea)
+ ; print ("total perimeter =", totalPerimeter)
+end

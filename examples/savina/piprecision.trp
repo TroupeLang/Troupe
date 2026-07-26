@@ -1,0 +1,27 @@
+(* Savina benchmark: Precise Pi Computation (parallelism group).
+ *
+ * Computes pi to n decimal digits with fixed-point arithmetic over
+ * arbitrary-precision integers (lib/BigInt; the Savina original uses
+ * BigDecimal — languages without platform arbitrary precision, such as
+ * Pony, omit this benchmark, and Troupe could not express it before
+ * bigint landed). Machin's formula pi = 16*arctan(1/5) - 4*arctan(1/239)
+ * with scale 10^(n+10); four workers each own an arithmetic-progression
+ * slice of the series terms, stepping their power of x incrementally,
+ * and stop when their terms reach zero. Partial sums are exact integers,
+ * so the master may add them in any arrival order.
+ *
+ *   ./local.sh examples/savina/piprecision.trp            # default sizes
+ *   ./local.sh examples/savina/piprecision.trp -- 30 60   # explicit sizes
+ *
+ * Result: the first n+1 digits of pi; ok iff they match the built-in
+ * 100-digit reference, so supported sizes are at most 100.
+ *)
+
+import List
+import Bench
+import "./Savina"
+
+let val d = case List.filter (fn d => d.name = "piprecision") Savina.all of [d] => d
+    val sizes = Bench.sizesFromArgs (getCliArgs authority) d.sizes
+in Bench.run authority d.name sizes 3 d.bench d.check
+end

@@ -35,5 +35,38 @@ export function mkLogger (l, level='info') {
   return x
 }
 
+/** A lazy debug logger for hot paths, used as a tagged template literal:
+ *
+ *      const debug = mkDebugTag(logger);
+ *      debug `delivering ${message} at ${pc}`
+ *
+ *  When debug logging is off the tag returns before the message string is
+ *  built, so interpolated values are never stringified — unlike an ordinary
+ *  template literal argument, which is fully constructed before the logger
+ *  can discard it. Values with a stringRep() method (runtime values,
+ *  levels, pids) are rendered with it; everything else with String().
+ *
+ *  The enabled check is captured at creation time: log levels in this
+ *  runtime are fixed at startup from CLI flags.
+ */
+export function mkDebugTag (logger) {
+  const enabled = logger.isLevelEnabled('debug');
+  return (strings: TemplateStringsArray | any, ...vals: any[]) => {
+    if (!enabled) return;
+    if (!Array.isArray(strings)) {
+      // called as a plain function, debug(msg) — kept for migration
+      logger.debug(strings);
+      return;
+    }
+    let s = strings[0];
+    for (let i = 0; i < vals.length; i++) {
+      const v = vals[i];
+      s += (v != null && typeof v.stringRep === 'function' ? v.stringRep() : String(v))
+           + strings[i + 1];
+    }
+    logger.debug(s);
+  };
+}
+
 
 

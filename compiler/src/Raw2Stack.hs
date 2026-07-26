@@ -133,11 +133,11 @@ trInsts ii = work [] [] ii  where
                   Raw.SetState cmp x -> Loc pos (Stack.SetState cmp x)
                   _ -> internalError "impossible case/bug: only label instructions must be passed to this translation function"
 
-        -- Get position for the group (use first instruction's position)
-        -- Note: linsts is non-empty here due to the guard at translateGroup []
+        -- Get position for the group (use first instruction's position);
+        -- linsts is non-empty here, the empty case having been taken by the
+        -- preceding `translateGroup []` equation.
         groupPos = case linsts of
           (li:_) -> getLoc li
-          _ -> NoPos  -- unreachable, but needed for exhaustiveness
 
         insts' = Loc groupPos (Stack.LabelGroup (map tri linsts))
 
@@ -229,8 +229,8 @@ trFun lfdef =
 
 
 rawProg2Stack :: Raw.RawProgram -> Stack.StackProgram
-rawProg2Stack (Raw.RawProgram atms fdefs) =
-  Stack.StackProgram atms (map trFun fdefs)
+rawProg2Stack (Raw.RawProgram fdefs) =
+  Stack.StackProgram (map trFun fdefs)
 
 
 rawFun2Stack :: Raw.LFunDef -> Stack.LFunDef
@@ -239,5 +239,4 @@ rawFun2Stack = trFun
 raw2Stack :: Raw.RawUnit -> Stack.StackUnit
 raw2Stack r = case r of
   Raw.FunRawUnit f -> Stack.FunStackUnit (trFun f)
-  Raw.AtomRawUnit c -> Stack.AtomStackUnit c
   Raw.ProgramRawUnit p -> Stack.ProgramStackUnit (rawProg2Stack p)

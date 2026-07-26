@@ -1,0 +1,5 @@
+{
+  "deps": [
+    {"path": "modsrc/ModuleGuardHelper", "hash": "lbrn5kic1lu9hcug3mprn435a6qkjq33idevk91j68l4s884evrg", "name": "modsrc/ModuleGuardHelper"}
+  ]
+}

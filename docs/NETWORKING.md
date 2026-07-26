@@ -10,12 +10,13 @@ a number of nodes to bootstrap its discovery. Note that this process takes a hum
 
 ## Local only mode
 To skip network connection, one can provide `--localonly` flag to the runtime, but
-observe that in this case all external I/O will result
-in a runtime error.
+observe that in this case all network operations will yield
+a runtime error.
 
 
 ## Generating new persistent IDs
-See [p2p-tools/mkid.mts](../p2p-tools/mkid.mts).
+See [p2p-tools/mkid.mts](../p2p-tools/mkid.mts). [p2p-tools/mkaliases.ts](../p2p-tools/mkaliases.ts)
+generates an aliases file from a set of id files. Both are built by `make p2p-tools`.
 
 ## Auto-created IDs
 
@@ -27,8 +28,9 @@ from a file.
 
 Libp2p is a fast-moving project, and there are stability issues. Workarounds live in the runtime
 code — for example, relay keep-alive messages and the `--relay-fault-tolerance` and `--disable-relay`
-runtime flags handled in `rt/src/p2p/p2p.mts`. The libp2p versions are pinned in the root
-`package.json`; there is no separate patch-application step during installation.
+runtime flags handled in `rt/src/p2p/p2p.mts`. The root `package.json` declares libp2p dependency
+ranges (`^3.0.0` and the like); exact versions are pinned by `package-lock.json`. There is no
+separate patch-application step during installation.
 
 
 ## Notes on the p2p runtime
@@ -45,7 +47,11 @@ accessible from the outside.
 
 ## Navigating the code base
 
-The main p2p runtime module is in [rt/src/p2p/p2p.mts](../rt/src/p2p/p2p.mts).
+The main p2p runtime module is in [rt/src/p2p/p2p.mts](../rt/src/p2p/p2p.mts). The relay is a
+separate program under [p2p-tools/relay/](../p2p-tools/relay/); see its `README.md`. The runtime's
+network-related command-line options are declared in
+[rt/src/TroupeCliArgs.mts](../rt/src/TroupeCliArgs.mts), which also rejects inconsistent
+combinations (for example `--disable-relay` with `--relay` or `--relay-only`).
 
 
 ## How node discovery works

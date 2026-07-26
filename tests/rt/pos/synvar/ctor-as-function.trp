@@ -1,0 +1,7 @@
+(* A constructor used as a first-class function -- mapped over a list. *)
+import List
+datatype 'a option = NONE | SOME of 'a
+
+let val xs = map SOME [1, 2, 3]
+in print xs   (* [(SOME 1), (SOME 2), (SOME 3)] *)
+end

@@ -168,10 +168,11 @@ export function serialize(w:LVal, pclev:Level, targetNodeId?: string) {
                 }
                 break;
             case Ty.TroupeType.TUPLE:
-                jsonObj = [];                                                
+                let tupleVals = [];
                 for (let i = 0; i < x.length; i++) {
-                    jsonObj.push(walk(x[i]));
+                    tupleVals.push(walk(x[i]));
                 }
+                jsonObj = { vals: tupleVals, isSynVariant: x._isSynVariant === true };
                 break;
             case Ty.TroupeType.CLOSURE:
                 if (!Ty.isSerializableClosure (lval.closureType)) {
@@ -223,6 +224,11 @@ export function serialize(w:LVal, pclev:Level, targetNodeId?: string) {
 
                             namespace.set(ff, x.fun.serialized)
 
+                            // A closure's module dependencies serialize as their
+                            // "module:<hash>" libdeps (the module code does not
+                            // travel); the receiver links its own module of that
+                            // hash, or cleanly rejects if it has none. So there is
+                            // no send-side restriction on module-bearing closures.
                             function dfs(deps) {
                                 for (let depName of deps) {
                                     if (!namespace.has(depName)) {
@@ -251,8 +257,9 @@ export function serialize(w:LVal, pclev:Level, targetNodeId?: string) {
                 // Authority level can also contain quarantined labels
                 jsonObj = { authorityLevel: serializeLevel(x.authorityLevel, lval) }
                 break;
-            case Ty.TroupeType.ATOM:
-                jsonObj = { atom: x.atom, creation_uuid: x.creation_uuid };
+            case Ty.TroupeType.BIGINT:
+                // bigints are not JSON-representable; decimal string form
+                jsonObj = x.value.toString();
                 break;
             case Ty.TroupeType.LOCALOBJECT: 
                 throw new UnserializableObjectError (lval)

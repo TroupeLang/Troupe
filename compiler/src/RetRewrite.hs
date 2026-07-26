@@ -54,7 +54,7 @@ instance Substitutable SimpleTerm where
       -- Now using LVarName (Located VarName), need to preserve the Located wrapper
       Bin op lv1 lv2 -> Bin op (fwdL lv1) (fwdL lv2)
       Un op lv -> Un op (fwdL lv)
-      Tuple lvs -> Tuple (map fwdL lvs)
+      Tuple lvs tag -> Tuple (map fwdL lvs) tag
       Record fields -> Record (fwdLFields fields)
       WithRecord lx fields -> WithRecord (fwdL lx) (fwdLFields fields)
       ProjField lx f -> ProjField (fwdL lx) f
@@ -367,4 +367,4 @@ lktWalkFix lkt =
        else lktWalkFix lkt'
 
 rewrite :: Prog -> Prog
-rewrite (Prog atoms lkterm) = Prog atoms (lktWalkFix lkterm)
+rewrite (Prog lkterm) = Prog (lktWalkFix lkterm)

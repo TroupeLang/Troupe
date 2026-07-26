@@ -1,0 +1,6 @@
+(* A module import may not bind the same name as another import. *)
+import List
+import "./modsrc/ModuleCollideHelper" as List
+
+let val _ = ()
+in () end

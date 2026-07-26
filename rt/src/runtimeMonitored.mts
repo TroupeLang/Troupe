@@ -30,7 +30,7 @@ const { flowsTo, actsFor, lub, glb } = levels
 import { getCliArgs, TroupeCliArg } from './TroupeCliArgs.mjs';
 import { connectResultSocket, sendSocketMessageAndClose } from './resultSocket.mjs';
 import { configureColors, isColorEnabled } from './colorConfig.mjs';
-import { mkLogger } from './logger.mjs'
+import { mkLogger, mkDebugTag } from './logger.mjs'
 import { getTroupeRoot } from './troupeRoot.mjs'
 import { Record } from './Record.mjs';
 import { level } from 'winston';
@@ -49,13 +49,13 @@ let logLevel = argv[TroupeCliArg.Debug] ? 'debug': 'info'
 const logger = mkLogger('RTM', logLevel);
 
 const info = x => logger.info(x)
-const debug = x => logger.debug(x)
+const debug = mkDebugTag(logger)
 const error = x => logger.error(x)
 
 // Quarantine-specific logger
 const qrnLogLevel = argv[TroupeCliArg.DebugQuarantine] ? 'debug' : 'info';
 const qrnLogger = mkLogger('QRN', qrnLogLevel);
-const qdebug = (x: string) => qrnLogger.debug(x);
+const qdebug = mkDebugTag(qrnLogger);
 
 let __p2pRunning = false;
 
@@ -170,7 +170,21 @@ async function spawnFromRemote(jsonObj, fromNode) {
 
   let nodeLev = nodeTrustLevel(fromNode);
 
-  let result = await DS.deserialize(nodeLev, jsonObj, fromNode)
+  let result;
+  try {
+    result = await DS.deserialize(nodeLev, jsonObj, fromNode)
+  } catch (e) {
+    // Same expected-adversarial-input disposition as receiveFromRemote: a
+    // spawned closure that names a module or library this node does not have
+    // makes deserialize reject. Drop the spawn (return null, handled by the
+    // caller) rather than let the rejection reach the fire-and-forget p2p
+    // dispatch and terminate the node. Unexpected failures still surface.
+    if (DS.isExpectedInboundError(e)) {
+      debug(`Rejecting spawn from ${fromNode}: ${(e as Error).message}`);
+      return null;
+    }
+    throw e;
+  }
 
   // For spawn requests, DROP means we reject the spawn
   if (shouldDrop(result)) {
@@ -212,7 +226,23 @@ async function spawnFromRemote(jsonObj, fromNode) {
 async function receiveFromRemote(pid, jsonObj, fromNode) {
   debug(`* rt receiveFromremote *  ${JSON.stringify(jsonObj)}`)
 
-  const result = await DS.deserialize(nodeTrustLevel(fromNode), jsonObj, fromNode);
+  let result;
+  try {
+    result = await DS.deserialize(nodeTrustLevel(fromNode), jsonObj, fromNode);
+  } catch (e) {
+    // A received value we cannot reconstruct is an expected adversarial input
+    // (e.g. a closure that names a module or library the receiver does not
+    // have): drop it and keep the node running, the same disposition as the
+    // corrupt-data drop below. Reaching here without a catch would leave the
+    // promise returned to the fire-and-forget p2p SEND handler rejected, and
+    // the process-level unhandledRejection handler terminates the node.
+    if (DS.isExpectedInboundError(e)) {
+      debug(`Dropping unreconstructable message from ${fromNode}: ${(e as Error).message}`);
+      qdebug(`DROP: message from ${fromNode} could not be deserialized: ${(e as Error).message}`);
+      return;  // Silent drop
+    }
+    throw e;  // Unexpected failure: do not mask it
+  }
 
   // Handle ingress check result
   if (shouldDrop(result)) {
@@ -222,7 +252,7 @@ async function receiveFromRemote(pid, jsonObj, fromNode) {
   }
 
   const data = result.value!;
-  debug(`* rt receiveFromremote *  ${fromNode} ${data.stringRep()}`);
+  debug `* rt receiveFromremote *  ${fromNode} ${data}`;
 
   let toPid = new LVal(new ProcessID(rt_uuid, pid, __nodeManager.getLocalNode()), data.lev);
 
@@ -230,7 +260,7 @@ async function receiveFromRemote(pid, jsonObj, fromNode) {
   const quarantineAuth = extractQuarantineAuth(result);
 
   if (quarantineAuth !== null) {
-    qdebug(`QUARANTINE: message from ${fromNode} quarantined with auth ${quarantineAuth.stringRep()}`);
+    qdebug `QUARANTINE: message from ${fromNode} quarantined with auth ${quarantineAuth}`;
   }
 
   // Pass raw fromNode; addMessage will construct the labeled value using
@@ -526,7 +556,7 @@ async function getNetworkPeerId(rtHandlers) {
   // Handle local-only or persist modes (skip network creation)
   if (argv[TroupeCliArg.LocalOnly] || argv[TroupeCliArg.Persist]) {
     if (!argv[TroupeCliArg.SuppressLocalInfoMessage]) {
-      info("Skipping network creation. Observe that all external IO operations will yield a runtime error.")
+      info("Skipping network creation. Observe that all network operations will yield a runtime error.")
     }
     if (argv[TroupeCliArg.Persist]) {
       info("Running with persist flag.")

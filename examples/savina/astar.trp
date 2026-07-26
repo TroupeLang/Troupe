@@ -1,0 +1,30 @@
+(* Savina benchmark: A* Search (parallelism group).
+ *
+ * Master/worker shortest path on a deterministic weighted grid (the entry
+ * cost of a cell is a fixed function of its coordinates). The master owns
+ * the frontier as a functional priority queue (lib/Map keyed by distance
+ * then node, consumed with extractMinOpt) and the best-distance map; four
+ * stateless workers expand nodes, returning neighbor/edge-cost lists that
+ * the master folds back in as relaxations. The frontier is run to
+ * exhaustion — the heuristic-zero case of A-star — which keeps the
+ * computed distances deterministic under concurrent expansion; the original's
+ * heuristic changes only when the search may stop, not what it computes.
+ *
+ * Verification runs the same expansion and relaxation code sequentially
+ * and compares the corner-to-corner distance.
+ *
+ *   ./local.sh examples/savina/astar.trp              # default sizes
+ *   ./local.sh examples/savina/astar.trp -- 20 40     # explicit sizes
+ *
+ * Result: distance from (0,0) to (w-1,w-1); ok iff it equals the
+ * sequential reference.
+ *)
+
+import List
+import Bench
+import "./Savina"
+
+let val d = case List.filter (fn d => d.name = "astar") Savina.all of [d] => d
+    val sizes = Bench.sizesFromArgs (getCliArgs authority) d.sizes
+in Bench.run authority d.name sizes 3 d.bench d.check
+end

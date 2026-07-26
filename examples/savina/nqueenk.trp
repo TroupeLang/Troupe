@@ -1,0 +1,25 @@
+(* Savina benchmark: N-Queens (parallelism group).
+ *
+ * Master/worker search: the main process spawns one worker per placement
+ * of the first-row queen; each worker counts all solutions in its subtree
+ * by sequential backtracking and reports the count; the main process sums
+ * them. (Savina counts the first K solutions; this port counts all of
+ * them — the K = infinity case — so the total is checkable against the
+ * known solution counts.) Measures fork/join work distribution with
+ * uneven subtree sizes.
+ *
+ *   ./local.sh examples/savina/nqueenk.trp            # default sizes
+ *   ./local.sh examples/savina/nqueenk.trp -- 8 9     # explicit sizes
+ *
+ * Result: total number of solutions; ok iff it equals the known count
+ * for board size n. Sizes without a built-in reference report ok=false.
+ *)
+
+import List
+import Bench
+import "./Savina"
+
+let val d = case List.filter (fn d => d.name = "nqueenk") Savina.all of [d] => d
+    val sizes = Bench.sizesFromArgs (getCliArgs authority) d.sizes
+in Bench.run authority d.name sizes 3 d.bench d.check
+end

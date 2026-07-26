@@ -1,0 +1,26 @@
+(* Savina benchmark: Logistic Map Series (concurrency group).
+ *
+ * 10 series actors each iterate x' = r * x * (1 - x) for n terms. The
+ * multiplication for each term is performed by a per-series rate worker
+ * reached by request/reply — the Savina original exists to exercise
+ * synchronous rendezvous emulation, which in Troupe (as in Erlang) is the
+ * ordinary ask pattern with selective receive. The main process collects
+ * final terms in series order and sums them.
+ *
+ * Verification recomputes the same series sequentially: float operations
+ * are performed in the identical order, so the sums must match exactly.
+ *
+ *   ./local.sh examples/savina/logmap.trp                # default sizes
+ *   ./local.sh examples/savina/logmap.trp -- 2000 8000   # explicit sizes
+ *
+ * Result: sum of final terms; ok iff it equals the sequential reference.
+ *)
+
+import List
+import Bench
+import "./Savina"
+
+let val d = case List.filter (fn d => d.name = "logmap") Savina.all of [d] => d
+    val sizes = Bench.sizesFromArgs (getCliArgs authority) d.sizes
+in Bench.run authority d.name sizes 3 d.bench d.check
+end

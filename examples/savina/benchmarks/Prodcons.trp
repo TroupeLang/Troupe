@@ -1,0 +1,65 @@
+(* Savina prodcons: 4 producers and 4 consumers over a bounded buffer with a
+ * credit protocol; result is the sum of item values. Exports `descriptor`. *)
+
+import List
+
+datatype 'a msg = Item of int * 'a | Data of int | Credit
+                | Get of 'a | Shutdown | Sum of int
+
+let val numProd = 4
+    val numCons = 4
+    val capacity = 10
+    (* Buffer state: item queue and its length, consumers waiting on an empty
+     * buffer, producers owed credit because the buffer was full. *)
+    fun buffer (q, qLen, waitingCons, owedProd) =
+        receive
+          [ hn (Item (v, prod)) =>
+              (case waitingCons of
+                 c :: cs =>
+                   (send (c, Data v); send (prod, Credit);
+                    buffer (q, qLen, cs, owedProd))
+               | [] =>
+                   if qLen + 1 < capacity
+                   then (send (prod, Credit);
+                         buffer (List.append q [v], qLen + 1, [], owedProd))
+                   else buffer (List.append q [v], qLen + 1, [],
+                                List.append owedProd [prod]))
+          , hn (Get c) =>
+              (case q of
+                 v :: vs =>
+                   (send (c, Data v);
+                    (case owedProd of
+                       p :: ps => (send (p, Credit);
+                                   buffer (vs, qLen - 1, waitingCons, ps))
+                     | []      => buffer (vs, qLen - 1, waitingCons, [])))
+               | [] => buffer ([], 0, List.append waitingCons [c], owedProd))
+          , hn Shutdown => () ]
+    fun producer (buf, i, k) =
+        let fun loop j =
+                if j = k then ()
+                else (send (buf, Item (i * k + j, self ()));
+                      receive [ hn Credit => loop (j + 1) ])
+        in loop 0 end
+    fun consumer (buf, main, k) =
+        let fun loop (j, acc) =
+                if j = k then send (main, Sum acc)
+                else (send (buf, Get (self ()));
+                      receive [ hn (Data v) => loop (j + 1, acc + v) ])
+        in loop (0, 0) end
+    fun bench n =
+        let val main = self ()
+            val buf = spawn (fn () => buffer ([], 0, [], []))
+            val _ = List.map (fn i => spawn (fn () => producer (buf, i, n)))
+                             (List.range numProd)
+            val _ = List.map (fn _ => spawn (fn () => consumer (buf, main, n)))
+                             (List.range numCons)
+            fun collect (k, total) =
+                if k = 0 then (send (buf, Shutdown); total)
+                else receive [ hn (Sum s) => collect (k - 1, total + s) ]
+        in collect (numCons, 0) end
+    val descriptor =
+        { name  = "prodcons"
+        , bench = bench
+        , check = fn n => fn t => t = 2 * n * (4 * n - 1)
+        , sizes = [200, 800, 3200] }
+in [ ("descriptor", descriptor) ] end

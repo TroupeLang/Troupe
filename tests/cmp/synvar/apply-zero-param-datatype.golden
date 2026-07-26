@@ -1,0 +1,1 @@
+tests/cmp/synvar/apply-zero-param-datatype.trp:3:16: datatype thing takes no type arguments

@@ -1,0 +1,6 @@
+(* A reference to a datatype declared in a later group is unbound --
+   sequential scoping, mutual recursion only exists within an `and` group. *)
+datatype a = MKA of b
+datatype b = MKB of int
+
+let val x = MKB 3 in print x end

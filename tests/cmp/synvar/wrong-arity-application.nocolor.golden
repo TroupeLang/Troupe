@@ -1,0 +1,1 @@
+tests/cmp/synvar/wrong-arity-application.trp:4:16: datatype box expects 1 type argument, got 2

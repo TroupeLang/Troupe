@@ -13,12 +13,18 @@ import { Label, LabelJSON, RegularLabel, labelFromJSON, labelImplies } from './l
  */
 export class Category {
     private _labels: Map<string, Label>  // key -> Label
+    // The label array, materialized once: a Category is immutable after
+    // construction, so this is a derived field, not a cache. Entailment checks
+    // iterate labels on the hot path; re-materializing from the Map per call
+    // was a measured cost. Consumers never mutate the returned array.
+    private _labelsArray: Label[]
 
     constructor(labels: Label[]) {
         this._labels = new Map();
         for (const label of labels) {
             this._labels.set(label.toKey(), label);
         }
+        this._labelsArray = Array.from(this._labels.values());
     }
 
     /**
@@ -39,7 +45,7 @@ export class Category {
      * Returns all labels as an array.
      */
     getLabels(): Label[] {
-        return Array.from(this._labels.values());
+        return this._labelsArray;
     }
 
     /**

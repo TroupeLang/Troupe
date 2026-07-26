@@ -66,8 +66,8 @@ export function runtimeEquals(x: TroupeRawValue, y: TroupeRawValue): LVal {
   let o2: any = y
 
   switch (x._troupeType) {
-    case TroupeType.ATOM:
-      return baseBoolean(o1.atom == o2.atom);
+    case TroupeType.BIGINT:
+      return baseBoolean(o1.value === o2.value);
     case TroupeType.PROCESS_ID:
       return baseBoolean(proc.pid_val_equals(o1, o2));
     case TroupeType.LEVEL:

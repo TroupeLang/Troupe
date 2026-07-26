@@ -1,0 +1,7 @@
+(* An `and` group that is not genuinely mutually recursive is rejected;
+   `c` does not participate in the a/b cycle. *)
+datatype a = A of b
+     and b = B of int
+     and c = C
+
+let val x = A (B 3) in print x end

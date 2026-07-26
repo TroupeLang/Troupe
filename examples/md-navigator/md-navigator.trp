@@ -343,8 +343,7 @@ let (* =================================================================== *)
                              | TDIR (_, _, _, kids) => acc + countFiles kids)) 0 ns
 
             fun summaryFor name dir idx n =
-                let val count = Html.span {class = "dcount"}
-                                         [Html.text (" " ^ intToString n)]
+                let val count = Html.span {class = "dcount"} [Html.text (intToString n)]
                 in if idx = ""
                    then Html.element "summary" {}
                           [Html.span {class = "dirname"} [Html.text name], count]
@@ -374,58 +373,46 @@ let (* =================================================================== *)
             val report = Path.relativeTo fromDir nav.links
             val search = Path.relativeTo fromDir nav.search
         in Html.element "aside" {class = "sidebar", id = "sidebar"}
-             [ Html.h2 {} [Html.text cfg.title]
-             , Html.p {}
-                 [ Html.a {href = home} [Html.text "Overview"]
-                 , Html.text " · "
-                 , Html.a {href = search} [Html.text "Search"]
-                 , Html.text " · "
-                 , Html.a {href = report} [Html.text "Links"]
-                 , Html.text " · "
-                 , Html.a {href = Path.relativeTo fromDir nav.comments, id = "commentslink"}
-                          [Html.text "Comments"] ]
-             , Html.input {type = "text", id = "filter", placeholder = "Filter documents"}
-             , Html.divElem {class = "timefilter"}
-                 [ Html.button {type = "button", class = "chip on", id = "win-0"}
-                               [Html.text "All"]
-                 , Html.button {type = "button", class = "chip", id = "win-3600000"}
-                               [Html.text "1h"]
-                 , Html.button {type = "button", class = "chip", id = "win-86400000"}
-                               [Html.text "24h"]
-                 , Html.button {type = "button", class = "chip", id = "win-604800000"}
-                               [Html.text "7d"]
-                 , Html.button {type = "button", class = "chip", id = "win-2592000000"}
-                               [Html.text "30d"] ]
-             , Html.divElem {class = "timefilter"}
-                 [ Html.input {type = "number", id = "wincustom", min = "1", placeholder = "n"}
-                 , Html.select {id = "winunit"}
-                     [ Html.option {value = "3600000"} [Html.text "hours"]
-                     , Html.option {value = "86400000"} [Html.text "days"]
-                     , Html.option {value = "604800000"} [Html.text "weeks"] ]
-                 , Html.button {type = "button", class = "chip", id = "expandall"}
-                               [Html.text "Expand all"]
-                 , Html.button {type = "button", class = "chip", id = "collapseall"}
-                               [Html.text "Collapse all"]
-                 , (if cfg.archiveDir = "" then Html.text ""
-                    else Html.button {type = "button", class = "chip", id = "archivetoggle",
-                                      title = "Show documents under " ^ cfg.archiveDir ^ "/"}
-                                     [Html.text "Show archive"]) ]
-             , Html.p {class = "legend"}
-                 [ Html.span {class = "dot hour"} []
-                 , Html.text " 1h · "
-                 , Html.span {class = "dot day"} []
-                 , Html.text " 24h · "
-                 , Html.span {class = "dot week"} []
-                 , Html.text " 7d"
-                 , Html.span {id = "shown"} [] ]
-             , Html.divElem {class = "sbtools"}
-                 [ Html.label {} [Html.text "Theme"]
-                 , Html.select {id = "theme"}
+             [ Html.divElem {class = "sbhead"}
+                 [ Html.a {href = home, class = "brand"} [Html.text cfg.title]
+                 , Html.select {id = "theme", class = "themesel"}
                      [ Html.option {value = "auto"}  [Html.text "Auto"]
                      , Html.option {value = "light"} [Html.text "Light"]
                      , Html.option {value = "dark"}  [Html.text "Dark"]
                      , Html.option {value = "sepia"} [Html.text "Sepia"] ] ]
-             , Html.divElem {class = "sbdrag", id = "sbdrag"} []
+             , Html.divElem {class = "sbnav"}
+                 [ Html.a {href = home} [Html.text "Overview"]
+                 , Html.a {href = search} [Html.text "Search"]
+                 , Html.a {href = report} [Html.text "Links"]
+                 , Html.a {href = Path.relativeTo fromDir nav.comments, id = "commentslink"}
+                          [Html.text "Comments"] ]
+             , Html.input {type = "text", id = "filter", placeholder = "Filter"}
+             , Html.divElem {class = "sbfilters"}
+                 [ Html.button {type = "button", class = "tog on", id = "win-0"}
+                               [Html.text "all"]
+                 , Html.button {type = "button", class = "tog", id = "win-3600000"}
+                               [Html.text "1h"]
+                 , Html.button {type = "button", class = "tog", id = "win-86400000"}
+                               [Html.text "24h"]
+                 , Html.button {type = "button", class = "tog", id = "win-604800000"}
+                               [Html.text "7d"]
+                 , Html.button {type = "button", class = "tog", id = "win-2592000000"}
+                               [Html.text "30d"]
+                 , Html.input {type = "number", id = "wincustom", min = "1", placeholder = "n"}
+                 , Html.select {id = "winunit"}
+                     [ Html.option {value = "3600000"} [Html.text "h"]
+                     , Html.option {value = "86400000"} [Html.text "d"]
+                     , Html.option {value = "604800000"} [Html.text "w"] ]
+                 , Html.span {class = "sep"} []
+                 , Html.button {type = "button", class = "tog", id = "expandall",
+                                title = "Expand every directory"} [Html.text "open"]
+                 , Html.button {type = "button", class = "tog", id = "collapseall",
+                                title = "Collapse every directory"} [Html.text "close"]
+                 , (if cfg.archiveDir = "" then Html.text ""
+                    else Html.button {type = "button", class = "tog", id = "archivetoggle",
+                                      title = "Show documents under " ^ cfg.archiveDir ^ "/"}
+                                     [Html.text "archive"])
+                 , Html.span {id = "shown"} [] ]
              , Html.ul {class = "tree"} (List.map nodeLi nodes) ]
         end
 
@@ -444,6 +431,7 @@ let (* =================================================================== *)
           (List.append
              [ Html.divElem {class = "layout"}
                  [ sidebar cfg nav fromDir currentRel tree
+              , Html.divElem {class = "sbdrag", id = "sbdrag"} []
                  , Html.divElem {class = "content"}
                      [ Html.element "main" {id = "top"} mainNodes
                      , Html.divElem {class = "maindrag", id = "maindrag"} []

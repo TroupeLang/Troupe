@@ -102,6 +102,13 @@ picker sits in the sidebar and remembers the choice, and `Auto` follows the oper
 Adding a theme means adding one `*Vars` binding and one `:root[data-theme=...]` line in `themeCss`.
 Nothing else in the program changes.
 
+The semantic colours sit on the blue-violet axis, which dichromatic vision preserves: `--recent`
+holds its hue under both protanopia and deuteranopia, where a vermillion simulates to a murky
+olive. Magnitude is carried as three strengths of that one hue rather than as three hues, and the
+strengths stay distinguishable after simulation. No signal depends on colour alone — the recency
+gutter carries its meaning by position, and broken links and the delete action are labelled in
+words.
+
 ## Link handling
 
 Each link is resolved against the document that contains it:

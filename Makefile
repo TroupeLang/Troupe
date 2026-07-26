@@ -27,6 +27,17 @@ p2p-tools:
 
 lib: check-compiler
 	cd lib; $(MAKE) build
+	@touch lib/out/.build-stamp
+
+# Rebuild the libraries only when a library source or the compiler is newer than the last build.
+# lib/Makefile's build target is one unconditional sequence whose order encodes the dependency
+# graph between the libraries, so the whole set is rebuilt when any of it changed -- but nothing
+# is rebuilt when nothing has. Depend on this rather than on `lib` to avoid paying for a rebuild
+# on every invocation.
+LIB_SOURCES := $(wildcard lib/*.trp)
+lib/out/.build-stamp: $(LIB_SOURCES) $(COMPILER)
+	cd lib; $(MAKE) build
+	@touch $@
 
 trp-rt: check-compiler
 	cd trp-rt/; $(MAKE) build
@@ -56,11 +67,13 @@ benchmark-deps: check-compiler
 # The io-root must contain the source directory, the output directory and the config file, all of
 # which the config names relative to it -- which is why it is the repository root rather than
 # _dev_planning/ itself.
-# Depends on lib rather than only on the compiler: the program imports SimpleFileIO and Markdown,
-# so a lib/out/ left over from before a merge fails with "Library 'SimpleFileIO' does not export".
+# Depends on the library build stamp rather than only on the compiler: the program imports
+# SimpleFileIO and Markdown, so a lib/out/ left over from before a merge fails with
+# "Library 'SimpleFileIO' does not export". The stamp means that costs nothing when the
+# libraries are already current.
 IOROOT ?= $(CURDIR)
 CONFIG ?= examples/md-navigator/config.json
-dev-planning-to-html: lib
+dev-planning-to-html: lib/out/.build-stamp
 	@if [ ! -d "$(IOROOT)/_dev_planning" ]; then \
 		echo "No _dev_planning/ under $(IOROOT). It is a separate repository and is absent" >&2; \
 		echo "from worktrees; pass IOROOT=<checkout that has it>." >&2; \

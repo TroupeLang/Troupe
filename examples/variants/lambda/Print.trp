@@ -1,0 +1,157 @@
+(* Two renderings of a term: a human-readable layout through the Pretty
+ * combinators, and a structural s-expression through Sexp.
+ *
+ * This module imports both kinds of import: "./Term" is a program-relative
+ * module, resolved against this file's directory, while Pretty, Sexp, List,
+ * String and Outcome are standard-library imports resolved by name.
+ *
+ * The Pretty rendering is precedence-aware, so it parenthesises only where the
+ * grammar needs it, and width-directed, so a term that does not fit breaks and
+ * indents. The s-expression rendering is structural and reversible: `toSexp`
+ * followed by `fromSexp` returns the same term.
+ *)
+
+import "./Term"
+
+import List
+import Outcome
+import Pretty
+import Sexp
+import String
+
+let (*--- Pretty rendering ---*)
+
+    (* Precedence levels, loosest first: 0 binds the bodies of lam and the else
+       branch of ite, which extend as far right as they can; 1 leq; 2 add and
+       sub; 3 application; 4 an operand that must stand alone. `docAt p t`
+       parenthesises t when its own level is looser than p. *)
+    fun parenIf b d = if b then Pretty.parens d else d
+
+    (* The left spine of an application: app (app (f, a), b) is (f, [a, b]). *)
+    fun spine (app (f, a)) acc = spine f (a :: acc)
+      | spine t acc            = (t, acc)
+
+    (* Curried binders: lam ("x", lam ("y", b)) is (["x", "y"], b), so a nest of
+       lambdas prints as one binder list. *)
+    fun binders (lam (x, b)) acc = binders b (x :: acc)
+      | binders t acc            = (List.reverse acc, t)
+
+    fun docAt p t =
+        case t of
+            var x => Pretty.text x
+          | lit n => Pretty.text (toString n)
+          | add (a, b) =>
+              parenIf (p > 2) (Pretty.sep [docAt 2 a <+> Pretty.text "+", docAt 3 b])
+          | sub (a, b) =>
+              parenIf (p > 2) (Pretty.sep [docAt 2 a <+> Pretty.text "-", docAt 3 b])
+          | leq (a, b) =>
+              parenIf (p > 1) (Pretty.sep [docAt 2 a <+> Pretty.text "<=", docAt 2 b])
+          | ite (c, th, el) =>
+              parenIf (p > 0) (Pretty.sep [ Pretty.text "if"   <+> docAt 1 c
+                                          , Pretty.text "then" <+> docAt 1 th
+                                          , Pretty.text "else" <+> docAt 0 el ])
+          | lam _ =>
+              let val (xs, body) = binders t []
+                  val head = Pretty.text ("\x5c" ^ String.concatWith " " xs ^ ".")
+              in parenIf (p > 0) (Pretty.sep [head, Pretty.nest 2 (docAt 0 body)])
+              end
+          | app _ =>
+              let val (h, args) = spine t []
+                  val argDocs = List.map (fn a => Pretty.nest 2 (docAt 4 a)) args
+              in parenIf (p > 3) (Pretty.sep (docAt 4 h :: argDocs))
+              end
+
+    (** A term as a `Pretty.doc`, parenthesised by precedence. *)
+    fun toDoc t = docAt 0 t
+
+    (** A term laid out to width `w`: one line where it fits, broken and
+     *  indented where it does not. *)
+    fun pretty w t = Pretty.render w (docAt 0 t)
+
+    (*--- S-expression rendering ---*)
+
+    (* Variable names in this object language are plain identifiers, so they are
+       atom-shaped and need no quoting. A name containing a delimiter would have
+       to be written as a Sexp.STR to survive the round trip. *)
+    fun toSexp t =
+        case t of
+            var x            => LST [ATOM "var", ATOM x]
+          | lit n            => LST [ATOM "lit", ATOM (toString n)]
+          | lam (x, b)       => LST [ATOM "lam", ATOM x, toSexp b]
+          | app (f, a)       => LST [ATOM "app", toSexp f, toSexp a]
+          | add (a, b)       => LST [ATOM "add", toSexp a, toSexp b]
+          | sub (a, b)       => LST [ATOM "sub", toSexp a, toSexp b]
+          | leq (a, b)       => LST [ATOM "leq", toSexp a, toSexp b]
+          | ite (c, th, el)  => LST [ATOM "ite", toSexp c, toSexp th, toSexp el]
+
+    (** A term as one line of s-expression text. *)
+    fun sexpString t = Sexp.print (toSexp t)
+
+    (** A term as s-expression text laid out to width `w`. *)
+    fun sexpPretty w t = Sexp.pretty w (toSexp t)
+
+    (* An atom is an integer literal if it is a run of digits, optionally signed.
+       `stringToInt` does not report failure, so the shape is checked first. *)
+    fun isDigits s =
+        let val n = String.size s
+            fun go i =
+                if i >= n then true
+                else let val c = String.subCode (s, i)
+                     in if c >= 48 andalso c <= 57 then go (i + 1) else false
+                     end
+        in if n = 0 then false else go 0
+        end
+
+    fun intAtom s =
+        let val signed = String.startsWith "-" s
+            val digits = if signed then String.substring (s, 1, String.size s) else s
+        in if isDigits digits
+           then OK (stringToInt s)
+           else ERR {reason = "not an integer literal: " ^ s}
+        end
+
+    (** The inverse of `toSexp`: `OK term`, or `ERR {reason}` naming the
+     *  s-expression that is not a term. *)
+    fun fromSexp s =
+        case s of
+            LST [ATOM "var", ATOM x]      => OK (var x)
+          | LST [ATOM "lit", ATOM n]      => Outcome.map (fn k => lit k) (intAtom n)
+          | LST [ATOM "lam", ATOM x, b]   => Outcome.map (fn t => lam (x, t)) (fromSexp b)
+          | LST [ATOM "app", f, a]        => binary (fn (x, y) => app (x, y)) f a
+          | LST [ATOM "add", a, b]        => binary (fn (x, y) => add (x, y)) a b
+          | LST [ATOM "sub", a, b]        => binary (fn (x, y) => sub (x, y)) a b
+          | LST [ATOM "leq", a, b]        => binary (fn (x, y) => leq (x, y)) a b
+          | LST [ATOM "ite", c, th, el]   => ternary c th el
+          | other                         => ERR {reason = "not a term: " ^ Sexp.print other}
+
+    (* Decode two subterms and combine them, propagating the first failure. *)
+    and binary make a b =
+        case fromSexp a of
+            ERR e => ERR e
+          | OK x  => (case fromSexp b of
+                          ERR e => ERR e
+                        | OK y  => OK (make (x, y)))
+
+    and ternary c th el =
+        case fromSexp c of
+            ERR e  => ERR e
+          | OK cc  => (case binary (fn (x, y) => (x, y)) th el of
+                           ERR e         => ERR e
+                         | OK (tt, ee)   => OK (ite (cc, tt, ee)))
+
+    (** Read a term from s-expression text. Reader failures carry the character
+     *  offset as well as the reason; decoding failures carry only the reason. *)
+    fun fromString src =
+        case Sexp.parse src of
+            ERR e => ERR e
+          | OK sx => fromSexp sx
+
+in [ ("toDoc", toDoc)
+   , ("pretty", pretty)
+   , ("toSexp", toSexp)
+   , ("sexpString", sexpString)
+   , ("sexpPretty", sexpPretty)
+   , ("fromSexp", fromSexp)
+   , ("fromString", fromString)
+   ]
+end

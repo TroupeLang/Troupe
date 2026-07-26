@@ -73,7 +73,7 @@ diff (GNU diffutils) 3.10
 Check that the installation works by running the golden test suite: `$TROUPE/bin/golden`.
 
 `make test` runs the golden suite together with the compiler's own test suites, the multinode
-tests, and the result-socket tests.
+tests, the hostile-peer tests, and the result-socket tests.
 
 #### Multinode tests
 

@@ -1,0 +1,43 @@
+(* Call-by-value evaluator for the object language.
+ *
+ * Application evaluates the function to a closure and evaluates the body in the
+ * captured environment extended with the already-evaluated argument. The
+ * environment is a cons list of name/value bindings; the parameter is named rho
+ * because `env` is a datatype name and so is not available as a variable.
+ *)
+
+import "./Term"
+
+let (* Environment lookup. An unbound name evaluates to a diagnostic pair rather
+       than failing, which keeps the evaluator total. *)
+    fun lookup empty x               = ("unbound", x)
+      | lookup (bind (y, v, rest)) x = if x = y then v else lookup rest x
+
+    (* Project the integer out of a value; a closure counts as zero. *)
+    fun numOf (num n) = n
+      | numOf _       = 0
+
+    fun eval rho (var x)         = lookup rho x
+      | eval rho (lit n)         = num n
+      | eval rho (lam (x, body)) = clo (x, body, rho)
+      | eval rho (add (a, b))    = num (numOf (eval rho a) + numOf (eval rho b))
+      | eval rho (sub (a, b))    = num (numOf (eval rho a) - numOf (eval rho b))
+      | eval rho (leq (a, b))    = if numOf (eval rho a) <= numOf (eval rho b)
+                                   then num 1 else num 0
+      | eval rho (ite (c, t, f)) = (case eval rho c of
+                                      num 0 => eval rho f
+                                    | _     => eval rho t)
+      | eval rho (app (f, a))    =
+          (case eval rho f of
+             clo (x, body, cenv) => eval (bind (x, eval rho a, cenv)) body
+           | _                   => num 0)
+
+    (** Evaluate a closed term and project the integer out of the result. *)
+    fun run t = numOf (eval empty t)
+
+in [ ("lookup", lookup)
+   , ("numOf", numOf)
+   , ("eval", eval)
+   , ("run", run)
+   ]
+end

@@ -14,7 +14,7 @@ Tests live in `tests/`:
 - `rt/` — runtime tests
   - `pos/` — positive tests (should succeed): `bigint/`, `core/`, `ifc/` (with
     `ifc/blocking_pini_leaks/`, `ifc/nmifc/`, `ifc/projection-typelabel/`, `ifc/sandbox/`),
-    `modules/`, `preamble/`, `synvar/`
+    `modules/`, `operators/`, `preamble/`, `synvar/`
   - `neg/` — negative tests (should fail): `bigint/`, `core/`, `ifc/` (with `ifc/nmifc/`,
     `ifc/projection-progress/`), `preamble/`
   - `timeout/` — `blocking/` (with `blocking/neg/`) and `diverging/`; both run under an 8-second
@@ -22,8 +22,11 @@ Tests live in `tests/`:
     used (`diverging/` compares the first 100 lines of output)
   - `warn/` — tests that should produce warnings
   - `multinode-tests/` — multinode (networking) tests
+  - `hostile-peer/` — raw-libp2p attacks against one victim node, driven by
+    `scripts/run-hostile-peer-tests.sh` (`make test/hostile-peer`)
   - `result-socket/` — result-socket tests, driven by their own scripts
-- `_util/` — the diff wrappers the golden runner invokes
+- `_util/` — the diff wrappers the golden runner invokes (`diff.sh`, `diff_n.sh`), and `filter.sh`,
+  used by the multinode runner
 - `_old_tests/` — retired tests, not run
 
 Throwaway/experimental tests go in `tests/_unautomated/` (see `CLAUDE.md`).
@@ -104,7 +107,8 @@ export const UserRuntime =
 make compiler   # rebuild compiler
 make lib        # rebuild the Troupe libraries against the new compiler
 make rt         # rebuild runtime
-make test       # run tests (bin/golden for the golden suite alone)
+make test       # run tests (mkdir -p out && ./bin/golden for the golden suite alone;
+                # without the out directory, the persistence tests fail with ENOENT)
 ```
 
 Notes:

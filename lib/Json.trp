@@ -1,6 +1,7 @@
 import String
 import List
 import ListPair
+import Number
 import Option
 import Outcome
 
@@ -140,9 +141,16 @@ let (*--- Character helpers ---*)
 
     (*--- Parsing ---*)
 
-    (* The greatest nesting depth `parse` accepts; deeper input yields an `ERR` rather than
-     * exhausting the stack. *)
-    val maxDepth = 200
+    (* The greatest nesting depth `parse` accepts; deeper input yields an `ERR`.
+     *
+     * This is a bound on resource exhaustion, not a stack guard: the runtime keeps its stack on
+     * the heap, so recursive descent does not run out of stack the way it would in a host language
+     * that uses the machine stack. Measured on this runtime, a million arrays deep parses; three
+     * million exhausts the heap, and that failure is a process abort no in-library check can
+     * convert into an `ERR`. The bound therefore sits at the integer ceiling, where it rejects
+     * nothing a caller could hold in memory and no test can reach it. Revisit together with
+     * `Sexp.parse`, which carries the same bound, if a resource policy is defined. *)
+    val maxDepth = Number.maxInt32
 
     (** Parse a full JSON document into a Troupe value. On success returns `OK value`; on malformed
      *  input returns `ERR {reason, offset}`, where `offset` is the character index of the offending

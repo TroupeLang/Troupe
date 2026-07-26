@@ -1,0 +1,91 @@
+(* Programs written in the object language, built as terms.
+ *
+ * Recursion is not a feature of the interpreter: it is expressed inside the
+ * object language with fixed-point combinators, first for a single function
+ * (the call-by-value Z combinator) and then for a mutually recursive group
+ * (Church pairs plus a paired variant of Z).
+ *
+ * Every binding here is a constructor application, never a call to a function
+ * defined in this file. A module whose top level calls one of its own functions
+ * — or a library function, or a local one — fails to build its export table,
+ * and every importer then dies at load time. This is why the selector terms
+ * below are values rather than being produced by fstT/sndT.
+ *)
+
+import "./Term"
+
+let (*--- a single recursive function -----------------------------------------*)
+
+    (* Z = \f.(\x. f (\v. x x v)) (\x. f (\v. x x v)), the eta-expanded
+       fixed-point combinator that is safe under call-by-value. *)
+    val zc =
+        let val half = lam ("x",
+                         app (var "f",
+                              lam ("v", app (app (var "x", var "x"), var "v"))))
+        in lam ("f", app (half, half))
+        end
+
+    (* fibStep self n = if n <= 1 then n else self (n-1) + self (n-2) *)
+    val fibStep =
+        lam ("self",
+          lam ("n",
+            ite (leq (var "n", lit 1),
+                var "n",
+                add (app (var "self", sub (var "n", lit 1)),
+                     app (var "self", sub (var "n", lit 2))))))
+
+    (** Doubly recursive fib, entirely inside the object language. *)
+    val fibTerm = app (zc, fibStep)
+
+    (*--- a mutually recursive group -------------------------------------------*)
+
+    (* Church pairs: pair = \a.\b.\s. s a b, with a projection applying a pair
+       to one of the two selectors. *)
+    val pairT = lam ("a", lam ("b", lam ("s",
+                  app (app (var "s", var "a"), var "b"))))
+
+    val fstSel = lam ("a", lam ("b", var "a"))
+    val sndSel = lam ("a", lam ("b", var "b"))
+
+    (** Project the first / second component out of a Church pair. *)
+    fun fstT p = app (p, fstSel)
+    fun sndT p = app (p, sndSel)
+
+    (* Zmut = \f. h h  where  h = \x. f (\v. fst (x x) v) (\v. snd (x x) v).
+       f receives the two selves, eta-delayed so call-by-value does not diverge,
+       and returns a Church pair of the two bodies; Zmut f is then the pair of
+       mutually recursive functions. The same shape scales to any group width
+       with n-ary tuples in place of pairs. *)
+    val zmut =
+        let val xx   = app (var "x", var "x")
+            val dFst = lam ("v", app (app (xx, fstSel), var "v"))
+            val dSnd = lam ("v", app (app (xx, sndSel), var "v"))
+            val h    = lam ("x", app (app (var "f", dFst), dSnd))
+        in lam ("f", app (h, h))
+        end
+
+    (* even/odd as one mutually recursive group:
+         even n = if n <= 0 then 1 else odd  (n - 1)
+         odd  n = if n <= 0 then 0 else even (n - 1)  *)
+    val evenOddStep =
+        lam ("even", lam ("odd",
+          app (app (pairT,
+                 lam ("n", ite (leq (var "n", lit 0), lit 1,
+                                app (var "odd", sub (var "n", lit 1))))),
+               lam ("n", ite (leq (var "n", lit 0), lit 0,
+                              app (var "even", sub (var "n", lit 1)))))))
+
+    (** The Church pair of the mutually recursive even and odd. *)
+    val evenOddPair = app (zmut, evenOddStep)
+
+in [ ("zc", zc)
+   , ("fibStep", fibStep)
+   , ("fibTerm", fibTerm)
+   , ("pairT", pairT)
+   , ("fstT", fstT)
+   , ("sndT", sndT)
+   , ("zmut", zmut)
+   , ("evenOddStep", evenOddStep)
+   , ("evenOddPair", evenOddPair)
+   ]
+end

@@ -8,6 +8,9 @@ for how to work here. For human-facing reference material, see:
 - [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — build/test commands, running programs, source maps
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — compilation pipeline, runtime, IFC, file extensions
 - [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) — test-suite layout, adding a built-in
+- [docs/MODULES.md](docs/MODULES.md) — program-relative modules, content-addressed identity, pins
+- [docs/OPERATORS.md](docs/OPERATORS.md) — user-defined infix operators and declared fixity
+- [docs/VARIANTS.md](docs/VARIANTS.md) — `datatype` declarations and syntactic variants
 - [docs/NETWORKING.md](docs/NETWORKING.md) — P2P runtime
 
 ## Build before running
@@ -17,7 +20,7 @@ commands are documented in [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) ("Building
 
 | Changed                   | Command         | Symptom of a stale build                                 |
 |---------------------------|-----------------|----------------------------------------------------------|
-| Haskell (`compiler/src/`) | `make compiler` | `troupec: command not found`, parse errors in valid code |
+| Haskell (`compiler/`)     | `make compiler` | `troupec: command not found`, parse errors in valid code |
 | TypeScript (`rt/src/`)    | `make rt`       | `Cannot find module` for runtime files                   |
 | Troupe libraries (`lib/`) | `make lib`      | `Cannot find module` for library files                   |
 | Everything                | `make all`      | —                                                        |
@@ -38,9 +41,9 @@ asserted:
 
 - Compile a **minimal probe program** and read the artifact the claim is about.
   `bin/troupec -v probe.trp -o probe.js` refreshes the stage dumps in `out/` (relative to the
-  working directory) alongside the emitted JS: `out.syntax`, `out.nopats`, `out.lowered`,
-  `out.alpha`, `out.cps`, `out.cpsopt`, `out.ir`, `out.iropt`, `out.rawout`, `out.rawopt`,
-  `out.stack`. `out.rawopt` is absent under `--no-rawopt`.
+  working directory) alongside the emitted JS: `out.syntax`, `out.opreassoc`, `out.nopats`,
+  `out.lowered`, `out.alpha`, `out.cps`, `out.cpsopt`, `out.ir`, `out.iropt`, `out.rawout`,
+  `out.rawopt`, `out.stack`. `out.rawopt` is absent under `--no-rawopt`.
 - Read the **pass that implements the behavior**, not just its name, a summary, or a
   downstream artifact two stages away.
 - For performance claims, **measure** (`examples/variants/bench.trp`, or a timing probe);

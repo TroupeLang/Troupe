@@ -9,9 +9,10 @@ a number of nodes to bootstrap its discovery. Note that this process takes a hum
 
 
 ## Local only mode
-To skip network connection, one can provide `--localonly` flag to the runtime, but
-observe that in this case all external I/O will result
-in a runtime error.
+To skip network connection, one can provide `--localonly` flag to the runtime; in this case network
+operations — remote `send`, remote `spawn`, `whereis` — fail. Local I/O is unaffected: printing,
+`SimpleFileIO`, and `save`/`restore` all work, which is why the golden suite runs this way. The
+runtime's start-up message says all external I/O will fail; it means the network operations.
 
 
 ## Generating new persistent IDs
@@ -28,8 +29,9 @@ from a file.
 
 Libp2p is a fast-moving project, and there are stability issues. Workarounds live in the runtime
 code — for example, relay keep-alive messages and the `--relay-fault-tolerance` and `--disable-relay`
-runtime flags handled in `rt/src/p2p/p2p.mts`. The libp2p versions are pinned in the root
-`package.json`; there is no separate patch-application step during installation.
+runtime flags handled in `rt/src/p2p/p2p.mts`. The root `package.json` declares libp2p dependency
+ranges (`^3.0.0` and the like); exact versions are pinned by `package-lock.json`. There is no
+separate patch-application step during installation.
 
 
 ## Notes on the p2p runtime

@@ -1,0 +1,39 @@
+(* The object language's syntax, as syntactic-variant datatypes.
+ *
+ * A module's datatypes are exported wholesale, so every importer of this file
+ * gets all the constructors below and can build and match terms with them.
+ * That is not transitive: a file that receives a term from Eval or Print and
+ * wants to match on it imports "./Term" itself.
+ *
+ * The constructors are deliberately lower case, which the language allows;
+ * `env` being a datatype name is why the evaluator calls its environment
+ * argument rho.
+ *)
+
+datatype term = var of string
+              | lam of string * term
+              | app of term * term
+              | lit of int
+              | add of term * term
+              | sub of term * term
+              | leq of term * term
+              | ite of term * term * term
+
+datatype value = num of int | clo of string * term * env
+     and env   = empty | bind of string * value * env
+
+let (** The number of nodes in a term, counting each constructor as one. *)
+    fun size t =
+        case t of
+            var _          => 1
+          | lit _          => 1
+          | lam (_, b)     => 1 + size b
+          | app (f, a)     => 1 + size f + size a
+          | add (a, b)     => 1 + size a + size b
+          | sub (a, b)     => 1 + size a + size b
+          | leq (a, b)     => 1 + size a + size b
+          | ite (c, t1, e) => 1 + size c + size t1 + size e
+
+in [ ("size", size)
+   ]
+end

@@ -39,13 +39,16 @@ build:
   # Dependency on `List`, `Option`, and `String`
 	$(COMPILER) ./Pretty.trp -l
 
+  # Dependency on `List`, `Number`, `String`, `Outcome`, and `Pretty`
+	$(COMPILER) ./Sexp.trp -l
+
   # Dependency on `Number` and `String` (and transitively `List`)
 	$(COMPILER) ./Hash.trp -l
 
   # Dependency on `List`, `String`, and `Option`
 	$(COMPILER) ./Html.trp -l
 
-  # Dependency on `List`, `ListPair`, `String`, `Option`, and `Outcome`
+  # Dependency on `List`, `ListPair`, `Number`, `String`, `Option`, and `Outcome`
 	$(COMPILER) ./Json.trp -l
 
   # Dependency on `Html`, `String`, and `List`

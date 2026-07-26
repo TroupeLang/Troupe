@@ -16,20 +16,27 @@
  *   produced nodes and the rendered string. No downgrading happens here.
  *
  * AST (tagged records):
- *   Block:  {tag="Heading", level, inline}
+ *   Block:  {tag="Heading", level, inline, slug}
  *           {tag="Paragraph", inline}
  *           {tag="CodeBlock", lang, code}
  *           {tag="BlockQuote", blocks}
- *           {tag="ListBlock", ordered, items}   -- each item = {blocks}
+ *           {tag="ListBlock", ordered, items}   -- each item = {blocks, task, checked}
+ *           {tag="Table", align, header, rows}  -- align: "left"/"right"/"center"/"none"
+ *                                               -- header: inline list per cell
+ *                                               -- rows:   list of (inline list per cell)
  *           {tag="ThematicBreak"}
  *   Inline: {tag="Text", content}
  *           {tag="Emph", inline}
  *           {tag="Strong", inline}
+ *           {tag="Strike", inline}
  *           {tag="Code", content}
  *           {tag="Link", url, inline}
  *           {tag="Image", url, alt}
  *           {tag="SoftBreak"}
  *           {tag="HardBreak"}
+ *
+ * A Heading's `slug` is unique within the document, so it can be used as an `id` and linked to
+ * with a `#fragment`. `headings` exposes the slugs for building a table of contents.
  *)
 
 import List
@@ -97,6 +104,32 @@ let (* =================================================================== *)
           "/", ":", ";", "<", "=", ">", "?", "@", "[", "\\", "]", "^", "_", "`",
           "{", "|", "}", "~" ]
     fun isPunct c = List.elem c punctChars
+
+    fun isAlphaNumChar c =
+        let val n = String.subCode (c, 0)
+        in (n >= 48 andalso n <= 57)      (* 0-9 *)
+           orelse (n >= 65 andalso n <= 90)   (* A-Z *)
+           orelse (n >= 97 andalso n <= 122)  (* a-z *)
+        end
+
+    fun toLowerChar c =
+        let val n = String.subCode (c, 0)
+        in if n >= 65 andalso n <= 90
+           then String.sub ("abcdefghijklmnopqrstuvwxyz", n - 65)
+           else c
+        end
+
+    fun toLowerCase s = String.map toLowerChar s
+
+    (* Whether a line holds a '|' at all - the cheap precondition for a table row. *)
+    fun hasPipe line = List.elem "|" (String.explode line)
+
+    (* Truncate or pad `xs` with `filler` so it has exactly `n` elements. *)
+    fun padTo n filler xs =
+        let val k = List.length xs
+            fun fillers 0 = []
+              | fillers j = filler :: fillers (j - 1)
+        in if k >= n then List.take n xs else List.append xs (fillers (n - k)) end
 
     (* Split a source string into lines on "\n", stripping a trailing "\r". *)
     fun splitLines s =
@@ -358,6 +391,21 @@ let (* =================================================================== *)
                                         :: flushBuf buf nodes)
                                 | [] => go cs ("[" :: buf) nodes)
                          | [] => go cs ("[" :: buf) nodes)
+                  else if c = "~" then
+                      (* Strikethrough. Only a `~~` pair delimits; a lone `~` is literal. *)
+                      let val isDouble = (case cs of x::_ => x = "~" | [] => false)
+                      in if not isDouble then go cs (c :: buf) nodes
+                         else let val afterDelim = dropN 1 cs
+                                  val nextCh     = (case afterDelim of x::_ => x | [] => "")
+                              in if nextCh = "" orelse nextCh = " " orelse nextCh = "\n"
+                                 then go cs (c :: buf) nodes
+                                 else (case splitAtDelim ["~", "~"] afterDelim of
+                                           (inner, rest)::_ =>
+                                             go rest [] ({tag = "Strike", inline = parseInlineChars inner}
+                                                         :: flushBuf buf nodes)
+                                         | [] => go cs (c :: buf) nodes)
+                              end
+                      end
                   else if (c = "*" orelse c = "_") then
                       let val prevCh   = (case buf of p::_ => p | [] => "")
                           val isU      = (c = "_")
@@ -391,6 +439,108 @@ let (* =================================================================== *)
     fun parseInline s = parseInlineChars (String.explode s)
 
     (* =================================================================== *)
+    (*  Tables (GFM)                                                       *)
+    (* =================================================================== *)
+
+    (* Split a table row on '|' delimiters, honouring backslash escapes and code spans, so a
+     * cell may contain a literal pipe as `\|` or inside `a|b`. A code span is closed only by a
+     * backtick run of the same length, matching the inline parser. *)
+    fun splitCells s =
+        let fun finish buf cells = (String.implode (List.reverse buf)) :: cells
+
+            (* `run` is the length of the backtick run that opened the current code span, or 0
+             * when outside one. *)
+            fun go []       buf cells run = List.reverse (finish buf cells)
+              | go (c::cs)  buf cells run =
+                  if c = "\\" then
+                      (case cs of
+                           [] => go [] ("\\" :: buf) cells run
+                         | n::cs' =>
+                             (* An escaped pipe becomes a literal one; every other escape is
+                              * left intact for the inline parser to interpret. *)
+                             if n = "|" then go cs' ("|" :: buf) cells run
+                             else go cs' (n :: "\\" :: buf) cells run)
+                  else if c = "`" then
+                      let val n     = 1 + countLeadingList "`" cs
+                          val cs'   = dropN (n - 1) cs
+                          val buf'  = addChars n "`" buf
+                      in if run = 0 then go cs' buf' cells n
+                         else if run = n then go cs' buf' cells 0
+                         else go cs' buf' cells run
+                      end
+                  else if c = "|" andalso run = 0 then go cs [] (finish buf cells) run
+                  else go cs (c :: buf) cells run
+        in go (String.explode s) [] [] 0 end
+
+    (* The cells of a table row, with the optional leading and trailing pipes discarded and
+     * every cell trimmed. *)
+    fun rowCells line =
+        let val t     = trim line
+            val n     = String.size t
+            val cells = splitCells t
+            val cells1 = if n > 0 andalso String.sub (t, 0) = "|"
+                         then List.drop 1 cells else cells
+            val k      = List.length cells1
+            val cells2 = if n > 1 andalso String.sub (t, n - 1) = "|" andalso k > 0
+                         then List.take (k - 1) cells1 else cells1
+        in List.map trim cells2 end
+
+    (* A delimiter cell is `-`+ with an optional leading and/or trailing colon. *)
+    fun delimAlign cell =
+        let val cs      = String.explode cell
+            val n       = List.length cs
+            val leftC   = n > 0 andalso List.head cs = ":"
+            val rightC  = n > 0 andalso List.nth cs (n - 1) = ":"
+            val core    = let val a = if leftC then List.drop 1 cs else cs
+                              val m = List.length a
+                          in if rightC andalso m > 0 then List.take (m - 1) a else a end
+        in if List.null core orelse not (List.forall (fn c => c = "-") core) then []
+           else if leftC andalso rightC then ["center"]
+           else if rightC then ["right"]
+           else if leftC then ["left"]
+           else ["none"]
+        end
+
+    (* The alignments of a delimiter row, or [] when the line is not one. *)
+    fun delimRow line =
+        let (* A single-column table's delimiter row carries no pipe at all. *)
+            val bare = List.forall (fn c => c = "-" orelse c = ":") (String.explode (trim line))
+        in if not (hasPipe line orelse bare) then []
+           else let val cells  = rowCells line
+                    val aligns = List.concat (List.map delimAlign cells)
+                in if List.null cells orelse List.length aligns <> List.length cells then []
+                   else aligns
+                end
+        end
+
+    (* A table opener: a header row holding a pipe, followed by a delimiter row with the same
+     * number of cells. Anything else stays a paragraph. *)
+    fun matchTableHead line rest =
+        (case rest of
+             [] => []
+           | l2::_ =>
+               if not (hasPipe line) then []
+               else let val hs = rowCells line
+                        val al = delimRow l2
+                    in if List.null al orelse List.length al <> List.length hs then []
+                       else [ {align = al, header = hs} ]
+                    end)
+
+    (* Consume a table: the header, the delimiter row, then body rows for as long as the lines
+     * keep looking like rows. Rows are padded or truncated to the header's width. *)
+    fun parseTable lines =
+        let val hd    = List.head (matchTableHead (List.head lines) (List.tail lines))
+            val width = List.length hd.align
+            fun isRow l = not (isBlank l) andalso hasPipe l andalso not (isThematicBreak l)
+            val (bodyLines, rest) = List.span isRow (List.drop 2 lines)
+            fun cellsOf l = List.map parseInline (padTo width "" (rowCells l))
+        in ({ tag    = "Table"
+            , align  = hd.align
+            , header = List.map parseInline (padTo width "" hd.header)
+            , rows   = List.map cellsOf bodyLines }, rest)
+        end
+
+    (* =================================================================== *)
     (*  Block parsing (mutually recursive)                                 *)
     (* =================================================================== *)
 
@@ -410,13 +560,23 @@ let (* =================================================================== *)
                       then let val (blk, rest') = parseBlockquote (line :: rest) in blk :: parseBlocks rest' end
                       else if matchMarker line <> []
                       then let val (blk, rest') = parseListBlock (line :: rest) in blk :: parseBlocks rest' end
+                      else if matchTableHead line rest <> []
+                      then let val (blk, rest') = parseTable (line :: rest) in blk :: parseBlocks rest' end
                       else let val (blk, rest') = parseParagraph (line :: rest) in blk :: parseBlocks rest' end)
 
     and parseParagraph lines =
         let fun stops l =
                 isBlank l orelse isThematicBreak l orelse (parseHeadingLine l <> [])
                 orelse isFence l orelse isBlockquote l orelse (matchMarker l <> [])
-            val (body, rest) = List.span (fn l => not (stops l)) lines
+            (* A table can open on the line after a paragraph line, which needs two lines of
+             * lookahead - more than `stops` sees. *)
+            fun collect []          acc = (List.reverse acc, [])
+              | collect (l::rest) acc =
+                  if stops l then (List.reverse acc, l :: rest)
+                  else if not (List.null acc) andalso matchTableHead l rest <> []
+                  then (List.reverse acc, l :: rest)
+                  else collect rest (l :: acc)
+            val (body, rest) = collect lines []
             val text = String.concatWith "\n" (List.map trimLeft body)
         in ({tag = "Paragraph", inline = parseInline text}, rest) end
 
@@ -431,6 +591,18 @@ let (* =================================================================== *)
 
     and parseListBlock lines =
         let val ordered0 = (List.head (matchMarker (List.head lines))).ordered
+            (* A task-list item: the item content opens with "[ ]" or "[x]" followed by a space
+             * or the end of the line. `[text](url)` cannot match, since its bracket holds more
+             * than the single marker character. *)
+            fun taskMarker content =
+                (case String.explode content of
+                     "["::b::"]"::r =>
+                       if (b = " " orelse b = "x" orelse b = "X")
+                          andalso (case r of [] => true | sp::_ => sp = " ")
+                       then [ {checked = (b = "x" orelse b = "X"),
+                               text    = String.implode (case r of [] => [] | _::t => t)} ]
+                       else []
+                   | _ => [])
             (* A continuation line either is blank or is indented to the item's content column.
              * Blank lines are kept, as empty lines, so a list item can hold several blocks. *)
             fun collectItem indent lines =
@@ -446,22 +618,94 @@ let (* =================================================================== *)
                      | mk::_ =>
                          if mk.ordered <> ordered0 then (List.reverse items, l :: rest)
                          else let val (contLines, rest') = collectItem (mk.indent) rest
-                                  val itemBlocks = parseBlocks ((mk.content) :: contLines)
-                              in loop rest' ({blocks = itemBlocks} :: items) end)
+                                  val (content, task, checked) =
+                                      (case taskMarker (mk.content) of
+                                           t::_ => (t.text, true, t.checked)
+                                         | []   => (mk.content, false, false))
+                                  val itemBlocks = parseBlocks (content :: contLines)
+                              in loop rest' ({blocks = itemBlocks, task = task, checked = checked}
+                                             :: items) end)
             val (items, remaining) = loop lines []
         in ({tag = "ListBlock", ordered = ordered0, items = items}, remaining) end
+
+    (* =================================================================== *)
+    (*  Heading slugs                                                      *)
+    (* =================================================================== *)
+
+    (* The plain text of an inline-node list, for slug generation and tables of contents. *)
+    fun inlineText ns =
+        let fun one n =
+                (case n.tag of
+                     "Text"      => n.content
+                   | "Code"      => n.content
+                   | "Emph"      => inlineText n.inline
+                   | "Strong"    => inlineText n.inline
+                   | "Strike"    => inlineText n.inline
+                   | "Link"      => inlineText n.inline
+                   | "Image"     => n.alt
+                   | "SoftBreak" => " "
+                   | "HardBreak" => " "
+                   | _           => "")
+        in String.concat (List.map one ns) end
+
+    (* The GitHub slug rule: lowercase, drop everything that is not alphanumeric, a space or a
+     * hyphen, then spaces to hyphens. *)
+    fun slugify s =
+        let val cs   = String.explode (toLowerCase (trim s))
+            val kept = List.filter (fn c => isAlphaNumChar c orelse c = " " orelse c = "-") cs
+        in String.implode (List.map (fn c => if c = " " then "-" else c) kept) end
+
+    (* The first of `base`, `base-1`, `base-2`, ... not already taken. *)
+    fun uniqueSlug used base =
+        let val b = if base = "" then "section" else base
+            fun try n =
+                let val cand = if n = 0 then b else b ^ "-" ^ intToString n
+                in if List.elem cand used then try (n + 1) else cand end
+        in try 0 end
+
+    (* Give every Heading a document-unique `slug`. Run as a pass over the parsed AST rather
+     * than during rendering, so rendering stays free of threaded state. *)
+    fun assignSlugs blocks =
+        let fun blk used b =
+                (case b.tag of
+                     "Heading" =>
+                       let val slug = uniqueSlug used (slugify (inlineText b.inline))
+                       in ({tag = "Heading", level = b.level, inline = b.inline, slug = slug},
+                           slug :: used)
+                       end
+                   | "BlockQuote" =>
+                       let val (bs, used') = blks used b.blocks
+                       in ({tag = "BlockQuote", blocks = bs}, used') end
+                   | "ListBlock" =>
+                       let val (its, used') = itms used b.items
+                       in ({tag = "ListBlock", ordered = b.ordered, items = its}, used') end
+                   | _ => (b, used))
+            and blks used []      = ([], used)
+              | blks used (b::bs) =
+                  let val (b',  u1) = blk used b
+                      val (bs', u2) = blks u1 bs
+                  in (b' :: bs', u2) end
+            and itms used []      = ([], used)
+              | itms used (i::is) =
+                  let val (bs,  u1) = blks used i.blocks
+                      val (is', u2) = itms u1 is
+                  in ({blocks = bs, task = i.task, checked = i.checked} :: is', u2) end
+            val (result, _) = blks [] blocks
+        in result end
 
     (* =================================================================== *)
     (*  AST -> Html nodes                                                  *)
     (* =================================================================== *)
 
-    fun headingNode level children =
-        if level = 1 then Html.h1 {} children
-        else if level = 2 then Html.h2 {} children
-        else if level = 3 then Html.h3 {} children
-        else if level = 4 then Html.h4 {} children
-        else if level = 5 then Html.h5 {} children
-        else Html.h6 {} children
+    fun headingNode level slug children =
+        let val attrs = if slug = "" then {} else {id = slug}
+        in if level = 1 then Html.h1 attrs children
+           else if level = 2 then Html.h2 attrs children
+           else if level = 3 then Html.h3 attrs children
+           else if level = 4 then Html.h4 attrs children
+           else if level = 5 then Html.h5 attrs children
+           else Html.h6 attrs children
+        end
 
     fun codeBlockNode lang code =
         let val codeChild = Html.text code
@@ -475,6 +719,7 @@ let (* =================================================================== *)
              "Text"      => Html.text n.content
            | "Emph"      => Html.em     {} (List.map inlineToNode n.inline)
            | "Strong"    => Html.strong {} (List.map inlineToNode n.inline)
+           | "Strike"    => Html.element "del" {} (List.map inlineToNode n.inline)
            | "Code"      => Html.code   {} [Html.text n.content]
            | "Link"      => if Html.isDangerousUrl n.url
                             then Html.a {} (List.map inlineToNode n.inline)
@@ -488,23 +733,52 @@ let (* =================================================================== *)
 
     fun inlineToNodes ns = List.map inlineToNode ns
 
+    (* Column alignment travels as an inline style rather than a class, so the output needs no
+     * external stylesheet to be laid out correctly. *)
+    fun alignAttr "center" = {style = "text-align: center"}
+      | alignAttr "right"  = {style = "text-align: right"}
+      | alignAttr "left"   = {style = "text-align: left"}
+      | alignAttr _        = {}
+
+    (* Header and body rows are padded to the alignment list's width by the parser, so these
+     * two lists always run out together. *)
+    fun cellNodes mk []          _          = []
+      | cellNodes mk _           []         = []
+      | cellNodes mk (a::aligns) (c::cells) =
+          (mk (alignAttr a) (inlineToNodes c)) :: cellNodes mk aligns cells
+
+    fun tableNode align header rows =
+        let val headRow  = Html.tr {} (cellNodes Html.th align header)
+            val bodyRows = List.map (fn r => Html.tr {} (cellNodes Html.td align r)) rows
+        in Html.table {} [ Html.thead {} [headRow], Html.tbody {} bodyRows ] end
+
     (* One block -> a list of Html nodes. In `tight` mode a Paragraph emits its
      * inline nodes directly (no <p>), which produces tight-list rendering. *)
     fun blockToNodes tight b =
         (case b.tag of
-             "Heading"       => [ headingNode b.level (inlineToNodes b.inline) ]
+             "Heading"       => [ headingNode b.level b.slug (inlineToNodes b.inline) ]
            | "Paragraph"     => if tight then inlineToNodes b.inline
                                 else [ Html.p {} (inlineToNodes b.inline) ]
            | "CodeBlock"     => [ codeBlockNode b.lang b.code ]
            | "BlockQuote"    => [ Html.blockquote {} (blocksToNodes false b.blocks) ]
            | "ThematicBreak" => [ Html.hr {} ]
            | "ListBlock"     => [ listNode b.ordered b.items ]
+           | "Table"         => [ tableNode b.align b.header b.rows ]
            | _               => [])
 
     and blocksToNodes tight bs = List.concat (List.map (blockToNodes tight) bs)
 
     and listNode ordered items =
-        let val liNodes = List.map (fn item => Html.li {} (blocksToNodes true item.blocks)) items
+        let fun itemNode item =
+                if item.task
+                then let val box = if item.checked
+                                   then Html.input {type = "checkbox", disabled = "", checked = ""}
+                                   else Html.input {type = "checkbox", disabled = ""}
+                     in Html.li {class = "task-list-item"}
+                                (box :: blocksToNodes true item.blocks)
+                     end
+                else Html.li {} (blocksToNodes true item.blocks)
+            val liNodes = List.map itemNode items
         in if ordered then Html.ol {} liNodes else Html.ul {} liNodes end
 
     (* =================================================================== *)
@@ -512,8 +786,24 @@ let (* =================================================================== *)
     (* =================================================================== *)
 
     (** Parse a Markdown source string into the block AST (for testing or
-     *  further processing). *)
-    fun parse s = parseBlocks (splitLines s)
+     *  further processing). Every Heading carries a document-unique `slug`. *)
+    fun parse s = assignSlugs (parseBlocks (splitLines s))
+
+    (** The headings of a parsed document as `{level, text, slug}`, in document order. The slugs
+     *  are the ones `toHtml` emits as `id` attributes, so a table of contents built from this
+     *  cannot drift from its targets. *)
+    fun headingsOf blocks =
+        let fun blk b =
+                (case b.tag of
+                     "Heading"    => [ {level = b.level, text = inlineText b.inline, slug = b.slug} ]
+                   | "BlockQuote" => blks b.blocks
+                   | "ListBlock"  => List.concat (List.map (fn i => blks i.blocks) b.items)
+                   | _            => [])
+            and blks bs = List.concat (List.map blk bs)
+        in blks blocks end
+
+    (** `headingsOf` applied to a freshly parsed source string. *)
+    fun headings s = headingsOf (parse s)
 
     (** Convert a Markdown source string into a list of Html nodes. *)
     fun toHtmlNodes s = blocksToNodes false (parse s)
@@ -523,6 +813,9 @@ let (* =================================================================== *)
     fun toHtml s = Html.renderAll (toHtmlNodes s)
 
 in [ ("parse", parse)
+   , ("headings", headings)
+   , ("headingsOf", headingsOf)
+   , ("blocksToNodes", blocksToNodes)
    , ("toHtmlNodes", toHtmlNodes)
    , ("toHtml", toHtml)
    ]

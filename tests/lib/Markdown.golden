@@ -1,4 +1,4 @@
-2026-07-16T23:15:15.528Z [RTM] [32minfo[39m: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+2026-07-26T08:20:18.601Z [RTM] [32minfo[39m: Skipping network creation. Observe that all external IO operations will yield a runtime error.
 [34mbegin [0mMarkdown
   [34mbegin [0mheadings
       [33m[ TEST ][0m it h1      [32m[ PASS ][0m it h1
@@ -67,8 +67,40 @@
       [33m[ TEST ][0m it parse produces the block AST      [32m[ PASS ][0m it parse produces the block AST
       [33m[ TEST ][0m it toHtmlNodes render to the same HTML as toHtml      [32m[ PASS ][0m it toHtmlNodes render to the same HTML as toHtml
   [34mend [0m
+  [34mbegin [0mtables
+      [33m[ TEST ][0m it header and one body row      [32m[ PASS ][0m it header and one body row
+      [33m[ TEST ][0m it outer pipes are optional      [32m[ PASS ][0m it outer pipes are optional
+      [33m[ TEST ][0m it alignment markers become inline styles      [32m[ PASS ][0m it alignment markers become inline styles
+      [33m[ TEST ][0m it an escaped pipe stays inside its cell      [32m[ PASS ][0m it an escaped pipe stays inside its cell
+      [33m[ TEST ][0m it a pipe inside a code span does not split the cell      [32m[ PASS ][0m it a pipe inside a code span does not split the cell
+      [33m[ TEST ][0m it a short row is padded      [32m[ PASS ][0m it a short row is padded
+      [33m[ TEST ][0m it a long row is truncated to the header width      [32m[ PASS ][0m it a long row is truncated to the header width
+      [33m[ TEST ][0m it cell contents are parsed as inline markdown      [32m[ PASS ][0m it cell contents are parsed as inline markdown
+      [33m[ TEST ][0m it a paragraph containing a pipe is not a table      [32m[ PASS ][0m it a paragraph containing a pipe is not a table
+      [33m[ TEST ][0m it a delimiter row with a different cell count is not a table      [32m[ PASS ][0m it a delimiter row with a different cell count is not a table
+      [33m[ TEST ][0m it a table may open directly after a paragraph line      [32m[ PASS ][0m it a table may open directly after a paragraph line
+  [34mend [0m
+  [34mbegin [0mtask lists
+      [33m[ TEST ][0m it an unticked item      [32m[ PASS ][0m it an unticked item
+      [33m[ TEST ][0m it a ticked item      [32m[ PASS ][0m it a ticked item
+      [33m[ TEST ][0m it an uppercase X also ticks      [32m[ PASS ][0m it an uppercase X also ticks
+      [33m[ TEST ][0m it a bracketed word is not a checkbox      [32m[ PASS ][0m it a bracketed word is not a checkbox
+      [33m[ TEST ][0m it a link at the start of an item is not a checkbox      [32m[ PASS ][0m it a link at the start of an item is not a checkbox
+  [34mend [0m
+  [34mbegin [0mstrikethrough
+      [33m[ TEST ][0m it a tilde pair      [32m[ PASS ][0m it a tilde pair
+      [33m[ TEST ][0m it nested emphasis      [32m[ PASS ][0m it nested emphasis
+      [33m[ TEST ][0m it a lone tilde is literal      [32m[ PASS ][0m it a lone tilde is literal
+      [33m[ TEST ][0m it an unmatched pair is literal      [32m[ PASS ][0m it an unmatched pair is literal
+  [34mend [0m
+  [34mbegin [0mheading slugs
+      [33m[ TEST ][0m it punctuation is dropped and spaces become hyphens      [32m[ PASS ][0m it punctuation is dropped and spaces become hyphens
+      [33m[ TEST ][0m it repeated headings get numbered slugs      [32m[ PASS ][0m it repeated headings get numbered slugs
+      [33m[ TEST ][0m it headings reports level, text and slug      [32m[ PASS ][0m it headings reports level, text and slug
+      [33m[ TEST ][0m it the slug ignores inline markup but keeps its text      [32m[ PASS ][0m it the slug ignores inline markup but keeps its text
+  [34mend [0m
 [34mend [0m
 
-Total:  39
-Passes: 39
+Total:  63
+Passes: 63
 >>> Main thread finished with value: true@{}%{}

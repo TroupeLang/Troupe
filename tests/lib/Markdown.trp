@@ -14,18 +14,18 @@ let val md = Markdown.toHtml
     val tests = Unit.group "Markdown" [
 
         Unit.group "headings" [
-            Unit.it "h1"            (Unit.isEq "<h1>Hi</h1>"        (md "# Hi"))
-          , Unit.it "h2"            (Unit.isEq "<h2>Two</h2>"       (md "## Two"))
-          , Unit.it "h6"            (Unit.isEq "<h6>Six</h6>"       (md "###### Six"))
+            Unit.it "h1"            (Unit.isEq "<h1 id='hi'>Hi</h1>"        (md "# Hi"))
+          , Unit.it "h2"            (Unit.isEq "<h2 id='two'>Two</h2>"       (md "## Two"))
+          , Unit.it "h6"            (Unit.isEq "<h6 id='six'>Six</h6>"       (md "###### Six"))
           , Unit.it "closing hashes stripped"
-                                    (Unit.isEq "<h3>Heading 3</h3>" (md "### Heading 3 ###"))
+                                    (Unit.isEq "<h3 id='heading-3'>Heading 3</h3>" (md "### Heading 3 ###"))
           , Unit.it "seven hashes is not a heading"
                                     (Unit.isEq "<p>####### Seven</p>" (md "####### Seven"))
         ],
 
         Unit.group "spec contract" [
             Unit.it "heading then emphasised paragraph"
-                    (Unit.isEq "<h1>Hi</h1><p>Hello <em>world</em></p>" (md "# Hi\n\nHello *world*"))
+                    (Unit.isEq "<h1 id='hi'>Hi</h1><p>Hello <em>world</em></p>" (md "# Hi\n\nHello *world*"))
         ],
 
         Unit.group "paragraphs and inline" [
@@ -122,10 +122,100 @@ let val md = Markdown.toHtml
 
         Unit.group "AST and node exports" [
             Unit.it "parse produces the block AST"
-                    (Unit.isEq [ {tag = "Heading", level = 1, inline = [ {tag = "Text", content = "Hi"} ]} ]
+                    (Unit.isEq [ {tag = "Heading", level = 1,
+                                  inline = [ {tag = "Text", content = "Hi"} ], slug = "hi"} ]
                                (Markdown.parse "# Hi"))
           , Unit.it "toHtmlNodes render to the same HTML as toHtml"
-                    (Unit.isEq "<h1>Hi</h1>" (Html.renderAll (Markdown.toHtmlNodes "# Hi")))
+                    (Unit.isEq "<h1 id='hi'>Hi</h1>" (Html.renderAll (Markdown.toHtmlNodes "# Hi")))
+        ],
+
+        Unit.group "tables" [
+            Unit.it "header and one body row"
+                    (Unit.isEq ("<table><thead><tr><th>A</th><th>B</th></tr></thead>"
+                                ^ "<tbody><tr><td>1</td><td>2</td></tr></tbody></table>")
+                               (md "| A | B |\n|---|---|\n| 1 | 2 |"))
+          , Unit.it "outer pipes are optional"
+                    (Unit.isEq ("<table><thead><tr><th>A</th><th>B</th></tr></thead>"
+                                ^ "<tbody><tr><td>1</td><td>2</td></tr></tbody></table>")
+                               (md "A | B\n--|--\n1 | 2"))
+          , Unit.it "alignment markers become inline styles"
+                    (Unit.isEq ("<table><thead><tr><th style='text-align: left'>L</th>"
+                                ^ "<th style='text-align: center'>C</th>"
+                                ^ "<th style='text-align: right'>R</th></tr></thead>"
+                                ^ "<tbody></tbody></table>")
+                               (md "| L | C | R |\n|:--|:-:|--:|"))
+          , Unit.it "an escaped pipe stays inside its cell"
+                    (Unit.isEq ("<table><thead><tr><th>A</th></tr></thead>"
+                                ^ "<tbody><tr><td>a | b</td></tr></tbody></table>")
+                               (md "| A |\n|---|\n| a \\| b |"))
+          , Unit.it "a pipe inside a code span does not split the cell"
+                    (Unit.isEq ("<table><thead><tr><th>A</th></tr></thead>"
+                                ^ "<tbody><tr><td><code>x|y</code></td></tr></tbody></table>")
+                               (md "| A |\n|---|\n| `x|y` |"))
+          , Unit.it "a short row is padded"
+                    (Unit.isEq ("<table><thead><tr><th>A</th><th>B</th></tr></thead>"
+                                ^ "<tbody><tr><td>1</td><td></td></tr></tbody></table>")
+                               (md "| A | B |\n|---|---|\n| 1 |"))
+          , Unit.it "a long row is truncated to the header width"
+                    (Unit.isEq ("<table><thead><tr><th>A</th></tr></thead>"
+                                ^ "<tbody><tr><td>1</td></tr></tbody></table>")
+                               (md "| A |\n|---|\n| 1 | 2 |"))
+          , Unit.it "cell contents are parsed as inline markdown"
+                    (Unit.isEq ("<table><thead><tr><th>A</th></tr></thead>"
+                                ^ "<tbody><tr><td><strong>b</strong></td></tr></tbody></table>")
+                               (md "| A |\n|---|\n| **b** |"))
+          , Unit.it "a paragraph containing a pipe is not a table"
+                    (Unit.isEq "<p>a | b</p>" (md "a | b"))
+          , Unit.it "a delimiter row with a different cell count is not a table"
+                    (Unit.isEq "<p>| A | B |\n|---|</p>" (md "| A | B |\n|---|"))
+          , Unit.it "a table may open directly after a paragraph line"
+                    (Unit.isEq ("<p>intro</p><table><thead><tr><th>A</th></tr></thead>"
+                                ^ "<tbody></tbody></table>")
+                               (md "intro\n| A |\n|---|"))
+        ],
+
+        Unit.group "task lists" [
+            Unit.it "an unticked item"
+                    (Unit.isEq ("<ul><li class='task-list-item'>"
+                                ^ "<input type='checkbox' disabled='' />open</li></ul>")
+                               (md "- [ ] open"))
+          , Unit.it "a ticked item"
+                    (Unit.isEq ("<ul><li class='task-list-item'>"
+                                ^ "<input type='checkbox' disabled='' checked='' />done</li></ul>")
+                               (md "- [x] done"))
+          , Unit.it "an uppercase X also ticks"
+                    (Unit.isEq ("<ul><li class='task-list-item'>"
+                                ^ "<input type='checkbox' disabled='' checked='' />done</li></ul>")
+                               (md "- [X] done"))
+          , Unit.it "a bracketed word is not a checkbox"
+                    (Unit.isEq "<ul><li>[not a task]</li></ul>" (md "- [not a task]"))
+          , Unit.it "a link at the start of an item is not a checkbox"
+                    (Unit.isEq "<ul><li><a href='x.md'>t</a></li></ul>" (md "- [t](x.md)"))
+        ],
+
+        Unit.group "strikethrough" [
+            Unit.it "a tilde pair"      (Unit.isEq "<p><del>gone</del></p>" (md "~~gone~~"))
+          , Unit.it "nested emphasis"
+                    (Unit.isEq "<p><del>a <em>b</em></del></p>" (md "~~a *b*~~"))
+          , Unit.it "a lone tilde is literal"
+                    (Unit.isEq "<p>a ~ b</p>" (md "a ~ b"))
+          , Unit.it "an unmatched pair is literal"
+                    (Unit.isEq "<p>~~open</p>" (md "~~open"))
+        ],
+
+        Unit.group "heading slugs" [
+            Unit.it "punctuation is dropped and spaces become hyphens"
+                    (Unit.isEq "<h2 id='a-b-c'>A b: c</h2>" (md "## A b: c"))
+          , Unit.it "repeated headings get numbered slugs"
+                    (Unit.isEq "<h1 id='dup'>Dup</h1><h1 id='dup-1'>Dup</h1>"
+                               (md "# Dup\n\n# Dup"))
+          , Unit.it "headings reports level, text and slug"
+                    (Unit.isEq [ {level = 1, text = "One",   slug = "one"}
+                               , {level = 2, text = "Two",   slug = "two"} ]
+                               (Markdown.headings "# One\n\n## Two"))
+          , Unit.it "the slug ignores inline markup but keeps its text"
+                    (Unit.isEq [ {level = 1, text = "a b", slug = "a-b"} ]
+                               (Markdown.headings "# a *b*"))
         ]
 
     ]

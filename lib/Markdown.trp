@@ -144,7 +144,12 @@ let (* =================================================================== *)
     fun toLowerCase s = String.map toLowerChar s
 
     (* Whether a line holds a '|' at all - the cheap precondition for a table row. *)
-    fun hasPipe line = List.elem "|" (String.explode line)
+    fun hasPipe line =
+        let val n = String.size line
+            fun go i = if i >= n then false
+                       else if String.subCode (line, i) = 124 then true
+                       else go (i + 1)
+        in go 0 end
 
     (* Truncate or pad `xs` with `filler` so it has exactly `n` elements. *)
     fun padTo n filler xs =
@@ -475,31 +480,39 @@ let (* =================================================================== *)
      * cell may contain a literal pipe as `\|` or inside `a|b`. A code span is closed only by a
      * backtick run of the same length, matching the inline parser. *)
     fun splitCells s =
-        let fun finish buf cells = (String.implode (List.reverse buf)) :: cells
-
-            (* `run` is the length of the backtick run that opened the current code span, or 0
-             * when outside one. *)
-            fun go []       buf cells run = List.reverse (finish buf cells)
-              | go (c::cs)  buf cells run =
-                  if c = "\\" then
-                      (case cs of
-                           [] => go [] ("\\" :: buf) cells run
-                         | n::cs' =>
-                             (* An escaped pipe becomes a literal one; every other escape is
-                              * left intact for the inline parser to interpret. *)
-                             if n = "|" then go cs' ("|" :: buf) cells run
-                             else go cs' (n :: "\\" :: buf) cells run)
-                  else if c = "`" then
-                      let val n     = 1 + countLeadingList "`" cs
-                          val cs'   = dropN (n - 1) cs
-                          val buf'  = addChars n "`" buf
-                      in if run = 0 then go cs' buf' cells n
-                         else if run = n then go cs' buf' cells 0
-                         else go cs' buf' cells run
-                      end
-                  else if c = "|" andalso run = 0 then go cs [] (finish buf cells) run
-                  else go cs (c :: buf) cells run
-        in go (String.explode s) [] [] 0 end
+        let val n = String.size s
+            (* The length of the run of backticks starting at `i`. *)
+            fun backtickRun i =
+                let fun go j = if String.subCode (s, j) = 96 then go (j + 1) else j - i
+                in go i end
+            (* The cell so far, extended with the characters from `from` up to `i`. Only an
+             * escaped pipe interrupts a run, so a cell is usually one substring. *)
+            fun upto acc from i =
+                if i > from then acc ^ String.substring (s, from, i) else acc
+            (* `acc` is the finished part of the current cell and `from` the start of the run not
+             * yet copied into it; `run` is the length of the backtick run that opened the code
+             * span the scan is inside, or 0 when it is outside one. *)
+            fun go i from acc cells run =
+                if i >= n then List.reverse (upto acc from n :: cells)
+                else let val c = String.subCode (s, i)
+                     in if c = 92 andalso i + 1 < n then
+                            (* An escaped pipe becomes a literal one; every other escape is left
+                             * intact for the inline parser to interpret, and the character it
+                             * escapes is stepped over so it cannot open a code span. *)
+                            if String.subCode (s, i + 1) = 124
+                            then go (i + 2) (i + 2) (upto acc from i ^ "|") cells run
+                            else go (i + 2) from acc cells run
+                        else if c = 96 then
+                            let val k = backtickRun i
+                            in if run = 0 then go (i + k) from acc cells k
+                               else if run = k then go (i + k) from acc cells 0
+                               else go (i + k) from acc cells run
+                            end
+                        else if c = 124 andalso run = 0 then
+                            go (i + 1) (i + 1) "" (upto acc from i :: cells) run
+                        else go (i + 1) from acc cells run
+                     end
+        in go 0 0 "" [] 0 end
 
     (* The cells of a table row, with the optional leading and trailing pipes discarded and
      * every cell trimmed. *)
@@ -542,13 +555,28 @@ let (* =================================================================== *)
                 end
         end
 
+    (* Whether every character of `s` is one a delimiter row may hold, and at least one is a '-'.
+     * This is what makes a table opener cheap to rule out: `matchTableHead` is asked about every
+     * line of the document, and on a line of prose the scan below stops at the first letter. *)
+    fun couldBeDelimRow s =
+        let val n = String.size s
+            fun go i dash =
+                if i >= n then dash
+                else let val c = String.subCode (s, i)
+                     in if c = 45 then go (i + 1) true                        (* -   *)
+                        else if c = 58 orelse c = 124                         (* : | *)
+                             orelse c = 32 orelse c = 9 then go (i + 1) dash  (* sp  *)
+                        else false
+                     end
+        in go 0 false end
+
     (* A table opener: a header row holding a pipe, followed by a delimiter row with the same
      * number of cells. Anything else stays a paragraph. *)
     fun matchTableHead line rest =
         (case rest of
              [] => []
            | l2::_ =>
-               if not (hasPipe line) then []
+               if not (couldBeDelimRow l2) orelse not (hasPipe line) then []
                else let val hs = rowCells line
                         val al = delimRow l2
                     in if List.null al orelse List.length al <> List.length hs then []

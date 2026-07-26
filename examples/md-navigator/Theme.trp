@@ -145,27 +145,25 @@ let
       ^ ".tree details[open] > summary .dirname { color: var(--fg-muted); }\n"
       ^ ".tree summary:hover .dirname { color: var(--fg); }\n"
       ^ ".tree .dcount { color: var(--fg-faint); font-size: 0.68rem; font-variant-numeric: tabular-nums; }\n"
-      (* Recency reads as a dot on a three-slot track in the gutter, drifting away from the name
-       * as a change ages: the slot beside the filename is the last hour, the middle the last day,
-       * the far slot the last week, and no dot at all means older. The freshest document
-       * therefore gets both the nearest slot and the strongest hue, and staleness recedes.
-       * Position is a channel colour blindness cannot affect, and the hue's strength says the
-       * same thing again, so either cue alone carries it. The document being read is marked by
-       * its ground, which leaves the gutter free.
+      (* Recency reads as a dot on a three-slot track flush with the right edge. The left of a
+       * tree already carries nesting, and two horizontal-position signals on the same side
+       * compete with one another: the left is hierarchy, the right is state.
        *
-       * Directory rows carry the same left padding, so the gutter is a real column rather than
-       * an indent only some rows have. *)
-      ^ ".tree summary { padding-left: 1.25rem; }\n"
+       * The track runs like a time axis, older to the left and newer to the right, so the last
+       * week sits nearest the name and the last hour hard against the edge, where a mark is
+       * easiest to find. Position is a channel colour blindness cannot affect, and the hue's
+       * strength says the same thing again, so either cue alone carries it. The document being
+       * read is marked by its ground, which leaves the track free. *)
       ^ ".tree a { color: var(--fg-muted); text-decoration: none; }\n"
-      ^ ".tree a[id^=doc] { display: block; position: relative; padding-left: 1.25rem;\n"
+      ^ ".tree a[id^=doc] { display: block; position: relative; padding-right: 1.15rem;\n"
       ^ "  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n"
       ^ ".tree a[id^=doc]::before { content: \'\'; position: absolute; top: 50%; width: 4.5px;\n"
       ^ "  height: 4.5px; border-radius: 50%; transform: translateY(-50%); }\n"
-      ^ ".tree a.hour::before { left: 13px; background: var(--recent); }\n"
-      ^ ".tree a.day::before { left: 7px;\n"
-      ^ "  background: color-mix(in srgb, var(--recent) 75%, transparent); }\n"
-      ^ ".tree a.week::before { left: 1px;\n"
+      ^ ".tree a.week::before { right: 12px;\n"
       ^ "  background: color-mix(in srgb, var(--recent) 50%, transparent); }\n"
+      ^ ".tree a.day::before { right: 6.5px;\n"
+      ^ "  background: color-mix(in srgb, var(--recent) 75%, transparent); }\n"
+      ^ ".tree a.hour::before { right: 1px; background: var(--recent); }\n"
       ^ ".tree a:hover { color: var(--fg); }\n"
       ^ ".tree a.current { background-color: var(--surface-2); color: var(--fg);\n"
       ^ "  font-weight: 600; }\n"

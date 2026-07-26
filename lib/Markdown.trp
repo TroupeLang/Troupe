@@ -56,8 +56,10 @@ let (* =================================================================== *)
      * characters. Exploding a line into a list and imploding it back costs about sixteen times
      * as much as scanning it in place, and the block parser does that scanning repeatedly. *)
 
-    (* Compared as character codes rather than as strings: String.sub allocates a one-character
-     * string per position, which on a scan is most of the cost. *)
+    (* Compared as character codes. String.sub and String.subCode measure the same - 880ns and
+     * 860ns per character - so the one-character string String.sub builds is not what a scan
+     * pays for. Both are two-argument primitive calls, and the call is the cost: a
+     * one-argument primitive is 150ns and a bare loop iteration is 40ns. *)
     val spaceCode = 32
 
     (* The index of the first character that is not a space. *)

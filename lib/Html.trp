@@ -63,9 +63,10 @@ let (* --- Helper Functions --- *)
     (* Escape HTML special characters for text content: &, <, >
      *
      * Scans by character code and copies unescaped runs whole, rather than mapping over the
-     * string's characters: a one-character string per position is most of the cost on rendered
-     * output. Text needing no escape at all -- the common case -- is returned unchanged without
-     * allocating. *)
+     * string's characters. What that saves is primitive calls, not allocation: a two-argument
+     * primitive costs about 860ns per character against 40ns for a loop iteration, so the
+     * cheapest character is the one no call is made for. Text needing no escape at all -- the
+     * common case -- is returned unchanged. *)
     val ampCode   = 38
     val ltCode    = 60
     val gtCode    = 62

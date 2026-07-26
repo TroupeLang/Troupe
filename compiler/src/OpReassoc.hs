@@ -17,7 +17,7 @@
 -- maximal run of strictly tighter operators, reproducing e.g.
 -- @not (x ^ y)@ for @not x ^ y@.
 --
--- Design: @_dev_planning/custom-operators/design.md@ §4.3.
+-- Design: @_dev_planning/_archive/custom-operators/design.md@ §4.3.
 module OpReassoc (reassocProg, fileFixityEnv) where
 
 import           Basics

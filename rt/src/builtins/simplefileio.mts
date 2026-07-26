@@ -16,7 +16,7 @@ import * as os from 'node:os';
  * Operations: readFile, writeFile, appendFile, fileExists, readDir, makeDir, fileStat,
  * removeFile. Directory removal, rename, copy and streaming reads are deliberately absent.
  *
- * Security design (see _dev_planning/tier2-libraries/spec-simple-file-io.md):
+ * Security design (see _dev_planning/_archive/tier2-libraries/spec-simple-file-io.md):
  *  - Every operation requires FULL (ROOT) authority, mirroring `persist`. Untrusted code
  *    cannot reach the filesystem at all, so per-write confidentiality checks, per-path
  *    levels, bounded-integrity read content, and quarantine integration are all deferred

@@ -10,7 +10,7 @@
 -- are shared with 'Direct' by re-export, so the parser's helper code is
 -- unchanged by the module swap.
 --
--- Design: @_dev_planning/custom-operators/design.md@ §4.2.
+-- Design: @_dev_planning/_archive/custom-operators/design.md@ §4.2.
 module Surface ( Lambda (..)
                , Term (..)
                , Decl (..)

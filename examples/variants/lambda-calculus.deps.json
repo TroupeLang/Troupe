@@ -1,0 +1,8 @@
+{
+  "deps": [
+    {"path": "lambda/Eval", "hash": "aj4jb0i72m1ue9hj4qt20q1inl8jeevvjbhqspb3ahqehcj29u4g", "name": "lambda/Eval"},
+    {"path": "lambda/Print", "hash": "jf29b07jdqtgi5crc75dr5k01kcn5ti1mn72qvrrsc95168q4tsg", "name": "lambda/Print"},
+    {"path": "lambda/Programs", "hash": "7mdnuraho7tti3j07qe89tgjvgk5s6s7o81ulsvvpck8n69ie0ug", "name": "lambda/Programs"},
+    {"path": "lambda/Term", "hash": "brh9kcs6o6rpqt1gog6pv9l2ogt8rfne6og895ct2qfr6j76tieg", "name": "lambda/Term"}
+  ]
+}

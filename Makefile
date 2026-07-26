@@ -1,4 +1,5 @@
-.PHONY: rt trp-rt compiler lib p2p-tools npm clean test dist check-compiler notebook
+.PHONY: rt trp-rt compiler lib p2p-tools npm clean test dist check-compiler notebook \
+        dev-planning-to-html
 
 # TODO: Rename to 'build/*' ?
 all: npm compiler rt trp-rt p2p-tools lib
@@ -42,6 +43,30 @@ benchmark-deps: check-compiler
 	@for f in `grep -rlE '^import "\./' --include='*.trp' examples/`; do \
 		echo "  pinning $$f"; ./bin/troupec --update-deps "$$f" >/dev/null; \
 	done
+
+# Compile the planning notes into a browsable HTML tree with examples/md-navigator, and
+# write it to out/md-navigator/. The run prints the page to open.
+#
+# _dev_planning/ is a separate repository, so it is absent from a worktree of this one; point
+# IOROOT at a checkout that has it to generate from elsewhere:
+#
+#   make dev-planning-to-html IOROOT=/path/to/Troupe \
+#       CONFIG=.claude/worktrees/<name>/examples/md-navigator/config.json
+#
+# The io-root must contain the source directory, the output directory and the config file, all of
+# which the config names relative to it -- which is why it is the repository root rather than
+# _dev_planning/ itself.
+IOROOT ?= $(CURDIR)
+CONFIG ?= examples/md-navigator/config.json
+dev-planning-to-html: check-compiler
+	@if [ ! -d "$(IOROOT)/_dev_planning" ]; then \
+		echo "No _dev_planning/ under $(IOROOT). It is a separate repository and is absent" >&2; \
+		echo "from worktrees; pass IOROOT=<checkout that has it>." >&2; \
+		exit 1; \
+	fi
+	mkdir -p "$(IOROOT)/out"
+	./local.sh examples/md-navigator/md-navigator.trp --localonly \
+		--io-root "$(IOROOT)" -- "$(CONFIG)"
 
 clean: clean/compiler clean/rt clean/trp-rt clean/p2p-tools clean/lib
 clean/compiler:

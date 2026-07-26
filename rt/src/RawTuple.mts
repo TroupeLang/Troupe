@@ -24,10 +24,23 @@ export class RawTuple extends Array<LVal> implements TroupeAggregateRawValue {
   _isSynVariant: boolean;
 
   constructor(x: LVal[], isSynVariant: boolean = false) {
-    super(...x)
+    // super() and then filling in order, rather than super(...x) or super(x.length): the
+    // spread costs more than the assignments it saves, and an array constructed with a
+    // length is holey in V8 and stays holey once filled. Reading an element is unaffected.
+    super()
+    const n = x.length;
+    for (let i = 0; i < n; i++) {
+      this[i] = x[i];
+    }
     this._isSynVariant = isSynVariant;
-    let dataLevels = x.map(lv => lv.dataLevel);
-    this.dataLevel = levels.lub(...dataLevels);
+    // The join of the elements' labels, folded in place. The previous spelling,
+    // levels.lub(...x.map(lv => lv.dataLevel)), allocated an arrow function and an array for
+    // the map, and a rest-argument array at each variadic hop on the way to the fold.
+    let l: Level = n === 0 ? levels.BOT : x[0].dataLevel;
+    for (let i = 1; i < n; i++) {
+      l = levels.lub(l, x[i].dataLevel);
+    }
+    this.dataLevel = l;
   }
 
   // A prototype method, not a per-instance closure: everything it needs is

@@ -6,6 +6,13 @@ reviewed rigorously rather than depend on the monitor.
 
 ## Modules
 
+- `Bench`         : Timing harness for the benchmark programs under `examples/`. `time` returns a
+                    thunk's value with its elapsed milliseconds; `run` performs one warmup and then
+                    `reps` timed runs per size, reporting each run on a line of its own.
+- `BigInt`        : Arbitrary-precision integers, written with the `123n` literal syntax. They are
+                    a distinct type from numbers and the ordinary operators do not apply, so all
+                    bigint arithmetic and comparison goes through this module; the decimal printer
+                    is `show`.
 - `Duration`      : Time spans, represented in milliseconds.
 - `Hash`          : Hash functions for values of all types.
 - `HashMap`       : Map from keys to values via their hash.
@@ -13,9 +20,19 @@ reviewed rigorously rather than depend on the monitor.
 - `Html`          : Combinator-based HTML generation with escaping.
 - `IfcUtil`       : Lattice-level constants and helper functions for downgrading
                     (declassification and endorsement).
+- `Json`          : Parser and printer for JSON (RFC 8259). Documents are ordinary Troupe values:
+                    `null` is unit, an array is a list, an object is a record. Object member order
+                    and duplicate keys therefore do not survive a round trip, and `null` cannot be
+                    told apart from unit. `parse` returns an `Outcome` whose `ERR` carries a
+                    `reason` and a character `offset`.
 - `List`          : Operations for lists, i.e. `[]` and `x::xs`.
 - `ListPair`      : Operations for list of pairs, i.e. `(x,y)::xs`.
 - `Map`           : Map from keys to values via a comparator function.
+- `Markdown`      : Markdown source to HTML: headings, paragraphs, code blocks, block quotes,
+                    lists, thematic breaks, emphasis, code spans, links and images. Output is built
+                    as `Html` nodes rather than concatenated strings, so escaping and dangerous-URL
+                    blocking come from `Html`, and literal HTML in the source is escaped rather
+                    than passed through.
 - `Number`        : Operations for numbers, i.e. integer and floats.
 - `Option`        : An optional value: `SOME v` / `NONE`.
 - `Outcome`       : A value or a diagnostic: `OK v` / `ERR e`. Use it when a failure carries
@@ -32,32 +49,58 @@ reviewed rigorously rather than depend on the monitor.
 - `Sexp`          : Reader and printer for Lisp-style s-expressions: `ATOM` / `STR` / `LST`,
                     `parse` returning an `Outcome`, and both a single-line and a `Pretty`-based
                     rendering.
+- `SimpleFileIO`  : `readFile` and `writeFile` reporting failure as an `Outcome`
+                    (`ERR {reason, path}`) instead of the runtime's tagged record. Import it
+                    selectively: `import { readFile, writeFile } SimpleFileIO` shadows the
+                    builtins of those names, leaving call sites unchanged.
 - `StencilVector` : Memory-efficient implementation of small (sparse) arrays.
 - `String`        : Operations for strings
+- `Svg`           : SVG generation on the node model of `Html`: an `svg` root that sets the xmlns,
+                    `g`, the shape elements, `text` and `points`. Attribute names written in
+                    camelCase are emitted hyphenated where SVG spells them that way (`fontSize`
+                    becomes `font-size`); SVG's own camelCase attributes, such as `viewBox`, pass
+                    through unchanged.
+- `Template`      : Jinja-style text templating against a context record: `{{ expr }}`
+                    interpolation, escaped through `Html.escapeHtml` unless piped to `safe`,
+                    `{% if %}` and `{% for %}` blocks, filters, and `{# comments #}`. `compile` and
+                    `render` return an `Outcome`; a path absent from the context is an `ERR` naming
+                    it, not the empty string.
 - `ThreadUtil`    : Additional functions for thread management.
 - `Time`          : Date and time manipulation.
 - `timeout`       : Timers that send a message or exit the program after a duration.
 - `Unit`          : Unit testing.
+- `VariantsDemo`  : Datatype groups (`color`, `'a box`, `shape`) and functions over them, exported
+                    for the syntactic-variant import tests under `tests/`. A test fixture rather
+                    than a library for user code.
+- `Vector`        : Immutable vectors held as a 16-way branching tree of lists. `sub` and `update`
+                    walk one node per level and scan at most 16 entries in each; `update` copies
+                    one node per level and shares the rest of the structure.
 
 ## How to add a new file
 
-To compile a module as part of the standard library, add it to the list of files in the `lib`
-target of the *makefile*.
+To compile a module as part of the standard library, add a `$(COMPILER) ./Name.trp -l` line to the
+`build` target of `lib/Makefile` (the root `make lib` target delegates to it). The lines are grouped
+in dependency order, so a new file goes after everything it imports. Build with `/usr/bin/make lib`
+from the repository root.
 
 ## Design Principles
 
 - File names are written in `CamelCase`. This makes them conform to the Standard ML Basis Library.
 - We will try to match function names in the Standard ML library.
-- Each module exports a single *record* with the same name as the file. This (1) makes it closer to
-  the SML module system and (2) allows for name resolution, e.g. `HashMap.findOpt` and
-  `ListPair.findOpt` can be used in the same file.
+- A module's body is a list of `("name", value)` pairs, which importers reach under the file's own
+  name. This (1) makes it closer to the SML module system and (2) allows for name resolution, e.g.
+  `HashMap.findOpt` and `ListPair.findOpt` can be used in the same file. A module that declares
+  datatypes exports them alongside that list, and constructors arrive unqualified — see
+  [docs/MODULES.md](../docs/MODULES.md).
 - Each function that is exported has to be documented (`(** <text> *)`). In the long run, we will
-  auto-generate documentation for the Standard Library.
+  auto-generate documentation for the Standard Library. Not every existing module meets this yet:
+  `Html` documents its exports with plain `(* *)` comments, and a few modules share one doc comment
+  across a group of related exports.
 - A library that exports operators (see [docs/OPERATORS.md](../docs/OPERATORS.md)) declares their
   fixities in its header and exports them under their symbolic names
   (`("<+>", ( <+> ))`); the fixity travels in the `.exports` interface. When an operator has a
-  natural word name, export that alphabetic alias alongside it (`("beside", ( <+> ))`), so
-  qualified-import users have a prefix spelling.
+  natural word name, export that alphabetic alias alongside it — `Pretty` exports
+  `("beside", ( <.> ))` and `("above", ( $$ ))` — so qualified-import users have a prefix spelling.
 - Avoid changing signatures and names of existing functions. It breaks backwards compatibility
   with existing code, i.e., in the user guide, assignments, etc. New library functions are okay to
   introduce, including those that happen to duplicate functionality. We should then go through the

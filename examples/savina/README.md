@@ -1,13 +1,17 @@
 # Savina benchmarks ported to Troupe
 
 The complete 30-benchmark Savina actor suite (Imam & Sarkar, AGERE 2014)
-ported to Troupe. The benchmarks are defined in `Savina.trp` as
-descriptors (name, benchmark function, correctness check, default
+ported to Troupe. Each benchmark is a program-relative module under
+`benchmarks/`, with its own message-protocol datatype, exporting a
+`descriptor` (name, benchmark function, correctness check, default
 sizes), built on the core actor primitives (`spawn`, `send`, `receive`,
-`self`). `Savina.trp` is a program-relative module exporting `all`, the
-descriptor list; `runall.trp` and each thin per-benchmark driver import
-it with `import "./Savina"`. The whole import graph is recompiled on
-every run, so there is no artifact to publish or keep fresh. Each
+`self`). `Savina.trp` imports those 30 modules and re-exports `all`, the
+descriptor list in canonical suite order; `runall.trp` and each thin
+per-benchmark driver import it with `import "./Savina"`. The whole import
+graph is recompiled on every run, so there is no artifact to publish, but
+each program's `<main>.deps.json` pins its modules by content hash and
+has to be re-pinned with `make benchmark-deps` after a module or compiler
+change — a stale pin is a compile error. Each
 benchmark file here is a thin driver selecting one descriptor, with that
 benchmark's semantics, deviations, and check documented in its header
 comment.

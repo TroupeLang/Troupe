@@ -8,6 +8,9 @@ for how to work here. For human-facing reference material, see:
 - [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) — build/test commands, running programs, source maps
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — compilation pipeline, runtime, IFC, file extensions
 - [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) — test-suite layout, adding a built-in
+- [docs/MODULES.md](docs/MODULES.md) — program-relative modules, content-addressed identity, pins
+- [docs/OPERATORS.md](docs/OPERATORS.md) — user-defined infix operators and declared fixity
+- [docs/VARIANTS.md](docs/VARIANTS.md) — `datatype` declarations and syntactic variants
 - [docs/NETWORKING.md](docs/NETWORKING.md) — P2P runtime
 
 ## Build before running
@@ -17,7 +20,7 @@ commands are documented in [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) ("Building
 
 | Changed                   | Command         | Symptom of a stale build                                 |
 |---------------------------|-----------------|----------------------------------------------------------|
-| Haskell (`compiler/src/`) | `make compiler` | `troupec: command not found`, parse errors in valid code |
+| Haskell (`compiler/`)     | `make compiler` | `troupec: command not found`, parse errors in valid code |
 | TypeScript (`rt/src/`)    | `make rt`       | `Cannot find module` for runtime files                   |
 | Troupe libraries (`lib/`) | `make lib`      | `Cannot find module` for library files                   |
 | Everything                | `make all`      | —                                                        |

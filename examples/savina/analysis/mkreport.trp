@@ -1,6 +1,6 @@
 (* mkreport — re-analyze an existing Savina results file: parse the
  * Bench measurement lines and regenerate the markdown summary and SVG
- * chart sheet via lib/SavinaReport. The normal path is
+ * chart sheet via examples/savina/SavinaReport.trp. The normal path is
  * examples/savina/runall.trp, which runs the suite and writes these
  * artifacts itself; this tool exists to reprocess previously collected
  * results (e.g. from another machine or an older runtime).

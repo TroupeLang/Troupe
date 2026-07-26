@@ -22,7 +22,7 @@ Troupe consists of three main components:
 | `compiler/`  | Haskell compiler sources (`troupec`)                                              |
 | `rt/`        | TypeScript runtime; `rt/built/` is the generated build output                     |
 | `lib/`       | Troupe standard library (`.trp` sources); `lib/out/` is the compiled output       |
-| `trp-rt/`    | Service module placeholder (`service.trp`), built by `make trp-rt`                |
+| `trp-rt/`    | Node service module (`service.trp`), loaded at startup; `make trp-rt`             |
 | `bin/`       | Compiled binaries — **not** version-controlled; do not add scripts here           |
 | `scripts/`   | Version-controlled executable scripts                                             |
 | `dev-utils/` | Developer helper scripts (e.g. `build-snapshot.sh`)                               |

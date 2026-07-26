@@ -93,7 +93,7 @@ pins.
 
 ### Tests
 
-- `make test` runs `test/local`, `test/multinode`, and `test/result-socket`
+- `make test` runs `test/local`, `test/multinode`, `test/hostile-peer`, and `test/result-socket`
 - `make test/local` runs `stack test` in `compiler/` (all of the compiler's Haskell test suites)
   followed by the golden suite
 - `bin/golden` to run the golden test suite with options
@@ -128,8 +128,10 @@ cd compiler && make parser-info     # parser info
 ### Running examples that do not require network
 
 `local.sh` compiles the program to a temporary file and runs it with the runtime's `--localonly`
-flag, which skips p2p network creation and key generation. Under `--localonly` all external I/O
-operations yield a runtime error.
+flag, which skips p2p network creation and key generation. Operations that need the network are
+unavailable in this mode; stdio and `SimpleFileIO` are not affected, which is why the golden suite
+runs this way. The runtime prints a startup line saying all external I/O will fail, which overstates
+it.
 
 ### Passing command-line arguments to Troupe programs
 

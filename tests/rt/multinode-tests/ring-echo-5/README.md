@@ -17,5 +17,5 @@ See ring-echo for the basic pattern.
   - Client: 5 seconds - Ensures complete chain formation
 - **ports**: 6789-6795 - Seven unique ports required
 - **expected_exit_code**: 124 for all 5 intermediaries - Continuous proxy operation
-- **timeout**: 60 seconds - Extended chain requires more time
-- **sleep delays**: Client uses 4-second sleep for chain stability
+- **timeout**: 120 seconds - Extended chain requires more time
+- **sleep delays**: Client sleeps 1.5 seconds before its first lookup, for chain stability

@@ -93,8 +93,8 @@ Key components:
 Every runtime operation that reaches outside the program — standard streams, persistence, the
 network registry, and file I/O — is gated on authority rather than on ordinary label flow. With the
 exception of `send` (governed by wire label/trust checks), these operations require **full (ROOT)
-authority**: `stdio` defaults its level to ROOT, and `persist`, `cliargs`, `exit`, and `register`
-call `assertIsRootAuthority`.
+authority**: `stdio` defaults its level to ROOT, and `persist`, `cliargs`, `exit`, `register`, and
+the `SimpleFileIO` primitives call `assertIsRootAuthority`.
 
 ### File I/O (`SimpleFileIO`)
 
@@ -106,10 +106,11 @@ support document-processing programs and is expected to be superseded by a label
   reach the filesystem at all, so per-write confidentiality checks and per-path levels are deferred
   rather than half-answered.
 - **Labeling.** Read content is labeled at ROOT ("we trust our own files"), exactly as `persist`
-  labels restored data. Each primitive returns a tagged record (`{tag="Ok",…}` / `{tag="Err",
-  {reason, path}}`), so a missing file or rejected path never crashes the thread. The standard
-  library reports failure with `Option` and `Outcome`; these records are built in the runtime
-  and are the last place the tagged-record encoding survives.
+  labels restored data. Each primitive returns a tagged record
+  (`{tag="Ok", value=…}` / `{tag="Err", error={reason, path}}`), so a missing file or rejected path
+  never crashes the thread. The standard library reports failure with `Option` and `Outcome`; the
+  runtime still builds tagged records here and in the bigint conversion built-ins, and those two are
+  the only places the encoding survives.
 - **Sandbox.** `--io-root <dir>` (`rt/src/TroupeCliArgs.mts`) bounds path reachability, orthogonal
   to authority: `..`, absolute-outside, and symlink escapes are rejected before any filesystem
   access, so even a bug in ROOT code cannot write outside the subtree. When unset, a per-invocation
@@ -132,8 +133,9 @@ Bigints are a base value type backed by JavaScript BigInt, distinct from numbers
   reject bigints at their type asserts; there is no implicit mixing.
 - **Semantics.** `getType` reports `"bigint"`. Equality is kind-first: two bigints compare by
   value; a bigint never equals a number or a string. Bigints print in literal form (`5n`);
-  `BigInt.show` yields the plain decimal digits. `BigInt.fromString` and `BigInt.toInt` return
-  tagged records built in the runtime (`toInt` fails beyond exact double range).
+  `BigInt.show` yields the plain decimal digits. The built-ins `bigFromString` and `bigToInt` return
+  tagged records built in the runtime; `BigInt.fromString` and `BigInt.toInt` convert those to an
+  `Option`, so `NONE` reports failure (`toInt` fails beyond exact double range).
 - **Representation.** A bigint is boxed (`rt/src/TroupeBigInt.mts`) so it can carry the runtime
   type tag; the label rides the enclosing labeled value like every base type, and every built-in
   joins the current pc into its result label, matching the labeling of number literals. On the
@@ -226,7 +228,9 @@ With `-m` the source map is embedded in the `.js`; no separate `.map` file is pr
 An `.exports` file is a line-oriented text interface (`compiler/src/Exports.hs`): an optional
 leading `module-hash <hash>` line carrying a module artifact's own content-addressed identity (a
 standard-library compile emits none), then one exported value name per line, then one
-`datatype <group-hash> <canonical-form>` line per exported datatype group in declaration order.
+`datatype <group-hash> <canonical-form>` line per exported datatype group in declaration order, then
+one `fixity <l|r|n> <level> <name>` line per exported operator — mandatory for a symbolic export, see
+[OPERATORS.md](OPERATORS.md).
 
 A program that imports program-relative modules has a `<main>.deps.json` next to it, pinning each
 resolved module by path, content hash, and display name. See [MODULES.md](MODULES.md) and

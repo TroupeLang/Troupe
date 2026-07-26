@@ -16,7 +16,8 @@ The multi-node testing system consists of:
 Each test lives in its own directory with:
 - `config.json` - Test configuration (nodes, timeouts, network setup)
 - `*.trp` - Troupe source files for each node
-- `expected.golden` - Expected output (optional)
+
+The oracle is exit codes; no golden output file is read (see "Test Assertions" below).
 
 ### Configuration Format
 
@@ -35,11 +36,18 @@ Each test lives in its own directory with:
       "script": "node1.trp",
       "port": 6789,
       "start_delay": 0,
-      "expected_exit_code": 0
+      "expected_exit_code": 0,
+      "extra_argv": "--rspawn"
     }
-  ]
+  ],
+  "trust": [ { "from": "node1", "to": "node2", "level": "bot" } ],
+  "output": { "merge_strategy": "timestamp", "filter_patterns": ["uuid", "timestamp", "peer_id"] }
 }
 ```
+
+`trust` generates each node's `trustmaps/<id>-trustmap.json` and adds `--trustmap` to its command
+line; a test that needs no trust map sets it to `null`. `extra_argv` is appended to that node's
+`network.sh` invocation. `output.merge_strategy` controls how the per-node logs are interleaved.
 
 #### `use_relay` options:
 - `"relay-only"`: Run test with relay server (default behavior)
@@ -74,10 +82,13 @@ scripts/run-multinode-tests.sh -v
 - **basic-echo** - Simple client-server message exchange
 - **multi-client** - One server handling multiple clients
 
-### Advanced Patterns  
+### Advanced Patterns
 - **cross-spawn** - Cross-node process spawning
-- **service-discovery** - Multiple services across nodes
-- **fault-tolerance** - Network partition recovery
+- **ring-echo**, **ring-echo-3**, **ring-echo-5** - Forwarding through 1, 3 and 5 intermediaries
+- **synvar-exchange** - Independently compiled identical datatype declarations across nodes
+- **quarantine-echo** - Echo under a non-bottom trust level
+- **module-closure-net-missing**, **module-spawn-net-missing** - Receiver lacks an imported module
+- **trust-flow-issue-42** - Illegal trust flow on remote spawn
 
 ## Key Design Principles
 

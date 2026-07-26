@@ -4,7 +4,7 @@ This is a demonstration of a **Confused Deputy Attack** in the context of Nonmal
 
 ## Overview
 
-The program shows how NMIFC can prevent attacks that exploit trusted code to perform unauthorized operations. The attack succeeds without NMIFC (`--no-nmifc`) but is stopped when running with the `--nmifc` flag.
+The program shows how NMIFC can prevent attacks that exploit trusted code to perform unauthorized operations. NMIFC enforcement is on by default, so the attack is stopped by a plain run and succeeds only when it is disabled with `--no-nmifc`.
 
 ## Actors
 
@@ -68,8 +68,8 @@ The server endorses data that was influenced by untrusted (attacker) code. This 
 
 | Mode          | Command                        | Result                                      |
 |---------------|--------------------------------|---------------------------------------------|
-| Without NMIFC | `./local.sh program.trp`       | Attack succeeds - password leaks and authenticates |
-| With NMIFC    | `./local.sh program.trp --nmifc` | Attack blocked - endorsement is rejected    |
+| Without NMIFC | `./local.sh program.trp --no-nmifc` | Attack succeeds - password leaks and authenticates |
+| With NMIFC (default) | `./local.sh program.trp` | Attack blocked - endorsement is rejected    |
 
 ## Key Security Primitives Used
 

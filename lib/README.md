@@ -16,6 +16,10 @@ reviewed rigorously rather than depend on the monitor.
 - `List`          : Operations for lists, i.e. `[]` and `x::xs`.
 - `ListPair`      : Operations for list of pairs, i.e. `(x,y)::xs`.
 - `Map`           : Map from keys to values via a comparator function.
+- `Markdown`      : Markdown to safe HTML, via an AST rendered through `Html`. Supports ATX
+                    headings with `id` anchors, paragraphs, fenced code, blockquotes, nested and
+                    task lists, thematic breaks, GFM tables, emphasis, strikethrough, inline code,
+                    links and images. No raw HTML passthrough.
 - `Number`        : Operations for numbers, i.e. integer and floats.
 - `Option`        : An optional value: `SOME v` / `NONE`.
 - `Outcome`       : A value or a diagnostic: `OK v` / `ERR e`. Use it when a failure carries
@@ -25,6 +29,24 @@ reviewed rigorously rather than depend on the monitor.
                     that receives an outcome from another library must import `Outcome` itself
                     in order to pattern-match on it. The same holds for `Option`.
 - `Set`           : Set of elements via a comparator function.
+- `SimpleFileIO`  : Whole-file and directory access reported as an `Outcome`. Every operation
+                    takes ROOT `authority` and resolves its path inside the `--io-root` subtree;
+                    a path escaping that subtree fails rather than reaching the filesystem.
+
+  | Operation                        | `OK` payload                                              |
+  |----------------------------------|-----------------------------------------------------------|
+  | `readFile (auth, path)`          | the contents                                              |
+  | `writeFile (auth, path, s)`      | `()`                                                      |
+  | `appendFile (auth, path, s)`     | `()`, creating the file if absent                         |
+  | `fileExists (auth, path)`        | `true` / `false`; never `ERR`                             |
+  | `readDir (auth, path)`           | `{name, kind}` list, kind `"file"` / `"dir"` / `"other"`  |
+  | `makeDir (auth, path)`           | `()`, recursive and idempotent                            |
+  | `fileStat (auth, path)`          | `{kind, size, mtime}`, mtime in milliseconds              |
+  | `removeFile (auth, path)`        | `()`                                                      |
+
+  An `ERR` carries `{reason, path}`, where `path` is the caller-supplied path rather than the
+  resolved one. Entry order from `readDir` is unspecified. A symlink reports `kind = "other"`
+  rather than the kind of its target.
 - `StencilVector` : Memory-efficient implementation of small (sparse) arrays.
 - `String`        : Operations for strings
 - `ThreadUtil`    : Additional functions for thread management.

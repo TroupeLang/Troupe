@@ -67,20 +67,54 @@ let (* --- Helper Functions --- *)
         else if c = ">" then "&gt;"
         else c
 
-    (* Escape HTML special characters for text content: &, <, > *)
-    fun escapeHtml s = String.translate escapeBase s
+    (* Escape HTML special characters for text content: &, <, >
+     *
+     * Scans by character code and copies unescaped runs whole, rather than mapping over the
+     * string's characters: String.translate explodes into a list and allocates a one-character
+     * string per position, which on rendered output is most of the cost. Text needing no escape
+     * at all -- the common case -- is returned unchanged without allocating. *)
+    val ampCode = 38
+    val ltCode  = 60
+    val gtCode  = 62
+
+    fun escapeOf 38 = "&amp;"
+      | escapeOf 60 = "&lt;"
+      | escapeOf _  = "&gt;"
+
+    fun escapeHtml s =
+        let val n = String.size s
+            fun special c = c = ampCode orelse c = ltCode orelse c = gtCode
+            fun scan i = if i >= n then n
+                         else if special (String.subCode (s, i)) then i
+                         else scan (i + 1)
+            fun go from acc =
+                let val j = scan from
+                in if j >= n
+                   then String.concat (List.reverse (String.substring (s, from, n) :: acc))
+                   else go (j + 1) (escapeOf (String.subCode (s, j))
+                                    :: String.substring (s, from, j) :: acc)
+                end
+        in if scan 0 >= n then s else go 0 [] end
 
     (* Escape HTML special characters for attribute values: &, <, >, '
      * Single quotes are escaped as &#39; since we use single quotes for attribute values.
      * This prevents XSS via attribute value injection. *)
     fun escapeAttr s =
-        let fun escapeChar c =
-                let val base = escapeBase c
-                in if base = c andalso String.subCode (c, 0) = 39  (* single quote *)
-                   then "&#39;"
-                   else base
+        let val n = String.size s
+            fun special c = c = ampCode orelse c = ltCode orelse c = gtCode orelse c = 39
+            fun repl 39 = "&#39;"
+              | repl c  = escapeOf c
+            fun scan i = if i >= n then n
+                         else if special (String.subCode (s, i)) then i
+                         else scan (i + 1)
+            fun go from acc =
+                let val j = scan from
+                in if j >= n
+                   then String.concat (List.reverse (String.substring (s, from, n) :: acc))
+                   else go (j + 1) (repl (String.subCode (s, j))
+                                    :: String.substring (s, from, j) :: acc)
                 end
-        in String.translate escapeChar s end
+        in if scan 0 >= n then s else go 0 [] end
 
     (* Escape content for script/style tags.
      * HTML5 spec: script/style content ends at </script or </style (case-insensitive).

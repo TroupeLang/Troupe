@@ -157,7 +157,7 @@ let
       ^ ".tree a { color: var(--fg-muted); text-decoration: none; }\n"
       ^ ".tree a[id^=doc] { display: block; position: relative; padding-right: 1.6rem;\n"
       ^ "  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }\n"
-      ^ ".tree a[id^=doc]::before { content: \'\'; position: absolute; top: 50%; width: 4.5px;\n"
+      ^ ".tree a[id^=doc]::before { content: ''; position: absolute; top: 50%; width: 4.5px;\n"
       ^ "  height: 4.5px; border-radius: 50%; transform: translateY(-50%); }\n"
       ^ ".tree a.month::before { right: 17.5px;\n"
       ^ "  background: color-mix(in srgb, var(--recent) 34%, transparent); }\n"

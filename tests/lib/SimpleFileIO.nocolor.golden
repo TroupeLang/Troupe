@@ -1,0 +1,51 @@
+2026-07-26T08:14:42.000Z [RTM] info: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+[34mbegin [0mSimpleFileIO
+  [34mbegin [0mdirectories
+      [33m[ TEST ][0m it makeDir creates a nested path      [32m[ PASS ][0m it makeDir creates a nested path
+      [33m[ TEST ][0m it the directory exists      [32m[ PASS ][0m it the directory exists
+      [33m[ TEST ][0m it makeDir is idempotent      [32m[ PASS ][0m it makeDir is idempotent
+  [34mend [0m
+  [34mbegin [0mwhole-file read and write
+      [33m[ TEST ][0m it writeFile reports OK      [32m[ PASS ][0m it writeFile reports OK
+      [33m[ TEST ][0m it readFile returns the contents      [32m[ PASS ][0m it readFile returns the contents
+      [33m[ TEST ][0m it appendFile reports OK      [32m[ PASS ][0m it appendFile reports OK
+      [33m[ TEST ][0m it the append is visible      [32m[ PASS ][0m it the append is visible
+      [33m[ TEST ][0m it appendFile creates a missing file      [32m[ PASS ][0m it appendFile creates a missing file
+      [33m[ TEST ][0m it the created file has the appended contents      [32m[ PASS ][0m it the created file has the appended contents
+  [34mend [0m
+  [34mbegin [0mreadDir
+      [33m[ TEST ][0m it lists files and subdirectories with their kinds      [32m[ PASS ][0m it lists files and subdirectories with their kinds
+  [34mend [0m
+  [34mbegin [0mfileStat
+      [33m[ TEST ][0m it reports the kind of a file      [32m[ PASS ][0m it reports the kind of a file
+      [33m[ TEST ][0m it reports the size in bytes      [32m[ PASS ][0m it reports the size in bytes
+      [33m[ TEST ][0m it reports a positive mtime      [32m[ PASS ][0m it reports a positive mtime
+      [33m[ TEST ][0m it reports the kind of a directory      [32m[ PASS ][0m it reports the kind of a directory
+  [34mend [0m
+  [34mbegin [0mremoveFile
+      [33m[ TEST ][0m it reports OK      [32m[ PASS ][0m it reports OK
+      [33m[ TEST ][0m it the file is gone afterwards      [32m[ PASS ][0m it the file is gone afterwards
+  [34mend [0m
+  [34mbegin [0mfailures
+      [33m[ TEST ][0m it readFile on a missing file      [32m[ PASS ][0m it readFile on a missing file
+      [33m[ TEST ][0m it the error echoes the caller's path      [32m[ PASS ][0m it the error echoes the caller's path
+      [33m[ TEST ][0m it fileStat on a missing file      [32m[ PASS ][0m it fileStat on a missing file
+      [33m[ TEST ][0m it readDir on a file      [32m[ PASS ][0m it readDir on a file
+      [33m[ TEST ][0m it removeFile on a missing file      [32m[ PASS ][0m it removeFile on a missing file
+      [33m[ TEST ][0m it removeFile on a directory fails      [32m[ PASS ][0m it removeFile on a directory fails
+  [34mend [0m
+  [34mbegin [0msandbox
+      [33m[ TEST ][0m it readFile cannot escape the io-root      [32m[ PASS ][0m it readFile cannot escape the io-root
+      [33m[ TEST ][0m it writeFile cannot escape the io-root      [32m[ PASS ][0m it writeFile cannot escape the io-root
+      [33m[ TEST ][0m it an escaping path reports the caller's path, not the resolved one      [32m[ PASS ][0m it an escaping path reports the caller's path, not the resolved one
+      [33m[ TEST ][0m it fileExists reports false outside the io-root      [32m[ PASS ][0m it fileExists reports false outside the io-root
+  [34mend [0m
+  [34mbegin [0mlabeling
+      [33m[ TEST ][0m it file contents are labeled at ROOT      [32m[ PASS ][0m it file contents are labeled at ROOT
+      [33m[ TEST ][0m it error reasons are labeled at ROOT      [32m[ PASS ][0m it error reasons are labeled at ROOT
+  [34mend [0m
+[34mend [0m
+
+Total:  28
+Passes: 28
+>>> Main thread finished with value: true@{#ROOT}%{#ROOT}

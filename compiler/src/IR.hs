@@ -396,7 +396,11 @@ instance WellFormedIRCheck IRExpr where
                      -- SimpleFileIO whole-file primitives (ROOT-authority; see builtins/simplefileio.mts)
                      , "appendFile"
                      , "fileExists"
+                     , "fileStat"
+                     , "makeDir"
+                     , "readDir"
                      , "readFile"
+                     , "removeFile"
                      , "writeFile"
                      , "endorseType"
                      , "floor"

@@ -4,6 +4,7 @@ import { Record } from '../Record.mjs';
 import { ROOT } from '../Level.mjs';
 import { assertIsNTuple, assertIsRootAuthority, assertIsString } from '../Asserts.mjs'
 import { __unitbase } from '../UnitBase.mjs';
+import { mkList } from '../ValuesUtil.mjs';
 import { getCliArgs, TroupeCliArg } from '../TroupeCliArgs.mjs';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -11,6 +12,9 @@ import * as os from 'node:os';
 
 /**
  * SimpleFileIO — placeholder whole-file I/O runtime primitive.
+ *
+ * Operations: readFile, writeFile, appendFile, fileExists, readDir, makeDir, fileStat,
+ * removeFile. Directory removal, rename, copy and streaming reads are deliberately absent.
  *
  * Security design (see _dev_planning/tier2-libraries/spec-simple-file-io.md):
  *  - Every operation requires FULL (ROOT) authority, mirroring `persist`. Untrusted code
@@ -87,9 +91,28 @@ function errMessage(e: unknown): string {
         const code = (e as any).code;
         if (code === 'ENOENT') return 'file not found';
         if (code === 'EISDIR') return 'path is a directory';
+        if (code === 'ENOTDIR') return 'path is not a directory';
+        if (code === 'ENOTEMPTY') return 'directory is not empty';
         if (code === 'EACCES' || code === 'EPERM') return 'permission denied';
     }
     return e instanceof Error ? e.message : String(e);
+}
+
+/**
+ * The `kind` reported for a directory entry or a stat'd path. A symlink is reported as 'other'
+ * rather than resolved: the sandbox refuses to traverse symlinks out of the root, so following
+ * one here would report a kind for a path the read/write operations will then reject.
+ */
+function direntKind(d: fs.Dirent): string {
+    if (d.isDirectory()) return 'dir';
+    if (d.isFile()) return 'file';
+    return 'other';
+}
+
+function statKind(s: fs.Stats): string {
+    if (s.isDirectory()) return 'dir';
+    if (s.isFile()) return 'file';
+    return 'other';
 }
 
 export function BuiltinSimpleFileIO<TBase extends Constructor<UserRuntimeZero>>(Base: TBase) {
@@ -228,5 +251,115 @@ export function BuiltinSimpleFileIO<TBase extends Constructor<UserRuntimeZero>>(
                 }
             });
         }, 'fileExists');
+
+        // Entries of a directory as a list of {name, kind}. The kind comes from the directory
+        // entry itself, so walking a tree costs one call per directory rather than one stat per
+        // entry. Entry order is whatever the filesystem reports; callers that need a stable order
+        // must sort.
+        readDir = mkBase((larg) => {
+            assertIsNTuple(larg, 2);
+            this.runtime.$t.raiseCurrentThreadPC(larg.lev);
+            const arg = larg.val;
+            assertIsRootAuthority(arg[0]);
+            assertIsString(arg[1]);
+            const origPath = arg[1].val;
+
+            const r = resolveInSandbox(origPath);
+            if (!r.ok) {
+                return this.runtime.ret(this.mkErr(r.reason, origPath));
+            }
+            this.suspendWithResult(async () => {
+                try {
+                    const entries = await fs.promises.readdir(r.resolved, { withFileTypes: true });
+                    const items = entries.map(d => {
+                        const rec = Record.mkRecord([
+                            ['name', new LVal(d.name, ROOT)],
+                            ['kind', new LVal(direntKind(d), ROOT)],
+                        ]);
+                        return new LVal(rec, ROOT);
+                    });
+                    return this.mkOk(new LVal(mkList(items), ROOT));
+                } catch (e) {
+                    return this.mkErr(errMessage(e), origPath);
+                }
+            });
+        }, 'readDir');
+
+        // Create a directory, including any missing parents. Succeeds on an existing directory.
+        makeDir = mkBase((larg) => {
+            assertIsNTuple(larg, 2);
+            this.runtime.$t.raiseCurrentThreadPC(larg.lev);
+            const arg = larg.val;
+            assertIsRootAuthority(arg[0]);
+            assertIsString(arg[1]);
+            const origPath = arg[1].val;
+
+            const r = resolveInSandbox(origPath);
+            if (!r.ok) {
+                return this.runtime.ret(this.mkErr(r.reason, origPath));
+            }
+            this.suspendWithResult(async () => {
+                try {
+                    await fs.promises.mkdir(r.resolved, { recursive: true });
+                    return this.mkOk(new LVal(__unitbase, ROOT));
+                } catch (e) {
+                    return this.mkErr(errMessage(e), origPath);
+                }
+            });
+        }, 'makeDir');
+
+        // {kind, size, mtime} for a path; mtime in milliseconds since the epoch. Uses lstat, so a
+        // symlink reports kind 'other' rather than the kind of its target — consistent with
+        // readDir and with the sandbox's refusal to traverse symlinks out of the root.
+        fileStat = mkBase((larg) => {
+            assertIsNTuple(larg, 2);
+            this.runtime.$t.raiseCurrentThreadPC(larg.lev);
+            const arg = larg.val;
+            assertIsRootAuthority(arg[0]);
+            assertIsString(arg[1]);
+            const origPath = arg[1].val;
+
+            const r = resolveInSandbox(origPath);
+            if (!r.ok) {
+                return this.runtime.ret(this.mkErr(r.reason, origPath));
+            }
+            this.suspendWithResult(async () => {
+                try {
+                    const s = await fs.promises.lstat(r.resolved);
+                    const rec = Record.mkRecord([
+                        ['kind', new LVal(statKind(s), ROOT)],
+                        ['size', new LVal(s.size, ROOT)],
+                        ['mtime', new LVal(s.mtimeMs, ROOT)],
+                    ]);
+                    return this.mkOk(new LVal(rec, ROOT));
+                } catch (e) {
+                    return this.mkErr(errMessage(e), origPath);
+                }
+            });
+        }, 'fileStat');
+
+        // Delete a file. Directories are rejected by the filesystem (EPERM/EISDIR); there is no
+        // recursive-delete primitive, deliberately.
+        removeFile = mkBase((larg) => {
+            assertIsNTuple(larg, 2);
+            this.runtime.$t.raiseCurrentThreadPC(larg.lev);
+            const arg = larg.val;
+            assertIsRootAuthority(arg[0]);
+            assertIsString(arg[1]);
+            const origPath = arg[1].val;
+
+            const r = resolveInSandbox(origPath);
+            if (!r.ok) {
+                return this.runtime.ret(this.mkErr(r.reason, origPath));
+            }
+            this.suspendWithResult(async () => {
+                try {
+                    await fs.promises.unlink(r.resolved);
+                    return this.mkOk(new LVal(__unitbase, ROOT));
+                } catch (e) {
+                    return this.mkErr(errMessage(e), origPath);
+                }
+            });
+        }, 'removeFile');
     }
 }

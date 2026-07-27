@@ -1,0 +1,325 @@
+(* compare — cross-language comparison report from N row files.
+ *
+ * Reads one row file per language, each named on the command line as
+ * `<label>=<path>` (paths are relative to --io-root), and writes a markdown
+ * report to stdout. The FIRST label given is the baseline: every ratio reads
+ * as "N times the baseline". Nothing else is printed, so the caller can
+ * redirect stdout straight into a report file; run.sh does.
+ *
+ *   ./local.sh examples/benchmarks/crosslang/compare.trp --io-root out \
+ *       --suppress-local-info-message --suppress-main-thread-finished-message \
+ *       -- python3=crosslang-python3.txt troupe=crosslang-troupe.txt
+ *
+ * Reported figure is the MINIMUM over the repetitions of a cell, not the
+ * median that SavinaReport uses. The minimum is the run least disturbed by
+ * whatever else the machine was doing, which is the right summary when the
+ * quantity of interest is a ratio between two languages measured in the same
+ * window; the median is the better summary when the quantity of interest is
+ * one language's own variability. Both row files are kept, so either can be
+ * recomputed.
+ *
+ * This is not restricted to two languages: pass as many `label=path` pairs as
+ * there are row files and every non-baseline language gets its own ratio
+ * column.
+ *)
+
+import Outcome
+import { readFile } SimpleFileIO
+import List
+import String
+
+let val args = getCliArgs authority
+
+    fun say s   = fwrite (stdout authority, s)
+    fun sayLn s = say (s ^ "\n")
+
+    fun die (code, msg) =
+        let val _ = fwrite (stderr authority, msg ^ "\n")
+        in exit (authority, code) end
+
+    (*==================== parsing ====================*)
+
+    (** Value of a `key=value` token; "" if the token has no `=`. *)
+    fun fieldValue tok =
+        case String.split "=" tok of
+          [_, v] => v
+        | _      => ""
+
+    (* A measurement line is exactly `<name> n= rep= ms= ok=`. Header lines
+       start with `#` and every other shape is ignored, so a row file can
+       carry commentary without a separate metadata channel. *)
+    fun parseLine line =
+        if String.startsWith "#" line then []
+        else case String.split " " line of
+               [name, nTok, _, msTok, okTok] =>
+                 [(name, stringToInt (fieldValue nTok),
+                   stringToInt (fieldValue msTok),
+                   fieldValue okTok = "true")]
+             | _ => []
+
+    fun parseRows text =
+        List.reverse
+          (List.foldl (fn (l, acc) => case parseLine l of
+                                        r :: _ => r :: acc
+                                      | []     => acc)
+                      [] (String.lines text))
+
+    (** Value of a `# <key>: <value>` header line. *)
+    fun headerValue (key, text) =
+        let val prefix = "# " ^ key ^ ": "
+        in case List.filter (String.startsWith prefix) (String.lines text) of
+             h :: _ => substring (h, String.size prefix, String.size h)
+           | []     => "(not recorded)"
+        end
+
+    (*==================== arithmetic ====================*)
+
+    fun roundTo (places, x) =
+        let fun p10 0 = 1
+              | p10 k = 10 * p10 (k - 1)
+            val f = p10 places
+        in floor (x * f + 0.5) / f end
+
+    fun powi (b, 0) = 1
+      | powi (b, e) = b * powi (b, e - 1)
+
+    (* Natural log and exp built from `sqrt` and multiplication alone. The
+       runtime has no log, exp or pow — rt/src/builtins/math.mts provides
+       random, floor and sqrt and nothing else.
+     *
+     *   ln x : repeated square roots drive x^(1/2^m) towards 1, and
+     *          ln x = 2^m (x^(1/2^m) - 1) in the limit.
+     *   exp y: (1 + y/2^m)^(2^m) by repeated squaring.
+     *
+     * m = 24 leaves the relative error near 1e-7 across the range of ratios
+     * these reports carry, which is far below the measurement noise.
+     *
+     * This replaced a Newton n-th root, which was wrong: the step shrinks the
+     * estimate by a factor of only (1 - 1/k) per iteration, so a large ratio
+     * under a large cell count needs far more iterations than a fixed budget
+     * allows. With 20 cells and a ratio of 1252 it had not remotely converged,
+     * and the reported geometric mean came out around 1.7e11. Nothing in the
+     * formulation here can fail to converge or overflow, because no
+     * intermediate value ever leaves the neighbourhood of 1. *)
+    val lnSteps = 24
+    val lnScale = powi (2, lnSteps)
+
+    fun lnApprox x =
+        let fun root (v, 0) = v
+              | root (v, i) = root (sqrt v, i - 1)
+        in lnScale * (root (x, lnSteps) - 1) end
+
+    fun expApprox y =
+        let fun square (v, 0) = v
+              | square (v, i) = square (v * v, i - 1)
+        in square (1 + y / lnScale, lnSteps) end
+
+    (** Geometric mean: the exp of the mean of the logs. *)
+    fun geomean ratios =
+        let val k = List.length ratios
+        in if k = 0 then 0
+           else expApprox (List.foldl (fn (r, acc) => acc + lnApprox r) 0 ratios
+                           / k)
+        end
+
+    (*==================== row queries ====================*)
+
+    fun uniq xs =
+        List.reverse (List.foldl (fn (x, acc) => if List.elem x acc
+                                                 then acc else x :: acc)
+                                 [] xs)
+
+    fun rowsFor (rows, name, size) =
+        List.filter (fn (b, n, _, _) => b = name andalso n = size) rows
+
+    fun minMs cells = List.min (fn a => fn b => a < b)
+                               (List.map (fn (_, _, ms, _) => ms) cells)
+
+    fun allOk cells = List.length (List.filter (fn (_, _, _, ok) => not ok) cells) = 0
+
+    (* Below this, a measurement says more about the clock than about the
+       program: Troupe's getTime is whole milliseconds, so a 4 ms cell carries
+       25% quantisation before any noise. Cells under the floor are marked in
+       the tables and counted, not silently dropped — some suites (AWFY at its
+       smallest sizes) have several, and that is a fact about the sizes, which
+       are inherited from the single-language suite and were never tuned
+       against wall-clock. *)
+    val floorMs = 10
+
+    fun underFloor ms = ms < floorMs
+
+    (*==================== load ====================*)
+
+    fun parseSource a =
+        case String.split "=" a of
+          [label, path] => (label, path)
+        | _             => (a, a)
+
+    fun load (label, path) =
+        case readFile (authority, path) of
+          ERR e => die (1, "compare: cannot read " ^ path ^ ": " ^ e.reason)
+        | OK text =>
+            { label   = label
+            , version = headerValue ("version", text)
+            , startup = headerValue ("startup-ms", text)
+            , machine = headerValue ("machine", text)
+            , rows    = parseRows text }
+
+    val sources = List.map (fn a => load (parseSource a)) args
+
+in if List.length args < 2
+   then die (2, "usage: compare.trp -- <label>=<rows> <label>=<rows> [...]")
+   else
+     let val base   = List.nth sources 0
+         val others = List.drop 1 sources
+
+         val benches = uniq (List.map (fn (b, _, _, _) => b) base.rows)
+
+         (*--- per-benchmark tables ---*)
+
+         fun sizeRow (name, size) =
+             let val baseCells = rowsFor (base.rows, name, size)
+                 val baseMs    = minMs baseCells
+
+                 (* A zero baseline makes the ratio undefined rather than
+                    large; report it as such instead of dividing. *)
+                 fun ratioText ms = if baseMs <= 0 then "-"
+                                    else toString (roundTo (2, ms / baseMs))
+
+                 fun cellFor s =
+                     case rowsFor (s.rows, name, size) of
+                       []    => " | (absent) | -"
+                     | cells => " | " ^ toString (roundTo (1, minMs cells))
+                                ^ " | " ^ ratioText (minMs cells)
+                                ^ (if allOk cells then "" else " CHECK FAILED")
+
+                 fun cells ([], acc)      = acc
+                   | cells (s :: ss, acc) = cells (ss, acc ^ cellFor s)
+
+                 val marked = underFloor baseMs
+                              orelse List.length
+                                       (List.filter (fn s =>
+                                           case rowsFor (s.rows, name, size) of
+                                             []    => false
+                                           | cells => underFloor (minMs cells))
+                                         others) > 0
+
+             in "| " ^ toString size ^ (if marked then " *" else "")
+                ^ " | " ^ toString (roundTo (1, baseMs))
+                ^ (if allOk baseCells then "" else " CHECK FAILED")
+                ^ cells (others, "") ^ " |"
+             end
+
+         fun benchTable name =
+             let val sizes = uniq (List.map (fn (_, n, _, _) => n)
+                                     (List.filter (fn (b, _, _, _) => b = name)
+                                                  base.rows))
+                 val head = "| size | " ^ base.label ^ " ms"
+                            ^ List.foldl (fn (s, acc) =>
+                                  acc ^ " | " ^ s.label ^ " ms | x " ^ base.label)
+                                "" others
+                            ^ " |"
+                 (* Two columns per non-baseline language (its time and its
+                    ratio), plus size and the baseline's own time. *)
+                 val rule = List.foldl (fn (_, acc) => acc ^ "|------|------")
+                                       "|------|------" others
+                            ^ "|"
+             in String.concatWith "\n"
+                  (List.append ["", "## " ^ name, "", head, rule]
+                     (List.map (fn n => sizeRow (name, n)) sizes))
+             end
+
+         (*--- summary across all cells ---*)
+
+         fun ratiosFor s =
+             List.foldl (fn (name, acc) =>
+                 List.append acc
+                   (List.foldl (fn (size, acc2) =>
+                       case rowsFor (s.rows, name, size) of
+                         []    => acc2
+                       | cells =>
+                           case rowsFor (base.rows, name, size) of
+                             []  => acc2
+                             (* A zero baseline has no ratio; including it would
+                                make the geometric mean infinite. *)
+                           | bc  => if minMs bc <= 0 then acc2
+                                    else List.append acc2 [minMs cells / minMs bc])
+                     [] (uniq (List.map (fn (_, n, _, _) => n)
+                                (List.filter (fn (b, _, _, _) => b = name)
+                                             base.rows)))))
+               [] benches
+
+         fun summaryRow s =
+             let val rs = ratiosFor s
+             in if List.length rs = 0
+                then "| " ^ s.label ^ " | (no comparable cells) | | | |"
+                else "| " ^ s.label
+                     ^ " | " ^ toString (roundTo (2, geomean rs))
+                     ^ " | " ^ toString (roundTo (2, List.min (fn a => fn b => a < b) rs))
+                     ^ " | " ^ toString (roundTo (2, List.max (fn a => fn b => a < b) rs))
+                     ^ " | " ^ toString (List.length rs) ^ " |"
+             end
+
+         (*--- parity: cells one language has and another does not ---*)
+
+         fun missingFor s =
+             List.foldl (fn (name, acc) =>
+                 List.append acc
+                   (List.foldl (fn (size, acc2) =>
+                       if List.length (rowsFor (s.rows, name, size)) = 0
+                       then List.append acc2 [name ^ " n=" ^ toString size]
+                       else acc2)
+                     [] (uniq (List.map (fn (_, n, _, _) => n)
+                                (List.filter (fn (b, _, _, _) => b = name)
+                                             base.rows)))))
+               [] benches
+
+         val missing =
+             List.foldl (fn (s, acc) =>
+                 List.append acc
+                   (List.map (fn c => s.label ^ ": " ^ c) (missingFor s)))
+               [] others
+
+         val _ = sayLn (String.concatWith "\n"
+             [ "# Cross-language comparison (generated)"
+             , ""
+             , "Minimum over the repetitions of each cell, one untimed warmup per"
+             , "size. Ratios are against " ^ base.label ^ ", the first row file given."
+             , "Machine: " ^ base.machine ^ "."
+             , ""
+             , "## Startup (whole process, kernel time excluded)"
+             , ""
+             , "| language | version | startup ms |"
+             , "|----------|---------|------------|" ])
+
+         val _ = List.map (fn s => sayLn ("| " ^ s.label ^ " | " ^ s.version
+                                          ^ " | " ^ s.startup ^ " |"))
+                          sources
+
+         val _ = List.map (fn name => sayLn (benchTable name)) benches
+
+         val _ = sayLn (String.concatWith "\n"
+             [ ""
+             , "A size marked `*` has at least one language measuring under "
+               ^ toString floorMs ^ " ms, where the"
+             , "clock contributes more than the program; treat that row as indicative only."
+             , ""
+             , "## Summary"
+             , ""
+             , "Geometric mean of the per-cell ratios against " ^ base.label ^ "."
+             , "A wide min-max spread means the ratio is workload-dependent and no"
+             , "single number describes it."
+             , ""
+             , "| language | geomean | min | max | cells |"
+             , "|----------|---------|-----|-----|-------|" ])
+
+         val _ = List.map (fn s => sayLn (summaryRow s)) others
+
+     in if List.length missing > 0
+        then sayLn ("\n## Missing cells\n\nPresent in " ^ base.label
+                    ^ " and absent elsewhere; the languages are measuring"
+                    ^ " different work:\n\n"
+                    ^ String.concatWith "\n" (List.map (fn m => "- " ^ m) missing))
+        else ()
+     end
+end

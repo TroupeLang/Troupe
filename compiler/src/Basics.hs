@@ -236,28 +236,22 @@ nameOf what tbl x =
     (n : _) -> n
     []      -> error ("Basics.nameOf: missing " ++ what)
 
-instance ToSexp BinOp where
+instance Sexp BinOp where
   toSexp = Atom . nameOf "BinOp" binOpTable
-
-instance FromSexp BinOp where
   fromSexp d = do
     s <- asToken d
     case lookup s binOpTable of
       Just op -> Right op
       Nothing -> Left ("unknown binary operator: " ++ s)
 
-instance ToSexp UnaryOp where
+instance Sexp UnaryOp where
   toSexp = Atom . nameOf "UnaryOp" unOpTable
-
-instance FromSexp UnaryOp where
   fromSexp d = do
     s <- asToken d
     case lookup s unOpTable of
       Just op -> Right op
       Nothing -> Left ("unknown unary operator: " ++ s)
 
-instance ToSexp LibName where
+instance Sexp LibName where
   toSexp (LibName l) = Str l
-
-instance FromSexp LibName where
   fromSexp d = LibName <$> asName d

@@ -8,13 +8,15 @@ other document or on any external repository, and is meant to be dropped straigh
 repo. The audience is an agent working in the **Troupe repository** (the Haskell compiler under
 `compiler/`).
 
-- **Status:** specification — ready for a Troupe-side implementation (printer + parser + round-trip
-  property test). No part of it is yet implemented in the Troupe repo. Last re-verified against the
-  Troupe sources 2026-07-07: every type transcribed under *Source of truth* matches
-  `compiler/src/IR.hs` / `Core.hs` / `Basics.hs` / `DCLabels.hs` verbatim.
+- **Status:** implemented in the Troupe repo — `compiler/src/Sexp.hs` (datum layer and the `Sexp`
+  class), the `Sexp` instances in the modules defining each type, and `compiler/src/IRSexp.hs` (the
+  document layer). Exercised by `compiler/test/ir-sexp-test` and by `troupec --emit-ir-sexp` /
+  `--ingest-ir-sexp` / `--verify-ir-sexp`. Last re-verified against the Troupe sources 2026-07-28:
+  every type transcribed under *Source of truth* matches `compiler/src/IR.hs` / `Core.hs` /
+  `Basics.hs` / `DCLabels.hs` verbatim.
 - **Format:** `troupe-ir-sexp`. A readable, round-trippable textual encoding of the full Troupe IR
   AST (`compiler/src/IR.hs`), structured DC-label literals included.
-- **Versioning:** version `1`. Every document is wrapped in `(troupe-ir-sexp VERSION …)`; format
+- **Versioning:** version `2`. Every document is wrapped in `(troupe-ir-sexp VERSION …)`; format
   identification and the versioning policy are specified inline (§ *Format identification and
   versioning*).
 
@@ -43,12 +45,12 @@ translation that *produces* the IR.
 ## Source of truth — the AST being concretized
 
 The format is a 1:1 concretization of these Haskell types. Field order below is the order used in
-the s-expression. (Locations are erased — see *Source positions are erased*.)
+the s-expression. (Locations are optional — see *Source positions are optional*.)
 
 From `compiler/src/IR.hs`:
 
 ```haskell
-data IRProgram   = IRProgram C.Atoms [LFunDef]
+data IRProgram   = IRProgram [LFunDef]
 data FunDef      = FunDef HFN LVarName Consts IRBBTree          -- name, arg, consts, body
 newtype HFN      = HFN Ident                                    -- Ident = String
 type    Consts   = [(VarName, C.Lit)]
@@ -59,7 +61,7 @@ data IRInst      = Assign VarName IRExpr
 
 data IRExpr      = Bin Basics.BinOp LVarAccess LVarAccess
                  | Un  Basics.UnaryOp LVarAccess
-                 | Tuple [LVarAccess]
+                 | Tuple [LVarAccess] Basics.SynVariantTag      -- tag: is this a variant value?
                  | Record LFields                               -- [(FieldName, LVarAccess)]
                  | WithRecord LVarAccess LFields
                  | ProjField LVarAccess Basics.FieldName
@@ -84,22 +86,21 @@ data VarAccess   = VarLocal VarName | VarEnv VarName | VarFunSelfRef
 From `compiler/src/Core.hs`:
 
 ```haskell
-data Atoms   = Atoms [AtomName]                                 -- AtomName = String
 data Numeric = NumInt Integer | NumFloat Double
 data Lit     = LNumeric Numeric | LString String | LLabel String
-             | LDCLabel DCLabelExp | LUnit | LBool Bool | LAtom AtomName
+             | LDCLabel DCLabelExp | LUnit | LBool Bool
 ```
 
 From `compiler/src/Basics.hs`:
 
 ```haskell
-type VarName = String;  type AtomName = String;  type FieldName = String
+type VarName = String;  type FieldName = String;  type SynVariantTag = Bool
 newtype LibName = LibName String
 data BinOp   = Plus | Minus | Mult | Div | Mod | Eq | Neq | Le | Lt | Ge | Gt
-             | And | Or | RaisedTo | FlowsTo | Concat | IntDiv
+             | And | Or | RaisedTo | Concat | IntDiv
              | BinAnd | BinOr | BinXor | BinShiftLeft | BinShiftRight | BinZeroShiftRight
-             | HasField | LatticeJoin | LatticeMeet
-data UnaryOp = IsList | IsTuple | IsRecord | Head | Tail | Fst | Snd
+             | HasField | LatticeJoin
+data UnaryOp = IsList | IsTuple | IsRecord | Head | Tail
              | ListLength | TupleLength | RecordSize | LevelOf | UnMinus | Not
 ```
 
@@ -124,10 +125,31 @@ primitives therefore never change this grammar; they only add names the runtime 
 is a fixed point of the IR's *structure*, which has been stable for years, so the spec can be held
 as an independent contract while the primitive set evolves on both sides.
 
-**Source positions are erased.** `LVarAccess = Located VarAccess`, `LFunDef = Located FunDef`,
-`LVarName = Located VarName`, `LIRInst`/`LIRTerminator = Located …` all carry source positions. **The
-format does not represent positions.** The printer drops them; the parser fills the null position
-(`NoPos`). The round-trip law is therefore stated over **position-erased** ASTs.
+**Source positions are optional (version 2).** `LVarAccess = Located VarAccess`,
+`LFunDef = Located FunDef`, `LVarName = Located VarName`, `LIRInst`/`LIRTerminator = Located …`
+all carry source positions, from
+
+```haskell
+data PosInf = SrcPosInf String Int Int | RTGen String | NoPos   -- file, line, column
+```
+
+A located value with a position is written inside an `@` wrapper; a value at `NoPos` is written
+as its payload alone:
+
+```
+(@ ("examples/foo.trp" 12 3) (local "x"))    ; SrcPosInf
+(@ (rt "description") (local "x"))           ; RTGen
+(local "x")                                  ; NoPos
+```
+
+Any node may therefore appear with or without a wrapper, and a producer that has no positions to
+offer emits none. Two round-trip laws follow (see *Round-trip law*): with positions the AST comes
+back exactly, and a position-erased document comes back position-erased.
+
+Version 1 of this format could not represent positions at all. A version-1 document is a
+version-2 document that happens to have no `@` wrappers, but the version atom is part of the text
+and that text is a module's content-addressed identity (`compiler/src/ModuleHash.hs`), so the
+version bump repinned every module in the repository.
 
 ## Lexical layer
 
@@ -139,7 +161,7 @@ The surface is standard s-expressions, whitespace-insensitive.
   Used for node heads (`program`, `fun`, `bb`, `assign`, …), operators (the `BinOp`/`UnaryOp`
   constructor names), and the label-constant tokens `#true` / `#false`.
 - **Strings:** double-quoted, with escapes `\" \\ \n \t \r \uXXXX`. **All names** — `VarName`, the
-  `HFN` ident, `AtomName`, `LibName`, `FieldName`, label `Tag` — are written as **quoted strings**,
+  `HFN` ident, `LibName`, `FieldName`, label `Tag` — are written as **quoted strings**,
   because Troupe identifiers legitimately contain `$`, `.`, etc. (e.g. `"$$authorityarg"`,
   `"$env.x"`). (A reader MAY also accept a bare symbol where a name is expected, but the printer
   always quotes.)
@@ -158,8 +180,7 @@ numbers. Each rule names the AST constructor it denotes.
 **Program, functions, blocks.**
 
 ```
-PROGRAM   ::= (program ATOMS FUN*)                       -- IRProgram (Atoms …) [FunDef …]
-ATOMS     ::= (atoms STRING*)                            -- Core.Atoms [AtomName]
+PROGRAM   ::= (program FUN*)                             -- IRProgram [FunDef …]
 FUN       ::= (fun STRING (arg STRING) CONSTS BBTREE)    -- FunDef (HFN name) arg consts body
 CONSTS    ::= (consts (STRING LIT)*)                     -- [(VarName, Lit)]
 BBTREE    ::= (bb (INST*) TERM)                          -- BB [IRInst] IRTerminator
@@ -179,7 +200,8 @@ CLO  ::= (STRING STRING)                                 --   (VarName, HFN) clo
 ```
 EXPR ::= (bin BINOP VARACCESS VARACCESS)                 -- Bin
        | (un  UNOP  VARACCESS)                           -- Un
-       | (tuple VARACCESS*)                              -- Tuple
+       | (tuple VARACCESS*)                              -- Tuple … False (an ordinary tuple)
+       | (tuple-variant VARACCESS*)                      -- Tuple … True  (a syntactic-variant value)
        | (record (STRING VARACCESS)*)                    -- Record
        | (with-record VARACCESS (STRING VARACCESS)*)     -- WithRecord
        | (proj-field VARACCESS STRING)                   -- ProjField … FieldName
@@ -221,7 +243,6 @@ LIT ::= (int INT)                                        -- LNumeric (NumInt _)
       | (string STRING)                                  -- LString
       | (bool true) | (bool false)                       -- LBool
       | unit                                             -- LUnit
-      | (atom STRING)                                    -- LAtom AtomName
       | (label-string STRING)                            -- LLabel String  (legacy; raw surface text)
       | DCLABEL                                          -- LDCLabel DCLabelExp  (preferred; below)
 ```
@@ -232,15 +253,15 @@ readable aliases the parser also accepts, but the printer emits the constructor 
 
 ```
 BINOP ::= Plus | Minus | Mult | Div | Mod | Eq | Neq | Le | Lt | Ge | Gt
-        | And | Or | RaisedTo | FlowsTo | Concat | IntDiv
+        | And | Or | RaisedTo | Concat | IntDiv
         | BinAnd | BinOr | BinXor | BinShiftLeft | BinShiftRight | BinZeroShiftRight
-        | HasField | LatticeJoin | LatticeMeet
-UNOP  ::= IsList | IsTuple | IsRecord | Head | Tail | Fst | Snd
+        | HasField | LatticeJoin
+UNOP  ::= IsList | IsTuple | IsRecord | Head | Tail
         | ListLength | TupleLength | RecordSize | LevelOf | UnMinus | Not
 ```
 
 Note the label-relevant operators are ordinary `BinOp`s/`UnaryOp`s, not special forms: `RaisedTo`
-(`x raisedTo lev`), `FlowsTo` (`⊑`), `LatticeJoin` (`⊔`), `LatticeMeet` (`⊓`), `LevelOf`.
+(`x raisedTo lev`), `LatticeJoin` (`⊔`), `LevelOf`.
 
 ## Labels and authorities — the structured encoding
 
@@ -290,12 +311,12 @@ existing constructs.
 Let `print : IRProgram → Text` and `parse : Text → Either Error IRProgram`. The required law, over
 **position-erased** ASTs:
 
-> **R1 (parse ∘ print = id).** For every well-formed `p : IRProgram`, `parse (print p) = Right p'`
-> where `p'` equals `p` structurally, modulo source positions.
+> **R1 (parse ∘ print = id).** For every well-formed `p : IRProgram`,
+> `parse (printWithPositions p) = Right p` exactly, and `parse (print p) = Right p'` where `p'`
+> equals `p` structurally, modulo source positions.
 
 Structural equality is the derived `Eq` on `FunDef`/`IRExpr`/`Lit`/…, with positions normalized.
-(`IRProgram` itself derives only `Generic`; compare component-wise: equal `Atoms` and pointwise-equal
-`FunDef`s. For `DCLabelExp`, R1 uses the *derived, syntactic* `Eq` — the `LabelExp` tree is preserved
+(`IRProgram` derives `Eq` as well as `Generic`. For `DCLabelExp`, R1 uses the *derived, syntactic* `Eq` — the `LabelExp` tree is preserved
 exactly — not the semantic `dcLabelEq`.)
 
 > **R2 (print ∘ parse = id, on canonical text).** `print` produces a **canonical** form (binary
@@ -320,16 +341,15 @@ its version. This wrapper is the outermost production, replacing `(program …)`
 
 ```
 DOCUMENT ::= (troupe-ir-sexp VERSION PROGRAM)
-VERSION  ::= a positive integer literal           ; current = 1
-PROGRAM  ::= (program ATOMS FUN*)                  ; unchanged
+VERSION  ::= a positive integer literal           ; current = 2
+PROGRAM  ::= (program FUN*)
 ```
 
 Example (the `a + b` program, wrapped):
 
 ```
-(troupe-ir-sexp 1
+(troupe-ir-sexp 2
   (program
-    (atoms)
     (fun "main" (arg "$$authorityarg")
       (consts)
       (bb ((assign "a" (const (int 1)))
@@ -340,7 +360,7 @@ Example (the `a + b` program, wrapped):
 
 **Printer / parser requirements.**
 
-- **Printer** emits the wrapper with the current version (`1`).
+- **Printer** emits the wrapper with the current version (`2`).
 - **Parser** MUST check the head symbol is exactly `troupe-ir-sexp` and that `VERSION` is one it
   supports; otherwise it **rejects with a clear error** — it must not attempt to parse an unknown
   head or version. This is the loud-on-drift guard, and it also distinguishes this format from
@@ -350,13 +370,17 @@ Example (the `a + b` program, wrapped):
 
 **Versioning policy.**
 
-- This spec defines **version 1**.
+- This spec defines **version 2**.
 - Bump the integer on any **backward-incompatible** grammar change (a renamed, removed, or retyped
   node). Purely additive changes need not bump — a `v1` parser may then loudly reject the unknown
   head, which is acceptable.
 - Maintain a changelog mapping each version number to its grammar revision.
 
-**Changelog.** `1` — initial grammar (this document).
+**Changelog.**
+
+- `1` — initial grammar.
+- `2` — optional source positions (the `@` wrapper); `(program …)` no longer carries an `(atoms …)`
+  list, atoms having been retired from the language.
 
 ## Conventions for a *runnable* whole program
 
@@ -383,7 +407,6 @@ The format faithfully represents any `IRProgram`; **running** one additionally r
 
 ```
 (program
-  (atoms)
   (fun "main" (arg "$$authorityarg")
     (consts)
     (bb ((assign "a" (const (int 1)))

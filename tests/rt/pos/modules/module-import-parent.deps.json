@@ -1,6 +1,6 @@
 {
   "deps": [
-    {"path": "modsrc/ModuleParentBase", "hash": "t5p1rklj82jtrd1nj12t6k64kk3i311164f10fghjc3s2b0k6gj0", "name": "modsrc/ModuleParentBase"},
-    {"path": "modsrc/util/ModuleParentChild", "hash": "mg6dufu7bb4q95dci3ujqf35ukdavi0bpbdsvq0e65ua7aoig5lg", "name": "modsrc/util/ModuleParentChild"}
+    {"path": "modsrc/ModuleParentBase", "hash": "jfj6qrgmdmdrg7o5mbpjsoeifussqgoic24kttgdigjrljpc7gv0", "name": "modsrc/ModuleParentBase"},
+    {"path": "modsrc/util/ModuleParentChild", "hash": "46vmccdoaitdor643nn4chagj9g9bjeojs1vntcte15kjtorbudg", "name": "modsrc/util/ModuleParentChild"}
   ]
 }

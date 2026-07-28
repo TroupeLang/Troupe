@@ -701,20 +701,16 @@ ppFunCall fn args = fn <+> ppArgs args
 maxProjIdx :: Integer
 maxProjIdx = 2147483647
 
-instance ToSexp IRProgram where
+instance Sexp IRProgram where
   toSexp (IRProgram funs) = Lst (Atom "program" : map toSexp funs)
-
-instance FromSexp IRProgram where
   fromSexp (Lst (Atom "program" : funDs)) = IRProgram <$> mapM fromSexp funDs
   fromSexp d = Left ("expected (program ...), got " ++ headHint d)
 
-instance ToSexp HFN where
+instance Sexp HFN where
   toSexp (HFN h) = Str h
-
-instance FromSexp HFN where
   fromSexp d = HFN <$> asName d
 
-instance ToSexp FunDef where
+instance Sexp FunDef where
   toSexp (FunDef hfn arg consts body) =
     Lst [ Atom "fun"
         , toSexp hfn
@@ -722,8 +718,6 @@ instance ToSexp FunDef where
         , encodeConsts consts
         , toSexp body
         ]
-
-instance FromSexp FunDef where
   fromSexp (Lst [Atom "fun", nameD, argD, constsD, bodyD]) = do
     name <- asName nameD
     context ("in function " ++ show name) $ do
@@ -752,11 +746,9 @@ decodeConst (Lst [nD, litD]) = do
   Right (n, l)
 decodeConst d = Left ("expected (NAME LIT) const binding, got " ++ headHint d)
 
-instance ToSexp IRBBTree where
+instance Sexp IRBBTree where
   toSexp (BB insts term) =
     Lst [Atom "bb", Lst (map toSexp insts), toSexp term]
-
-instance FromSexp IRBBTree where
   fromSexp (Lst [Atom "bb", instsD, termD]) = do
     instDs <- expectList instsD
     insts  <- mapM fromSexp instDs
@@ -764,7 +756,7 @@ instance FromSexp IRBBTree where
     Right (BB insts term)
   fromSexp d = Left ("expected (bb (INST*) TERM), got " ++ headHint d)
 
-instance ToSexp IRInst where
+instance Sexp IRInst where
   toSexp (Assign v e) = Lst [Atom "assign", toSexp v, toSexp e]
   toSexp (MkFunClosures caps clos) =
     Lst [ Atom "mkclos"
@@ -773,8 +765,6 @@ instance ToSexp IRInst where
         ]
     where encCap (v, lva) = Lst [toSexp v, toSexp lva]
           encClo (v, hfn) = Lst [toSexp v, toSexp hfn]
-
-instance FromSexp IRInst where
   fromSexp (Lst [Atom "assign", nD, eD]) = do
     n <- fromSexp nD
     e <- fromSexp eD
@@ -801,7 +791,7 @@ decodeClo (Lst [nD, hD]) = do
   Right (n, h)
 decodeClo d = Left ("expected (NAME HFN) closure, got " ++ headHint d)
 
-instance ToSexp IRExpr where
+instance Sexp IRExpr where
   toSexp (Bin op a b)        = Lst [Atom "bin", toSexp op, toSexp a, toSexp b]
   toSexp (Un op a)           = Lst [Atom "un", toSexp op, toSexp a]
   toSexp (Tuple vas tag)     = Lst (Atom (if tag then "tuple-variant" else "tuple")
@@ -815,8 +805,6 @@ instance ToSexp IRExpr where
   toSexp (Const lit)         = Lst [Atom "const", toSexp lit]
   toSexp (Base v)            = Lst [Atom "base", Str v]
   toSexp (Lib l v)           = Lst [Atom "lib", toSexp l, Str v]
-
-instance FromSexp IRExpr where
   fromSexp (Lst (Atom "bin" : opD : rest)) =
     case rest of
       [aD, bD] -> do op <- fromSexp opD
@@ -881,7 +869,7 @@ decodeProjIdx d = do
       then Left ("ProjIdx index exceeds maximum (" ++ show maxProjIdx ++ "): " ++ show i)
       else Right (fromInteger i)
 
-instance ToSexp IRTerminator where
+instance Sexp IRTerminator where
   toSexp (TailCall f a)            = Lst [Atom "tail-call", toSexp f, toSexp a]
   toSexp (Ret a)                   = Lst [Atom "ret", toSexp a]
   toSexp (If c t e)                = Lst [Atom "if", toSexp c, toSexp t, toSexp e]
@@ -889,8 +877,6 @@ instance ToSexp IRTerminator where
   toSexp (LibExport a)             = Lst [Atom "lib-export", toSexp a]
   toSexp (Error a)                 = Lst [Atom "error", toSexp a]
   toSexp (StackExpand v b1 b2)     = Lst [Atom "stack-expand", toSexp v, toSexp b1, toSexp b2]
-
-instance FromSexp IRTerminator where
   fromSexp (Lst [Atom "tail-call", fD, aD]) = do
     f <- fromSexp fD
     a <- fromSexp aD
@@ -918,12 +904,10 @@ instance FromSexp IRTerminator where
     Right (StackExpand n b1 b2)
   fromSexp d = Left ("not a valid terminator, got " ++ headHint d)
 
-instance ToSexp VarAccess where
+instance Sexp VarAccess where
   toSexp (VarLocal v) = Lst [Atom "local", toSexp v]
   toSexp (VarEnv v)   = Lst [Atom "env", toSexp v]
   toSexp VarFunSelfRef = Atom "self"
-
-instance FromSexp VarAccess where
   fromSexp (Lst [Atom "local", nD]) = VarLocal <$> fromSexp nD
   fromSexp (Lst [Atom "env", nD])   = VarEnv <$> fromSexp nD
   fromSexp (Atom "self")            = Right VarFunSelfRef

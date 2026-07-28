@@ -21,11 +21,13 @@ import qualified IRSexp
 import           SynVarHash                 (base32hexEncode)
 
 -- | The format-identifier prefix pinning this identity's IR-encoding version.
+-- Version 2 tracks troupe-ir-sexp version 2 (see 'IRSexp.formatVersion'), whose
+-- version atom is part of the hashed text.
 -- Hashed into the input as a domain separator (never rendered into the
 -- identity string), so a future IR-encoding change cannot collide with this
 -- version's hashes.
 formatIdentifier :: String
-formatIdentifier = "troupe:mod:1"
+formatIdentifier = "troupe:mod:2"
 
 -- | The base32hex-rendered SHA-256 hash of a module's position-erased codegened
 -- IR: the module's content-addressed identity. Hashes

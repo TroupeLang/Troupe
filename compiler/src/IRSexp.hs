@@ -4,18 +4,26 @@
 -- This module implements the format specified in
 -- @compiler/docs/spec-troupe-ir-sexp.md@:
 --
---   * 'printProg' : 'IRProgram' -> 'String' — the canonical printer (R2).
+--   * 'printProg' : 'IRProgram' -> 'String' — the printer, source positions
+--     erased.
+--   * 'printProgWithPos' — the same, keeping source positions.
 --   * 'parseProg' : 'String' -> 'Either' 'String' 'IRProgram' — the parser
---     (tolerant lexically, strict on the versioned @(troupe-ir-sexp 1 ...)@
---     wrapper).
---   * 'erasePosProg' — normalizes all source positions to 'NoPos' so the
---     round-trip law R1 can be stated over position-erased ASTs.
+--     (tolerant lexically, strict on the versioned @(troupe-ir-sexp 2 ...)@
+--     wrapper). Positions are optional in the grammar, so it reads the output
+--     of either printer.
+--   * 'erasePosProg' — normalizes all source positions to 'NoPos'.
 --
--- The encoding of the IR itself is not here: it is the 'ToSexp' / 'FromSexp'
--- instances, each defined in the module that defines its type, over the datum
--- layer in "Sexp".
+-- Two round-trip laws follow, both checked by @compiler/test/ir-sexp-test@ and
+-- by @troupec --verify-ir-sexp@:
+--
+-- > parseProg (printProgWithPos p) == Right p
+-- > parseProg (printProg p)        == Right (erasePosProg p)
+--
+-- The encoding of the IR itself is not here: it is the 'Sexp' instances, each
+-- defined in the module that defines its type, over the datum layer in "Sexp".
 module IRSexp
   ( printProg
+  , printProgWithPos
   , parseProg
   , erasePosProg
   , Datum(..)
@@ -30,16 +38,25 @@ import           TroupePositionInfo (Located(..), noLoc)
 -- The current format version.
 ------------------------------------------------------------
 
+-- | Version 2 added optional source positions (the @\@@ wrapper, see
+-- "TroupePositionInfo"). A version-1 document is a version-2 document with no
+-- positions in it, but the version atom is part of the text, and that text is a
+-- module's content-addressed identity ("ModuleHash") — so this bump repins
+-- every module, and the identity's own domain separator moves with it.
 formatVersion :: Integer
-formatVersion = 1
+formatVersion = 2
 
 ------------------------------------------------------------
 -- Printing.
 ------------------------------------------------------------
 
--- | Print a whole program in the canonical wrapped s-expression form.
+-- | Print a whole program with its source positions erased.
 printProg :: IRProgram -> String
-printProg p = renderDatum (encodeDocument p) ++ "\n"
+printProg = printProgWithPos . erasePosProg
+
+-- | Print a whole program, keeping source positions.
+printProgWithPos :: IRProgram -> String
+printProgWithPos p = renderDatum (encodeDocument p) ++ "\n"
 
 encodeDocument :: IRProgram -> Datum
 encodeDocument p =

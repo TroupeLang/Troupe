@@ -26,7 +26,7 @@ where
 
 import GHC.Generics
 import qualified Data.Serialize as Serialize
-import Sexp (ToSexp(..), FromSexp(..), Datum(..), asName)
+import Sexp (Sexp(..), Datum(..), asName)
 
 import Basics(BinOp(..),UnaryOp(..),Precedence)
 import qualified Basics
@@ -315,8 +315,6 @@ ppKTerm' (AssertElseError vname kt1 verr) = do
 -- s-expression serialization (see "Sexp")
 ------------------------------------------------------------
 
-instance ToSexp VarName where
+instance Sexp VarName where
   toSexp (VN v) = Str v
-
-instance FromSexp VarName where
   fromSexp d = VN <$> asName d

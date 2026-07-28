@@ -265,32 +265,26 @@ v1LabelToDCLabelExp s =
 -- s-expression serialization (see "Sexp")
 ------------------------------------------------------------
 
-instance ToSexp DCLabelExp where
+instance Sexp DCLabelExp where
   toSexp (DCLabelExp (c, i)) = Lst [Atom "dclabel", toSexp c, toSexp i]
-
-instance FromSexp DCLabelExp where
   fromSexp (Lst [Atom "dclabel", c1, c2]) = do
     a <- fromSexp c1
     b <- fromSexp c2
     Right (DCLabelExp (a, b))
   fromSexp d = Left ("expected (dclabel COMPONENT COMPONENT), got " ++ headHint d)
 
-instance ToSexp LabelComponent where
+instance Sexp LabelComponent where
   toSexp (ConstComponent LabelTrue)  = Atom "#true"
   toSexp (ConstComponent LabelFalse) = Atom "#false"
   toSexp (ExprComponent le)          = toSexp le
-
-instance FromSexp LabelComponent where
   fromSexp (Atom "#true")  = Right (ConstComponent LabelTrue)
   fromSexp (Atom "#false") = Right (ConstComponent LabelFalse)
   fromSexp d               = ExprComponent <$> fromSexp d
 
-instance ToSexp LabelExp where
+instance Sexp LabelExp where
   toSexp (TagExp t)       = Lst [Atom "tag", Str t]
   toSexp (OpExp Conj a b) = Lst [Atom "and", toSexp a, toSexp b]
   toSexp (OpExp Disj a b) = Lst [Atom "or", toSexp a, toSexp b]
-
-instance FromSexp LabelExp where
   fromSexp (Lst [Atom "tag", sD])     = TagExp <$> asName sD
   fromSexp (Lst (Atom "and" : args))  = nary Conj args
   fromSexp (Lst (Atom "or"  : args))  = nary Disj args

@@ -16,7 +16,7 @@ import           Test.Tasty
 import           Test.Tasty.HUnit
 import           Test.Tasty.QuickCheck (testProperty, forAll, (===), withMaxSuccess, Property)
 
-import           IRSexp (printProg, parseProg, erasePosProg)
+import           IRSexp (printProg, printProgWithPos, parseProg, erasePosProg)
 import           Gen (genProg)
 import           IR
 import qualified Core
@@ -64,16 +64,25 @@ main = defaultMain $ testGroup "troupe-ir-sexp round-trip"
   , mkCases "literal forms"                litCases
   , mkCases "dc-label forms"               dcLabelCases
   , mkCases "structural extras"            structuralCases
-  , testProperty "R1: parse (print p) == p (positions erased)"
+  , testProperty "parse (print p) == p (positions erased)"
       (withMaxSuccess 2000 propRoundTrip)
+  , testProperty "parse (printWithPos p) == p (positions kept)"
+      (withMaxSuccess 2000 propRoundTripPos)
   ]
 
--- | R1, over generated wrapped documents: parsing a printed program
--- reproduces it structurally, modulo source positions.
+-- | Over generated wrapped documents: parsing a printed program reproduces it
+-- structurally, modulo source positions.
 propRoundTrip :: Property
 propRoundTrip =
   forAll genProg $ \p ->
     parseProg (printProg p) === Right (erasePosProg p)
+
+-- | The same for the position-carrying printer, where nothing is lost: the
+-- parsed program equals the original, positions included.
+propRoundTripPos :: Property
+propRoundTripPos =
+  forAll genProg $ \p ->
+    parseProg (printProgWithPos p) === Right p
 
 ------------------------------------------------------------
 -- Program builders.

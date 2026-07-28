@@ -70,6 +70,8 @@ data Flag
   | DebugPP
   | PPPosFormat String
   | EmitIRSexp
+  -- | Modifier for --emit-ir-sexp: keep source positions in the emitted text.
+  | IRSexpPositions
   | IngestIRSexp
   | VerifyIRSexp
   -- | Establish/update the dependencies file for a program (the maintenance
@@ -97,8 +99,9 @@ options =
   , Option []    ["debug-pp"]  (NoArg DebugPP)            "show positions in IR dumps"
   , Option []    ["pp-pos-format"] (ReqArg PPPosFormat "FMT") "position format: inline|comment|bracket|none"
   , Option []    ["emit-ir-sexp"]   (NoArg EmitIRSexp)   "compile a .trp and emit the IR as troupe-ir-sexp text (to -o FILE, else stdout)"
+  , Option []    ["ir-sexp-positions"] (NoArg IRSexpPositions) "with --emit-ir-sexp: keep source positions in the emitted text"
   , Option []    ["ingest-ir-sexp"] (NoArg IngestIRSexp) "read a troupe-ir-sexp file and compile it to JS (program must be self-contained; no ambient methods are injected)"
-  , Option []    ["verify-ir-sexp"] (NoArg VerifyIRSexp) "compile a .trp, print its IR as troupe-ir-sexp, re-parse, and check the position-erased ASTs match (R1 self-check)"
+  , Option []    ["verify-ir-sexp"] (NoArg VerifyIRSexp) "compile a .trp, print its IR as troupe-ir-sexp both with and without positions, re-parse each, and check the ASTs match"
   , Option []    ["update-deps"]    (NoArg UpdateDeps)   "establish/update the program's dependencies file (<main>.deps.json) with actual module hashes, instead of enforcing pins"
   , Option []    ["datatype-hashes"] (NoArg DatatypeHashes) "print the content hash and canonical form of each datatype group declared in the file, then stop"
   ]
@@ -219,22 +222,30 @@ process pin root flags fname input = do
 
       ------ EMIT troupe-ir-sexp (and stop) ----------------
       when (EmitIRSexp `elem` flags) $ do
-        let sexp = IRSexp.printProg iropt
+        let sexp = if IRSexpPositions `elem` flags
+                     then IRSexp.printProgWithPos iropt
+                     else IRSexp.printProg iropt
         case List.find isOutputFile flags of
           Just (OutputFile f) -> writeFile f sexp
           _                   -> putStr sexp
         exitSuccess
 
-      ------ VERIFY troupe-ir-sexp round-trip (and stop) ---
+      ------ VERIFY troupe-ir-sexp round-trips (and stop) --
+      -- Both laws: with positions the AST comes back exactly; without them it
+      -- comes back position-erased.
       when (VerifyIRSexp `elem` flags) $ do
-        let printed = IRSexp.printProg iropt
-        case IRSexp.parseProg printed of
-          Left err -> die ("troupe-ir-sexp round-trip FAILED (parse): " ++ err)
-          Right ir2 ->
-            if IRSexp.erasePosProg iropt == IRSexp.erasePosProg ir2
-              then do putStrLn "troupe-ir-sexp round-trip OK"
-                      exitSuccess
-              else die "troupe-ir-sexp round-trip FAILED (position-erased ASTs differ)"
+        let check what expected printed =
+              case IRSexp.parseProg printed of
+                Left err -> die ("troupe-ir-sexp round-trip FAILED (" ++ what
+                                 ++ ", parse): " ++ err)
+                Right ir2
+                  | ir2 == expected -> return ()
+                  | otherwise -> die ("troupe-ir-sexp round-trip FAILED (" ++ what
+                                      ++ ", ASTs differ)")
+        check "with positions" iropt (IRSexp.printProgWithPos iropt)
+        check "positions erased" (IRSexp.erasePosProg iropt) (IRSexp.printProg iropt)
+        putStrLn "troupe-ir-sexp round-trip OK"
+        exitSuccess
 
       ------ RAW -------------------------------------------
       let raw = IR2Raw.prog2raw iropt

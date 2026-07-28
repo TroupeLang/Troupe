@@ -5,19 +5,20 @@
 --   * /Datum/ — the lexical and structural layer: 'Datum', a reader
 --     ('readDatum') and a canonical renderer ('renderDatum'). It knows nothing
 --     about the Troupe IR.
---   * /Classes/ — 'ToSexp' and 'FromSexp', with one hand-written instance per
---     type of the serialized closure. Instances live in the module that defines
---     the type, so there are no orphans and adding a constructor breaks the
---     build at the one instance that must handle it.
+--   * /Class/ — 'Sexp', carrying both directions, with one hand-written
+--     instance per type of the serialized closure. Instances live in the module
+--     that defines the type, so there are no orphans and adding a constructor
+--     breaks the build at the one instance that must handle it. The two
+--     directions are one class, as in cereal's 'Data.Serialize.Serialize', so a
+--     type cannot acquire an encoding without a decoding to match it.
 --
 -- The document layer that wraps an IR program in @(troupe-ir-sexp VERSION …)@,
 -- and the format specification it implements, are in "IRSexp"
 -- (@compiler/docs/spec-troupe-ir-sexp.md@).
 module Sexp
   ( Datum(..)
-    -- * Classes
-  , ToSexp(..)
-  , FromSexp(..)
+    -- * Class
+  , Sexp(..)
     -- * Text layer
   , renderDatum
   , readDatum
@@ -51,31 +52,27 @@ data Datum
 -- The classes.
 ------------------------------------------------------------
 
--- | Encode a value as a datum. Total: every value of the type has an encoding.
-class ToSexp a where
-  toSexp :: a -> Datum
-
--- | Decode a value from a datum, or explain why the datum is not one.
-class FromSexp a where
+-- | A type with an s-expression encoding.
+class Sexp a where
+  -- | Encode a value as a datum. Total: every value of the type has an
+  -- encoding.
+  toSexp   :: a -> Datum
+  -- | Decode a value from a datum, or explain why the datum is not one.
   fromSexp :: Datum -> Either String a
 
 -- Numeric leaves are written as bare atoms, so that they read back as numbers
 -- rather than as strings.
 
-instance ToSexp Integer where
+instance Sexp Integer where
   toSexp = Atom . show
-
-instance FromSexp Integer where
   fromSexp d = do
     s <- asToken d
     case readMaybe s of
       Just i  -> Right i
       Nothing -> Left ("bad integer literal: " ++ s)
 
-instance ToSexp Double where
+instance Sexp Double where
   toSexp = Atom . show
-
-instance FromSexp Double where
   fromSexp d = do
     s <- asToken d
     case readMaybe s of

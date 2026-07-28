@@ -747,7 +747,7 @@ termPrec _                 = 0
 -- s-expression serialization (see "Sexp")
 ------------------------------------------------------------
 
-instance ToSexp Lit where
+instance Sexp Lit where
   toSexp (LNumeric (NumInt i))   = Lst [Atom "int", toSexp i]
   toSexp (LNumeric (NumFloat d)) = Lst [Atom "float", toSexp d]
   toSexp (LString s)             = Lst [Atom "string", Str s]
@@ -755,8 +755,6 @@ instance ToSexp Lit where
   toSexp LUnit                   = Atom "unit"
   toSexp (LLabel s)              = Lst [Atom "label-string", Str s]
   toSexp (LDCLabel dc)           = toSexp dc
-
-instance FromSexp Lit where
   fromSexp (Lst [Atom "int", nD])    = (LNumeric . NumInt) <$> fromSexp nD
   fromSexp (Lst [Atom "float", nD])  = (LNumeric . NumFloat) <$> fromSexp nD
   fromSexp (Lst [Atom "string", sD]) = LString <$> asName sD

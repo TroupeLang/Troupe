@@ -28,7 +28,6 @@ module DCLabels
   , DisjTags(..)
   , DCLabel(..)) where
 import GHC.Generics(Generic)
-import Data.Serialize (Serialize)
 import Sexp
 import Data.List (sort, nub, dropWhileEnd)
 import Data.List.Utils (split)
@@ -161,14 +160,6 @@ opPrec :: LabelOp -> Int
 opPrec Conj = 100
 opPrec Disj = 10
 
-instance Serialize LabelConst
-instance Serialize LabelOp
-instance Serialize DisjTags
-instance Serialize CNF
-instance Serialize DCLabel
-instance Serialize LabelExp
-instance Serialize LabelComponent
-instance Serialize DCLabelExp
 
 -- pretty printing 
 --

@@ -24,7 +24,6 @@ module Core (   Lambda (..)
               )
 where
 import GHC.Generics(Generic)
-import Data.Serialize (Serialize)
 import Sexp
 
 import           Basics
@@ -71,7 +70,6 @@ data FunDecl = FunDecl VarName Lambda PosInf  -- Keep PosInf for function defini
 -- with cross-type equality (NumInt 3 == NumFloat 3.0)
 data Numeric = NumInt Integer | NumFloat Double
   deriving (Show, Generic)
-instance Serialize Numeric
 instance Eq Numeric where
   (NumInt x) == (NumInt y) = x == y
   (NumFloat x) == (NumFloat y) = x == y
@@ -91,7 +89,6 @@ data Lit
     | LUnit
     | LBool Bool
   deriving (Show, Generic)
-instance Serialize Lit
 instance Eq Lit where
   (LNumeric n1) == (LNumeric n2) = n1 == n2
   (LString s) == (LString s') = s == s'

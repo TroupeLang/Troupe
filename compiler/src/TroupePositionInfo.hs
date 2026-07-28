@@ -20,7 +20,6 @@ where
 
 
 import GHC.Generics(Generic)
-import Data.Serialize (Serialize)
 import Sexp (Sexp(..), Datum(..), asName, headHint)
 
 data PosInf = SrcPosInf String Int Int
@@ -29,7 +28,6 @@ data PosInf = SrcPosInf String Int Int
             deriving (Eq, Ord, Generic)
 
 
-instance Serialize PosInf
 
 instance Show PosInf
   where show (SrcPosInf filename row col) = filename ++ ":" ++ (show row) ++ ":" ++ (show col)
@@ -56,7 +54,6 @@ data Located a = Loc !PosInf a
 instance Ord a => Ord (Located a) where
   compare (Loc _ x) (Loc _ y) = compare x y
 
-instance Serialize a => Serialize (Located a)
 
 instance GetPosInfo (Located a) where
   posInfo = getLoc

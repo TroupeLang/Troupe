@@ -25,7 +25,6 @@ module RetCPS
 where
 
 import GHC.Generics
-import qualified Data.Serialize as Serialize
 import Sexp (Sexp(..), Datum(..), asName)
 
 import Basics(BinOp(..),UnaryOp(..),Precedence)
@@ -44,7 +43,6 @@ newtype VarName = VN Basics.VarName
     deriving (Eq, Ord, Generic)
 
 
-instance Serialize.Serialize VarName
 instance Show VarName where
   show (VN x) = show x
 

@@ -24,13 +24,8 @@ import           Control.Monad.State
 import           Control.Monad.Writer
 import Control.Monad (when)
 import           Data.List
-import           Data.Word                 (Word8)
 import qualified Data.ByteString           as BS
 import qualified Data.ByteString.Lazy      as BSL
-import           Data.Serialize            (Serialize)
-import qualified Data.Serialize            as Serialize
-import qualified Codec.Compression.GZip    as GZip
-import qualified Codec.Compression.Zlib.Internal as ZlibI
 import           GHC.Generics              (Generic)
 
 import           Text.PrettyPrint.HughesPJ (hsep, nest, text, vcat, ($$), (<+>))
@@ -202,104 +197,24 @@ ppDeps a = ppDepsAsJSON a
 
 
 -----------------------------------------------------------
--- Serialization instances
+-- Serialization
 -----------------------------------------------------------
 
-instance Serialize IRProgram
-instance Serialize IRTerminator
-instance Serialize FunDef
-instance Serialize VarAccess
-instance Serialize HFN
-instance Serialize IRExpr
-instance Serialize IRInst
-instance Serialize IRBBTree
-
------------------------------------------------------------
--- Serialization 
------------------------------------------------------------
+-- | What a serialized blob carries: one function (mobile code) or a whole
+-- program. The wire framing and compression are in "IRBlob"; the encoding is
+-- the 'Sexp' instances, and the document wrapper is in "IRSexp".
 data SerializationUnit
   = FunSerialization FunDef
   | ProgramSerialization IRProgram
   deriving (Generic)
 
-instance Serialize SerializationUnit
-
-
--- Blob wire format (v1): the 4-byte format identifier "TRPI", then a Word8
--- format version, then the payload. For v1 the payload is a gzip stream of the
--- cereal-encoded SerializationUnit. See _dev_planning/ir-blob-compression.md.
-irBlobFormatId :: BS.ByteString
-irBlobFormatId = BS.pack [0x54, 0x52, 0x50, 0x49]  -- "TRPI"
-
-irBlobVersion :: Word8
-irBlobVersion = 1
-
--- Upper bound on decompressed blob size, enforced during decompression to
--- defend against decompression bombs arriving from remote nodes. The largest
--- observed real blob is ~10 KB.
-maxDecompressedBytes :: Int
-maxDecompressedBytes = 64 * 1024 * 1024
-
-encodeBlob :: SerializationUnit -> BS.ByteString
-encodeBlob su =
-  let cereal = Serialize.runPut (Serialize.put su)
-      gz     = BSL.toStrict (GZip.compress (BSL.fromStrict cereal))
-  in irBlobFormatId `BS.append` BS.singleton irBlobVersion `BS.append` gz
-
-serializeFunDef :: FunDef -> BS.ByteString
-serializeFunDef fdef = encodeBlob (FunSerialization fdef)
-
--- Gzip-decompress with a hard output cap, using the incremental zlib API so
--- that corrupt input becomes a Left (rather than an imprecise DecompressError
--- thrown from a lazy thunk) and an over-cap stream is aborted with a Left. The
--- fold accumulator threads the remaining byte budget.
-decompressGzipCapped :: Int -> BS.ByteString -> Either String BS.ByteString
-decompressGzipCapped cap input =
-  BSL.toStrict <$>
-    ZlibI.foldDecompressStreamWithInput
-      onChunk onEnd onError
-      (ZlibI.decompressST ZlibI.gzipFormat ZlibI.defaultDecompressParams)
-      (BSL.fromStrict input)
-      cap
-  where
-    onChunk :: BS.ByteString -> (Int -> Either String BSL.ByteString)
-                             -> (Int -> Either String BSL.ByteString)
-    onChunk c k remaining =
-      let n = BS.length c
-      in if n > remaining
-         then Left ("decompressed IR blob exceeds "
-                     ++ show cap ++ "-byte cap")
-         else (BSL.fromStrict c <>) <$> k (remaining - n)
-    onEnd :: BSL.ByteString -> (Int -> Either String BSL.ByteString)
-    onEnd _leftover _ = Right BSL.empty
-    onError :: ZlibI.DecompressError -> (Int -> Either String BSL.ByteString)
-    onError e _ = Left (show e)
-
-deserialize :: BS.ByteString -> Either String SerializationUnit
-deserialize bs =
-  -- Dispatch on the 4-byte format identifier. A legacy (unframed) blob is raw
-  -- cereal, whose first byte is the SerializationUnit constructor tag, always 0
-  -- or 1 and therefore never 0x54 ('T'); so a blob beginning with "TRPI" is
-  -- unambiguously the framed format. This invariant holds while
-  -- SerializationUnit has <= 84 constructors.
-  if irBlobFormatId `BS.isPrefixOf` bs
-  then case BS.uncons (BS.drop 4 bs) of
-         Just (v, payload)
-           | v == irBlobVersion -> decompressGzipCapped maxDecompressedBytes payload
-                                      >>= decodeUnit
-           | otherwise -> Left ("unsupported IR blob format version "
-                                 ++ show v ++ " (compiler too old?)")
-         Nothing -> Left "truncated IR blob header"
-  else decodeUnit bs
-  where
-    decodeUnit b =
-      case Serialize.runGet (Serialize.get) b of
-        Left s -> Left s
-        Right x@(FunSerialization fdecl) ->
-          case runExcept (wfFun fdecl) of
-            Right _ -> Right x
-            Left _  -> Left "ir not well-formed"
-        Right x -> Right x
+instance Sexp SerializationUnit where
+  toSexp (FunSerialization f)     = toSexp f
+  toSexp (ProgramSerialization p) = toSexp p
+  fromSexp d@(Lst (Atom "fun" : _))     = FunSerialization <$> fromSexp d
+  fromSexp d@(Lst (Atom "program" : _)) = ProgramSerialization <$> fromSexp d
+  fromSexp d = Left ("expected a (fun ...) or (program ...) serialization unit, got "
+                     ++ headHint d)
 
 -----------------------------------------------------------
 -- Well-formedness

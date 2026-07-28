@@ -6,7 +6,6 @@ module Basics
 where
 
 import GHC.Generics(Generic)
-import Data.Serialize (Serialize)
 import Sexp
 
 type VarName = String
@@ -27,22 +26,18 @@ type SynVariantTag = Bool
 -- | Eq and Neq: deep equality check on the two parameters, including the types (any type inequality results in false being returned).
 data BinOp = Plus | Minus | Mult | Div | Mod |  Eq | Neq | Le | Lt | Ge | Gt | And | Or | RaisedTo | Concat| IntDiv | BinAnd | BinOr | BinXor | BinShiftLeft | BinShiftRight | BinZeroShiftRight | HasField | LatticeJoin
   deriving (Eq,Generic, Ord)
-instance Serialize BinOp
 data UnaryOp = IsList | IsTuple | IsRecord | Head | Tail | ListLength | TupleLength | RecordSize | LevelOf | UnMinus | Not
   deriving (Eq, Generic, Ord)
-instance Serialize UnaryOp
 
 -- | Associativity of a declared operator fixity: @infixl@ / @infixr@ /
 -- @infix@ (non-associative, Haskell's meaning — SML's bare @infix@ is left).
 data OpAssoc = OpLeft | OpRight | OpNon
   deriving (Eq, Show, Generic, Ord)
-instance Serialize OpAssoc
 
 -- | A declared operator fixity: associativity and level (0 through 9).
 -- Serializable because it travels with imports in 'ImportDecl'.
 data Fixity = Fixity OpAssoc Int
   deriving (Eq, Show, Generic, Ord)
-instance Serialize Fixity
 
 -- | Whether a name is an operator name: all operator characters ('$'-only
 -- operators included), or containing a character that is not legal in a
@@ -133,11 +128,9 @@ opPrec RaisedTo   = 50
 opPrec HasField   = 50
 
 newtype LibName = LibName String deriving (Eq, Show, Generic, Ord)
-instance Serialize LibName
 
 data ImportMode = Qualified | Unqualified
   deriving (Eq, Show, Ord, Generic)
-instance Serialize ImportMode
 
 
 
@@ -173,7 +166,6 @@ data ImportDecl = ImportDecl
       -- (they are compile-time only).
   } deriving (Eq, Show, Ord, Generic)
 
-instance Serialize ImportDecl
 
 data Imports = Imports [ImportDecl]
   deriving (Eq, Show, Ord)

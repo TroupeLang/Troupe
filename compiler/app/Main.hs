@@ -8,6 +8,7 @@ import qualified IR as CCIR
 -- import qualified RetRewrite as Rewrite
 import qualified IR2Raw
 import qualified IRSexp
+import qualified IRBlob
 import qualified Pipeline
 import qualified Raw
 import qualified Raw2Stack
@@ -129,7 +130,7 @@ process pin root flags fname input = do
           _                   -> putStr sexp
         exitSuccess
 
-      emitJS outPath root flags copts folded iropt
+      emitJS outPath (maybe "" id fname) root flags copts folded iropt
 
       Pipeline.writeUnitExports outPath (ModuleArtifact `elem` flags) folded iropt
 
@@ -160,9 +161,9 @@ compileOpts flags =
 -- | IR to JavaScript on disk: Raw, Raw optimization, stack layout, emission,
 -- source map. Used for the main compilation unit and for each module in a
 -- program's import graph.
-emitJS :: FilePath -> FilePath -> [Flag] -> Pipeline.CompileOpts
+emitJS :: FilePath -> FilePath -> FilePath -> [Flag] -> Pipeline.CompileOpts
        -> Pipeline.Folded -> CCIR.IRProgram -> IO ()
-emitJS outPath root flags copts folded iropt = do
+emitJS outPath srcPath root flags copts folded iropt = do
   let verbose          = Verbose `elem` flags
       noRawOpt         = NoRawOpt `elem` flags
       debugJS          = Debug `elem` flags
@@ -204,7 +205,10 @@ emitJS outPath root flags copts folded iropt = do
                     in any (\imp -> importPath imp /= Nothing) imps
       isProgram = usesModules && not (LibMode `elem` flags)
       moduleRoot     = if isProgram then Just root else Nothing
-      moduleDepsFile = if isProgram then Just (depsFilePath outPath) else Nothing
+      -- Keyed off the source, not the output: the dependencies file sits
+      -- beside the program's .trp, while the output may be anywhere (-o, or a
+      -- temporary path when a script compiles and runs in one step).
+      moduleDepsFile = if isProgram then Just (depsFilePath srcPath) else Nothing
   let (stackjs, mappings) = Stack2JS.stack2JSWithMappings compileMode
                                                           debugJS
                                                           sourceMapEnabled
@@ -378,7 +382,7 @@ fromStdinIR putStrLn format = do
     else
       case B64.decode input of
         Right bs ->
-           case CCIR.deserialize bs
+           case IRBlob.deserialize bs
               of Right x -> do (putStrLn . format . ir2Stack) x
                  Left s -> do putStrLn "ERROR in deserialization"
                               debugOut $ "deserialization error" ++ s
@@ -446,7 +450,7 @@ main = do
           _ <- pure mods
           Pipeline.compileModuleGraph pin root (compileOpts moduleFlags) file
             (\m folded iropt ->
-               emitJS (Pipeline.moduleOutPath m) root moduleFlags (compileOpts moduleFlags)
+               emitJS (Pipeline.moduleOutPath m) m root moduleFlags (compileOpts moduleFlags)
                       folded iropt)
           (_, ec) <- process pin root o (Just file) input
           return ec

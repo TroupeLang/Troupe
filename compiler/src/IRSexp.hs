@@ -25,6 +25,8 @@ module IRSexp
   ( printProg
   , printProgWithPos
   , parseProg
+  , printUnit
+  , parseUnit
   , erasePosProg
   , Datum(..)
   ) where
@@ -56,14 +58,18 @@ printProg = printProgWithPos . erasePosProg
 
 -- | Print a whole program, keeping source positions.
 printProgWithPos :: IRProgram -> String
-printProgWithPos p = renderDatum (encodeDocument p) ++ "\n"
+printProgWithPos = printDocument
 
-encodeDocument :: IRProgram -> Datum
-encodeDocument p =
-  Lst [ Atom "troupe-ir-sexp"
-      , toSexp formatVersion
-      , toSexp p
-      ]
+-- | Print a serialization unit — one function, or a whole program — keeping
+-- source positions. This is what a blob carries ("IRBlob").
+printUnit :: SerializationUnit -> String
+printUnit = printDocument
+
+-- | Wrap an encodable value in the versioned document.
+printDocument :: Sexp a => a -> String
+printDocument x = renderDatum (Lst [ Atom "troupe-ir-sexp"
+                                   , toSexp formatVersion
+                                   , toSexp x ]) ++ "\n"
 
 ------------------------------------------------------------
 -- Parsing.
@@ -71,17 +77,24 @@ encodeDocument p =
 
 -- | Parse a whole program from its canonical (or tolerant) s-expression text.
 parseProg :: String -> Either String IRProgram
-parseProg input = readDatum input >>= decodeDocument
+parseProg = parseDocument
 
-decodeDocument :: Datum -> Either String IRProgram
-decodeDocument (Lst [Atom "troupe-ir-sexp", verD, progD]) = do
+-- | Parse a serialization unit: a function or a whole program.
+parseUnit :: String -> Either String SerializationUnit
+parseUnit = parseDocument
+
+parseDocument :: Sexp a => String -> Either String a
+parseDocument input = readDatum input >>= decodeDocument
+
+decodeDocument :: Sexp a => Datum -> Either String a
+decodeDocument (Lst [Atom "troupe-ir-sexp", verD, bodyD]) = do
   ver <- fromSexp verD
   if ver == formatVersion
-    then fromSexp progD
+    then fromSexp bodyD
     else Left ("unsupported troupe-ir-sexp version: " ++ show ver
                ++ " (this build supports version " ++ show formatVersion ++ ")")
 decodeDocument (Lst (Atom "troupe-ir-sexp" : _)) =
-  Left "malformed troupe-ir-sexp wrapper: expected (troupe-ir-sexp VERSION PROGRAM)"
+  Left "malformed troupe-ir-sexp wrapper: expected (troupe-ir-sexp VERSION BODY)"
 decodeDocument d =
   Left ("not a troupe-ir-sexp document: expected head symbol \"troupe-ir-sexp\", got "
         ++ headHint d)

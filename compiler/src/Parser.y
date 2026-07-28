@@ -390,7 +390,7 @@ APat : VAR                                 {% atPos $1 (VarPattern (varTok $1)) 
      | '(' ConPat ')'                      { $2 }
      | '(' CSPattern PatElem ')'           {% atPos $1 (TuplePattern (reverse ($3:$2))) }
      | FieldPattern                        { $1 }
-     | ListPattern                         { $1 }
+     | BracketListPattern                  { $1 }
 
 
 Form :: { LTerm }
@@ -521,9 +521,17 @@ FieldPat
     : VAR              {(varTok $1, Nothing) }
     | VAR '=' Pattern  {(varTok $1, Just $3) }
 
-ListPattern:  '[' ']'                              {% atPos $1 (ListPattern []) }
+-- Bracketed list patterns are self-delimited, so a constructor argument may be
+-- one (see 'APat'). The infix cons pattern is not, and is deliberately absent
+-- from that layer: were it reachable there, `C p :: rest` would parse as
+-- `C (p :: rest)`, silently, since the argument would swallow the cons.
+BracketListPattern
+    :     '[' ']'                                  {% atPos $1 (ListPattern []) }
     | '[' PatElem ']'                              {% atPos $1 (ListPattern [$2]) }
     | '[' CSPattern PatElem ']'                    {% atPos $1 (ListPattern (reverse ($3:$2))) }
+
+ListPattern
+    :     BracketListPattern                       { $1 }
     |     Pattern '::' Pattern                     {% atPos $2 (ConsPattern $1 $3) }
 
 

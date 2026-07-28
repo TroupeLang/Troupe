@@ -64,11 +64,30 @@ main = defaultMain $ testGroup "troupe-ir-sexp round-trip"
   , mkCases "literal forms"                litCases
   , mkCases "dc-label forms"               dcLabelCases
   , mkCases "structural extras"            structuralCases
+  , testCase "NaN survives the round trip (compared by isNaN, not equality)" nanRoundTrip
   , testProperty "parse (print p) == p (positions erased)"
       (withMaxSuccess 2000 propRoundTrip)
   , testProperty "parse (printWithPos p) == p (positions kept)"
       (withMaxSuccess 2000 propRoundTripPos)
   ]
+
+-- | NaN needs its own check: the structural equality the other cases use is not
+-- reflexive on it, so `parse (print p) == p` cannot hold for a program carrying
+-- one. What must hold is that the value comes back as a NaN.
+nanRoundTrip :: Assertion
+nanRoundTrip =
+  case parseProg (printProgWithPos (progLit (Core.LNumeric (Core.NumFloat (0/0))))) of
+    Left err -> assertFailure ("parse error: " ++ err)
+    Right p  -> case floatsOf p of
+                  [x] | isNaN x -> return ()
+                  xs -> assertFailure ("expected a single NaN literal, got " ++ show xs)
+  where
+    floatsOf (IRProgram funs) =
+      [ d | Loc _ (FunDef _ _ consts _) <- funs
+          , (_, Core.LNumeric (Core.NumFloat d)) <- consts ]
+      ++ [ d | Loc _ (FunDef _ _ _ bb) <- funs, d <- floatsBB bb ]
+    floatsBB (BB insts _) =
+      [ d | Loc _ (Assign _ (Const (Core.LNumeric (Core.NumFloat d)))) <- insts ]
 
 -- | Over generated wrapped documents: parsing a printed program reproduces it
 -- structurally, modulo source positions.
@@ -142,6 +161,13 @@ litCases =
   , ("float-neg",      progLit (Core.LNumeric (Core.NumFloat (-0.5))))
   , ("float-third",    progLit (Core.LNumeric (Core.NumFloat (1.0 / 3.0))))
   , ("float-zero",     progLit (Core.LNumeric (Core.NumFloat 0.0)))
+  , ("float-neg-zero",  progLit (Core.LNumeric (Core.NumFloat (-0.0))))
+    -- Reachable from source: an overflowing literal such as 1.0e400 lexes
+    -- through `read`, so the IR can hold an infinity and the format has to
+    -- carry one. (NaN cannot arise this way, and is covered separately since
+    -- it is not equal to itself.)
+  , ("float-infinity", progLit (Core.LNumeric (Core.NumFloat (1/0))))
+  , ("float-neg-infinity", progLit (Core.LNumeric (Core.NumFloat (-1/0))))
   , ("string-simple",  progLit (Core.LString "hello world"))
   , ("string-empty",   progLit (Core.LString ""))
   , ("string-escapes", progLit (Core.LString "a\"b\\c\nd\te\rf"))

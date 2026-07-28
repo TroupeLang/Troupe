@@ -113,6 +113,13 @@ test/docker: ci-test-golden-no-color test/multinode test/hostile-peer test/resul
 test/local: compiler lib/out/.build-stamp
 	mkdir -p out
 	cd compiler && $(MAKE) test
+	$(MAKE) test/ir-blob-interchange
+
+# The half of the IR blob interchange check that has to run outside Haskell:
+# confirms a Haskell-produced blob decompresses under Node's zlib, and that the
+# checked-in Node-compressed references are current. Cheap; needs no build.
+test/ir-blob-interchange:
+	node scripts/ir-blob-interchange.mjs --check
 
 test/prop-compiler:
 	cd compiler && stack test :dclabels-prop-test $(STACK_OPTS)

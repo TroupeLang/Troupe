@@ -167,10 +167,34 @@ The surface is standard s-expressions, whitespace-insensitive.
   always quotes.)
 - **Integers:** optional `-`, then digits (`LNumeric (NumInt _)`). `NumInt` is `Integer` —
   unbounded; the reader must not truncate to a machine word.
-- **Floats:** decimal with a `.` and/or exponent (`LNumeric (NumFloat _)`). The printer MUST emit a
-  shortest round-trip representation of the `Double` (Haskell's `show @Double` suffices), so that
-  `read (show d) = d` — otherwise R1 fails on floats. `NaN` and `±Infinity` have no literal form and
-  are not representable; a generator for the property test must not produce them.
+- **Floats:** `LNumeric (NumFloat _)`, an IEEE-754 double. Two implementations will not spell the
+  same value the same way — Haskell renders `1.0e-3` where JavaScript renders `0.001`, and
+  `1.0` where JavaScript renders `1` — and that is allowed: what is fixed is the syntax every
+  reader must **accept**, not the syntax a writer must **emit**.
+
+  ```
+  FLOAT ::= ['-'] digit+ ['.' digit+] [('e'|'E') ['+'|'-'] digit+]
+          | ['-'] "Infinity"
+          | "NaN"
+  ```
+
+  A writer MUST emit a shortest round-trip representation, so that reading its output recovers the
+  same double. It MUST NOT emit a leading `+`, a leading `.` (`.5`), or a trailing `.` (`1.`):
+  Haskell's reader rejects the first two outright and consumes only the `1` of the third.
+
+  **Non-finite values are representable and do occur.** An overflowing source literal such as
+  `1.0e400` lexes through `read` into an infinity, so the IR can hold one, and `Infinity` /
+  `-Infinity` are the spellings both Haskell's `reads` and JavaScript's `Number` accept and
+  produce. `NaN` is accepted for completeness; no source construct produces it.
+
+  **A caveat for the laws below:** structural equality is not reflexive on `NaN`, so
+  `parse (print p) = p` cannot hold for a document carrying one. A conforming implementation
+  checks that case by asking whether the decoded value is a NaN, not whether it equals the
+  original (`compiler/test/ir-sexp-test` does this).
+
+  **Negative zero** is a distinct value that survives Haskell's `show`/`read` as `-0.0`, but
+  JavaScript's `String(-0)` is `"0"` — an implementation printing through it must special-case
+  the sign, or it silently loses the distinction.
 
 ## Grammar — node by node
 
@@ -306,26 +330,45 @@ nodes already in this grammar:
 The format thus needs no authority-specific syntax; an emitter expresses authorities through these
 existing constructs.
 
-## The round-trip law (acceptance property)
+## The interchange laws (acceptance properties)
 
-Let `print : IRProgram → Text` and `parse : Text → Either Error IRProgram`. The required law, over
-**position-erased** ASTs:
+The point of the format is that two implementations can exchange IR. Conformance is stated on the
+**decoded value**, never on bytes or on text: gzip streams from different compressors differ while
+remaining mutually readable, and the s-expression layer is whitespace-insignificant, so neither
+compression output nor layout is part of the format.
 
-> **R1 (parse ∘ print = id).** For every well-formed `p : IRProgram`,
-> `parse (printWithPositions p) = Right p` exactly, and `parse (print p) = Right p'` where `p'`
-> equals `p` structurally, modulo source positions.
+Let `print`/`parse` range over documents and `encodeBlob`/`deserialize` over blobs (see *Blobs*).
 
-Structural equality is the derived `Eq` on `FunDef`/`IRExpr`/`Lit`/…, with positions normalized.
-(`IRProgram` derives `Eq` as well as `Generic`. For `DCLabelExp`, R1 uses the *derived, syntactic* `Eq` — the `LabelExp` tree is preserved
-exactly — not the semantic `dcLabelEq`.)
+> **L1 (round trip).** For every well-formed `p`, `parse (print p) = Right p'` where `p'` is
+> structurally equal to `p`, positions included. Printing with positions erased instead gives back
+> the position-erased program.
+>
+> **L2 (text ingestion).** An implementation parses a document another implementation printed and
+> obtains a structurally equal value.
+>
+> **L3 (blob ingestion).** An implementation decompresses and decodes a blob another
+> implementation produced and obtains a structurally equal value. The blob bytes may differ.
+>
+> **L4 (framing).** `deserialize (encodeBlob u) = Right u` for every serialization unit `u`.
 
-> **R2 (print ∘ parse = id, on canonical text).** `print` produces a **canonical** form (binary
-> `and`/`or`, quoted names, constructor-name operators, no comments, fixed spacing). For canonical
-> input `t`, `print (parse t) = t`. Non-canonical but valid input (extra whitespace, comments, n-ary
-> label sugar, bare-symbol names) parses to the same AST and *re-prints canonically*.
+Structural equality is the derived `Eq` on `FunDef`/`IRExpr`/`Lit`/… — for `DCLabelExp` the
+*syntactic* `Eq`, preserving the `LabelExp` tree, not the semantic `dcLabelEq` — with the `NaN`
+caveat noted under *Floats*.
 
-**Recommended test:** a property test generating arbitrary `IRProgram` values and checking R1
-(`parse (print p) == p` up to positions). This is the implementation's primary acceptance test.
+**Making L2 and L3 observable.** Do not compare one implementation's values with another's through
+a canonical text; there is no canonical text. Compare inside one implementation: parse the other
+side's artifact with your own reader and compare against your own value using your own equality.
+The check is then symmetric, and neither side needs to reproduce the other's layout or compression.
+
+**What the laws do not require.** Identical text, identical byte length, identical gzip output,
+identical float spelling, identical line breaking. An implementation may pretty-print, or emit
+everything on one line, and remain conformant.
+
+Checked in this repository by `compiler/test/ir-sexp-test` (L1 over generated and hand-built IR),
+`compiler/test/ir-sexp-corpus` (L1 over every program in the test corpus, module graphs included),
+`compiler/test/ir-sexp-conformance` (L1–L4 over the reference documents and blobs, including one
+compressed by Node rather than Haskell), and `scripts/ir-blob-interchange.mjs` (the other direction
+of the compression check).
 
 ## Format identification and versioning
 
@@ -381,6 +424,29 @@ Example (the `a + b` program, wrapped):
 - `1` — initial grammar.
 - `2` — optional source positions (the `@` wrapper); `(program …)` no longer carries an `(atoms …)`
   list, atoms having been retired from the language.
+
+## Blobs — the mobile-code framing
+
+A blob is how a serialization unit travels: embedded per function in emitted JavaScript
+(`this.<fn>.serialized`, base64) and carried between nodes when a closure moves.
+
+```
+bytes 0-3 : "TRPI"                     format identifier
+byte  4   : version, currently 2
+bytes 5.. : gzip stream (RFC 1952) of the UTF-8 encoded document
+```
+
+The document inside is an ordinary `(troupe-ir-sexp 2 …)` whose body is either `(fun …)` — one
+function, the mobile-code case — or `(program …)`. Positions are carried: the receiving compiler
+rebuilds a source map for the relinked code from them.
+
+A reader MUST reject a blob whose identifier is absent or whose version it does not implement, and
+MUST bound decompression output (this implementation caps it at 64 MB) — blobs arrive from remote
+nodes, so a small input inflating without limit is a denial of service.
+
+Any conforming gzip implementation may produce the stream: Haskell's `zlib`, Node's `zlib` and a
+browser's `CompressionStream('gzip')` all interoperate, which L3 exists to check rather than
+assume. Compression level and therefore byte length are implementation choices.
 
 ## Conventions for a *runnable* whole program
 

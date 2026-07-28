@@ -127,6 +127,19 @@ tests:
     - tasty-hunit
     - tasty-quickcheck
     - QuickCheck
+  ir-sexp-corpus-test:
+    main: Main.hs
+    source-dirs: test/ir-sexp-corpus
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - Troupe-compiler
+    - tasty
+    - tasty-hunit
+    - directory
+    - filepath
   dclabels-prop-test:
     main: DCLabelsProps.hs
     source-dirs: test/prop

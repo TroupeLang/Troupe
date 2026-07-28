@@ -2,20 +2,13 @@
 
 module Main (main) where
 
-import qualified SynVarFolding as SVF
-import Parser
-import qualified Core as Core
-import RetDFCPS
-import qualified CaseElimination as C
 import System.Environment
 import Util.FileUtil
-import qualified ClosureConv as CC
 import qualified IR as CCIR
-import qualified IROpt
 -- import qualified RetRewrite as Rewrite
-import qualified CPSOpt as CPSOpt
 import qualified IR2Raw
 import qualified IRSexp
+import qualified Pipeline
 import qualified Raw
 import qualified Raw2Stack
 import qualified Stack
@@ -33,19 +26,12 @@ import System.IO
 import TroupeSourceMap (buildSourceMap)
 import System.Exit
 import ProcessImports
-import OpReassoc (reassocProg, fileFixityEnv)
-import Basics (isOperatorName)
-import qualified Data.Map as Map
-import qualified ModuleHash
 import DepsFile (DepEntry(..), depsFilePath, readDepsFile, writeDepsFile, lookupPinByPath)
 import Direct (Prog(..))
 import Basics (Imports(..), importPath)
 import System.Directory (createDirectoryIfMissing)
-import AddAmbientMethods
-import ShowIndent
 import Exports
 import CompileMode
-import Control.Monad.Except
 import Control.Monad (when)
 import System.Console.GetOpt
 import Data.List as List
@@ -70,10 +56,7 @@ data Flag
   | DebugPP
   | PPPosFormat String
   | EmitIRSexp
-  -- | Modifier for --emit-ir-sexp: keep source positions in the emitted text.
-  | IRSexpPositions
   | IngestIRSexp
-  | VerifyIRSexp
   -- | Establish/update the dependencies file for a program (the maintenance
   -- utility): resolve and hash the module graph and record actual hashes as
   -- pins, instead of enforcing existing pins. A driver-facing subcommand.
@@ -99,9 +82,7 @@ options =
   , Option []    ["debug-pp"]  (NoArg DebugPP)            "show positions in IR dumps"
   , Option []    ["pp-pos-format"] (ReqArg PPPosFormat "FMT") "position format: inline|comment|bracket|none"
   , Option []    ["emit-ir-sexp"]   (NoArg EmitIRSexp)   "compile a .trp and emit the IR as troupe-ir-sexp text (to -o FILE, else stdout)"
-  , Option []    ["ir-sexp-positions"] (NoArg IRSexpPositions) "with --emit-ir-sexp: keep source positions in the emitted text"
   , Option []    ["ingest-ir-sexp"] (NoArg IngestIRSexp) "read a troupe-ir-sexp file and compile it to JS (program must be self-contained; no ambient methods are injected)"
-  , Option []    ["verify-ir-sexp"] (NoArg VerifyIRSexp) "compile a .trp, print its IR as troupe-ir-sexp both with and without positions, re-parse each, and check the ASTs match"
   , Option []    ["update-deps"]    (NoArg UpdateDeps)   "establish/update the program's dependencies file (<main>.deps.json) with actual module hashes, instead of enforcing pins"
   , Option []    ["datatype-hashes"] (NoArg DatatypeHashes) "print the content hash and canonical form of each datatype group declared in the file, then stop"
   ]
@@ -116,239 +97,141 @@ options =
 -- utility to record; ignored on a normal enforcing compile).
 process :: PinCheck -> FilePath -> [Flag] -> Maybe String -> String -> IO ([DepEntry], ExitCode)
 process pin root flags fname input = do
-  let ast    = parseProg (maybe "" id fname) input
-
-  let compileMode = if LibMode `elem` flags then Library else Normal
-
   let verbose = Verbose `elem` flags
-      noRawOpt = NoRawOpt `elem` flags
-      debugJS = Debug `elem` flags
-      sourceMapEnabled = SourceMap `elem` flags
-      debugPP = DebugPP `elem` flags
-      isPPPosFormatFlag (PPPosFormat _) = True
-      isPPPosFormatFlag _ = False
-      ppPosFormatStr = case List.find isPPPosFormatFlag flags of
-                         Just (PPPosFormat s) -> s
-                         _ -> "inline"
-      ppConfig = PPrint.mkPPConfig debugPP (PPrint.parsePosFormat ppPosFormatStr)
+      copts    = compileOpts flags
 
-  case ast of
-    Left err -> do
-      die err
-
-    Right prog_parsed -> do
+  do
       let outPath = outFile flags (fromJust fname)
-
-      -- To print all tokens from the parser, uncomment the following line:
-      -- debugTokens (Right tks) = mapM_ print tks
 
       ------------------------------------------------------
       -- TROUPE (FRONTEND) ---------------------------------
-      -- Ambient-method injection is deferred to after syntactic-variant folding
-      -- (see the fold block below); processImports therefore runs on the raw
-      -- parsed program. Module imports resolve relative to this file, displayed
-      -- relative to the project root.
-      (sprog, resolvedDeps) <- processImports pin root (maybe "" id fname) prog_parsed
-
-      -- The parse-phase program (flat operator chains); this is what the
-      -- SYNTAX dump shows.
-      when verbose $ do printSep "SYNTAX"
-                        writeFileD "out/out.syntax" (showIndent 2 sprog)
-                        putStrLn (showIndent 2 sprog)
-
-      -- Re-association: rebuild operator chains into the Direct operator
-      -- tree from the fixity environment (built-ins seeded; user operators
-      -- from declarations and imports once those land).
-      prog <- case runExcept (reassocProg sprog) of
-                Right p -> return p
-                Left s  -> die s
-      when verbose $ do printSep "OPERATOR REASSOCIATION"
-                        writeFileD "out/out.opreassoc" (showIndent 2 prog)
-
-      exports <- case compileMode of Library -> case runExcept (extractExports prog) of
-                                                     Right es -> return (Just (es))
-                                                     Left s   -> die s
-                                     _       -> return Nothing
-      ------------------------------------------------------
-      -- Syntactic-variant folding runs on the user program before the ambient
-      -- methods are injected, so the folder never inspects the generated
-      -- declarations and a datatype constructor may shadow an ambient builtin.
-      foldRes <- case runExcept (SVF.foldProg prog) of
-        Right r -> return r
-        Left s -> die s
-      let localGroups    = SVF.frLocal foldRes      -- [(group hash, canonical form)]
-          consumedRecord = SVF.frConsumed foldRes   -- [(library, consumed hashes)]
-          folded = case compileMode of Normal -> addAmbientMethods (SVF.frProg foldRes)
-                                       _      -> SVF.frProg foldRes
+      folded <- Pipeline.frontEndFold pin root copts (maybe "" id fname) input
+      let sprog          = Pipeline.fdSurface folded
+          prog           = Pipeline.fdProg folded
+          localGroups    = Pipeline.fdLocal folded      -- [(group hash, canonical form)]
+          consumedRecord = Pipeline.fdConsumed folded   -- [(library, consumed hashes)]
+          exports        = Pipeline.fdExports folded
+          resolvedDeps   = Pipeline.fdDeps folded
 
       when (DatatypeHashes `elem` flags) $ do
         putStr (datatypeHashReport localGroups)
         exitSuccess
 
-      prog' <- case runExcept (C.trans compileMode folded) of
-        Right p -> return p
-        Left s -> die s
-      when verbose $ do printSep "PATTERN MATCH ELIMINATION"
-                        writeFileD "out/out.nopats" (showIndent 2 prog')
-      ------------------------------------------------------
-      let lowered = Core.lowerProg prog'
-      when verbose $ do printSep  "LOWERING FUNS AND LETS"
-                        writeFileD "out/out.lowered" (showIndent 2 lowered)
-      ------------------------------------------------------
-      renamed <- case runExcept (Core.renameProg lowered) of
-        Right p -> return p
-        Left s -> die $ "troupec: " ++ s
-      when verbose $ do printSep "α RENAMING"
-                        writeFileD "out/out.alpha" (showIndent 2 renamed)
-      ------------------------------------------------------
-      let cpsed = RetDFCPS.transProg renamed
-      when verbose $ do printSep "CPSED"
-                        writeFileD "out/out.cps" (showIndent 2 cpsed)
-      ------------------------------------------------------
-      let rwcps = CPSOpt.rewrite cpsed
-      when verbose $ do printSep  "REWRITING CPS"
-                        writeFileD "out/out.cpsopt" (showIndent 2 rwcps)
-
       ------------------------------------------------------
       ------ IR (BACKEND) ----------------------------------
-      ir <- case runExcept (CC.closureConvert compileMode rwcps) of 
-          Right ir -> return ir 
-          Left  s -> die $ "troupec: " ++ s
-
-      when verbose $ writeFileD "out/out.ir" (PP.render $ PPrint.runPP ppConfig $ CCIR.ppProg ir)
-
-      let iropt = IROpt.iropt ir
-      when verbose $ writeFileD "out/out.iropt" (PP.render $ PPrint.runPP ppConfig $ CCIR.ppProg iropt)
+      iropt <- Pipeline.frontEndIR copts folded
 
       ------ EMIT troupe-ir-sexp (and stop) ----------------
       when (EmitIRSexp `elem` flags) $ do
-        let sexp = if IRSexpPositions `elem` flags
-                     then IRSexp.printProgWithPos iropt
-                     else IRSexp.printProg iropt
+        let sexp = IRSexp.printProgWithPos iropt
         case List.find isOutputFile flags of
           Just (OutputFile f) -> writeFile f sexp
           _                   -> putStr sexp
         exitSuccess
 
-      ------ VERIFY troupe-ir-sexp round-trips ------------
-      -- Both laws: with positions the AST comes back exactly; without them it
-      -- comes back position-erased. Every compilation unit is checked, module
-      -- components of a program included, so the check covers the whole module
-      -- graph rather than the main program alone.
-      let unitLabel = if ModuleArtifact `elem` flags
-                        then " (module " ++ maybe "?" takeFileName fname ++ ")"
-                        else ""
-      when (VerifyIRSexp `elem` flags) $ do
-        let check what expected printed =
-              case IRSexp.parseProg printed of
-                Left err -> die ("troupe-ir-sexp round-trip FAILED (" ++ what
-                                 ++ ", parse): " ++ err)
-                Right ir2
-                  | ir2 == expected -> return ()
-                  | otherwise -> die ("troupe-ir-sexp round-trip FAILED (" ++ what
-                                      ++ ", ASTs differ)")
-        check "with positions" iropt (IRSexp.printProgWithPos iropt)
-        check "positions erased" (IRSexp.erasePosProg iropt) (IRSexp.printProg iropt)
-        putStrLn ("troupe-ir-sexp round-trip OK" ++ unitLabel)
-        -- A module inside a program's graph must go on to produce its artifact:
-        -- the compile that consumes it reads its .exports. Only the main unit
-        -- stops here.
-        when (ModuleArtifact `notElem` flags) exitSuccess
+      emitJS outPath root flags copts folded iropt
 
-      ------ RAW -------------------------------------------
-      let raw = IR2Raw.prog2raw iropt
-      when verbose $ printSep  "GENERATING RAW"
-      when verbose $ writeFileD "out/out.rawout" (PP.render $ PPrint.runPP ppConfig $ Raw.ppProg raw)
-
-      ----- RAW OPT ----------------------------------------
-      rawopt <- do
-        if noRawOpt
-        then return raw
-        else do
-          let opt = RawOpt.rawopt raw
-          when verbose $ printSep  "OPTIMIZING RAW OPT"
-          when verbose $ writeFileD "out/out.rawopt" (PP.render $ PPrint.runPP ppConfig $ Raw.ppProg opt)
-          return opt
-
-      ----- STACK ------------------------------------------
-      let stack = Raw2Stack.rawProg2Stack rawopt
-      when verbose $ printSep "GENERATING STACK"
-      when verbose $ writeFileD "out/out.stack" (PP.render $ PPrint.runPP ppConfig $ Stack.ppProg stack)
-
-      ----- JAVASCRIPT -------------------------------------
-      -- The compiled artifact embeds its datatype records (spec §10): a library
-      -- carries its own exported group hashes; any artifact that consumed
-      -- imported datatypes carries the per-library consumed hashes.
-      let records = Stack2JS.DatatypeRecords
-                      { Stack2JS.drExported = map fst localGroups
-                      , Stack2JS.drConsumed = consumedRecord }
-      -- Record the project root and the dependencies file in the program when
-      -- it (transitively) uses modules, so the runtime can seed its
-      -- hash -> (location, name) resolver and locate compiled artifacts.
-      let usesModules = let Prog (Imports imps) _ _ = prog
-                        in any (\imp -> importPath imp /= Nothing) imps
-          isProgram = usesModules && not (LibMode `elem` flags)
-          moduleRoot     = if isProgram then Just root else Nothing
-          moduleDepsFile = if isProgram then Just (depsFilePath (fromJust fname)) else Nothing
-      let (stackjs, mappings) = Stack2JS.stack2JSWithMappings compileMode
-                                                              debugJS
-                                                              sourceMapEnabled
-                                                              records
-                                                              moduleRoot
-                                                              moduleDepsFile
-                                                              (Stack.ProgramStackUnit stack)
-
-      ----- SOURCE MAP EMBEDDING ---------------------------
-      -- When source maps are enabled, replace the placeholder with actual source map JSON.
-      -- Also append the inline source map comment for Node.js --enable-source-maps compatibility.
-      let finalJs = if sourceMapEnabled
-                    then let mapJson = buildSourceMap outPath mappings
-                             mapJsonStr = BSLazyChar8.unpack (Aeson.encode mapJson)
-                             -- Replace placeholder with actual source map JSON using Data.Text.replace
-                             jsWithMap = T.unpack $ T.replace
-                                           (T.pack Stack2JS.sourceMapPlaceholderStr)
-                                           (T.pack mapJsonStr)
-                                           (T.pack stackjs)
-                             -- Also add inline comment for backwards compatibility
-                             mapBytes = BL.toStrict (Aeson.encode mapJson)
-                             mapBase64 = B64.encode mapBytes
-                             inlineComment = "\n//# sourceMappingURL=data:application/json;charset=utf-8;base64,"
-                                             ++ BS.unpack mapBase64 ++ "\n"
-                         in jsWithMap ++ inlineComment
-                    else stackjs
-      -- Atomic: a module artifact's .js may be read by another program's
-      -- runtime while a parallel build rewrites it.
-      atomicWriteFileD outPath finalJs
-
-      -- A program-module artifact records its own content hash in its
-      -- @.exports@ (the identity its consumers pick up); a stdlib library
-      -- carries no such line.
-      let moduleHashVal = if ModuleArtifact `elem` flags
-                          then Just (ModuleHash.moduleHash iropt)
-                          else Nothing
-      case exports of
-        Nothing -> return ()
-        Just es -> do
-          -- Every exported operator carries its fixity into the interface;
-          -- a symbolic export without a fixity in the file's environment
-          -- (local declarations plus unqualified imports, so re-export
-          -- propagates) is an error.
-          fixEnv <- case runExcept (fileFixityEnv sprog) of
-                      Right m -> return m
-                      Left s  -> die s
-          let opNames = filter isOperatorName es
-          exportedFixities <-
-            mapM (\v -> case Map.lookup v fixEnv of
-                          Just f  -> return (v, f)
-                          Nothing -> die $ "exported operator '" ++ v
-                                     ++ "' needs a fixity declaration in this file's header")
-                 opNames
-          writeExports outPath
-            (exportsFileContent moduleHashVal es localGroups exportedFixities)
+      Pipeline.writeUnitExports outPath (ModuleArtifact `elem` flags) folded iropt
 
       ----- EPILOGUE --------------------------------------
       when verbose printHr
       return (resolvedDeps, ExitSuccess)
+
+-- | Flags to pipeline options. Stage dumps are the executable's business: the
+-- pipeline hands them out, this decides they become files under out/ (and
+-- nothing at all unless -v).
+compileOpts :: [Flag] -> Pipeline.CompileOpts
+compileOpts flags =
+  Pipeline.CompileOpts { Pipeline.coMode     = if LibMode `elem` flags then Library else Normal
+                       , Pipeline.coDump     = dump
+                       , Pipeline.coPPConfig = ppConfig }
+  where
+    dump | Verbose `elem` flags = Pipeline.StageDump { Pipeline.dumpSep  = printSep
+                                                     , Pipeline.dumpFile = writeFileD
+                                                     , Pipeline.dumpEcho = putStrLn }
+         | otherwise            = Pipeline.silentDump
+    ppConfig = PPrint.mkPPConfig (DebugPP `elem` flags) (PPrint.parsePosFormat ppPosFormatStr)
+    isPPPosFormatFlag (PPPosFormat _) = True
+    isPPPosFormatFlag _               = False
+    ppPosFormatStr = case List.find isPPPosFormatFlag flags of
+                       Just (PPPosFormat s) -> s
+                       _                    -> "inline"
+
+-- | IR to JavaScript on disk: Raw, Raw optimization, stack layout, emission,
+-- source map. Used for the main compilation unit and for each module in a
+-- program's import graph.
+emitJS :: FilePath -> FilePath -> [Flag] -> Pipeline.CompileOpts
+       -> Pipeline.Folded -> CCIR.IRProgram -> IO ()
+emitJS outPath root flags copts folded iropt = do
+  let verbose          = Verbose `elem` flags
+      noRawOpt         = NoRawOpt `elem` flags
+      debugJS          = Debug `elem` flags
+      sourceMapEnabled = SourceMap `elem` flags
+      compileMode      = Pipeline.coMode copts
+      ppConfig         = Pipeline.coPPConfig copts
+
+  ------ RAW -------------------------------------------
+  let raw = IR2Raw.prog2raw iropt
+  when verbose $ printSep  "GENERATING RAW"
+  when verbose $ writeFileD "out/out.rawout" (PP.render $ PPrint.runPP ppConfig $ Raw.ppProg raw)
+
+  ----- RAW OPT ----------------------------------------
+  rawopt <- do
+    if noRawOpt
+    then return raw
+    else do
+      let opt = RawOpt.rawopt raw
+      when verbose $ printSep  "OPTIMIZING RAW OPT"
+      when verbose $ writeFileD "out/out.rawopt" (PP.render $ PPrint.runPP ppConfig $ Raw.ppProg opt)
+      return opt
+
+  ----- STACK ------------------------------------------
+  let stack = Raw2Stack.rawProg2Stack rawopt
+  when verbose $ printSep "GENERATING STACK"
+  when verbose $ writeFileD "out/out.stack" (PP.render $ PPrint.runPP ppConfig $ Stack.ppProg stack)
+
+  ----- JAVASCRIPT -------------------------------------
+  -- The compiled artifact embeds its datatype records: a library carries its
+  -- own exported group hashes; any artifact that consumed imported datatypes
+  -- carries the per-library consumed hashes.
+  let records = Stack2JS.DatatypeRecords
+                  { Stack2JS.drExported = map fst (Pipeline.fdLocal folded)
+                  , Stack2JS.drConsumed = Pipeline.fdConsumed folded }
+  -- Record the project root and the dependencies file in the program when it
+  -- (transitively) uses modules, so the runtime can seed its
+  -- hash -> (location, name) resolver and locate compiled artifacts.
+  let usesModules = let Prog (Imports imps) _ _ = Pipeline.fdProg folded
+                    in any (\imp -> importPath imp /= Nothing) imps
+      isProgram = usesModules && not (LibMode `elem` flags)
+      moduleRoot     = if isProgram then Just root else Nothing
+      moduleDepsFile = if isProgram then Just (depsFilePath outPath) else Nothing
+  let (stackjs, mappings) = Stack2JS.stack2JSWithMappings compileMode
+                                                          debugJS
+                                                          sourceMapEnabled
+                                                          records
+                                                          moduleRoot
+                                                          moduleDepsFile
+                                                          (Stack.ProgramStackUnit stack)
+
+  ----- SOURCE MAP EMBEDDING ---------------------------
+  -- When source maps are enabled, replace the placeholder with the source map
+  -- JSON, and append the inline comment Node's --enable-source-maps reads.
+  let finalJs = if sourceMapEnabled
+                then let mapJson = buildSourceMap outPath mappings
+                         mapJsonStr = BSLazyChar8.unpack (Aeson.encode mapJson)
+                         jsWithMap = T.unpack $ T.replace
+                                       (T.pack Stack2JS.sourceMapPlaceholderStr)
+                                       (T.pack mapJsonStr)
+                                       (T.pack stackjs)
+                         mapBytes = BL.toStrict (Aeson.encode mapJson)
+                         mapBase64 = B64.encode mapBytes
+                         inlineComment = "\n//# sourceMappingURL=data:application/json;charset=utf-8;base64,"
+                                         ++ BS.unpack mapBase64 ++ "\n"
+                     in jsWithMap ++ inlineComment
+                else stackjs
+  -- Atomic: a module artifact's .js may be read by another program's runtime
+  -- while a parallel build rewrites it.
+  atomicWriteFileD outPath finalJs
 
 isOutputFile :: Flag -> Bool
 isOutputFile (OutputFile _) = True
@@ -559,14 +442,12 @@ main = do
           -- consumers), then the file itself. Modules compile as content-hashed
           -- library artifacts (LibMode + ModuleArtifact); per-module dumps are
           -- not written (Verbose stays top-level only).
-          -- VerifyIRSexp propagates so each module in the graph is checked too;
-          -- EmitIRSexp deliberately does not (one document per invocation).
-          let moduleFlags = LibMode : ModuleArtifact
-                              : filter (`elem` [NoRawOpt, Debug, VerifyIRSexp]) o
-          mapM_ (\m -> do createDirectoryIfMissing True (takeDirectory m </> "out")
-                          minput <- readFile m
-                          _ <- process pin root moduleFlags (Just m) minput
-                          return ()) mods
+          let moduleFlags = LibMode : ModuleArtifact : filter (`elem` [NoRawOpt, Debug]) o
+          _ <- pure mods
+          Pipeline.compileModuleGraph pin root (compileOpts moduleFlags) file
+            (\m folded iropt ->
+               emitJS (Pipeline.moduleOutPath m) root moduleFlags (compileOpts moduleFlags)
+                      folded iropt)
           (_, ec) <- process pin root o (Just file) input
           return ec
 

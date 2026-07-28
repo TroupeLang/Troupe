@@ -36,6 +36,7 @@ import           GHC.Generics              (Generic)
 import           Text.PrettyPrint.HughesPJ (hsep, nest, text, vcat, ($$), (<+>))
 import qualified Text.PrettyPrint.HughesPJ as PP
 import           TroupePositionInfo (Located(..))
+import           Sexp
 import           PrettyPrint (PP, runPP, runPPDefault, ppLocated, vcatMapPP, ShowDebug(..))
 
 ------------------------------------------------------------
@@ -686,3 +687,244 @@ ppFunCall fn args = fn <+> ppArgs args
 
 
 
+
+
+------------------------------------------------------------
+-- s-expression serialization (see "Sexp")
+--
+-- One instance per IR type, matched constructor by constructor, so that a new
+-- IR constructor fails to compile here until it is given an encoding. The
+-- document wrapper that carries the format version lives in "IRSexp".
+------------------------------------------------------------
+
+-- | The maximum 'ProjIdx' value permitted (2^31 - 1).
+maxProjIdx :: Integer
+maxProjIdx = 2147483647
+
+instance ToSexp IRProgram where
+  toSexp (IRProgram funs) = Lst (Atom "program" : map toSexp funs)
+
+instance FromSexp IRProgram where
+  fromSexp (Lst (Atom "program" : funDs)) = IRProgram <$> mapM fromSexp funDs
+  fromSexp d = Left ("expected (program ...), got " ++ headHint d)
+
+instance ToSexp HFN where
+  toSexp (HFN h) = Str h
+
+instance FromSexp HFN where
+  fromSexp d = HFN <$> asName d
+
+instance ToSexp FunDef where
+  toSexp (FunDef hfn arg consts body) =
+    Lst [ Atom "fun"
+        , toSexp hfn
+        , Lst [Atom "arg", toSexp arg]
+        , encodeConsts consts
+        , toSexp body
+        ]
+
+instance FromSexp FunDef where
+  fromSexp (Lst [Atom "fun", nameD, argD, constsD, bodyD]) = do
+    name <- asName nameD
+    context ("in function " ++ show name) $ do
+      arg    <- decodeArg argD
+      consts <- decodeConsts constsD
+      body   <- fromSexp bodyD
+      Right (FunDef (HFN name) arg consts body)
+  fromSexp d = Left ("expected (fun NAME (arg NAME) CONSTS BODY), got " ++ headHint d)
+
+encodeConsts :: Consts -> Datum
+encodeConsts consts = Lst (Atom "consts" : map enc consts)
+  where enc (v, lit) = Lst [toSexp v, toSexp lit]
+
+decodeArg :: Datum -> Either String LVarName
+decodeArg (Lst [Atom "arg", nD]) = fromSexp nD
+decodeArg d = Left ("expected (arg NAME), got " ++ headHint d)
+
+decodeConsts :: Datum -> Either String Consts
+decodeConsts (Lst (Atom "consts" : ps)) = mapM decodeConst ps
+decodeConsts d = Left ("expected (consts ...), got " ++ headHint d)
+
+decodeConst :: Datum -> Either String (VarName, C.Lit)
+decodeConst (Lst [nD, litD]) = do
+  n <- fromSexp nD
+  l <- fromSexp litD
+  Right (n, l)
+decodeConst d = Left ("expected (NAME LIT) const binding, got " ++ headHint d)
+
+instance ToSexp IRBBTree where
+  toSexp (BB insts term) =
+    Lst [Atom "bb", Lst (map toSexp insts), toSexp term]
+
+instance FromSexp IRBBTree where
+  fromSexp (Lst [Atom "bb", instsD, termD]) = do
+    instDs <- expectList instsD
+    insts  <- mapM fromSexp instDs
+    term   <- fromSexp termD
+    Right (BB insts term)
+  fromSexp d = Left ("expected (bb (INST*) TERM), got " ++ headHint d)
+
+instance ToSexp IRInst where
+  toSexp (Assign v e) = Lst [Atom "assign", toSexp v, toSexp e]
+  toSexp (MkFunClosures caps clos) =
+    Lst [ Atom "mkclos"
+        , Lst (map encCap caps)
+        , Lst (map encClo clos)
+        ]
+    where encCap (v, lva) = Lst [toSexp v, toSexp lva]
+          encClo (v, hfn) = Lst [toSexp v, toSexp hfn]
+
+instance FromSexp IRInst where
+  fromSexp (Lst [Atom "assign", nD, eD]) = do
+    n <- fromSexp nD
+    e <- fromSexp eD
+    Right (Assign n e)
+  fromSexp (Lst [Atom "mkclos", capsD, closD]) = do
+    capDs <- expectList capsD
+    cloDs <- expectList closD
+    caps  <- mapM decodeCap capDs
+    clos  <- mapM decodeClo cloDs
+    Right (MkFunClosures caps clos)
+  fromSexp d = Left ("expected (assign ...) or (mkclos ...), got " ++ headHint d)
+
+decodeCap :: Datum -> Either String (VarName, LVarAccess)
+decodeCap (Lst [nD, vaD]) = do
+  n  <- fromSexp nD
+  va <- fromSexp vaD
+  Right (n, va)
+decodeCap d = Left ("expected (NAME VARACCESS) capture, got " ++ headHint d)
+
+decodeClo :: Datum -> Either String (VarName, HFN)
+decodeClo (Lst [nD, hD]) = do
+  n <- fromSexp nD
+  h <- fromSexp hD
+  Right (n, h)
+decodeClo d = Left ("expected (NAME HFN) closure, got " ++ headHint d)
+
+instance ToSexp IRExpr where
+  toSexp (Bin op a b)        = Lst [Atom "bin", toSexp op, toSexp a, toSexp b]
+  toSexp (Un op a)           = Lst [Atom "un", toSexp op, toSexp a]
+  toSexp (Tuple vas tag)     = Lst (Atom (if tag then "tuple-variant" else "tuple")
+                                    : map toSexp vas)
+  toSexp (Record fields)     = Lst (Atom "record" : map encField fields)
+  toSexp (WithRecord lva fs) = Lst (Atom "with-record" : toSexp lva : map encField fs)
+  toSexp (ProjField lva f)   = Lst [Atom "proj-field", toSexp lva, Str f]
+  toSexp (ProjIdx lva w)     = Lst [Atom "proj-idx", toSexp lva, toSexp (toInteger w)]
+  toSexp (List vas)          = Lst (Atom "list" : map toSexp vas)
+  toSexp (ListCons a b)      = Lst [Atom "cons", toSexp a, toSexp b]
+  toSexp (Const lit)         = Lst [Atom "const", toSexp lit]
+  toSexp (Base v)            = Lst [Atom "base", Str v]
+  toSexp (Lib l v)           = Lst [Atom "lib", toSexp l, Str v]
+
+instance FromSexp IRExpr where
+  fromSexp (Lst (Atom "bin" : opD : rest)) =
+    case rest of
+      [aD, bD] -> do op <- fromSexp opD
+                     a  <- fromSexp aD
+                     b  <- fromSexp bD
+                     Right (Bin op a b)
+      _ -> Left "bin expects an operator and two operands"
+  fromSexp (Lst [Atom "un", opD, aD]) = do
+    op <- fromSexp opD
+    a  <- fromSexp aD
+    Right (Un op a)
+  fromSexp (Lst (Atom "tuple" : vas)) =
+    Tuple <$> mapM fromSexp vas <*> pure False
+  fromSexp (Lst (Atom "tuple-variant" : vas)) =
+    Tuple <$> mapM fromSexp vas <*> pure True
+  fromSexp (Lst (Atom "record" : fields)) =
+    Record <$> mapM decodeField fields
+  fromSexp (Lst (Atom "with-record" : lvaD : fields)) = do
+    lva <- fromSexp lvaD
+    fs  <- mapM decodeField fields
+    Right (WithRecord lva fs)
+  fromSexp (Lst [Atom "proj-field", lvaD, fD]) = do
+    lva <- fromSexp lvaD
+    f   <- asName fD
+    Right (ProjField lva f)
+  fromSexp (Lst [Atom "proj-idx", lvaD, wD]) = do
+    lva <- fromSexp lvaD
+    w   <- decodeProjIdx wD
+    Right (ProjIdx lva w)
+  fromSexp (Lst (Atom "list" : vas)) =
+    List <$> mapM fromSexp vas
+  fromSexp (Lst [Atom "cons", aD, bD]) = do
+    a <- fromSexp aD
+    b <- fromSexp bD
+    Right (ListCons a b)
+  fromSexp (Lst [Atom "const", litD]) =
+    Const <$> fromSexp litD
+  fromSexp (Lst [Atom "base", vD]) =
+    Base <$> asName vD
+  fromSexp (Lst [Atom "lib", lD, vD]) = do
+    l <- fromSexp lD
+    v <- asName vD
+    Right (Lib l v)
+  fromSexp d = Left ("not a valid expression, got " ++ headHint d)
+
+encField :: (Basics.FieldName, LVarAccess) -> Datum
+encField (name, lva) = Lst [Str name, toSexp lva]
+
+decodeField :: Datum -> Either String (Basics.FieldName, LVarAccess)
+decodeField (Lst [nD, vaD]) = do
+  n  <- asName nD
+  va <- fromSexp vaD
+  Right (n, va)
+decodeField d = Left ("expected (NAME VARACCESS) field, got " ++ headHint d)
+
+decodeProjIdx :: Datum -> Either String Word
+decodeProjIdx d = do
+  i <- fromSexp d
+  if i < 0
+    then Left ("ProjIdx index must be non-negative: " ++ show i)
+    else if i > maxProjIdx
+      then Left ("ProjIdx index exceeds maximum (" ++ show maxProjIdx ++ "): " ++ show i)
+      else Right (fromInteger i)
+
+instance ToSexp IRTerminator where
+  toSexp (TailCall f a)            = Lst [Atom "tail-call", toSexp f, toSexp a]
+  toSexp (Ret a)                   = Lst [Atom "ret", toSexp a]
+  toSexp (If c t e)                = Lst [Atom "if", toSexp c, toSexp t, toSexp e]
+  toSexp (AssertElseError c bb er) = Lst [Atom "assert-else-error", toSexp c, toSexp bb, toSexp er]
+  toSexp (LibExport a)             = Lst [Atom "lib-export", toSexp a]
+  toSexp (Error a)                 = Lst [Atom "error", toSexp a]
+  toSexp (StackExpand v b1 b2)     = Lst [Atom "stack-expand", toSexp v, toSexp b1, toSexp b2]
+
+instance FromSexp IRTerminator where
+  fromSexp (Lst [Atom "tail-call", fD, aD]) = do
+    f <- fromSexp fD
+    a <- fromSexp aD
+    Right (TailCall f a)
+  fromSexp (Lst [Atom "ret", aD]) =
+    Ret <$> fromSexp aD
+  fromSexp (Lst [Atom "if", cD, tD, eD]) = do
+    c <- fromSexp cD
+    t <- fromSexp tD
+    e <- fromSexp eD
+    Right (If c t e)
+  fromSexp (Lst [Atom "assert-else-error", cD, bbD, errD]) = do
+    c   <- fromSexp cD
+    bb  <- fromSexp bbD
+    err <- fromSexp errD
+    Right (AssertElseError c bb err)
+  fromSexp (Lst [Atom "lib-export", aD]) =
+    LibExport <$> fromSexp aD
+  fromSexp (Lst [Atom "error", aD]) =
+    Error <$> fromSexp aD
+  fromSexp (Lst [Atom "stack-expand", nD, b1D, b2D]) = do
+    n  <- fromSexp nD
+    b1 <- fromSexp b1D
+    b2 <- fromSexp b2D
+    Right (StackExpand n b1 b2)
+  fromSexp d = Left ("not a valid terminator, got " ++ headHint d)
+
+instance ToSexp VarAccess where
+  toSexp (VarLocal v) = Lst [Atom "local", toSexp v]
+  toSexp (VarEnv v)   = Lst [Atom "env", toSexp v]
+  toSexp VarFunSelfRef = Atom "self"
+
+instance FromSexp VarAccess where
+  fromSexp (Lst [Atom "local", nD]) = VarLocal <$> fromSexp nD
+  fromSexp (Lst [Atom "env", nD])   = VarEnv <$> fromSexp nD
+  fromSexp (Atom "self")            = Right VarFunSelfRef
+  fromSexp d = Left ("not a valid variable access, got " ++ headHint d)

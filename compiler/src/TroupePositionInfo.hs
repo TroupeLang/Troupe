@@ -21,6 +21,7 @@ where
 
 import GHC.Generics(Generic)
 import Data.Serialize (Serialize)
+import Sexp (ToSexp(..), FromSexp(..))
 
 data PosInf = SrcPosInf String Int Int
             | RTGen String
@@ -83,3 +84,17 @@ mapLoc = fmap
 -- | Combine two located values, keeping the position of the first
 withLocOf :: Located a -> b -> Located b
 withLocOf (Loc p _) x = Loc p x
+
+------------------------------------------------------------
+-- s-expression serialization (see "Sexp")
+------------------------------------------------------------
+
+-- | Positions are not represented in troupe-ir-sexp version 1: encoding a
+-- located value writes its payload, and decoding fills 'NoPos'. The round-trip
+-- law is therefore stated over position-erased ASTs
+-- (@compiler/docs/spec-troupe-ir-sexp.md@).
+instance ToSexp a => ToSexp (Located a) where
+  toSexp = toSexp . unLoc
+
+instance FromSexp a => FromSexp (Located a) where
+  fromSexp d = noLoc <$> fromSexp d

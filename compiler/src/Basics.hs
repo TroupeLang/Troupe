@@ -7,6 +7,7 @@ where
 
 import GHC.Generics(Generic)
 import Data.Serialize (Serialize)
+import Sexp
 
 type VarName = String
 type FieldName = String
@@ -197,3 +198,66 @@ consPrec = 6000
 
 projPrec :: Precedence 
 projPrec = 6100
+
+
+------------------------------------------------------------
+-- s-expression serialization (see "Sexp")
+------------------------------------------------------------
+
+-- | Operator name tables: Haskell constructor names, verbatim. One table per
+-- operator type serves both directions, so the two cannot drift apart. A new
+-- operator does not break the build here -- 'nameOf' fails at run time instead;
+-- the round-trip suite covers every constructor
+-- (@compiler/test/ir-sexp-test@).
+binOpTable :: [(String, BinOp)]
+binOpTable =
+  [ ("Plus", Plus), ("Minus", Minus), ("Mult", Mult), ("Div", Div)
+  , ("Mod", Mod), ("Eq", Eq), ("Neq", Neq), ("Le", Le), ("Lt", Lt)
+  , ("Ge", Ge), ("Gt", Gt), ("And", And), ("Or", Or)
+  , ("RaisedTo", RaisedTo), ("Concat", Concat)
+  , ("IntDiv", IntDiv), ("BinAnd", BinAnd), ("BinOr", BinOr)
+  , ("BinXor", BinXor), ("BinShiftLeft", BinShiftLeft)
+  , ("BinShiftRight", BinShiftRight), ("BinZeroShiftRight", BinZeroShiftRight)
+  , ("HasField", HasField), ("LatticeJoin", LatticeJoin)
+  ]
+
+unOpTable :: [(String, UnaryOp)]
+unOpTable =
+  [ ("IsList", IsList), ("IsTuple", IsTuple), ("IsRecord", IsRecord)
+  , ("Head", Head), ("Tail", Tail)
+  , ("ListLength", ListLength), ("TupleLength", TupleLength)
+  , ("RecordSize", RecordSize), ("LevelOf", LevelOf)
+  , ("UnMinus", UnMinus), ("Not", Not)
+  ]
+
+nameOf :: Eq a => String -> [(String, a)] -> a -> String
+nameOf what tbl x =
+  case [ n | (n, y) <- tbl, y == x ] of
+    (n : _) -> n
+    []      -> error ("Basics.nameOf: missing " ++ what)
+
+instance ToSexp BinOp where
+  toSexp = Atom . nameOf "BinOp" binOpTable
+
+instance FromSexp BinOp where
+  fromSexp d = do
+    s <- asToken d
+    case lookup s binOpTable of
+      Just op -> Right op
+      Nothing -> Left ("unknown binary operator: " ++ s)
+
+instance ToSexp UnaryOp where
+  toSexp = Atom . nameOf "UnaryOp" unOpTable
+
+instance FromSexp UnaryOp where
+  fromSexp d = do
+    s <- asToken d
+    case lookup s unOpTable of
+      Just op -> Right op
+      Nothing -> Left ("unknown unary operator: " ++ s)
+
+instance ToSexp LibName where
+  toSexp (LibName l) = Str l
+
+instance FromSexp LibName where
+  fromSexp d = LibName <$> asName d

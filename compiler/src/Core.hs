@@ -25,6 +25,7 @@ module Core (   Lambda (..)
 where
 import GHC.Generics(Generic)
 import Data.Serialize (Serialize)
+import Sexp
 
 import           Basics
 import qualified DirectWOPats as D
@@ -740,3 +741,32 @@ termPrec (App _ _)         = appPrec
 termPrec (Bin op _ _)      = opPrec op
 termPrec (ListCons _ _)    = 200
 termPrec _                 = 0
+
+
+------------------------------------------------------------
+-- s-expression serialization (see "Sexp")
+------------------------------------------------------------
+
+instance ToSexp Lit where
+  toSexp (LNumeric (NumInt i))   = Lst [Atom "int", toSexp i]
+  toSexp (LNumeric (NumFloat d)) = Lst [Atom "float", toSexp d]
+  toSexp (LString s)             = Lst [Atom "string", Str s]
+  toSexp (LBool b)               = Lst [Atom "bool", Atom (if b then "true" else "false")]
+  toSexp LUnit                   = Atom "unit"
+  toSexp (LLabel s)              = Lst [Atom "label-string", Str s]
+  toSexp (LDCLabel dc)           = toSexp dc
+
+instance FromSexp Lit where
+  fromSexp (Lst [Atom "int", nD])    = (LNumeric . NumInt) <$> fromSexp nD
+  fromSexp (Lst [Atom "float", nD])  = (LNumeric . NumFloat) <$> fromSexp nD
+  fromSexp (Lst [Atom "string", sD]) = LString <$> asName sD
+  fromSexp (Lst [Atom "bool", bD])   = do
+    b <- asToken bD
+    case b of
+      "true"  -> Right (LBool True)
+      "false" -> Right (LBool False)
+      _       -> Left ("bad boolean literal: " ++ b)
+  fromSexp (Atom "unit")                    = Right LUnit
+  fromSexp (Lst [Atom "label-string", sD])  = LLabel <$> asName sD
+  fromSexp d@(Lst (Atom "dclabel" : _))     = LDCLabel <$> fromSexp d
+  fromSexp d = Left ("not a valid literal, got " ++ headHint d)

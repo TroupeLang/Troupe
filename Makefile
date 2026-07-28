@@ -104,7 +104,13 @@ test: test/local test/multinode test/hostile-peer test/result-socket
 # Test target for Docker runner (no Haskell toolchain available).
 test/docker: ci-test-golden-no-color test/multinode test/hostile-peer test/result-socket
 
-test/local:
+# The golden tests shell out to the installed ./bin/troupec, which `stack build`
+# alone does not update -- so without these prerequisites a run can pass 1000+
+# tests against a compiler predating the changes under test, and look no
+# different from a run that exercised them. Depends on the library stamp too:
+# libraries carry serialized IR blobs, and a stale one is not readable by a
+# compiler whose blob format has moved.
+test/local: compiler lib/out/.build-stamp
 	mkdir -p out
 	cd compiler && $(MAKE) test
 

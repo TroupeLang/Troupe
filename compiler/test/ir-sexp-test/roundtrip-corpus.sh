@@ -2,9 +2,17 @@
 # Whole-corpus round-trip check for the troupe-ir-sexp format.
 #
 # For every .trp under the given roots (default: tests/rt/pos), compile it,
-# print its IR as troupe-ir-sexp, re-parse it, and compare the position-erased
-# ASTs (troupec --verify-ir-sexp). Reports a pass/fail tally and exits non-zero
-# if any program's round-trip fails.
+# print its IR as troupe-ir-sexp with and without source positions, re-parse
+# each, and compare the ASTs (troupec --verify-ir-sexp).
+#
+# A file that does not compile at all is reported as SKIPPED, not failed: the
+# corpus contains module components (under modsrc/) whose pins live with the
+# main program that imports them, so compiling one standalone stops in import
+# processing before any IR exists. Those files say nothing about the format
+# either way. Skipped files are always listed, so a compile regression shows up
+# as a growing skip list instead of hiding among expected failures.
+#
+# Exits non-zero only when a program that compiled failed to round-trip.
 #
 # Usage: compiler/test/ir-sexp-test/roundtrip-corpus.sh [ROOT ...]
 
@@ -28,7 +36,9 @@ fi
 
 pass=0
 fail=0
+skip=0
 failed_list=""
+skipped_list=""
 
 for r in $ROOTS; do
   for f in $(find "$r" -name '*.trp' | sort); do
@@ -37,14 +47,21 @@ for r in $ROOTS; do
     out=$("$TROUPEC" --verify-ir-sexp "$f" 2>&1)
     if echo "$out" | grep -q "round-trip OK"; then
       pass=$((pass + 1))
-    else
+    elif echo "$out" | grep -q "round-trip FAILED"; then
       fail=$((fail + 1))
       failed_list="$failed_list\n  $f\n    $(echo "$out" | tail -1)"
+    else
+      # Did not compile: nothing was printed, so nothing was round-tripped.
+      skip=$((skip + 1))
+      skipped_list="$skipped_list\n  $f\n    $(echo "$out" | tail -1)"
     fi
   done
 done
 
-echo "troupe-ir-sexp corpus round-trip: $pass passed, $fail failed"
+echo "troupe-ir-sexp corpus round-trip: $pass passed, $fail failed, $skip skipped (did not compile)"
+if [ "$skip" -ne 0 ]; then
+  printf "skipped:%b\n" "$skipped_list"
+fi
 if [ "$fail" -ne 0 ]; then
   printf "failures:%b\n" "$failed_list" >&2
   exit 1

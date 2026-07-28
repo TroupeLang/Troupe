@@ -230,9 +230,14 @@ process pin root flags fname input = do
           _                   -> putStr sexp
         exitSuccess
 
-      ------ VERIFY troupe-ir-sexp round-trips (and stop) --
+      ------ VERIFY troupe-ir-sexp round-trips ------------
       -- Both laws: with positions the AST comes back exactly; without them it
-      -- comes back position-erased.
+      -- comes back position-erased. Every compilation unit is checked, module
+      -- components of a program included, so the check covers the whole module
+      -- graph rather than the main program alone.
+      let unitLabel = if ModuleArtifact `elem` flags
+                        then " (module " ++ maybe "?" takeFileName fname ++ ")"
+                        else ""
       when (VerifyIRSexp `elem` flags) $ do
         let check what expected printed =
               case IRSexp.parseProg printed of
@@ -244,8 +249,11 @@ process pin root flags fname input = do
                                       ++ ", ASTs differ)")
         check "with positions" iropt (IRSexp.printProgWithPos iropt)
         check "positions erased" (IRSexp.erasePosProg iropt) (IRSexp.printProg iropt)
-        putStrLn "troupe-ir-sexp round-trip OK"
-        exitSuccess
+        putStrLn ("troupe-ir-sexp round-trip OK" ++ unitLabel)
+        -- A module inside a program's graph must go on to produce its artifact:
+        -- the compile that consumes it reads its .exports. Only the main unit
+        -- stops here.
+        when (ModuleArtifact `notElem` flags) exitSuccess
 
       ------ RAW -------------------------------------------
       let raw = IR2Raw.prog2raw iropt
@@ -551,7 +559,10 @@ main = do
           -- consumers), then the file itself. Modules compile as content-hashed
           -- library artifacts (LibMode + ModuleArtifact); per-module dumps are
           -- not written (Verbose stays top-level only).
-          let moduleFlags = LibMode : ModuleArtifact : filter (`elem` [NoRawOpt, Debug]) o
+          -- VerifyIRSexp propagates so each module in the graph is checked too;
+          -- EmitIRSexp deliberately does not (one document per invocation).
+          let moduleFlags = LibMode : ModuleArtifact
+                              : filter (`elem` [NoRawOpt, Debug, VerifyIRSexp]) o
           mapM_ (\m -> do createDirectoryIfMissing True (takeDirectory m </> "out")
                           minput <- readFile m
                           _ <- process pin root moduleFlags (Just m) minput

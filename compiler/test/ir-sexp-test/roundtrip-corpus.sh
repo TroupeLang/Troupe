@@ -44,16 +44,23 @@ for r in $ROOTS; do
   for f in $(find "$r" -name '*.trp' | sort); do
     # Skip empty files (e.g. placeholder .trp fixtures): not programs.
     [ -s "$f" ] || continue
+    # Classify on the exit status first. A compile of a module component pulls
+    # in its own dependencies, and those compiles report their own "round-trip
+    # OK" before the component itself fails on a missing pin -- so the presence
+    # of an OK line says nothing on its own.
     out=$("$TROUPEC" --verify-ir-sexp "$f" 2>&1)
-    if echo "$out" | grep -q "round-trip OK"; then
+    status=$?
+    if [ "$status" -eq 0 ]; then
       pass=$((pass + 1))
     elif echo "$out" | grep -q "round-trip FAILED"; then
       fail=$((fail + 1))
       failed_list="$failed_list\n  $f\n    $(echo "$out" | tail -1)"
     else
-      # Did not compile: nothing was printed, so nothing was round-tripped.
+      # Did not compile, so this file's own IR was never round-tripped. Report
+      # the diagnostic, not the OK lines its dependencies may have produced.
       skip=$((skip + 1))
-      skipped_list="$skipped_list\n  $f\n    $(echo "$out" | tail -1)"
+      why=$(echo "$out" | grep -v "round-trip OK" | tail -1)
+      skipped_list="$skipped_list\n  $f\n    $why"
     fi
   done
 done

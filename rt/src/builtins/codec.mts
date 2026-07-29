@@ -44,9 +44,18 @@ function firstNonByte(s: string): number {
 
 export function BuiltinCodec<TBase extends Constructor<UserRuntimeZero>>(Base: TBase) {
     return class extends Base {
+        // A string holding an unpaired surrogate has no UTF-8 encoding: Node
+        // substitutes U+FFFD for it, and the round trip would come back quietly
+        // altered. Refused instead, for the same reason a non-byte string is.
         gzip = mkBase((arg) => {
             assertIsString(arg);
-            const out = gzipSync(Buffer.from(arg.val as string, 'utf8'));
+            const s = arg.val as string;
+            if (!s.isWellFormed()) {
+                this.runtime.$t.threadError(
+                    "gzip: argument has no UTF-8 encoding: it contains an unpaired surrogate");
+                return;
+            }
+            const out = gzipSync(Buffer.from(s, 'utf8'));
             return this.runtime.ret(new LVal(out.toString('latin1'), arg.lev));
         }, "gzip")
 

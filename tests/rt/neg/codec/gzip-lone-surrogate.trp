@@ -1,0 +1,6 @@
+import String
+
+(* Troupe strings are UTF-16, and an unpaired surrogate has no UTF-8 encoding. Node would
+   substitute U+FFFD for it and the round trip would come back quietly altered, so gzip refuses
+   the argument instead. *)
+print (gzip (String.strCode 55296))

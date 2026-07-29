@@ -39,7 +39,11 @@ let checked = 0;
 let mismatched = 0;
 
 for (const entry of readdirSync(dir).sort()) {
-  if (!entry.endsWith('.blob') || entry.endsWith('.node.blob')) continue;
+  // Only the Haskell-written references are inputs here: the .node.blob files
+  // are this script's own output, and the .troupe.blob files are the second
+  // implementation's.
+  if (!entry.endsWith('.blob')) continue;
+  if (entry.endsWith('.node.blob') || entry.endsWith('.troupe.blob')) continue;
   const name = entry.slice(0, -'.blob'.length);
   const { header, payload } = unpack(readFileSync(join(dir, entry), 'utf8'));
 

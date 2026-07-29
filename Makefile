@@ -99,7 +99,7 @@ ci-test-golden-no-color:
 	mkdir -p out 
 	./bin/golden --no-color
 
-test: test/local test/multinode test/hostile-peer test/result-socket
+test: test/local test/ir-sexp-corpus-troupe test/multinode test/hostile-peer test/result-socket
 
 # Test target for Docker runner (no Haskell toolchain available).
 test/docker: ci-test-golden-no-color test/multinode test/hostile-peer test/result-socket
@@ -128,6 +128,13 @@ test/ir-blob-interchange:
 # and the libraries, which `all` builds.
 test/ir-sexp-troupe: check-compiler lib/out/.build-stamp
 	./scripts/ir-sexp-troupe-conformance.sh
+
+# The interchange over every program in tests/rt/pos rather than the six in the
+# conformance corpus: each program's document goes through the Troupe reader and
+# printer, and the value that comes back is compared here. Needs the runtime and
+# the libraries, and takes minutes, so it is not part of test/local.
+test/ir-sexp-corpus-troupe: compiler rt lib/out/.build-stamp
+	cd compiler && IR_SEXP_TROUPE_CORPUS=1 stack test :ir-sexp-corpus-troupe-test $(STACK_OPTS)
 
 test/prop-compiler:
 	cd compiler && stack test :dclabels-prop-test $(STACK_OPTS)

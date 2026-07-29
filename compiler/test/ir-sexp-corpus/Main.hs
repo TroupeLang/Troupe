@@ -17,42 +17,23 @@
 module Main (main) where
 
 import           Control.Exception (try)
-import           Control.Monad (filterM, forM)
+import           Control.Monad (filterM)
 import           Data.IORef
-import           Data.List (isSuffixOf, sort)
-import           System.Directory (doesDirectoryExist, doesFileExist, getCurrentDirectory,
-                                   listDirectory)
+import           System.Directory (doesFileExist)
 import           System.Exit (ExitCode)
-import           System.FilePath (makeRelative, takeDirectory, takeFileName, (</>))
+import           System.FilePath (makeRelative, takeDirectory, takeFileName)
 
 import           Test.Tasty
 import           Test.Tasty.Runners (NumThreads(..))
 import           Test.Tasty.HUnit
 
 import           CompileMode (CompileMode(..))
+import           Corpus (compileOpts, corpusFiles, corpusRoot, troupeRoot)
 import           DepsFile (depsFilePath, readDepsFile)
 import qualified IR
 import           IRSexp (erasePosProg, parseProg, printProg, printProgWithPos)
 import qualified Pipeline
-import           PrettyPrint (mkPPConfig, parsePosFormat)
 import           ProcessImports (PinCheck(..))
-
--- | The repository this test was built from: the parent of the package
--- directory it runs in (@compiler/@).
---
--- Deliberately not $TROUPE. That variable points at whichever checkout the
--- shell is configured for, which in a worktree is a different repository with
--- different module pins — the test would then compile another branch's corpus
--- with this branch's compiler and report the pin mismatches as compile
--- failures.
-troupeRoot :: IO FilePath
-troupeRoot = takeDirectory <$> getCurrentDirectory
-
-opts :: CompileMode -> Pipeline.CompileOpts
-opts mode = Pipeline.CompileOpts { Pipeline.coMode     = mode
-                                 , Pipeline.coDump     = Pipeline.silentDump
-                                 , Pipeline.coPPConfig = mkPPConfig False (parsePosFormat "inline")
-                                 }
 
 -- | Both laws for one IR program. Returns the failure description, if any.
 checkLaws :: IR.IRProgram -> Maybe String
@@ -79,14 +60,14 @@ checkProgram file = do
   outcome <- try $ do
     pins    <- maybe [] (either (const []) id) <$> readDepsFile (depsFilePath file)
     results <- newIORef []
-    Pipeline.compileModuleGraph (Enforce pins) root (opts Library) file
+    Pipeline.compileModuleGraph (Enforce pins) root (compileOpts Library) file
       (\m _ ir -> case checkLaws ir of
                     Nothing  -> return ()
                     Just why -> modifyIORef results
                                   (("module " ++ takeFileName m ++ ": " ++ why) :))
     input  <- readFile file
-    folded <- Pipeline.frontEndFold (Enforce pins) root (opts Normal) file input
-    ir     <- Pipeline.frontEndIR (opts Normal) folded
+    folded <- Pipeline.frontEndFold (Enforce pins) root (compileOpts Normal) file input
+    ir     <- Pipeline.frontEndIR (compileOpts Normal) folded
     let mainFailure = case checkLaws ir of
                         Nothing  -> []
                         Just why -> ["program: " ++ why]
@@ -96,25 +77,10 @@ checkProgram file = do
     Left _         -> return (Left "did not compile")
     Right failures -> return (Right failures)
 
--- | Every non-empty @.trp@ under a root, sorted.
-corpusFiles :: FilePath -> IO [FilePath]
-corpusFiles dir = do
-  isDir <- doesDirectoryExist dir
-  if not isDir then return [] else do
-    entries <- sort <$> listDirectory dir
-    fmap concat . forM entries $ \e -> do
-      let p = dir </> e
-      d <- doesDirectoryExist p
-      if d then corpusFiles p
-           else if ".trp" `isSuffixOf` e
-                  then do nonEmpty <- (> 0) . length <$> readFile p
-                          return [p | nonEmpty]
-                  else return []
-
 main :: IO ()
 main = do
   root  <- troupeRoot
-  files <- corpusFiles (root </> "tests" </> "rt" </> "pos")
+  files <- corpusFiles (corpusRoot root)
   present <- filterM doesFileExist files
   -- Sequential: cases that share a module graph write the same .exports
   -- artifacts, so running them concurrently would race.

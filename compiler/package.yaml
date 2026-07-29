@@ -128,7 +128,9 @@ tests:
     - QuickCheck
   ir-sexp-corpus-test:
     main: Main.hs
-    source-dirs: test/ir-sexp-corpus
+    source-dirs:
+    - test/ir-sexp-corpus
+    - test/ir-sexp-shared
     ghc-options:
     - -threaded
     - -rtsopts
@@ -155,6 +157,22 @@ tests:
     - bytestring
     - base64-bytestring
     - zlib
+  ir-sexp-corpus-troupe-test:
+    main: Main.hs
+    source-dirs:
+    - test/ir-sexp-corpus-troupe
+    - test/ir-sexp-shared
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - Troupe-compiler
+    - tasty
+    - tasty-hunit
+    - directory
+    - filepath
+    - process
   dclabels-prop-test:
     main: DCLabelsProps.hs
     source-dirs: test/prop

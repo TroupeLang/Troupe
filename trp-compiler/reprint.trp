@@ -1,0 +1,62 @@
+import "./IR"
+import { readFile, writeFile, readDir } SimpleFileIO
+import Option
+import Outcome
+import List
+import String
+
+(* Read every `<name>.sexp` in a directory, decode it into the IR datatypes, and write the
+   re-encoded document to `<name>.reprint`. One process for the whole corpus: the caller compares
+   what comes back against its own IR, so this side is a pure decode-and-print and holds no
+   opinion about what the documents contain.
+
+   Used by the whole-corpus differential (`make test/ir-sexp-corpus-troupe`), where the caller is
+   the Haskell suite that produced the documents in the first place.
+
+   Prints one line per document, and a count. Exits non-zero if any document failed to decode. *)
+
+let fun say line = fwrite (stdout authority, line ^ "\x0a")
+
+    fun isDocument name = String.endsWith ".sexp" name
+
+    fun stem name = String.substring (name, 0, String.size name - 5)
+
+    fun reprint (dir, name) =
+        let val inPath  = dir ^ "/" ^ name
+            val outPath = dir ^ "/" ^ stem name ^ ".reprint"
+        in case readFile (authority, inPath) of
+               ERR e => SOME ("cannot read " ^ name ^ ": " ^ e.reason)
+             | OK text =>
+                 (case IR.fromString text of
+                      ERR m => SOME (name ^ ": " ^ m)
+                    | OK unit =>
+                        (case writeFile (authority, outPath, IR.toText unit) of
+                             ERR e => SOME ("cannot write " ^ outPath ^ ": " ^ e.reason)
+                           | OK _  => NONE))
+        end
+
+    fun run (_, [], failed)          = failed
+      | run (dir, name :: rest, failed) =
+          case reprint (dir, name) of
+              NONE     => run (dir, rest, failed)
+            | SOME msg => let val _ = say ("FAIL " ^ msg) in run (dir, rest, failed + 1) end
+in
+    case getCliArgs authority of
+        [dir] =>
+          (case readDir (authority, dir) of
+               ERR e => let val _ = say ("cannot list " ^ dir ^ ": " ^ e.reason)
+                        in exit (authority, 2)
+                        end
+             | OK entries =>
+                 let val names  = List.map (fn e => e.name)
+                                           (List.filter (fn e => e.kind = "file") entries)
+                     val docs   = List.filter isDocument names
+                     val failed = run (dir, docs, 0)
+                     val _      = say ("reprinted " ^ toString (List.length docs - failed)
+                                       ^ " of " ^ toString (List.length docs) ^ " documents")
+                 in exit (authority, if failed = 0 then 0 else 1)
+                 end)
+      | _ => let val _ = say "usage: reprint <directory of .sexp documents>"
+             in exit (authority, 2)
+             end
+end

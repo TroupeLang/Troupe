@@ -37,7 +37,10 @@ for f in bin/troupec rt/built/troupe.mjs; do
 done
 
 corpus=compiler/test/ir-sexp-conformance/data
-docs=$(ls "$corpus"/*.sexp)
+# The Haskell-written documents only: <name>.troupe.sexp is this script's own
+# output, and feeding it back in would check nothing and name blobs that do not
+# exist.
+docs=$(ls "$corpus"/*.sexp | /usr/bin/grep -v '\.troupe\.sexp$')
 if [ -z "$docs" ]; then
     echo "Error: no documents in $corpus" >&2
     exit 1

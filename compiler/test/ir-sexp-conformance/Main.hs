@@ -14,6 +14,7 @@
 --   * L2 text ingestion:  parse (reference .sexp) == this compiler's IR for the program
 --   * L3 blob ingestion:  deserialize (reference .blob) == the same value, whoever compressed it
 --   * L4 framing:         deserialize (encodeBlob u)  == u
+--   * L5 rejection:       every malformed blob is a Left, never a Right and never an exception
 --
 -- Equality is structural on the decoded IR throughout. Text layout and
 -- compressed bytes are not part of the format: gzip streams from different
@@ -27,10 +28,13 @@
 -- version bump.
 module Main (main) where
 
+import qualified Codec.Compression.GZip as GZip
 import           Control.Monad (forM, unless)
+import           Data.Bits (xor)
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Base64 as B64
 import qualified Data.ByteString.Char8 as BSC
+import qualified Data.ByteString.Lazy as BSL
 import           Data.List (maximumBy)
 import           Data.Ord (comparing)
 import           System.Directory (createDirectoryIfMissing, doesFileExist, getCurrentDirectory)
@@ -62,6 +66,41 @@ conformancePrograms =
   , ("dclabel",     "tests/rt/pos/ifc/dclabel-whitespace.trp")
   , ("lists",       "tests/rt/pos/core/list00.trp")
   ]
+
+-- | Every way a blob arriving from another node can be wrong, derived from a
+-- valid one. Each must come back as a Left: a reader that accepts nonsense is
+-- not conformant, and the second implementation is held to the same list
+-- (trp-compiler/conformance.trp).
+malformations :: BS.ByteString -> [(String, BS.ByteString)]
+malformations good =
+  [ ("empty input",                       BS.empty)
+  , ("identifier only",                   BS.take 4 good)
+  , ("header only",                       BS.take 5 good)
+  , ("truncated to a quarter",            BS.take (n `div` 4) good)
+  , ("truncated to a half",               BS.take (n `div` 2) good)
+  , ("truncated by one byte",             BS.take (n - 1) good)
+  , ("a foreign identifier",              BSC.pack "TRPX" <> BS.drop 4 good)
+  , ("a version we do not read",          withVersion 3)
+  , ("version 1, which carried cereal",   withVersion 1)
+  , ("a header with no gzip stream",      header <> BSC.pack "not compressed")
+  , ("a byte flipped mid-stream",         flipAt (n `div` 2))
+  , ("a byte flipped near the end",       flipAt (n - 3))
+  , ("a gzip stream of text that is not a document", header <> gz (BSC.pack "hello"))
+  , ("a gzip stream of invalid UTF-8",    header <> gz (BS.pack [0xff, 0xfe, 0xfd]))
+  , ("a decompression bomb",              header <> bomb)
+  , ("a valid stream with rubbish after it", good <> BSC.pack "rubbish")
+  ]
+  where
+    n           = BS.length good
+    header      = BS.take 5 good
+    withVersion v = BS.take 4 good <> BS.singleton v <> BS.drop 5 good
+    flipAt i    = BS.take i good
+                  <> BS.singleton (BS.index good i `xor` 0xff)
+                  <> BS.drop (i + 1) good
+    gz          = BSL.toStrict . GZip.compress . BSL.fromStrict
+    -- 68 MiB of one byte, past the 64 MiB cap, compressed lazily so the
+    -- uncompressed form is never held.
+    bomb        = BSL.toStrict (GZip.compress (BSL.replicate (68 * 1024 * 1024) 0x61))
 
 troupeRoot :: IO FilePath
 troupeRoot = takeDirectory <$> getCurrentDirectory
@@ -158,6 +197,20 @@ main = do
             unitEq (IRBlob.deserialize raw) funUnit
         | (name, _, _, _, funUnit, _, _) <- cases ]
 
+      -- The other direction of L2: the document was printed by the Troupe
+      -- implementation, from IR it decoded itself, so a pass means each side
+      -- reads what the other writes -- for whole programs, positions included.
+    , testGroup "L2 across implementations: a Troupe-printed document parses here"
+        [ testCase name $ do
+            let troupePath = dir </> name <.> "troupe.sexp"
+            exists <- doesFileExist troupePath
+            unless exists $
+              assertFailure (troupePath ++ " is missing; regenerate with\
+                             \ ./scripts/ir-sexp-troupe-conformance.sh --write-troupe-references")
+            text <- readFile troupePath
+            progEq (parseProg text) ir
+        | (name, _, ir, _, _, _, _) <- cases ]
+
       -- The other direction of the same law: this blob was written by the Troupe
       -- implementation, from IR it decoded itself, and its payload was compressed
       -- by Node. Nothing about it is this compiler's output.
@@ -167,11 +220,22 @@ main = do
             exists <- doesFileExist troupePath
             unless exists $
               assertFailure (troupePath ++ " is missing; regenerate with\
-                             \ ./scripts/ir-sexp-troupe-conformance.sh --write-troupe-blobs")
+                             \ ./scripts/ir-sexp-troupe-conformance.sh --write-troupe-references")
             b64 <- readFile troupePath
             raw <- either (assertFailure . ("base64: " ++)) return
                      (B64.decode (BSC.pack (filter (/= '\n') b64)))
             unitEq (IRBlob.deserialize raw) funUnit
+        | (name, _, _, _, funUnit, _, _) <- cases ]
+
+      -- A reader that accepts nonsense is not conformant either. Mobile code
+      -- arrives from other nodes, so every one of these is reachable input.
+    , testGroup "L5: a malformed blob is refused"
+        [ testGroup name
+            [ testCase what $
+                case IRBlob.deserialize bad of
+                  Left _  -> return ()
+                  Right _ -> assertFailure "accepted"
+            | (what, bad) <- malformations (IRBlob.encodeBlob funUnit) ]
         | (name, _, _, _, funUnit, _, _) <- cases ]
 
     , testGroup "the document a blob carries is the one the printer emits"

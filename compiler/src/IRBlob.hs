@@ -83,8 +83,16 @@ decompressGzipCapped cap input =
          then Left ("decompressed IR blob exceeds "
                      ++ show cap ++ "-byte cap")
          else (BSL.fromStrict c <>) <$> k (remaining - n)
+    -- Input after the gzip member is refused rather than discarded. A blob is
+    -- exactly a header and one stream, so trailing bytes mean the blob is not
+    -- what its writer produced -- and a reader that ignores them accepts inputs
+    -- another implementation rejects, which is a divergence in what the format
+    -- admits. (Node's gunzip reads a second member there and fails.)
     onEnd :: BSL.ByteString -> (Int -> Either String BSL.ByteString)
-    onEnd _leftover _ = Right BSL.empty
+    onEnd leftover _
+      | BSL.null leftover = Right BSL.empty
+      | otherwise         = Left (show (BSL.length leftover)
+                                   ++ " bytes of trailing input after the gzip stream")
     onError :: ZlibI.DecompressError -> (Int -> Either String BSL.ByteString)
     onError e _ = Left (show e)
 

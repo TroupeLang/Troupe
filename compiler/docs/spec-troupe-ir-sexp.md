@@ -350,6 +350,9 @@ Let `print`/`parse` range over documents and `encodeBlob`/`deserialize` over blo
 > implementation produced and obtains a structurally equal value. The blob bytes may differ.
 >
 > **L4 (framing).** `deserialize (encodeBlob u) = Right u` for every serialization unit `u`.
+>
+> **L5 (rejection).** A blob that is not one an encoder produced is refused, as a value the caller
+> can act on rather than as a crash or a hang.
 
 Structural equality is the derived `Eq` on `FunDef`/`IRExpr`/`Lit`/… — for `DCLabelExp` the
 *syntactic* `Eq`, preserving the `LabelExp` tree, not the semantic `dcLabelEq` — with the `NaN`
@@ -372,7 +375,17 @@ compressed by Node rather than Haskell and one produced by the second implementa
 
 The second implementation is `trp-compiler/IR.trp` and `trp-compiler/Blob.trp`, written in Troupe.
 `scripts/ir-sexp-troupe-conformance.sh` runs the same laws inside it, over the same corpus, using
-Troupe's structural equality; `make test/local` runs both sides.
+Troupe's structural equality; `make test/local` runs both sides. `make test/ir-sexp-corpus-troupe`
+widens the text half from the six reference programs to every program in `tests/rt/pos`: each is
+compiled, printed, decoded and re-printed by the Troupe implementation, and parsed back here, with
+the two IR values compared.
+
+**A reader must also refuse.** Accepting a malformed blob is a conformance failure in the same way
+as rejecting a valid one, since blobs arrive from other nodes. Both implementations are held to the
+same list of malformations — truncations, a foreign identifier, an unreadable version, a flipped
+byte, a payload that is not a gzip stream, one that is not UTF-8, a decompression bomb, and a valid
+stream with trailing bytes after it. A blob is a header and exactly one gzip stream: input after
+that stream is refused rather than ignored, so that neither side admits what the other rejects.
 
 ## Format identification and versioning
 

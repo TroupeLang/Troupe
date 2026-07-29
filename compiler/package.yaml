@@ -154,6 +154,7 @@ tests:
     - filepath
     - bytestring
     - base64-bytestring
+    - zlib
   dclabels-prop-test:
     main: DCLabelsProps.hs
     source-dirs: test/prop

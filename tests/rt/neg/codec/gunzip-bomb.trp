@@ -1,0 +1,11 @@
+import String
+
+(* A decompression bomb from a remote node: 80 KiB of concatenated gzip members that expand to
+   80 MiB. gunzip stops at the same 64 MiB cap the compiler enforces (compiler/src/IRBlob.hs). *)
+let fun double (s, 0) = s
+      | double (s, n) = double (s ^ s, n - 1)
+    fun times (s, 0) = ""
+      | times (s, n) = s ^ times (s, n - 1)
+    val bomb = times (gzip (double ("a", 23)), 10)
+in print (String.size (gunzip bomb))
+end

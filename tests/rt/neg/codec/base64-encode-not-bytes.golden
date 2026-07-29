@@ -1,0 +1,8 @@
+2026-07-29T14:05:19.413Z [RTM] [32minfo[39m: Skipping network creation. Observe that all network operations will yield a runtime error.
+Runtime error in thread 9571c0a7-3aa0-4dff-a248-56616c46133f@{}%{}
+
+  4 | print (base64Encode ("ok so far " ^ String.strCode 9731))
+    |        ^
+
+>> base64Encode: argument is not a byte string: character 10 is code unit 9731, above 255
+>> at tests/rt/neg/codec/base64-encode-not-bytes.trp:4:8

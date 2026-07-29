@@ -1,0 +1,5 @@
+import String
+
+(* gunzip takes a byte string: every character a code unit at most 255. A character above that
+   is a mis-encoded argument, and saying so beats truncating it silently. *)
+print (gunzip (String.strCode 9731))

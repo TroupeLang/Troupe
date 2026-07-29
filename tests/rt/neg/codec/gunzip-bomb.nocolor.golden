@@ -1,0 +1,8 @@
+2026-07-29T14:05:20.864Z [RTM] info: Skipping network creation. Observe that all network operations will yield a runtime error.
+Runtime error in thread e7df1663-3fe1-47f6-8f5e-1e071a4e04ff@{}%{}
+
+  10 | in print (String.size (gunzip bomb))
+     |                        ^
+
+>> gunzip: decompressed data exceeds the 67108864-byte cap
+>> at tests/rt/neg/codec/gunzip-bomb.trp:10:24

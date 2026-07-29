@@ -1,0 +1,8 @@
+2026-07-29T14:05:19.331Z [RTM] [32minfo[39m: Skipping network creation. Observe that all network operations will yield a runtime error.
+Runtime error in thread b4798417-1392-4968-a0b2-6c69a8051ca0@{}%{}
+
+  3 | print (base64Decode "not base64!")
+    |        ^
+
+>> base64Decode: argument is not base64
+>> at tests/rt/neg/codec/base64-decode-invalid.trp:3:8

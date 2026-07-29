@@ -37,10 +37,12 @@ import { BuiltinRecordReflection } from './builtins/recordReflection.mjs'
 import { BuiltinRecordToList } from './builtins/recordToList.mjs'
 import { BuiltinTypeInformation } from './builtins/types.mjs'
 import { BuiltinListToTuple } from './builtins/listToTuple.mjs'
+import { BuiltinCodec } from './builtins/codec.mjs'
 
 let BuiltSpawnSendReceive = x => BuiltinSpawn(BuiltinSend(BuiltinReceive(x)))
 
 export const UserRuntime =
+    BuiltinCodec (
     BuiltinListToTuple (
     BuiltinString (
     BuiltinService (
@@ -77,4 +79,4 @@ export const UserRuntime =
     BuiltinRecordReflection(
     BuiltinTypeInformation(
     BuiltinStdIo(UserRuntimeZero)
-    )))))))))))))))))))))))))))))))))))
+    ))))))))))))))))))))))))))))))))))))

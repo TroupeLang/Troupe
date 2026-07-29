@@ -1,0 +1,4 @@
+import String
+
+(* base64Encode has the same byte-string argument as gunzip. *)
+print (base64Encode ("ok so far " ^ String.strCode 9731))

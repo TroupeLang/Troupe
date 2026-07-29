@@ -1,0 +1,8 @@
+2026-07-29T14:05:20.809Z [RTM] info: Skipping network creation. Observe that all network operations will yield a runtime error.
+Runtime error in thread fad07ad6-9d54-4c72-8259-6fe7a8daee32@{}%{}
+
+  2 | print (gunzip "this is not a gzip stream")
+    |        ^
+
+>> gunzip: incorrect header check
+>> at tests/rt/neg/codec/gunzip-corrupt.trp:2:8

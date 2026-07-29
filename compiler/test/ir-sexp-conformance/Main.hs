@@ -158,6 +158,22 @@ main = do
             unitEq (IRBlob.deserialize raw) funUnit
         | (name, _, _, _, funUnit, _, _) <- cases ]
 
+      -- The other direction of the same law: this blob was written by the Troupe
+      -- implementation, from IR it decoded itself, and its payload was compressed
+      -- by Node. Nothing about it is this compiler's output.
+    , testGroup "L3 across implementations: a Troupe-produced blob decodes here"
+        [ testCase name $ do
+            let troupePath = dir </> name <.> "troupe.blob"
+            exists <- doesFileExist troupePath
+            unless exists $
+              assertFailure (troupePath ++ " is missing; regenerate with\
+                             \ ./scripts/ir-sexp-troupe-conformance.sh --write-troupe-blobs")
+            b64 <- readFile troupePath
+            raw <- either (assertFailure . ("base64: " ++)) return
+                     (B64.decode (BSC.pack (filter (/= '\n') b64)))
+            unitEq (IRBlob.deserialize raw) funUnit
+        | (name, _, _, _, funUnit, _, _) <- cases ]
+
     , testGroup "the document a blob carries is the one the printer emits"
         [ testCase name $
             parseUnit (printUnit funUnit) `unitEq'` funUnit

@@ -1,5 +1,6 @@
 import "./IR"
-import { readFile } SimpleFileIO
+import "./Blob"
+import { readFile, writeFile } SimpleFileIO
 import Sexp
 import Outcome
 import List
@@ -14,6 +15,13 @@ import String
      L2 (ingestion)    the document was written by the Haskell compiler, so decoding it at all
                        is the text half of L2; the value half is observed by handing this
                        implementation's re-print back to troupec.
+     L3 (blobs)        the recorded blob and the one a different compressor produced from it
+                       decode to the same IR here. Blob bytes are never compared.
+     L4 (framing)      unpack (pack doc) = doc.
+
+   Every <name>.sexp names a <name>.blob and a <name>.node.blob beside it. With
+   --write-troupe-blobs, each blob this implementation produces is written to <name>.troupe.blob,
+   which the Haskell conformance suite then decodes -- the other direction of L3.
 
    Exits non-zero if any document fails, so a script can run it as a test. *)
 
@@ -23,41 +31,90 @@ let fun say line = fwrite (stdout authority, line ^ "\x0a")
 
     fun law (name, holds) = if holds then PASSED else FAILED name
 
-    fun check path =
+    (* `path` without its ".sexp" suffix. *)
+    fun stem path = String.substring (path, 0, String.size path - 5)
+
+    (* The IR value a recorded blob carries. Blob text may end in a newline; base64Decode
+       ignores whitespace. *)
+    fun valueOfBlob path =
+        case readFile (authority, path) of
+            ERR e => ERR ("cannot read " ^ path ^ ": " ^ e.reason)
+          | OK b64 =>
+              (case Blob.unpack b64 of
+                   ERR m  => ERR (path ^ ": " ^ m)
+                 | OK doc => (case IR.fromString doc of
+                                  ERR m => ERR (path ^ ": " ^ m)
+                                | OK u  => OK u))
+
+    (* The document laws. *)
+    fun checkDocument text =
+        case Sexp.parse text of
+            ERR e => FAILED ("parse: " ^ e.reason)
+          | OK datum =>
+              (case Sexp.parse (Sexp.print datum) of
+                   ERR e => FAILED ("D: re-parsing our own printed datum: " ^ e.reason)
+                 | OK datum' =>
+                     if not (datum = datum')
+                     then FAILED "D: parse (print d) <> d"
+                     else (case IR.decode datum of
+                               ERR m => FAILED ("decode: " ^ m)
+                             | OK x =>
+                                 (case IR.fromString (IR.toText x) of
+                                      ERR m => FAILED ("L1: re-reading our own text: " ^ m)
+                                    | OK y => law ("L1: decode (encode x) <> x", x = y))))
+
+    (* The blob laws, and the blob this implementation writes for the other one to read. *)
+    fun checkBlobs (base, write) =
+        case valueOfBlob (base ^ ".blob") of
+            ERR m => FAILED m
+          | OK xh =>
+              (case valueOfBlob (base ^ ".node.blob") of
+                   ERR m => FAILED m
+                 | OK xn =>
+                     if not (xh = xn)
+                     then FAILED "L3: a differently compressed blob decodes to a different value"
+                     else let val doc = IR.toText xh
+                          in case Blob.unpack (Blob.pack doc) of
+                                 ERR m => FAILED ("L4: " ^ m)
+                               | OK doc' =>
+                                   if not (doc = doc')
+                                   then FAILED "L4: unpack (pack doc) <> doc"
+                                   else if not write
+                                   then PASSED
+                                   else (case writeFile (authority, base ^ ".troupe.blob",
+                                                         Blob.pack doc ^ "\x0a") of
+                                             ERR e => FAILED ("cannot write: " ^ e.reason)
+                                           | OK _  => PASSED)
+                          end)
+
+    fun check (path, write) =
         case readFile (authority, path) of
             ERR e => FAILED ("cannot read: " ^ e.reason)
           | OK text =>
-              (case Sexp.parse text of
-                   ERR e => FAILED ("parse: " ^ e.reason)
-                 | OK datum =>
-                     (case Sexp.parse (Sexp.print datum) of
-                          ERR e => FAILED ("D: re-parsing our own printed datum: " ^ e.reason)
-                        | OK datum' =>
-                            if not (datum = datum')
-                            then FAILED "D: parse (print d) <> d"
-                            else (case IR.decode datum of
-                                      ERR m => FAILED ("decode: " ^ m)
-                                    | OK x =>
-                                        (case IR.fromString (IR.toText x) of
-                                             ERR m => FAILED ("L1: re-reading our own text: " ^ m)
-                                           | OK y => law ("L1: decode (encode x) <> x", x = y)))))
+              (case checkDocument text of
+                   FAILED m => FAILED m
+                 | PASSED   => checkBlobs (stem path, write))
 
     fun report (path, PASSED)     = let val _ = say ("PASS " ^ path) in 0 end
       | report (path, FAILED msg) = let val _ = say ("FAIL " ^ path ^ ": " ^ msg) in 1 end
 
-    fun run []        = 0
-      | run (p :: ps) = let val failed = report (p, check p)
-                        in failed + run ps
-                        end
+    fun run (_, [])          = 0
+      | run (write, p :: ps) = let val failed = report (p, check (p, write))
+                               in failed + run (write, ps)
+                               end
 
-    val paths = getCliArgs authority
+    val args  = getCliArgs authority
+    val write = List.elem "--write-troupe-blobs" args
+    val paths = List.filter (fn a => a <> "--write-troupe-blobs") args
 in
     case paths of
-        [] => let val _ = say "usage: conformance <document.sexp> ..." in exit (authority, 2) end
-      | _  => let val failed = run paths
+        [] => let val _ = say "usage: conformance [--write-troupe-blobs] <document.sexp> ..."
+              in exit (authority, 2)
+              end
+      | _  => let val failed = run (write, paths)
                   val n = List.length paths
                   val _ = if failed = 0
-                          then say ("all " ^ toString n ^ " documents: D and L1 hold")
+                          then say ("all " ^ toString n ^ " documents: D, L1, L3 and L4 hold")
                           else say (toString failed ^ " of " ^ toString n ^ " documents failed")
               in exit (authority, if failed = 0 then 0 else 1)
               end

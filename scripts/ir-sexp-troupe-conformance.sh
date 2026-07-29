@@ -14,7 +14,14 @@
 # half is observed by handing this implementation's re-print back to troupec,
 # which is what the corpus commit records.
 #
+# It also reads each document's recorded blobs -- the Haskell-compressed one and
+# the Node-compressed one -- and requires both to decode to the same IR here, and
+# checks its own framing round trip.
+#
 # Run from anywhere:  ./scripts/ir-sexp-troupe-conformance.sh
+# Add --write-troupe-blobs to rewrite the <name>.troupe.blob references, which
+# ir-sexp-conformance-test decodes: the direction of the interchange in which
+# Troupe is the producer.
 # Needs bin/troupec, rt/built and lib/out built.
 
 set -e
@@ -44,4 +51,4 @@ trap 'rm -f "$tmp" "$tmp.js"' EXIT
 # it sees them here; the documents themselves are read-only inputs.
 node rt/built/troupe.mjs -f="$tmp.js" --localonly \
      --suppress-local-info-message --suppress-main-thread-finished-message \
-     --io-root="$root" -- $docs
+     --io-root="$root" -- "$@" $docs

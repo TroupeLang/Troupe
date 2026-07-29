@@ -8,6 +8,7 @@ developed and judged against, and a drift detector for this one. `data/` holds, 
 | `<name>.sexp`   | the whole program as a `troupe-ir-sexp` document, positions included      |
 | `<name>.blob`   | base64 of a `TRPI` blob carrying the program's largest function, gzipped by Haskell |
 | `<name>.node.blob` | the same document, re-compressed by Node's `zlib` — a different compressor's bytes |
+| `<name>.troupe.blob` | written by the Troupe implementation, from IR it decoded itself — no part of it is this compiler's output |
 
 The references are cut from programs in `tests/rt/pos` chosen to span the grammar: arithmetic and
 recursion, both float spellings, variant tuples, a structured DC-label literal, lists.
@@ -20,16 +21,22 @@ blobs written down earlier (L3), that its own framing round-trips (L4), and — 
 `.node.blob` exists — that a blob compressed by a *different implementation* decodes to the same
 IR. Blob bytes are never compared; only decoded values are.
 
+`.troupe.blob` closes the other direction: it is produced by the second implementation, from IR
+that implementation decoded itself, so a passing case means each side accepts what the other
+writes. `scripts/ir-sexp-troupe-conformance.sh` runs the same laws inside Troupe over the `.sexp`
+and both recorded blobs.
+
 ## Regenerating
 
 ```sh
 IR_SEXP_REGENERATE=1 stack test Troupe-compiler:ir-sexp-conformance-test  # .sexp and .blob
 node scripts/ir-blob-interchange.mjs                                    # .node.blob
+./scripts/ir-sexp-troupe-conformance.sh --write-troupe-blobs            # .troupe.blob
 ```
 
-Run the second whenever the first changes anything: the Node blobs are derived from the Haskell
-ones. `node scripts/ir-blob-interchange.mjs --check` verifies they are current without rewriting,
-and is what `make test/local` runs.
+Run the second and third whenever the first changes anything: both are derived from the Haskell
+blobs. `node scripts/ir-blob-interchange.mjs --check` verifies the Node ones are current without
+rewriting, and is what `make test/local` runs.
 
 **Reading a regenerated diff.** Text that merely moved — different line breaking, a different float
 spelling, a different compressed length — is an implementation detail and carries no weight: layout

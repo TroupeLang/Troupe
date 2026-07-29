@@ -1,0 +1,54 @@
+import Outcome
+
+(** BytesAndZips - gzip and base64, with the failing directions reported as an Outcome.
+ *
+ *  The runtime builtins return `{tag = "Ok", value}` / `{tag = "Err", error = {reason}}`. This
+ *  wrapper converts that at the boundary, so no library-source hash has to be embedded in the
+ *  runtime to build a datatype value there.
+ *
+ *  Import it selectively to shadow the builtins, leaving call sites unchanged:
+ *
+ *    import { gunzip, base64Decode } BytesAndZips
+ *
+ *    case base64Decode blob of OK raw => ...
+ *                            | ERR e  => report e.reason
+ *
+ *  A name left out of the import list still resolves to the raw builtin, whose `{tag = "Ok"}`
+ *  record never matches `OK` - import every name you use.
+ *
+ *  **Byte strings.** Troupe has no byte arrays, so bytes are carried as strings in which every
+ *  character is one byte: a code unit in 0..255. `gzip` produces one and `base64Encode` consumes
+ *  one, which is why the two round trips compose in this order and no other:
+ *
+ *    val blob = base64Encode (gzip text)
+ *    val text = case base64Decode blob of OK raw => gunzip raw | ERR e => ...
+ *
+ *  **What is an outcome and what is not.** The two directions that consume untrusted data return
+ *  an outcome: a blob arriving from elsewhere may be truncated, corrupt, or a decompression bomb,
+ *  and none of that is a defect in the program reading it. Passing a string that is not bytes, or
+ *  one that has no UTF-8 encoding because it holds an unpaired surrogate, is a defect, and stays
+ *  a thread error - there is no sensible value to return for it.
+ *)
+
+let (* The builtins, captured before the definitions below shadow their names. *)
+    val rawGunzip       = gunzip
+    val rawBase64Decode = base64Decode
+
+    fun toOutcome {tag = "Ok",  value = v} = OK v
+      | toOutcome {tag = "Err", error = e} = ERR e
+
+    (** The text a gzip stream carries; `ERR {reason}` if it is not a gzip stream, if it expands
+     *  past the runtime's 64 MiB cap, or if what comes out is not UTF-8. Fails as a thread error
+     *  if the argument is not a byte string. *)
+    fun gunzip bytes = toOutcome (rawGunzip bytes)
+
+    (** The bytes a base64 string carries; `ERR {reason}` if it is not base64. Whitespace, which
+     *  a recorded blob may carry at the end of a line, is ignored. *)
+    fun base64Decode text = toOutcome (rawBase64Decode text)
+
+in [ ("gzip", gzip)
+   , ("gunzip", gunzip)
+   , ("base64Encode", base64Encode)
+   , ("base64Decode", base64Decode)
+   ]
+end

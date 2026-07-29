@@ -1,3 +1,0 @@
-(* Characters outside the base64 alphabet are rejected rather than skipped: a corrupt blob that
-   decoded to plausible bytes would be found much later, if at all. *)
-print (base64Decode "not base64!")

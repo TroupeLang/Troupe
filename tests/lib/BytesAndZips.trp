@@ -1,0 +1,121 @@
+import Unit
+import Outcome
+import List
+import String
+import { gzip, gunzip, base64Encode, base64Decode } BytesAndZips
+
+(* Bytes are strings whose characters are code units in 0..255, so the two round trips compose in
+   one order only: base64Encode (gzip text), and back the other way. *)
+
+let val nul   = "\x00"
+    val esc   = "\x1b"
+    val snow  = "\xe2\x98\x83"
+    val emoji = String.strCode 128512
+
+    fun double (s, 0) = s
+      | double (s, n) = double (s ^ s, n - 1)
+
+    val corpus = [ "", "a", "hello, world", nul, nul ^ esc ^ nul, snow, emoji
+                 , "mixed " ^ nul ^ " text " ^ emoji ^ " end", double ("the quick brown fox. ", 16) ]
+
+    fun roundTrips s =
+        case base64Decode (base64Encode (gzip s)) of
+            ERR _   => false
+          | OK raw  => (case gunzip raw of OK t => t = s | ERR _ => false)
+
+    val valid = base64Encode (gzip "the document")
+
+    (* Every way a blob arriving from elsewhere can be wrong. Each must come back as ERR, with the
+       thread still running to report it -- which is the whole reason these two return an outcome
+       and the encoding directions do not. *)
+    fun corrupt (name, blob) = (name, base64Decode blob)
+
+    val badBase64 = [ ("not the alphabet",  "not base64!")
+                    , ("one character too many", valid ^ "A")
+                    , ("padding in the middle", "aGVs=bG8=")
+                    , ("three padding characters", "aGVsbG8===")
+                    , ("a lone character",  "a")
+                    ]
+
+    (* A gzip stream of 80 MiB, in 80 KiB of concatenated members: the shape a decompression bomb
+       arrives in. The runtime caps output at 64 MiB. *)
+    fun times (s, 0) = ""
+      | times (s, n) = s ^ times (s, n - 1)
+    val bomb = times (gzip (double ("a", 23)), 10)
+
+    val payload = case base64Decode valid of OK raw => raw | ERR _ => ""
+
+    val badStreams = [ ("not a gzip stream",   "this is not compressed")
+                     , ("empty input",         "")
+                     , ("a truncated stream",  String.substring (payload, 0, 12))
+                     , ("trailing rubbish only", String.substring (payload, 5, 9))
+                     , ("a decompression bomb", bomb)
+                     ]
+
+    fun isErr (ERR _) = true
+      | isErr (OK _)  = false
+
+    val tests = Unit.group "BytesAndZips" [
+            Unit.group "round trip" [
+                Unit.it "every corpus member survives"
+                        (Unit.isTrue (List.forall roundTrips corpus))
+              , Unit.it "no corpus member fails"
+                        (Unit.isEq [] (List.filter (fn s => roundTrips s = false) corpus))
+              , Unit.it "a known base64 vector"
+                        (Unit.isEq "aGVsbG8=" (base64Encode "hello"))
+              , Unit.it "decoding ignores the newline a recorded blob ends with"
+                        (Unit.isEq (OK "hello") (base64Decode ("aGVsbG8=" ^ "\x0a")))
+            ],
+            Unit.group "bad base64 is reported, not guessed" [
+                Unit.it "every malformed input is an ERR"
+                        (Unit.isTrue (List.forall (fn (_, b) => isErr (base64Decode b)) badBase64))
+              , Unit.it "none is accepted"
+                        (Unit.isEq []
+                                   (List.map (fn (n, _) => n)
+                                             (List.filter (fn (_, b) => isErr (base64Decode b) = false)
+                                                          badBase64)))
+              , Unit.it "the diagnostic says what is wrong"
+                        (Unit.isEq (ERR {reason = "not base64"}) (base64Decode "not base64!"))
+            ],
+            Unit.group "bad gzip is reported, not guessed" [
+                Unit.it "every malformed stream is an ERR"
+                        (Unit.isTrue (List.forall (fn (_, b) => isErr (gunzip b)) badStreams))
+              , Unit.it "none is accepted"
+                        (Unit.isEq []
+                                   (List.map (fn (n, _) => n)
+                                             (List.filter (fn (_, b) => isErr (gunzip b) = false)
+                                                          badStreams)))
+              , Unit.it "a bomb is stopped by the cap rather than by memory"
+                        (Unit.isEq (ERR {reason = "decompressed data exceeds the 67108864-byte cap"})
+                                   (gunzip bomb))
+                (* Truncation anywhere in a valid stream is caught: a gzip member ends with a
+                 * length and a checksum, so a prefix is never a shorter valid stream. *)
+              , let val stream = String.substring (payload, 5, String.size payload)
+                    val cuts   = List.map (fn i => String.substring (stream, 0, i))
+                                          [1, 2, 5, 10, 15, String.size stream - 1]
+                in Unit.it "every truncation of a valid stream is an ERR"
+                        (Unit.isTrue (List.forall (fn s => isErr (gunzip s)) cuts))
+                end
+            ],
+            (* The label of a result says as much as the input it came from, tag included: whether
+             * a blob decoded is a fact about the blob. *)
+            Unit.group "information flow" [
+                let val secret = "hello, world" raisedTo `{alice}`
+                in Unit.group "a labeled argument labels the result" [
+                       Unit.it "gzip"
+                               (Unit.isEq (levelOf secret) (levelOf (gzip secret)))
+                     , Unit.it "base64Encode"
+                               (Unit.isEq (levelOf secret) (levelOf (base64Encode (gzip secret))))
+                     , Unit.it "base64Decode, including its outcome"
+                               (Unit.isEq (levelOf secret)
+                                          (levelOf (base64Decode (base64Encode (gzip secret)))))
+                     , Unit.it "a failure is as sensitive as the input that failed"
+                               (Unit.isEq (levelOf secret) (levelOf (base64Decode secret)))
+                   ]
+                end
+              , Unit.it "a public argument stays public"
+                        (Unit.isEq (levelOf "x") (levelOf (gzip "x")))
+            ]
+        ]
+in Unit.run authority tests
+end

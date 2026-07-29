@@ -1,17 +1,16 @@
-2026-07-29T14:05:21.190Z [RTM] info: Skipping network creation. Observe that all network operations will yield a runtime error.
-[34mbegin [0mcodec
-  [34mbegin [0mgzip
-      [33m[ TEST ][0m it every corpus member survives a round trip      [32m[ PASS ][0m it every corpus member survives a round trip
-      [33m[ TEST ][0m it no corpus member fails      [32m[ PASS ][0m it no corpus member fails
-      [33m[ TEST ][0m it the compressed form is a byte string      [32m[ PASS ][0m it the compressed form is a byte string
-      [33m[ TEST ][0m it a run compresses to a fraction of its length      [32m[ PASS ][0m it a run compresses to a fraction of its length
-      [33m[ TEST ][0m it compression is deterministic within one host      [32m[ PASS ][0m it compression is deterministic within one host
+2026-07-29T17:28:46.272Z [RTM] info: Skipping network creation. Observe that all network operations will yield a runtime error.
+[34mbegin [0mcodec builtins
+  [34mbegin [0mthe result of the reading directions is a tagged record
+      [33m[ TEST ][0m it gunzip of a gzip stream      [32m[ PASS ][0m it gunzip of a gzip stream
+      [33m[ TEST ][0m it gunzip of something else      [32m[ PASS ][0m it gunzip of something else
+      [33m[ TEST ][0m it base64Decode of base64      [32m[ PASS ][0m it base64Decode of base64
+      [33m[ TEST ][0m it base64Decode of something else      [32m[ PASS ][0m it base64Decode of something else
   [34mend [0m
-  [34mbegin [0mbase64
-      [33m[ TEST ][0m it every corpus member's compressed form survives a round trip      [32m[ PASS ][0m it every corpus member's compressed form survives a round trip
-      [33m[ TEST ][0m it a known vector      [32m[ PASS ][0m it a known vector
-      [33m[ TEST ][0m it the empty string      [32m[ PASS ][0m it the empty string
-      [33m[ TEST ][0m it decoding ignores line breaks      [32m[ PASS ][0m it decoding ignores line breaks
+  [34mbegin [0mthe writing directions return the value itself
+      [33m[ TEST ][0m it every corpus member survives a round trip      [32m[ PASS ][0m it every corpus member survives a round trip
+      [33m[ TEST ][0m it the compressed form is a byte string      [32m[ PASS ][0m it the compressed form is a byte string
+      [33m[ TEST ][0m it a known base64 vector      [32m[ PASS ][0m it a known base64 vector
+      [33m[ TEST ][0m it compression is deterministic within one host      [32m[ PASS ][0m it compression is deterministic within one host
   [34mend [0m
   [34mbegin [0mblob framing
     [34mbegin [0massembled and taken apart in Troupe
@@ -23,13 +22,13 @@
   [34mbegin [0minformation flow
     [34mbegin [0ma labeled argument labels the result
         [33m[ TEST ][0m it gzip        [32m[ PASS ][0m it gzip
-        [33m[ TEST ][0m it base64Encode        [32m[ PASS ][0m it base64Encode
-        [33m[ TEST ][0m it the whole round trip returns the value with its label        [32m[ PASS ][0m it the whole round trip returns the value with its label
+        [33m[ TEST ][0m it the record gunzip returns        [32m[ PASS ][0m it the record gunzip returns
+        [33m[ TEST ][0m it and the tag inside it, which says whether the input decoded        [32m[ PASS ][0m it and the tag inside it, which says whether the input decoded
     [34mend [0m
       [33m[ TEST ][0m it a public argument stays public      [32m[ PASS ][0m it a public argument stays public
   [34mend [0m
 [34mend [0m
 
-Total:  16
-Passes: 16
+Total:  15
+Passes: 15
 >>> Main thread finished with value: true@{alice}%{alice}

@@ -1,2 +1,0 @@
-(* A blob that is not a gzip stream is a Troupe-level error, not a crash. *)
-print (gunzip "this is not a gzip stream")

@@ -1,0 +1,33 @@
+2026-07-29T17:28:47.490Z [RTM] [32minfo[39m: Skipping network creation. Observe that all network operations will yield a runtime error.
+[34mbegin [0mBytesAndZips
+  [34mbegin [0mround trip
+      [33m[ TEST ][0m it every corpus member survives      [32m[ PASS ][0m it every corpus member survives
+      [33m[ TEST ][0m it no corpus member fails      [32m[ PASS ][0m it no corpus member fails
+      [33m[ TEST ][0m it a known base64 vector      [32m[ PASS ][0m it a known base64 vector
+      [33m[ TEST ][0m it decoding ignores the newline a recorded blob ends with      [32m[ PASS ][0m it decoding ignores the newline a recorded blob ends with
+  [34mend [0m
+  [34mbegin [0mbad base64 is reported, not guessed
+      [33m[ TEST ][0m it every malformed input is an ERR      [32m[ PASS ][0m it every malformed input is an ERR
+      [33m[ TEST ][0m it none is accepted      [32m[ PASS ][0m it none is accepted
+      [33m[ TEST ][0m it the diagnostic says what is wrong      [32m[ PASS ][0m it the diagnostic says what is wrong
+  [34mend [0m
+  [34mbegin [0mbad gzip is reported, not guessed
+      [33m[ TEST ][0m it every malformed stream is an ERR      [32m[ PASS ][0m it every malformed stream is an ERR
+      [33m[ TEST ][0m it none is accepted      [32m[ PASS ][0m it none is accepted
+      [33m[ TEST ][0m it a bomb is stopped by the cap rather than by memory      [32m[ PASS ][0m it a bomb is stopped by the cap rather than by memory
+      [33m[ TEST ][0m it every truncation of a valid stream is an ERR      [32m[ PASS ][0m it every truncation of a valid stream is an ERR
+  [34mend [0m
+  [34mbegin [0minformation flow
+    [34mbegin [0ma labeled argument labels the result
+        [33m[ TEST ][0m it gzip        [32m[ PASS ][0m it gzip
+        [33m[ TEST ][0m it base64Encode        [32m[ PASS ][0m it base64Encode
+        [33m[ TEST ][0m it base64Decode, including its outcome        [32m[ PASS ][0m it base64Decode, including its outcome
+        [33m[ TEST ][0m it a failure is as sensitive as the input that failed        [32m[ PASS ][0m it a failure is as sensitive as the input that failed
+    [34mend [0m
+      [33m[ TEST ][0m it a public argument stays public      [32m[ PASS ][0m it a public argument stays public
+  [34mend [0m
+[34mend [0m
+
+Total:  16
+Passes: 16
+>>> Main thread finished with value: true@{alice}%{alice}

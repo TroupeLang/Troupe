@@ -114,12 +114,20 @@ test/local: compiler lib/out/.build-stamp
 	mkdir -p out
 	cd compiler && $(MAKE) test
 	$(MAKE) test/ir-blob-interchange
+	$(MAKE) test/ir-sexp-troupe
 
 # The half of the IR blob interchange check that has to run outside Haskell:
 # confirms a Haskell-produced blob decompresses under Node's zlib, and that the
 # checked-in Node-compressed references are current. Cheap; needs no build.
 test/ir-blob-interchange:
 	node scripts/ir-blob-interchange.mjs --check
+
+# The interchange laws inside the second implementation: the Troupe reader in
+# trp-compiler/ decodes every conformance document and checks the datum-layer
+# and round-trip laws with Troupe's own structural equality. Needs the runtime
+# and the libraries, which `all` builds.
+test/ir-sexp-troupe: check-compiler lib/out/.build-stamp
+	./scripts/ir-sexp-troupe-conformance.sh
 
 test/prop-compiler:
 	cd compiler && stack test :dclabels-prop-test $(STACK_OPTS)

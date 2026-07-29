@@ -367,8 +367,12 @@ everything on one line, and remain conformant.
 Checked in this repository by `compiler/test/ir-sexp-test` (L1 over generated and hand-built IR),
 `compiler/test/ir-sexp-corpus` (L1 over every program in the test corpus, module graphs included),
 `compiler/test/ir-sexp-conformance` (L1–L4 over the reference documents and blobs, including one
-compressed by Node rather than Haskell), and `scripts/ir-blob-interchange.mjs` (the other direction
-of the compression check).
+compressed by Node rather than Haskell and one produced by the second implementation), and
+`scripts/ir-blob-interchange.mjs` (the other direction of the compression check).
+
+The second implementation is `trp-compiler/IR.trp` and `trp-compiler/Blob.trp`, written in Troupe.
+`scripts/ir-sexp-troupe-conformance.sh` runs the same laws inside it, over the same corpus, using
+Troupe's structural equality; `make test/local` runs both sides.
 
 ## Format identification and versioning
 

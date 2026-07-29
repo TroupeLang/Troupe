@@ -60,6 +60,13 @@ let (*--- Character helpers ---*)
         else if c = 34 orelse c = 59                  then false
         else true
 
+    (* The value of a hexadecimal digit, or a negative number if `c` is not one. *)
+    fun hexValue c =
+        if      c >= 48 andalso c <= 57  then c - 48        (* 0-9 *)
+        else if c >= 97 andalso c <= 102 then c - 87        (* a-f *)
+        else if c >= 65 andalso c <= 70  then c - 55        (* A-F *)
+        else 0 - 1
+
     (*--- Reading ---*)
 
     (* The greatest nesting depth the reader accepts; deeper input yields an `ERR`.
@@ -94,7 +101,24 @@ let (*--- Character helpers ---*)
                 else if code i = 10 then skipWs (i+1)
                 else skipComment (i+1)
 
-            (* Decode an escape sequence; `k` is the character just after the backslash. *)
+            (* Decode the four hex digits of a `\uXXXX` escape starting at `k`. *)
+            fun decodeHex4 k =
+                if k + 4 > n
+                then ("err", "incomplete \\u escape", k - 2)
+                else let fun go j acc =
+                             if j = k + 4 then ("ok", acc, j)
+                             else let val v = hexValue (code j)
+                                  in if v < 0
+                                     then ("err", "bad \\u escape", j)
+                                     else go (j+1) (acc * 16 + v)
+                                  end
+                     in go k 0
+                     end
+
+            (* Decode an escape sequence; `k` is the character just after the backslash.
+               `\uXXXX` is here because writers emit it for control characters: this reader
+               accepts every form any writer may produce, while its own printer emits the
+               shorter ones. *)
             fun decodeEscape k =
                 if k >= n
                 then ("err", "incomplete escape sequence", k - 1)
@@ -104,6 +128,10 @@ let (*--- Character helpers ---*)
                         else if c = 110 then ("ok", "\x0a", k+1)
                         else if c = 116 then ("ok", "\x09", k+1)
                         else if c = 114 then ("ok", "\x0d", k+1)
+                        else if c = 117
+                        then case decodeHex4 (k+1) of
+                                 ("ok", v, j)   => ("ok", String.strCode v, j)
+                               | (_, msg, at)   => ("err", msg, at)
                         else ("err", "invalid escape character", k)
                      end
 

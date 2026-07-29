@@ -1,0 +1,509 @@
+import Sexp
+import Outcome
+import List
+import String
+
+(** IR - the Troupe intermediate representation, and its troupe-ir-sexp encoding.
+ *
+ *  A second implementation of the format specified in
+ *  `compiler/docs/spec-troupe-ir-sexp.md`, written against that document and checked against the
+ *  conformance corpus in `compiler/test/ir-sexp-conformance/`. It reads what the Haskell compiler
+ *  writes and writes what the Haskell compiler reads; the two agree on decoded values, not on
+ *  bytes or layout.
+ *
+ *    decode : sexp -> (unit, string) outcome     a datum to a serialization unit
+ *    encode : unit -> sexp                       the inverse
+ *
+ *  Text goes through `Sexp.parse` / `Sexp.print`, which own the lexical layer.
+ *
+ *  **Numeric literals keep their lexical form.** `LINT` and `LFLOAT` carry the digits as written
+ *  rather than a number, because Troupe's numbers are IEEE doubles: reading the unbounded integer
+ *  the format permits would silently corrupt it (measured on this runtime, 2^200 becomes
+ *  1.6069380442589903e+60, which is not even a well-formed integer atom to write back). Carrying
+ *  the text is exact, and a backend that re-emits these literals needs no arithmetic on them.
+ *  It also keeps `(int 5)` and `(float 5.0)` distinct, which a double representation could not.
+ *)
+
+(* A source position. `NOPOS` is the absence of one; the encoding writes a located value with no
+   position as its payload alone. *)
+datatype pos = SRCPOS of (string * int * int)     (* file, line, column *)
+             | RTGEN  of string
+             | NOPOS
+
+datatype varaccess = VARLOCAL of string
+                   | VARENV   of string
+                   | VARSELF
+
+datatype labelexp = TAGEXP of string
+                  | CONJ   of (labelexp * labelexp)
+                  | DISJ   of (labelexp * labelexp)
+
+datatype labelcomponent = COMPTRUE
+                        | COMPFALSE
+                        | COMPEXP of labelexp
+
+datatype dclabel = DCLABEL of (labelcomponent * labelcomponent)   (* confidentiality, integrity *)
+
+datatype lit = LINT     of string      (* exact digits, see the note above *)
+             | LFLOAT   of string
+             | LSTRING  of string
+             | LBOOL    of bool
+             | LUNIT
+             | LLABEL   of string
+             | LDCLABEL of dclabel
+
+(* Expressions, instructions and terminators. A located value is a `(pos, value)` pair. *)
+datatype irexpr = BIN         of (string * (pos * varaccess) * (pos * varaccess))
+                | UN          of (string * (pos * varaccess))
+                | TUPLE       of ((pos * varaccess) list * bool)   (* bool: variant tuple *)
+                | RECORD      of ((string * (pos * varaccess)) list)
+                | WITHRECORD  of ((pos * varaccess) * (string * (pos * varaccess)) list)
+                | PROJFIELD   of ((pos * varaccess) * string)
+                | PROJIDX     of ((pos * varaccess) * string)
+                | LIST        of ((pos * varaccess) list)
+                | LISTCONS    of ((pos * varaccess) * (pos * varaccess))
+                | CONST       of lit
+                | BASE        of string
+                | LIB         of (string * string)
+
+datatype irinst = ASSIGN of (string * irexpr)
+                | MKCLOS of ((string * (pos * varaccess)) list * (string * string) list)
+
+datatype irterm = TAILCALL   of ((pos * varaccess) * (pos * varaccess))
+                | RET        of (pos * varaccess)
+                | IFTERM     of ((pos * varaccess) * bbtree * bbtree)
+                | ASSERTELSE of ((pos * varaccess) * bbtree * (pos * varaccess))
+                | LIBEXPORT  of (pos * varaccess)
+                | ERRORTERM  of (pos * varaccess)
+                | STACKEXP   of (string * bbtree * bbtree)
+and     bbtree  = BB of ((pos * irinst) list * (pos * irterm))
+
+datatype fundef = FUNDEF of (string * (pos * string) * (string * lit) list * bbtree)
+
+datatype irprogram = IRPROGRAM of (pos * fundef) list
+
+(* What a document carries: one function (the mobile-code case) or a whole program. *)
+datatype irunit = FUNUNIT  of fundef
+                | PROGUNIT of irprogram
+
+let
+    (*--- Decoding helpers ---*)
+
+    val formatVersion = "2"
+
+    fun fail msg = ERR msg
+
+    (* A name is written as a quoted string; a bare symbol is accepted too, as the spec's
+       tolerant reading allows. *)
+    fun asName (STR s)  = OK s
+      | asName (ATOM s) = OK s
+      | asName _        = fail "expected a name"
+
+    fun asAtom (ATOM s) = OK s
+      | asAtom (STR s)  = OK s
+      | asAtom _        = fail "expected a token"
+
+    fun asList (LST xs) = OK xs
+      | asList _        = fail "expected a list"
+
+    (* Map a decoder over a list, stopping at the first error. *)
+    fun mapM f xs =
+        let fun go [] acc = OK (List.reverse acc)
+              | go (y::ys) acc =
+                  case f y of
+                      OK v  => go ys (v :: acc)
+                    | ERR e => ERR e
+        in go xs []
+        end
+
+    fun context what r =
+        case r of
+            OK v  => OK v
+          | ERR e => ERR (what ^ ": " ^ e)
+
+    (*--- Positions ---*)
+
+    fun decodePos (ATOM "none") = OK NOPOS
+      | decodePos (LST [ATOM "rt", s]) =
+          (case asName s of OK t => OK (RTGEN t) | ERR e => ERR e)
+      | decodePos (LST [f, l, c]) =
+          (case (asName f, asAtom l, asAtom c) of
+               (OK file, OK line, OK col) =>
+                 OK (SRCPOS (file, stringToInt line, stringToInt col))
+             | _ => fail "malformed source position")
+      | decodePos _ = fail "not a valid source position"
+
+    (* A located value: `(@ POS PAYLOAD)`, or the payload alone for `NOPOS`. *)
+    fun decodeLocated decodePayload (LST [ATOM "@", p, x]) =
+          (case decodePos p of
+               OK pp => (case decodePayload x of
+                             OK v  => OK (pp, v)
+                           | ERR e => ERR e)
+             | ERR e => ERR e)
+      | decodeLocated decodePayload d =
+          (case decodePayload d of
+               OK v  => OK (NOPOS, v)
+             | ERR e => ERR e)
+
+    (*--- Variable access ---*)
+
+    fun decodeVA (LST [ATOM "local", n]) =
+          (case asName n of OK s => OK (VARLOCAL s) | ERR e => ERR e)
+      | decodeVA (LST [ATOM "env", n]) =
+          (case asName n of OK s => OK (VARENV s) | ERR e => ERR e)
+      | decodeVA (ATOM "self") = OK VARSELF
+      | decodeVA _ = fail "not a valid variable access"
+
+    fun decodeLVA d = decodeLocated decodeVA d
+
+    (*--- Labels ---*)
+
+    fun decodeLabelExp (LST [ATOM "tag", t]) =
+          (case asName t of OK s => OK (TAGEXP s) | ERR e => ERR e)
+      | decodeLabelExp (LST ((ATOM "and") :: args)) = decodeNary true args
+      | decodeLabelExp (LST ((ATOM "or") :: args))  = decodeNary false args
+      | decodeLabelExp _ = fail "not a valid label expression"
+
+    (* `and`/`or` accept n-ary sugar, right-nested; a writer emits the binary form. *)
+    and decodeNary isConj args =
+        case mapM decodeLabelExp args of
+            ERR e => ERR e
+          | OK es =>
+              case es of
+                  [] => fail "and/or requires at least two operands"
+                | [_] => fail "and/or requires at least two operands"
+                | (x::rest) =>
+                    let fun fold [y] = y
+                          | fold (y::ys) = if isConj then CONJ (y, fold ys) else DISJ (y, fold ys)
+                          | fold [] = x
+                    in OK (if isConj then CONJ (x, fold rest) else DISJ (x, fold rest))
+                    end
+
+    fun decodeComponent (ATOM "#true")  = OK COMPTRUE
+      | decodeComponent (ATOM "#false") = OK COMPFALSE
+      | decodeComponent d =
+          case decodeLabelExp d of
+              OK e  => OK (COMPEXP e)
+            | ERR m => ERR m
+
+    fun decodeDCLabel (LST [ATOM "dclabel", c, i]) =
+          (case (decodeComponent c, decodeComponent i) of
+               (OK cc, OK ii) => OK (DCLABEL (cc, ii))
+             | (ERR e, _)     => ERR e
+             | (_, ERR e)     => ERR e)
+      | decodeDCLabel _ = fail "expected (dclabel COMPONENT COMPONENT)"
+
+    (*--- Literals ---*)
+
+    fun decodeLit (LST [ATOM "int", n]) =
+          (case asAtom n of OK s => OK (LINT s) | ERR e => ERR e)
+      | decodeLit (LST [ATOM "float", n]) =
+          (case asAtom n of OK s => OK (LFLOAT s) | ERR e => ERR e)
+      | decodeLit (LST [ATOM "string", s]) =
+          (case asName s of OK t => OK (LSTRING t) | ERR e => ERR e)
+      | decodeLit (LST [ATOM "bool", b]) =
+          (case asAtom b of
+               OK "true"  => OK (LBOOL true)
+             | OK "false" => OK (LBOOL false)
+             | OK other   => fail ("bad boolean literal: " ^ other)
+             | ERR e      => ERR e)
+      | decodeLit (ATOM "unit") = OK LUNIT
+      | decodeLit (LST [ATOM "label-string", s]) =
+          (case asName s of OK t => OK (LLABEL t) | ERR e => ERR e)
+      | decodeLit (LST ((ATOM "dclabel") :: rest)) =
+          (case decodeDCLabel (LST ((ATOM "dclabel") :: rest)) of
+               OK d  => OK (LDCLABEL d)
+             | ERR e => ERR e)
+      | decodeLit _ = fail "not a valid literal"
+
+    (*--- Expressions ---*)
+
+    fun decodeField (LST [n, va]) =
+          (case (asName n, decodeLVA va) of
+               (OK f, OK v)  => OK (f, v)
+             | (ERR e, _)    => ERR e
+             | (_, ERR e)    => ERR e)
+      | decodeField _ = fail "expected (NAME VARACCESS) field"
+
+    fun decodeExpr (LST [ATOM "bin", op, a, b]) =
+          (case (asAtom op, decodeLVA a, decodeLVA b) of
+               (OK o, OK x, OK y) => OK (BIN (o, x, y))
+             | (ERR e, _, _)      => ERR e
+             | (_, ERR e, _)      => ERR e
+             | (_, _, ERR e)      => ERR e)
+      | decodeExpr (LST [ATOM "un", op, a]) =
+          (case (asAtom op, decodeLVA a) of
+               (OK o, OK x)  => OK (UN (o, x))
+             | (ERR e, _)    => ERR e
+             | (_, ERR e)    => ERR e)
+      | decodeExpr (LST ((ATOM "tuple") :: vas)) =
+          (case mapM decodeLVA vas of OK xs => OK (TUPLE (xs, false)) | ERR e => ERR e)
+      | decodeExpr (LST ((ATOM "tuple-variant") :: vas)) =
+          (case mapM decodeLVA vas of OK xs => OK (TUPLE (xs, true)) | ERR e => ERR e)
+      | decodeExpr (LST ((ATOM "record") :: fs)) =
+          (case mapM decodeField fs of OK xs => OK (RECORD xs) | ERR e => ERR e)
+      | decodeExpr (LST ((ATOM "with-record") :: va :: fs)) =
+          (case (decodeLVA va, mapM decodeField fs) of
+               (OK v, OK xs) => OK (WITHRECORD (v, xs))
+             | (ERR e, _)    => ERR e
+             | (_, ERR e)    => ERR e)
+      | decodeExpr (LST [ATOM "proj-field", va, f]) =
+          (case (decodeLVA va, asName f) of
+               (OK v, OK n)  => OK (PROJFIELD (v, n))
+             | (ERR e, _)    => ERR e
+             | (_, ERR e)    => ERR e)
+      | decodeExpr (LST [ATOM "proj-idx", va, i]) =
+          (case (decodeLVA va, asAtom i) of
+               (OK v, OK n)  => OK (PROJIDX (v, n))
+             | (ERR e, _)    => ERR e
+             | (_, ERR e)    => ERR e)
+      | decodeExpr (LST ((ATOM "list") :: vas)) =
+          (case mapM decodeLVA vas of OK xs => OK (LIST xs) | ERR e => ERR e)
+      | decodeExpr (LST [ATOM "cons", a, b]) =
+          (case (decodeLVA a, decodeLVA b) of
+               (OK x, OK y)  => OK (LISTCONS (x, y))
+             | (ERR e, _)    => ERR e
+             | (_, ERR e)    => ERR e)
+      | decodeExpr (LST [ATOM "const", l]) =
+          (case decodeLit l of OK v => OK (CONST v) | ERR e => ERR e)
+      | decodeExpr (LST [ATOM "base", n]) =
+          (case asName n of OK s => OK (BASE s) | ERR e => ERR e)
+      | decodeExpr (LST [ATOM "lib", l, v]) =
+          (case (asName l, asName v) of
+               (OK a, OK b)  => OK (LIB (a, b))
+             | (ERR e, _)    => ERR e
+             | (_, ERR e)    => ERR e)
+      | decodeExpr _ = fail "not a valid expression"
+
+    (*--- Instructions, terminators, blocks ---*)
+
+    fun decodeCapture (LST [n, va]) =
+          (case (asName n, decodeLVA va) of
+               (OK s, OK v)  => OK (s, v)
+             | (ERR e, _)    => ERR e
+             | (_, ERR e)    => ERR e)
+      | decodeCapture _ = fail "expected (NAME VARACCESS) capture"
+
+    fun decodeClosure (LST [n, h]) =
+          (case (asName n, asName h) of
+               (OK s, OK f)  => OK (s, f)
+             | (ERR e, _)    => ERR e
+             | (_, ERR e)    => ERR e)
+      | decodeClosure _ = fail "expected (NAME HFN) closure"
+
+    fun decodeInst (LST [ATOM "assign", n, e]) =
+          (case (asName n, decodeExpr e) of
+               (OK s, OK x)  => OK (ASSIGN (s, x))
+             | (ERR m, _)    => ERR m
+             | (_, ERR m)    => ERR m)
+      | decodeInst (LST [ATOM "mkclos", caps, clos]) =
+          (case (asList caps, asList clos) of
+               (OK cs, OK fs) =>
+                 (case (mapM decodeCapture cs, mapM decodeClosure fs) of
+                      (OK a, OK b) => OK (MKCLOS (a, b))
+                    | (ERR e, _)   => ERR e
+                    | (_, ERR e)   => ERR e)
+             | (ERR e, _) => ERR e
+             | (_, ERR e) => ERR e)
+      | decodeInst _ = fail "expected (assign ...) or (mkclos ...)"
+
+    fun decodeBB (LST [ATOM "bb", insts, term]) =
+          (case asList insts of
+               ERR e => ERR e
+             | OK is =>
+                 case (mapM (decodeLocated decodeInst) is, decodeLocated decodeTerm term) of
+                     (OK xs, OK t) => OK (BB (xs, t))
+                   | (ERR e, _)    => ERR e
+                   | (_, ERR e)    => ERR e)
+      | decodeBB _ = fail "expected (bb (INST*) TERM)"
+
+    and decodeTerm (LST [ATOM "tail-call", f, a]) =
+          (case (decodeLVA f, decodeLVA a) of
+               (OK x, OK y)  => OK (TAILCALL (x, y))
+             | (ERR e, _)    => ERR e
+             | (_, ERR e)    => ERR e)
+      | decodeTerm (LST [ATOM "ret", a]) =
+          (case decodeLVA a of OK x => OK (RET x) | ERR e => ERR e)
+      | decodeTerm (LST [ATOM "if", c, t, e]) =
+          (case (decodeLVA c, decodeBB t, decodeBB e) of
+               (OK x, OK a, OK b) => OK (IFTERM (x, a, b))
+             | (ERR m, _, _)      => ERR m
+             | (_, ERR m, _)      => ERR m
+             | (_, _, ERR m)      => ERR m)
+      | decodeTerm (LST [ATOM "assert-else-error", c, bb, err]) =
+          (case (decodeLVA c, decodeBB bb, decodeLVA err) of
+               (OK x, OK a, OK b) => OK (ASSERTELSE (x, a, b))
+             | (ERR m, _, _)      => ERR m
+             | (_, ERR m, _)      => ERR m
+             | (_, _, ERR m)      => ERR m)
+      | decodeTerm (LST [ATOM "lib-export", a]) =
+          (case decodeLVA a of OK x => OK (LIBEXPORT x) | ERR e => ERR e)
+      | decodeTerm (LST [ATOM "error", a]) =
+          (case decodeLVA a of OK x => OK (ERRORTERM x) | ERR e => ERR e)
+      | decodeTerm (LST [ATOM "stack-expand", n, b1, b2]) =
+          (case (asName n, decodeBB b1, decodeBB b2) of
+               (OK s, OK a, OK b) => OK (STACKEXP (s, a, b))
+             | (ERR m, _, _)      => ERR m
+             | (_, ERR m, _)      => ERR m
+             | (_, _, ERR m)      => ERR m)
+      | decodeTerm _ = fail "not a valid terminator"
+
+    (*--- Functions and programs ---*)
+
+    fun decodeConst (LST [n, l]) =
+          (case (asName n, decodeLit l) of
+               (OK s, OK v)  => OK (s, v)
+             | (ERR e, _)    => ERR e
+             | (_, ERR e)    => ERR e)
+      | decodeConst _ = fail "expected (NAME LIT) const binding"
+
+    fun decodeConsts (LST ((ATOM "consts") :: ps)) = mapM decodeConst ps
+      | decodeConsts _ = fail "expected (consts ...)"
+
+    fun decodeArg (LST [ATOM "arg", n]) = decodeLocated asName n
+      | decodeArg _ = fail "expected (arg NAME)"
+
+    fun decodeFun (LST [ATOM "fun", n, arg, consts, body]) =
+          (case asName n of
+               ERR e => ERR e
+             | OK name =>
+                 context ("in function " ^ name)
+                   (case (decodeArg arg, decodeConsts consts, decodeBB body) of
+                        (OK a, OK cs, OK b) => OK (FUNDEF (name, a, cs, b))
+                      | (ERR e, _, _)       => ERR e
+                      | (_, ERR e, _)       => ERR e
+                      | (_, _, ERR e)       => ERR e))
+      | decodeFun _ = fail "expected (fun NAME (arg NAME) CONSTS BODY)"
+
+    fun decodeProgram (LST ((ATOM "program") :: fs)) =
+          (case mapM (decodeLocated decodeFun) fs of
+               OK xs => OK (IRPROGRAM xs)
+             | ERR e => ERR e)
+      | decodeProgram _ = fail "expected (program ...)"
+
+    fun decodeBody (LST ((ATOM "fun") :: rest)) =
+          (case decodeFun (LST ((ATOM "fun") :: rest)) of
+               OK f  => OK (FUNUNIT f)
+             | ERR e => ERR e)
+      | decodeBody (LST ((ATOM "program") :: rest)) =
+          (case decodeProgram (LST ((ATOM "program") :: rest)) of
+               OK p  => OK (PROGUNIT p)
+             | ERR e => ERR e)
+      | decodeBody _ = fail "expected a (fun ...) or (program ...) serialization unit"
+
+    (** Decode a whole document: the versioned wrapper and its body. *)
+    fun decode (LST [ATOM "troupe-ir-sexp", ver, body]) =
+          (case asAtom ver of
+               ERR e => ERR e
+             | OK v =>
+                 if v = formatVersion
+                 then decodeBody body
+                 else fail ("unsupported troupe-ir-sexp version: " ^ v
+                            ^ " (this implementation supports version " ^ formatVersion ^ ")"))
+      | decode _ = fail "not a troupe-ir-sexp document"
+
+    (*--- Encoding ---*)
+
+    fun encodePos (SRCPOS (f, l, c)) = LST [STR f, ATOM (toString l), ATOM (toString c)]
+      | encodePos (RTGEN s)          = LST [ATOM "rt", STR s]
+      | encodePos NOPOS              = ATOM "none"
+
+    (* A located value writes its position in an `@` wrapper; `NOPOS` writes the payload alone,
+       so a position-free document stays position-free. *)
+    fun encodeLocated enc (NOPOS, x) = enc x
+      | encodeLocated enc (p, x)     = LST [ATOM "@", encodePos p, enc x]
+
+    fun encodeVA (VARLOCAL n) = LST [ATOM "local", STR n]
+      | encodeVA (VARENV n)   = LST [ATOM "env", STR n]
+      | encodeVA VARSELF      = ATOM "self"
+
+    fun encodeLVA lva = encodeLocated encodeVA lva
+
+    fun encodeLabelExp (TAGEXP t)    = LST [ATOM "tag", STR t]
+      | encodeLabelExp (CONJ (a, b)) = LST [ATOM "and", encodeLabelExp a, encodeLabelExp b]
+      | encodeLabelExp (DISJ (a, b)) = LST [ATOM "or", encodeLabelExp a, encodeLabelExp b]
+
+    fun encodeComponent COMPTRUE    = ATOM "#true"
+      | encodeComponent COMPFALSE   = ATOM "#false"
+      | encodeComponent (COMPEXP e) = encodeLabelExp e
+
+    fun encodeDCLabel (DCLABEL (c, i)) =
+        LST [ATOM "dclabel", encodeComponent c, encodeComponent i]
+
+    fun encodeLit (LINT s)     = LST [ATOM "int", ATOM s]
+      | encodeLit (LFLOAT s)   = LST [ATOM "float", ATOM s]
+      | encodeLit (LSTRING s)  = LST [ATOM "string", STR s]
+      | encodeLit (LBOOL b)    = LST [ATOM "bool", ATOM (if b then "true" else "false")]
+      | encodeLit LUNIT        = ATOM "unit"
+      | encodeLit (LLABEL s)   = LST [ATOM "label-string", STR s]
+      | encodeLit (LDCLABEL d) = encodeDCLabel d
+
+    fun encodeField (n, va) = LST [STR n, encodeLVA va]
+
+    fun encodeExpr (BIN (op, a, b))      = LST [ATOM "bin", ATOM op, encodeLVA a, encodeLVA b]
+      | encodeExpr (UN (op, a))          = LST [ATOM "un", ATOM op, encodeLVA a]
+      | encodeExpr (TUPLE (vas, isVar))  =
+          LST ((ATOM (if isVar then "tuple-variant" else "tuple")) :: List.map encodeLVA vas)
+      | encodeExpr (RECORD fs)           = LST ((ATOM "record") :: List.map encodeField fs)
+      | encodeExpr (WITHRECORD (v, fs))  =
+          LST ((ATOM "with-record") :: encodeLVA v :: List.map encodeField fs)
+      | encodeExpr (PROJFIELD (v, f))    = LST [ATOM "proj-field", encodeLVA v, STR f]
+      | encodeExpr (PROJIDX (v, i))      = LST [ATOM "proj-idx", encodeLVA v, ATOM i]
+      | encodeExpr (LIST vas)            = LST ((ATOM "list") :: List.map encodeLVA vas)
+      | encodeExpr (LISTCONS (a, b))     = LST [ATOM "cons", encodeLVA a, encodeLVA b]
+      | encodeExpr (CONST l)             = LST [ATOM "const", encodeLit l]
+      | encodeExpr (BASE n)              = LST [ATOM "base", STR n]
+      | encodeExpr (LIB (l, v))          = LST [ATOM "lib", STR l, STR v]
+
+    fun encodeInst (ASSIGN (n, e)) = LST [ATOM "assign", STR n, encodeExpr e]
+      | encodeInst (MKCLOS (caps, clos)) =
+          LST [ ATOM "mkclos"
+              , LST (List.map (fn (n, va) => LST [STR n, encodeLVA va]) caps)
+              , LST (List.map (fn (n, h) => LST [STR n, STR h]) clos) ]
+
+    fun encodeBB (BB (insts, term)) =
+        LST [ ATOM "bb"
+            , LST (List.map (encodeLocated encodeInst) insts)
+            , encodeLocated encodeTerm term ]
+
+    and encodeTerm (TAILCALL (f, a))       = LST [ATOM "tail-call", encodeLVA f, encodeLVA a]
+      | encodeTerm (RET a)                 = LST [ATOM "ret", encodeLVA a]
+      | encodeTerm (IFTERM (c, t, e))      = LST [ATOM "if", encodeLVA c, encodeBB t, encodeBB e]
+      | encodeTerm (ASSERTELSE (c, b, e))  =
+          LST [ATOM "assert-else-error", encodeLVA c, encodeBB b, encodeLVA e]
+      | encodeTerm (LIBEXPORT a)           = LST [ATOM "lib-export", encodeLVA a]
+      | encodeTerm (ERRORTERM a)           = LST [ATOM "error", encodeLVA a]
+      | encodeTerm (STACKEXP (n, a, b))    =
+          LST [ATOM "stack-expand", STR n, encodeBB a, encodeBB b]
+
+    fun encodeFun (FUNDEF (name, arg, consts, body)) =
+        LST [ ATOM "fun"
+            , STR name
+            , LST [ATOM "arg", encodeLocated (fn s => STR s) arg]
+            , LST ((ATOM "consts") :: List.map (fn (n, l) => LST [STR n, encodeLit l]) consts)
+            , encodeBB body ]
+
+    fun encodeProgram (IRPROGRAM fs) =
+        LST ((ATOM "program") :: List.map (encodeLocated encodeFun) fs)
+
+    fun encodeBody (FUNUNIT f)  = encodeFun f
+      | encodeBody (PROGUNIT p) = encodeProgram p
+
+    (** Encode a serialization unit as a whole document. *)
+    fun encode u = LST [ATOM "troupe-ir-sexp", ATOM formatVersion, encodeBody u]
+
+    (** Read a document from text. *)
+    fun fromString text =
+        case Sexp.parse text of
+            OK datum => decode datum
+          | ERR e    => ERR ("s-expression: " ^ e.reason)
+
+    (** Write a document as text. *)
+    fun toText u = Sexp.print (encode u)
+in
+    [ ("decode", decode)
+    , ("encode", encode)
+    , ("fromString", fromString)
+    , ("toText", toText)
+    ]
+end

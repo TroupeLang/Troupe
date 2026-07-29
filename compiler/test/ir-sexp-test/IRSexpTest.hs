@@ -16,6 +16,8 @@ import           Test.Tasty
 import           Test.Tasty.HUnit
 import           Test.Tasty.QuickCheck (testProperty, forAll, (===), withMaxSuccess, Property)
 
+import           Data.Char (isHexDigit, digitToInt)
+
 import           IRSexp (printProg, printProgWithPos, parseProg, erasePosProg)
 import           Gen (genProg)
 import           IR
@@ -65,6 +67,7 @@ main = defaultMain $ testGroup "troupe-ir-sexp round-trip"
   , mkCases "dc-label forms"               dcLabelCases
   , mkCases "structural extras"            structuralCases
   , testCase "NaN survives the round trip (compared by isNaN, not equality)" nanRoundTrip
+  , testCase "a string literal may carry unescaped control characters" rawControlRead
   , testProperty "parse (print p) == p (positions erased)"
       (withMaxSuccess 2000 propRoundTrip)
   , testProperty "parse (printWithPos p) == p (positions kept)"
@@ -88,6 +91,28 @@ nanRoundTrip =
       ++ [ d | Loc _ (FunDef _ _ _ bb) <- funs, d <- floatsBB bb ]
     floatsBB (BB insts _) =
       [ d | Loc _ (Assign _ (Const (Core.LNumeric (Core.NumFloat d)))) <- insts ]
+
+-- | Escaping a control character is a writer's choice, not a rule of the format:
+-- the second implementation (@trp-compiler/IR.trp@) prints them raw, where this
+-- one writes @\\uXXXX@. Every other case here goes through this side's printer,
+-- so the raw form reaches the reader only from the other implementation — which
+-- is exactly the case a round-trip test cannot reach. Written down as text here
+-- instead: the escapes this printer emitted are undone before reading it back.
+rawControlRead :: Assertion
+rawControlRead =
+  let p       = progLit (Core.LString "a\SOHb\US")
+      printed = unescape (printProgWithPos p)
+  in case parseProg printed of
+       Left err -> assertFailure ("parse error: " ++ err ++ "\n--- text ---\n" ++ printed)
+       Right actual
+         | actual == p -> return ()
+         | otherwise   -> assertFailure ("mismatch\n--- text ---\n" ++ printed)
+  where
+    unescape ('\\' : 'u' : a : b : c : d : rest)
+      | all isHexDigit [a, b, c, d] = toEnum (foldl (\n h -> n * 16 + digitToInt h) 0 [a,b,c,d])
+                                      : unescape rest
+    unescape (c : rest) = c : unescape rest
+    unescape []         = []
 
 -- | Over generated wrapped documents: parsing a printed program reproduces it
 -- structurally, modulo source positions.

@@ -292,8 +292,8 @@ let (* =================================================================== *)
 
     (* Does the char list `cs` start with the char list `delim`? *)
     fun matchesAt []      _        = true
-      | matchesAt _::_ []       = false
-      | matchesAt d::ds c::cs = if d = c then matchesAt ds cs else false
+      | matchesAt (_::_) []       = false
+      | matchesAt (d::ds) (c::cs) = if d = c then matchesAt ds cs else false
 
     (* Find the first occurrence of `delim` that is preceded by a non-space,
      * non-empty run. Returns [ (before, after) ] or []. Used for emphasis. *)

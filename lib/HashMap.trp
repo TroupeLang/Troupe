@@ -33,7 +33,7 @@ let (* NOTE: The map is implemented as a Hash Array Mapped Trie (HAMT), i.e. a p
     (** Hash of (non-empty) leaf bucket. *)
     (* TODO (Optimisation): Store hash values in leaves to circumvent recomputation for each
      *                      collision? *)
-    fun leaf_hash hf (k,_)::_ = hf k
+    fun leaf_hash hf ((k,_)::_) = hf k
 
     (** Returns the size of the bucket. *)
     val leaf_size = List.length

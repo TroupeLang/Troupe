@@ -54,7 +54,7 @@ let
                                              | _          => 17
             val p = 3
             fun go i []    acc = acc
-              | go i x::xs acc =
+              | go i (x::xs) acc =
                 let val acc' = (acc + i * ((hash x) xorb (hashType x))) andb Number.maxInt32
                 in go (i*p) xs acc' end
         in go 1 xs 0 end

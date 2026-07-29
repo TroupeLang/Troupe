@@ -34,7 +34,6 @@
 -- Deferred (v1 does NOT generate these):
 --   * AtPattern  -- matches a value's *label* via LevelOf; needs a
 --                   label-carrying value model. Follow-up.
---   * ErrorPattern -- parser error-recovery placeholder, not real surface syntax.
 
 module Main (main) where
 
@@ -105,7 +104,7 @@ refMatch (RecordPattern fs mode) (VRecord kvs) =
                  WildcardMatch -> True
   in if sizeOk then matchFields fs kvs else Nothing
 refMatch (RecordPattern _ _) _     = Nothing
-refMatch _ _                       = Nothing   -- AtPattern / ErrorPattern (not generated)
+refMatch _ _                       = Nothing   -- AtPattern (not generated)
 
 refMatchL :: S.LDeclPattern -> V -> Maybe [(String, V)]
 refMatchL lp = refMatch (unLoc lp)
@@ -139,7 +138,6 @@ binders (RecordPattern fs _)  = concatMap fb fs
   where fb (f, Nothing) = [f]
         fb (_, Just lp) = binders (unLoc lp)
 binders (AtPattern lp _)      = binders (unLoc lp)
-binders ErrorPattern          = []
 
 -- ---------------------------------------------------------------------------
 -- Interpreter for the pattern-free DirectWOPats term
@@ -300,7 +298,6 @@ showPat (RecordPattern fs mode) =
         showField (f, Just p)  = f ++ " = " ++ showPat (unLoc p)
         dots = case mode of WildcardMatch -> [".."]; ExactMatch -> []
 showPat (AtPattern p l)  = showPat (unLoc p) ++ " @ " ++ l
-showPat ErrorPattern     = "<error>"
 
 showLit :: S.Lit -> String
 showLit (S.LNumeric (S.NumInt n)) = show n

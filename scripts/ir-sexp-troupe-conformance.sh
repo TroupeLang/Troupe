@@ -18,10 +18,16 @@
 # the Node-compressed one -- and requires both to decode to the same IR here, and
 # checks its own framing round trip.
 #
+# The reader is compiled both ways, as the golden runner compiles every test it
+# collects (compiler/test/Golden.hs runs each under Raw optimization and under
+# --no-rawopt). This is the second implementation of the format, and the setting
+# that turns off Raw optimizations is the one that surfaces corner-case codegen
+# bugs; a reader checked only in the optimized configuration is checked half.
+#
 # Run from anywhere:  ./scripts/ir-sexp-troupe-conformance.sh
-# Add --write-troupe-blobs to rewrite the <name>.troupe.blob references, which
-# ir-sexp-conformance-test decodes: the direction of the interchange in which
-# Troupe is the producer.
+# Add --write-troupe-references to rewrite the <name>.troupe.sexp and
+# <name>.troupe.blob references, which ir-sexp-conformance-test reads back: the
+# direction of the interchange in which Troupe is the producer.
 # Needs bin/troupec, rt/built and lib/out built.
 
 set -e
@@ -48,10 +54,14 @@ fi
 
 tmp=$(mktemp)
 trap 'rm -f "$tmp" "$tmp.js"' EXIT
-./bin/troupec trp-compiler/conformance.trp -m --output="$tmp.js"
 
-# --io-root is the repository root, so the program receives the corpus paths as
-# it sees them here; the documents themselves are read-only inputs.
-node rt/built/troupe.mjs -f="$tmp.js" --localonly \
-     --suppress-local-info-message --suppress-main-thread-finished-message \
-     --io-root="$root" -- "$@" $docs
+for rawopt in "" "--no-rawopt"; do
+    echo "== the reader compiled with ${rawopt:-Raw optimization}"
+    ./bin/troupec $rawopt trp-compiler/conformance.trp -m --output="$tmp.js"
+
+    # --io-root is the repository root, so the program receives the corpus paths
+    # as it sees them here; the documents themselves are read-only inputs.
+    node rt/built/troupe.mjs -f="$tmp.js" --localonly \
+         --suppress-local-info-message --suppress-main-thread-finished-message \
+         --io-root="$root" -- "$@" $docs
+done

@@ -1,0 +1,11 @@
+(* Lists long enough that a per-element spine recursion in the runtime would
+ * overflow the JS stack; the lists are built programmatically, and the
+ * comparisons cover full agreement, a difference only at the last element,
+ * a length difference, and self-comparison. *)
+let fun build (n, acc) = if n = 0 then acc else build (n - 1, (n - 1) :: acc)
+    val a = build (100000, [])
+    val b = build (100000, [])
+    val c = build (99999, [100001])
+    val d = build (99999, [])
+in (a = b, a = c, a = d, a = a)
+end

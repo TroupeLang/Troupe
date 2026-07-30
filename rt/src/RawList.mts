@@ -108,9 +108,16 @@ export class Cons extends RawList {
         return this._length;
     }
 
+    // Walks the spine iteratively: recursing here costs one JS stack frame per
+    // element, so a list longer than the engine's stack overflows it. The
+    // length is cached on every cons cell, so the result array is sized once.
     toArray () {
-        let x = this._tail.toArray();
-        x.unshift ( this._head );
-        return x;
+        const a : LVal [] = new Array (this._length);
+        let x : RawList = this;
+        for (let j = 0; j < a.length; j ++) {
+            a[j] = x.head;
+            x = x.tail;
+        }
+        return a;
     }
 }

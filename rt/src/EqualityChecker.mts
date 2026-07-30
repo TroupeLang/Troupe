@@ -35,6 +35,28 @@ export function runtimeEquals(x: TroupeRawValue, y: TroupeRawValue): LVal {
 
   }
 
+  // Same comparison as `arrayEquality`, walking the two spines instead of
+  // materialising them: the lists may be longer than the JS stack, and a pair
+  // that differs early is then decided without copying either list.
+  function listEquality(o1, o2) {
+    if (o1.length != o2.length)
+      return baseBoolean(false)
+
+    // Join of the labels of values compared so far
+    let l = levels.BOT
+    let x = o1, y = o2
+    while (!x.isNil) {
+      let u = x.head, v = y.head
+      let z = runtimeEquals(u.val, v.val);
+      l = levels.lub(l, z.lev, u.lev, v.lev)
+      if (!z.val) {
+        return baseBoolean(false, l)
+      }
+      x = x.tail; y = y.tail
+    }
+    return baseBoolean(true, l)
+  }
+
   function recordEquality(o1, o2) {
     if (o1.__obj.size != o2.__obj.size) {
       return baseBoolean(false);
@@ -75,7 +97,7 @@ export function runtimeEquals(x: TroupeRawValue, y: TroupeRawValue): LVal {
     case TroupeType.AUTHORITY:
       return levelEquality(o1.authorityLevel, o2.authorityLevel);
     case TroupeType.LIST:
-      return arrayEquality(o1.toArray(), o2.toArray());
+      return listEquality(o1, o2);
     case TroupeType.TUPLE:
       return arrayEquality(o1, o2)
     case TroupeType.RECORD:

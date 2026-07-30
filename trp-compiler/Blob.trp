@@ -1,0 +1,55 @@
+import String
+import Outcome
+import { gzip, gunzip, base64Encode, base64Decode } BytesAndZips
+
+(** Blob - the framing of the serialized IR blob, in Troupe.
+ *
+ *  A blob is the mobile-code format: it is embedded per function in emitted JavaScript
+ *  (`this.<fn>.serialized`) and travels between nodes when a closure moves. The layout is fixed
+ *  by `compiler/src/IRBlob.hs`:
+ *
+ *      bytes 0-3 : format identifier "TRPI"
+ *      byte  4   : format version, currently 2
+ *      bytes 5.. : gzip stream of the UTF-8 encoded troupe-ir-sexp document
+ *
+ *  all of it base64 at the point where it is written into a string. The runtime supplies the two
+ *  mechanical layers - `gzip`/`gunzip` and `base64Encode`/`base64Decode` - and the format itself
+ *  is assembled here, so that the version number has one home, in the compiler.
+ *
+ *  `unpack` takes arbitrary input: a blob arrives from another node, and every way it can be
+ *  wrong - not base64, too short to hold a header, a foreign identifier, a version this
+ *  implementation does not read, a payload that is not a gzip stream or that expands past the
+ *  runtime's cap - comes back as `ERR`, with no thread error to survive.
+ *)
+
+let val formatId      = "TRPI"
+    val formatVersion = 2
+
+    (** The blob text carrying `doc`, ready to be written into `this.<fn>.serialized`. The header
+     *  goes between the two layers: it is part of what gets base64-encoded, not of what gets
+     *  compressed. *)
+    fun pack doc = base64Encode (formatId ^ String.strCode formatVersion ^ gzip doc)
+
+    (** The document inside a blob. *)
+    fun unpack blob =
+        case base64Decode blob of
+            ERR e => ERR ("not base64: " ^ e.reason)
+          | OK raw =>
+              if String.size raw < 5
+              then ERR "truncated IR blob header"
+              else let val id = String.substring (raw, 0, 4)
+                       val v  = String.subCode (raw, 4)
+                   in if id <> formatId
+                      then ERR ("not an IR blob: missing " ^ formatId ^ " format identifier")
+                      else if v <> formatVersion
+                      then ERR ("unsupported IR blob format version " ^ toString v
+                                ^ " (expected " ^ toString formatVersion ^ "; recompile)")
+                      else (case gunzip (String.substring (raw, 5, String.size raw)) of
+                                ERR e  => ERR ("payload: " ^ e.reason)
+                              | OK doc => OK doc)
+                   end
+in
+    [ ("pack", pack)
+    , ("unpack", unpack)
+    ]
+end

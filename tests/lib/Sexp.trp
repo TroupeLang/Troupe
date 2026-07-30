@@ -10,6 +10,7 @@ let val q   = "\x22"
     val nl  = "\x0a"
     val tab = "\x09"
     val cr  = "\x0d"
+    val soh = "\x01"
 
     (* A payload exercising every escape, and its printed form. *)
     val hairy    = "a" ^ q ^ "b" ^ bs ^ "c" ^ nl ^ tab ^ cr
@@ -24,6 +25,7 @@ let val q   = "\x22"
                  , ATOM "-3"
                  , STR ""
                  , STR hairy
+                 , STR soh
                  , LST []
                  , LST [ATOM "f"]
                  , LST [ATOM "f", LST [ATOM "g", STR "x"], LST []]
@@ -62,6 +64,25 @@ let val q   = "\x22"
                         (Unit.isEq (OK (STR ("a" ^ nl ^ tab ^ q ^ bs ^ cr ^ "b")))
                                    (Sexp.parse (q ^ "a" ^ bs ^ "n" ^ bs ^ "t" ^ bs ^ q
                                                   ^ bs ^ bs ^ bs ^ "r" ^ "b" ^ q)))
+                (* A writer may escape any character as \uXXXX; the Haskell printer of the same
+                 * format does so for every control character. This reader accepts the long form
+                 * whether or not a short one exists for the character. *)
+              , Unit.it "a \\u escape decodes to its character"
+                        (Unit.isEq (OK (STR "A")) (Sexp.parse (q ^ bs ^ "u0041" ^ q)))
+              , Unit.it "a \\u escape decodes above ASCII"
+                        (Unit.isEq (OK (STR "\xe9")) (Sexp.parse (q ^ bs ^ "u00e9" ^ q)))
+              , Unit.it "a \\u escape of a control character decodes to it"
+                        (Unit.isEq (OK (STR soh)) (Sexp.parse (q ^ bs ^ "u0001" ^ q)))
+              , Unit.it "\\u and the short form agree"
+                        (Unit.isEq (Sexp.parse (q ^ bs ^ "t" ^ q))
+                                   (Sexp.parse (q ^ bs ^ "u0009" ^ q)))
+              , Unit.it "hex digits are read in either case"
+                        (Unit.isEq (Sexp.parse (q ^ bs ^ "u00E9" ^ q))
+                                   (Sexp.parse (q ^ bs ^ "u00e9" ^ q)))
+                (* Nothing requires a writer to escape control characters, and this printer does
+                 * not, so the reader takes them raw as well. *)
+              , Unit.it "a raw control character is string material"
+                        (Unit.isEq (OK (STR soh)) (Sexp.parse (q ^ soh ^ q)))
             ],
             Unit.group "parse lists" [
                 Unit.it "the empty list"
@@ -139,6 +160,12 @@ let val q   = "\x22"
               , Unit.it "a backslash at end of input points at the backslash"
                         (Unit.isEq (ERR {reason = "incomplete escape sequence", offset = 2})
                                    (Sexp.parse (q ^ "a" ^ bs)))
+              , Unit.it "a non-hex digit in a \\u escape points at the digit"
+                        (Unit.isEq (ERR {reason = "bad \\u escape", offset = 5})
+                                   (Sexp.parse (q ^ bs ^ "u00zz" ^ q)))
+              , Unit.it "a \\u escape with too few digits points at the backslash"
+                        (Unit.isEq (ERR {reason = "incomplete \\u escape", offset = 1})
+                                   (Sexp.parse (q ^ bs ^ "u12" ^ q)))
             ],
             Unit.group "pretty" [
                 Unit.it "a list that fits stays on one line"

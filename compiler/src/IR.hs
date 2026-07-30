@@ -24,18 +24,14 @@ import           Control.Monad.State
 import           Control.Monad.Writer
 import Control.Monad (when)
 import           Data.List
-import           Data.Word                 (Word8)
 import qualified Data.ByteString           as BS
 import qualified Data.ByteString.Lazy      as BSL
-import           Data.Serialize            (Serialize)
-import qualified Data.Serialize            as Serialize
-import qualified Codec.Compression.GZip    as GZip
-import qualified Codec.Compression.Zlib.Internal as ZlibI
 import           GHC.Generics              (Generic)
 
 import           Text.PrettyPrint.HughesPJ (hsep, nest, text, vcat, ($$), (<+>))
 import qualified Text.PrettyPrint.HughesPJ as PP
 import           TroupePositionInfo (Located(..))
+import           Sexp
 import           PrettyPrint (PP, runPP, runPPDefault, ppLocated, vcatMapPP, ShowDebug(..))
 
 ------------------------------------------------------------
@@ -201,104 +197,24 @@ ppDeps a = ppDepsAsJSON a
 
 
 -----------------------------------------------------------
--- Serialization instances
+-- Serialization
 -----------------------------------------------------------
 
-instance Serialize IRProgram
-instance Serialize IRTerminator
-instance Serialize FunDef
-instance Serialize VarAccess
-instance Serialize HFN
-instance Serialize IRExpr
-instance Serialize IRInst
-instance Serialize IRBBTree
-
------------------------------------------------------------
--- Serialization 
------------------------------------------------------------
+-- | What a serialized blob carries: one function (mobile code) or a whole
+-- program. The wire framing and compression are in "IRBlob"; the encoding is
+-- the 'Sexp' instances, and the document wrapper is in "IRSexp".
 data SerializationUnit
   = FunSerialization FunDef
   | ProgramSerialization IRProgram
   deriving (Generic)
 
-instance Serialize SerializationUnit
-
-
--- Blob wire format (v1): the 4-byte format identifier "TRPI", then a Word8
--- format version, then the payload. For v1 the payload is a gzip stream of the
--- cereal-encoded SerializationUnit. See _dev_planning/ir-blob-compression.md.
-irBlobFormatId :: BS.ByteString
-irBlobFormatId = BS.pack [0x54, 0x52, 0x50, 0x49]  -- "TRPI"
-
-irBlobVersion :: Word8
-irBlobVersion = 1
-
--- Upper bound on decompressed blob size, enforced during decompression to
--- defend against decompression bombs arriving from remote nodes. The largest
--- observed real blob is ~10 KB.
-maxDecompressedBytes :: Int
-maxDecompressedBytes = 64 * 1024 * 1024
-
-encodeBlob :: SerializationUnit -> BS.ByteString
-encodeBlob su =
-  let cereal = Serialize.runPut (Serialize.put su)
-      gz     = BSL.toStrict (GZip.compress (BSL.fromStrict cereal))
-  in irBlobFormatId `BS.append` BS.singleton irBlobVersion `BS.append` gz
-
-serializeFunDef :: FunDef -> BS.ByteString
-serializeFunDef fdef = encodeBlob (FunSerialization fdef)
-
--- Gzip-decompress with a hard output cap, using the incremental zlib API so
--- that corrupt input becomes a Left (rather than an imprecise DecompressError
--- thrown from a lazy thunk) and an over-cap stream is aborted with a Left. The
--- fold accumulator threads the remaining byte budget.
-decompressGzipCapped :: Int -> BS.ByteString -> Either String BS.ByteString
-decompressGzipCapped cap input =
-  BSL.toStrict <$>
-    ZlibI.foldDecompressStreamWithInput
-      onChunk onEnd onError
-      (ZlibI.decompressST ZlibI.gzipFormat ZlibI.defaultDecompressParams)
-      (BSL.fromStrict input)
-      cap
-  where
-    onChunk :: BS.ByteString -> (Int -> Either String BSL.ByteString)
-                             -> (Int -> Either String BSL.ByteString)
-    onChunk c k remaining =
-      let n = BS.length c
-      in if n > remaining
-         then Left ("decompressed IR blob exceeds "
-                     ++ show cap ++ "-byte cap")
-         else (BSL.fromStrict c <>) <$> k (remaining - n)
-    onEnd :: BSL.ByteString -> (Int -> Either String BSL.ByteString)
-    onEnd _leftover _ = Right BSL.empty
-    onError :: ZlibI.DecompressError -> (Int -> Either String BSL.ByteString)
-    onError e _ = Left (show e)
-
-deserialize :: BS.ByteString -> Either String SerializationUnit
-deserialize bs =
-  -- Dispatch on the 4-byte format identifier. A legacy (unframed) blob is raw
-  -- cereal, whose first byte is the SerializationUnit constructor tag, always 0
-  -- or 1 and therefore never 0x54 ('T'); so a blob beginning with "TRPI" is
-  -- unambiguously the framed format. This invariant holds while
-  -- SerializationUnit has <= 84 constructors.
-  if irBlobFormatId `BS.isPrefixOf` bs
-  then case BS.uncons (BS.drop 4 bs) of
-         Just (v, payload)
-           | v == irBlobVersion -> decompressGzipCapped maxDecompressedBytes payload
-                                      >>= decodeUnit
-           | otherwise -> Left ("unsupported IR blob format version "
-                                 ++ show v ++ " (compiler too old?)")
-         Nothing -> Left "truncated IR blob header"
-  else decodeUnit bs
-  where
-    decodeUnit b =
-      case Serialize.runGet (Serialize.get) b of
-        Left s -> Left s
-        Right x@(FunSerialization fdecl) ->
-          case runExcept (wfFun fdecl) of
-            Right _ -> Right x
-            Left _  -> Left "ir not well-formed"
-        Right x -> Right x
+instance Sexp SerializationUnit where
+  toSexp (FunSerialization f)     = toSexp f
+  toSexp (ProgramSerialization p) = toSexp p
+  fromSexp d@(Lst (Atom "fun" : _))     = FunSerialization <$> fromSexp d
+  fromSexp d@(Lst (Atom "program" : _)) = ProgramSerialization <$> fromSexp d
+  fromSexp d = Left ("expected a (fun ...) or (program ...) serialization unit, got "
+                     ++ headHint d)
 
 -----------------------------------------------------------
 -- Well-formedness
@@ -378,6 +294,8 @@ instance WellFormedIRCheck IRExpr where
                      , "bigFromString"
                      , "bigToInt"
                      , "bigToString"
+                     , "base64Decode"
+                     , "base64Encode"
                      , "cert"
                      , "charCodeAtWithDefault"
                      , "charFromCode"
@@ -410,6 +328,8 @@ instance WellFormedIRCheck IRExpr where
                      , "getTime"
                      , "getCliArgs"
                      , "getType"
+                     , "gunzip"
+                     , "gzip"
                      , "getNanoTime"
                      , "_getSystemProcess"
                      , "guard"
@@ -687,3 +607,228 @@ ppFunCall fn args = fn <+> ppArgs args
 
 
 
+
+
+------------------------------------------------------------
+-- s-expression serialization (see "Sexp")
+--
+-- One instance per IR type, matched constructor by constructor, so that a new
+-- IR constructor fails to compile here until it is given an encoding. The
+-- document wrapper that carries the format version lives in "IRSexp".
+------------------------------------------------------------
+
+-- | The maximum 'ProjIdx' value permitted (2^31 - 1).
+maxProjIdx :: Integer
+maxProjIdx = 2147483647
+
+instance Sexp IRProgram where
+  toSexp (IRProgram funs) = Lst (Atom "program" : map toSexp funs)
+  fromSexp (Lst (Atom "program" : funDs)) = IRProgram <$> mapM fromSexp funDs
+  fromSexp d = Left ("expected (program ...), got " ++ headHint d)
+
+instance Sexp HFN where
+  toSexp (HFN h) = Str h
+  fromSexp d = HFN <$> asName d
+
+instance Sexp FunDef where
+  toSexp (FunDef hfn arg consts body) =
+    Lst [ Atom "fun"
+        , toSexp hfn
+        , Lst [Atom "arg", toSexp arg]
+        , encodeConsts consts
+        , toSexp body
+        ]
+  fromSexp (Lst [Atom "fun", nameD, argD, constsD, bodyD]) = do
+    name <- asName nameD
+    context ("in function " ++ show name) $ do
+      arg    <- decodeArg argD
+      consts <- decodeConsts constsD
+      body   <- fromSexp bodyD
+      Right (FunDef (HFN name) arg consts body)
+  fromSexp d = Left ("expected (fun NAME (arg NAME) CONSTS BODY), got " ++ headHint d)
+
+encodeConsts :: Consts -> Datum
+encodeConsts consts = Lst (Atom "consts" : map enc consts)
+  where enc (v, lit) = Lst [toSexp v, toSexp lit]
+
+decodeArg :: Datum -> Either String LVarName
+decodeArg (Lst [Atom "arg", nD]) = fromSexp nD
+decodeArg d = Left ("expected (arg NAME), got " ++ headHint d)
+
+decodeConsts :: Datum -> Either String Consts
+decodeConsts (Lst (Atom "consts" : ps)) = mapM decodeConst ps
+decodeConsts d = Left ("expected (consts ...), got " ++ headHint d)
+
+decodeConst :: Datum -> Either String (VarName, C.Lit)
+decodeConst (Lst [nD, litD]) = do
+  n <- fromSexp nD
+  l <- fromSexp litD
+  Right (n, l)
+decodeConst d = Left ("expected (NAME LIT) const binding, got " ++ headHint d)
+
+instance Sexp IRBBTree where
+  toSexp (BB insts term) =
+    Lst [Atom "bb", Lst (map toSexp insts), toSexp term]
+  fromSexp (Lst [Atom "bb", instsD, termD]) = do
+    instDs <- expectList instsD
+    insts  <- mapM fromSexp instDs
+    term   <- fromSexp termD
+    Right (BB insts term)
+  fromSexp d = Left ("expected (bb (INST*) TERM), got " ++ headHint d)
+
+instance Sexp IRInst where
+  toSexp (Assign v e) = Lst [Atom "assign", toSexp v, toSexp e]
+  toSexp (MkFunClosures caps clos) =
+    Lst [ Atom "mkclos"
+        , Lst (map encCap caps)
+        , Lst (map encClo clos)
+        ]
+    where encCap (v, lva) = Lst [toSexp v, toSexp lva]
+          encClo (v, hfn) = Lst [toSexp v, toSexp hfn]
+  fromSexp (Lst [Atom "assign", nD, eD]) = do
+    n <- fromSexp nD
+    e <- fromSexp eD
+    Right (Assign n e)
+  fromSexp (Lst [Atom "mkclos", capsD, closD]) = do
+    capDs <- expectList capsD
+    cloDs <- expectList closD
+    caps  <- mapM decodeCap capDs
+    clos  <- mapM decodeClo cloDs
+    Right (MkFunClosures caps clos)
+  fromSexp d = Left ("expected (assign ...) or (mkclos ...), got " ++ headHint d)
+
+decodeCap :: Datum -> Either String (VarName, LVarAccess)
+decodeCap (Lst [nD, vaD]) = do
+  n  <- fromSexp nD
+  va <- fromSexp vaD
+  Right (n, va)
+decodeCap d = Left ("expected (NAME VARACCESS) capture, got " ++ headHint d)
+
+decodeClo :: Datum -> Either String (VarName, HFN)
+decodeClo (Lst [nD, hD]) = do
+  n <- fromSexp nD
+  h <- fromSexp hD
+  Right (n, h)
+decodeClo d = Left ("expected (NAME HFN) closure, got " ++ headHint d)
+
+instance Sexp IRExpr where
+  toSexp (Bin op a b)        = Lst [Atom "bin", toSexp op, toSexp a, toSexp b]
+  toSexp (Un op a)           = Lst [Atom "un", toSexp op, toSexp a]
+  toSexp (Tuple vas tag)     = Lst (Atom (if tag then "tuple-variant" else "tuple")
+                                    : map toSexp vas)
+  toSexp (Record fields)     = Lst (Atom "record" : map encField fields)
+  toSexp (WithRecord lva fs) = Lst (Atom "with-record" : toSexp lva : map encField fs)
+  toSexp (ProjField lva f)   = Lst [Atom "proj-field", toSexp lva, Str f]
+  toSexp (ProjIdx lva w)     = Lst [Atom "proj-idx", toSexp lva, toSexp (toInteger w)]
+  toSexp (List vas)          = Lst (Atom "list" : map toSexp vas)
+  toSexp (ListCons a b)      = Lst [Atom "cons", toSexp a, toSexp b]
+  toSexp (Const lit)         = Lst [Atom "const", toSexp lit]
+  toSexp (Base v)            = Lst [Atom "base", Str v]
+  toSexp (Lib l v)           = Lst [Atom "lib", toSexp l, Str v]
+  fromSexp (Lst (Atom "bin" : opD : rest)) =
+    case rest of
+      [aD, bD] -> do op <- fromSexp opD
+                     a  <- fromSexp aD
+                     b  <- fromSexp bD
+                     Right (Bin op a b)
+      _ -> Left "bin expects an operator and two operands"
+  fromSexp (Lst [Atom "un", opD, aD]) = do
+    op <- fromSexp opD
+    a  <- fromSexp aD
+    Right (Un op a)
+  fromSexp (Lst (Atom "tuple" : vas)) =
+    Tuple <$> mapM fromSexp vas <*> pure False
+  fromSexp (Lst (Atom "tuple-variant" : vas)) =
+    Tuple <$> mapM fromSexp vas <*> pure True
+  fromSexp (Lst (Atom "record" : fields)) =
+    Record <$> mapM decodeField fields
+  fromSexp (Lst (Atom "with-record" : lvaD : fields)) = do
+    lva <- fromSexp lvaD
+    fs  <- mapM decodeField fields
+    Right (WithRecord lva fs)
+  fromSexp (Lst [Atom "proj-field", lvaD, fD]) = do
+    lva <- fromSexp lvaD
+    f   <- asName fD
+    Right (ProjField lva f)
+  fromSexp (Lst [Atom "proj-idx", lvaD, wD]) = do
+    lva <- fromSexp lvaD
+    w   <- decodeProjIdx wD
+    Right (ProjIdx lva w)
+  fromSexp (Lst (Atom "list" : vas)) =
+    List <$> mapM fromSexp vas
+  fromSexp (Lst [Atom "cons", aD, bD]) = do
+    a <- fromSexp aD
+    b <- fromSexp bD
+    Right (ListCons a b)
+  fromSexp (Lst [Atom "const", litD]) =
+    Const <$> fromSexp litD
+  fromSexp (Lst [Atom "base", vD]) =
+    Base <$> asName vD
+  fromSexp (Lst [Atom "lib", lD, vD]) = do
+    l <- fromSexp lD
+    v <- asName vD
+    Right (Lib l v)
+  fromSexp d = Left ("not a valid expression, got " ++ headHint d)
+
+encField :: (Basics.FieldName, LVarAccess) -> Datum
+encField (name, lva) = Lst [Str name, toSexp lva]
+
+decodeField :: Datum -> Either String (Basics.FieldName, LVarAccess)
+decodeField (Lst [nD, vaD]) = do
+  n  <- asName nD
+  va <- fromSexp vaD
+  Right (n, va)
+decodeField d = Left ("expected (NAME VARACCESS) field, got " ++ headHint d)
+
+decodeProjIdx :: Datum -> Either String Word
+decodeProjIdx d = do
+  i <- fromSexp d
+  if i < 0
+    then Left ("ProjIdx index must be non-negative: " ++ show i)
+    else if i > maxProjIdx
+      then Left ("ProjIdx index exceeds maximum (" ++ show maxProjIdx ++ "): " ++ show i)
+      else Right (fromInteger i)
+
+instance Sexp IRTerminator where
+  toSexp (TailCall f a)            = Lst [Atom "tail-call", toSexp f, toSexp a]
+  toSexp (Ret a)                   = Lst [Atom "ret", toSexp a]
+  toSexp (If c t e)                = Lst [Atom "if", toSexp c, toSexp t, toSexp e]
+  toSexp (AssertElseError c bb er) = Lst [Atom "assert-else-error", toSexp c, toSexp bb, toSexp er]
+  toSexp (LibExport a)             = Lst [Atom "lib-export", toSexp a]
+  toSexp (Error a)                 = Lst [Atom "error", toSexp a]
+  toSexp (StackExpand v b1 b2)     = Lst [Atom "stack-expand", toSexp v, toSexp b1, toSexp b2]
+  fromSexp (Lst [Atom "tail-call", fD, aD]) = do
+    f <- fromSexp fD
+    a <- fromSexp aD
+    Right (TailCall f a)
+  fromSexp (Lst [Atom "ret", aD]) =
+    Ret <$> fromSexp aD
+  fromSexp (Lst [Atom "if", cD, tD, eD]) = do
+    c <- fromSexp cD
+    t <- fromSexp tD
+    e <- fromSexp eD
+    Right (If c t e)
+  fromSexp (Lst [Atom "assert-else-error", cD, bbD, errD]) = do
+    c   <- fromSexp cD
+    bb  <- fromSexp bbD
+    err <- fromSexp errD
+    Right (AssertElseError c bb err)
+  fromSexp (Lst [Atom "lib-export", aD]) =
+    LibExport <$> fromSexp aD
+  fromSexp (Lst [Atom "error", aD]) =
+    Error <$> fromSexp aD
+  fromSexp (Lst [Atom "stack-expand", nD, b1D, b2D]) = do
+    n  <- fromSexp nD
+    b1 <- fromSexp b1D
+    b2 <- fromSexp b2D
+    Right (StackExpand n b1 b2)
+  fromSexp d = Left ("not a valid terminator, got " ++ headHint d)
+
+instance Sexp VarAccess where
+  toSexp (VarLocal v) = Lst [Atom "local", toSexp v]
+  toSexp (VarEnv v)   = Lst [Atom "env", toSexp v]
+  toSexp VarFunSelfRef = Atom "self"
+  fromSexp (Lst [Atom "local", nD]) = VarLocal <$> fromSexp nD
+  fromSexp (Lst [Atom "env", nD])   = VarEnv <$> fromSexp nD
+  fromSexp (Atom "self")            = Right VarFunSelfRef
+  fromSexp d = Left ("not a valid variable access, got " ++ headHint d)

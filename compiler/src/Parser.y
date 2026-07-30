@@ -13,9 +13,10 @@ import Basics
 import TroupePositionInfo (Located(..), PosInf(..), noLoc, getLoc)
 import ParseError (ParseEnv(..), ParseState(..), ParseErrorInfo(..),
                    formatParseError, formatAllErrors, initialParseState,
-                   maxParseErrors, minErrorDistance)
+                   maxParseErrors, minErrorDistance, getSourceLine, makeCaretLine)
 
 import Control.Monad.Except
+import Data.List (intercalate)
 import Control.Monad.Reader
 import Control.Monad.State
 
@@ -355,8 +356,6 @@ TrailingForm : if Expr then Expr else Expr {% atPos $1 (If $2 $4 $6) }
 
 Match : Pattern '=>' Expr                      { [($1,$3)] }
       | Pattern '=>' Expr '|' Match            { ($1,$3):$5 }
-      | ConPat '=>' Expr                       { [($1,$3)] }
-      | ConPat '=>' Expr '|' Match             { ($1,$3):$5 }
       -- Error recovery: skip bad case arm content
       | catch                                  { [(noLoc ErrorPattern, noLoc (Lit LUnit))] }
 
@@ -368,15 +367,14 @@ Match : Pattern '=>' Expr                      { [($1,$3)] }
 -- dotted qualifier follows. Supported forms: bare applied `C p`, qualified
 -- applied `T.C p` / `M.T.C p`, and nullary qualified `T.C` / `M.T.C`. A bare
 -- nullary constructor is an ordinary variable pattern, resolved later.
-ConPat : VAR APat                          {% atPos $1 (ConPattern [varTok $1] (Just $2)) }
-       | VAR '.' VAR APat                  {% atPos $1 (ConPattern [varTok $1, varTok $3] (Just $4)) }
-       | VAR '.' VAR '.' VAR APat          {% atPos $1 (ConPattern [varTok $1, varTok $3, varTok $5] (Just $6)) }
-       | VAR '.' VAR                       {% atPos $1 (ConPattern [varTok $1, varTok $3] Nothing) }
-       | VAR '.' VAR '.' VAR               {% atPos $1 (ConPattern [varTok $1, varTok $3, varTok $5] Nothing) }
+
 
 -- Argument of a constructor pattern: an atomic (self-delimited) pattern. A
 -- nested constructor application must be parenthesized here.
 APat : VAR                                 {% atPos $1 (VarPattern (varTok $1)) }
+     | VAR '.' VAR                         {% atPos $1 (ConPattern [varTok $1, varTok $3] Nothing) }
+     | VAR '.' VAR '.' VAR                 {% atPos $1 (ConPattern [varTok $1, varTok $3, varTok $5] Nothing) }
+     | '(' OPSYM ')'                       {% atPos $2 (VarPattern (opTok $2)) }
      | '_'                                 {% atPos $1 Wildcard }
      | '(' ')'                             {% atPos $1 (ValPattern LUnit) }
      | NUM                                 {% atPos $1 (ValPattern (LNumeric (NumInt (numTok $1)))) }
@@ -387,10 +385,9 @@ APat : VAR                                 {% atPos $1 (VarPattern (varTok $1)) 
      | LABEL                               {% atPos $1 (ValPattern (LLabel (lblTok $1))) }
      | '`<' DCLabelExp '>`'                {% atPos $1 (ValPattern (LDCLabel $2)) }
      | '(' Pattern ')'                     { $2 }
-     | '(' ConPat ')'                      { $2 }
      | '(' CSPattern PatElem ')'           {% atPos $1 (TuplePattern (reverse ($3:$2))) }
      | FieldPattern                        { $1 }
-     | ListPattern                         { $1 }
+     | BracketListPattern                  { $1 }
 
 
 Form :: { LTerm }
@@ -478,29 +475,31 @@ CSExpr : Expr ','                  { [$1] }
      | CSExpr Expr ','             { ($2:$1) }
 
 
-Pattern : VAR                               {% atPos $1 (VarPattern (varTok $1)) }
-    | '(' OPSYM ')'                         {% atPos $2 (VarPattern (opTok $2)) }
-    | '(' Pattern ')'                       { $2 }
+-- Patterns are layered the way the ML grammar layers them, so that precedence
+-- is structural rather than a matter of resolving conflicts: atoms ('APat'),
+-- then juxtaposition ('PatApp', which is constructor application), then the
+-- infix cons. Application therefore binds tighter than '::' -- as it does in
+-- expressions -- and `C p :: rest` groups as `(C p) :: rest`.
+--
+-- Were a second infix ever admitted in patterns (a user-declared infix
+-- constructor, say), fixity would stop being known at parse time and this
+-- would have to become a flat chain resolved in 'OpReassoc', exactly as
+-- expressions are. With '::' the only infix, and its fixity fixed, the layering
+-- says the same thing and says it in the grammar.
+Pattern : PatApp                            { $1 }
+    | PatApp '::' Pattern                   {% mkPatCons $2 $1 $3 }
     | Pattern '@' LABEL                     {% atPos $2 (AtPattern $1 (lblTok $3)) }
-    | '(' ')'                               {% atPos $1 (ValPattern LUnit) }
-    | '_'                                   {% atPos $1 Wildcard }
-    | NUM                                   {% atPos $1 (ValPattern (LNumeric (NumInt (numTok $1)))) }
-    | FLOAT                                 {% atPos $1 (ValPattern (LNumeric (NumFloat (floatTok $1)))) }
-    | STRING                                {% atPos $1 (ValPattern (LString (strTok $1))) }
-    | true                                  {% atPos $1 (ValPattern (LBool True)) }
-    | false                                 {% atPos $1 (ValPattern (LBool False)) }
-    | LABEL                                 {% atPos $1 (ValPattern (LLabel (lblTok $1))) }
-    | '`<' DCLabelExp '>`'                  {% atPos $1 (ValPattern (LDCLabel $2)) }
-    | '(' CSPattern PatElem ')'             {% atPos $1 (TuplePattern (reverse ($3:$2))) }
-    | '(' ConPat ')'                        { $2 }
-    | FieldPattern                          { $1 }
-    | ListPattern   { $1}
+
+-- Juxtaposition: a constructor applied to one atomic pattern. Longer runs are
+-- rejected here rather than silently regrouped -- a constructor takes a single
+-- argument (a tuple, if several values are wanted).
+PatApp : APat                               { $1 }
+    | PatApp APat                           {% mkPatApp $1 $2 }
 
 -- An element of a tuple or list pattern: an ordinary pattern or a bare
 -- constructor-application pattern. This lets constructor patterns nest inside
 -- tuples and lists without parenthesizing each one (e.g. @(SOME x, NONE)@).
 PatElem : Pattern                           { $1 }
-        | ConPat                            { $1 }
 
 
 FieldPattern :
@@ -521,10 +520,14 @@ FieldPat
     : VAR              {(varTok $1, Nothing) }
     | VAR '=' Pattern  {(varTok $1, Just $3) }
 
-ListPattern:  '[' ']'                              {% atPos $1 (ListPattern []) }
+-- Bracketed list patterns are self-delimited, so a constructor argument may be
+-- one (see 'APat'). The infix cons pattern is not, and is deliberately absent
+-- from that layer: were it reachable there, `C p :: rest` would parse as
+-- `C (p :: rest)`, silently, since the argument would swallow the cons.
+BracketListPattern
+    :     '[' ']'                                  {% atPos $1 (ListPattern []) }
     | '[' PatElem ']'                              {% atPos $1 (ListPattern [$2]) }
     | '[' CSPattern PatElem ']'                    {% atPos $1 (ListPattern (reverse ($3:$2))) }
-    |     Pattern '::' Pattern                     {% atPos $2 (ConsPattern $1 $3) }
 
 
 CSPattern : PatElem ','         { [$1] }
@@ -564,16 +567,69 @@ FunDecl    : fun VAR FunOptions {% atPos $2 (FunDecl (varTok $2) $3) }
 AndFunDecl : and VAR FunOptions {% atPos $2 (FunDecl (varTok $2) $3) }
            | and '(' OPSYM ')' FunOptions {% atPos $3 (FunDecl (opTok $3) $5) }
 
-FunArgs : Pattern                        { [$1]  }
-        | Pattern FunArgs                { $1 : $2}
+-- Parameters are atomic, as in SML: juxtaposition in this position is the
+-- parameter list, so a constructor application or a cons pattern used as a
+-- parameter is parenthesized (`fun f (C x) = ...`, `fun head (x::_) = ...`).
+FunArgs : APat                           { [$1]  }
+        | APat FunArgs                   { $1 : $2}
 
 {
 
 -- | Parser monad type alias
 type ParseM a = ReaderT ParseEnv (StateT ParseState (Except String)) a
 
+-- | An infix occurrence in a pattern joins a flat chain, in source order, the
+-- way an infix occurrence in an expression does. 'OpReassoc' groups it against
+-- the same fixity table, so '::' cannot bind differently in the two positions.
+mkPatCons :: L Token -> LPattern -> LPattern -> ParseM LPattern
+mkPatCons tok l r = do
+  p <- pos tok
+  let elems = case r of
+                Loc _ (PatChain rest) -> PatOperand l : PatInfix p ChCons : rest
+                _                     -> [PatOperand l, PatInfix p ChCons, PatOperand r]
+  return (Loc p (PatChain elems))
+
+-- | Juxtaposition in a pattern is constructor application: the head names the
+-- constructor and the atom that follows is its argument. Whether that name is
+-- really a constructor is not a parsing question -- 'SynVarFolding' decides it
+-- against the datatype declarations in scope, the way SML defers it to
+-- elaboration -- so this only rejects shapes that cannot be an application at
+-- all.
+--
+-- A constructor takes one argument, so a longer run (@C p q@) is an error here
+-- rather than a silent regrouping; several values are passed as a tuple.
+mkPatApp :: LPattern -> LPattern -> ParseM LPattern
+mkPatApp (Loc p (VarPattern v)) arg         = return (Loc p (ConPattern [v] (Just arg)))
+mkPatApp (Loc p (ConPattern q Nothing)) arg = return (Loc p (ConPattern q (Just arg)))
+mkPatApp (Loc p (ConPattern q (Just _))) _  =
+  patAppError p ("constructor " ++ intercalate "." q ++ " takes one argument in a pattern"
+                 ++ "; several values are matched as a tuple")
+mkPatApp (Loc p _) _ =
+  patAppError p "only a constructor can be applied to an argument in a pattern"
+
+-- | Report a pattern-application error in the shape the parser's other
+-- diagnostics use -- location, source line, caret -- so that a semantic
+-- rejection inside an action does not read differently from a grammatical one.
+patAppError :: PosInf -> String -> ParseM a
+patAppError p msg = do
+  env <- ask
+  let (line, col) = case p of
+                      SrcPosInf _ l c -> (l, c)
+                      _               -> (0, 0)
+      srcLines = lines (peSource env)
+      locLine  = peFilename env ++ ":" ++ show line ++ ":" ++ show col ++ ": parse error"
+      ctxLine  = "  (while parsing a pattern)"
+      lineNumWidth = length (show line)
+      srcLine  = case getSourceLine srcLines line of
+                   Just l  -> "  " ++ show line ++ " | " ++ l
+                   Nothing -> ""
+      caret    = case getSourceLine srcLines line of
+                   Just _  -> "  " ++ replicate lineNumWidth ' ' ++ " | " ++ makeCaretLine col
+                   Nothing -> ""
+  throwError (unlines (filter (not . null) [locLine, ctxLine, "", srcLine, caret, "", "  " ++ msg]))
+
 -- Helper to create a located pattern at RTGen position
-rtGenPat :: DeclPattern -> LDeclPattern
+rtGenPat :: Pattern -> LPattern
 rtGenPat = Loc (RTGen "parser")
 
 -- Helper to create a located term at RTGen position
@@ -586,7 +642,7 @@ rtGenTerm = Loc (RTGen "parser")
 errorExpr :: L Token -> LTerm
 errorExpr _ = Loc (RTGen "error-recovery") (Lit LUnit)  -- Placeholder expression
 
-errorPattern :: L Token -> LDeclPattern
+errorPattern :: L Token -> LPattern
 errorPattern _ = Loc (RTGen "error-recovery") ErrorPattern
 
 errorDecl :: L Token -> Decl

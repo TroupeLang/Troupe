@@ -109,8 +109,8 @@ support document-processing programs and is expected to be superseded by a label
   labels restored data. Each primitive returns a tagged record
   (`{tag="Ok", value=…}` / `{tag="Err", error={reason, path}}`), so a missing file or rejected path
   never crashes the thread. The standard library reports failure with `Option` and `Outcome`; the
-  runtime still builds tagged records here and in the bigint conversion built-ins, and those two are
-  the only places the encoding survives.
+  runtime still builds tagged records here, in the bigint conversion built-ins, and in the two
+  decoding codec built-ins (below), and those three are the only places the encoding survives.
 - **Sandbox.** `--io-root <dir>` (`rt/src/TroupeCliArgs.mts`) bounds path reachability, orthogonal
   to authority: `..`, absolute-outside, and symlink escapes are rejected before any filesystem
   access, so even a bug in ROOT code cannot write outside the subtree. When unset, a per-invocation
@@ -119,6 +119,27 @@ support document-processing programs and is expected to be superseded by a label
 - **Deferred to the revision:** non-ROOT/parameterized I/O levels, per-path label manifests,
   write-confidentiality checks, bounded-integrity read content, quarantine integration, and
   streaming/handle-based access.
+
+### Compression and base64 (`BytesAndZips`)
+
+`rt/src/builtins/codec.mts` provides `gzip`/`gunzip` and `base64Encode`/`base64Decode`, the
+primitives a Troupe program needs in order to read and write the serialized IR blob that carries
+mobile code (`compiler/src/IRBlob.hs`). The blob framing is not among them: it is assembled by
+Troupe code (`trp-compiler/Blob.trp`), so the format version has one home, in the compiler.
+
+- **Bytes are strings.** Troupe has no byte arrays, so compressed and decoded data is carried in
+  strings whose characters are code units in 0..255. `gzip` produces one, `base64Encode` consumes
+  one, and a string carrying anything above 255 is refused rather than truncated. `gzip` likewise
+  refuses a string with no UTF-8 encoding — one holding an unpaired surrogate — which Node would
+  otherwise turn into U+FFFD, altering the value in a round trip that reported success.
+- **Failure is a value where the input is foreign.** `gunzip` and `base64Decode` return tagged
+  records, wrapped as `Outcome` by `lib/BytesAndZips`: a blob arriving from another node may be
+  truncated, corrupt or a decompression bomb, and the language has no exception handling, so a
+  thread error would be unrecoverable. A malformed *argument* stays a thread error.
+- **Bombs.** `gunzip` caps output at the 64 MiB the compiler enforces, so a small blob that expands
+  without bound fails as a value rather than exhausting memory.
+- **Labels.** All four carry their argument's label unchanged, tag included — whether a blob decoded
+  is a fact about that blob.
 
 ## Arbitrary-precision integers (bigint)
 

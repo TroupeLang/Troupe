@@ -4,8 +4,10 @@
 --   * no NaN / +/-Infinity floats (no literal form; see the spec),
 --   * ProjIdx indices in [0, 2^31-1] (the IR.hs bound),
 --
--- Programs are generated with 'NoPos' positions throughout; the R1 property
--- erases positions on both sides regardless.
+-- Every 'Located' node gets a generated position, mixing all three 'PosInf'
+-- forms, so that both round-trip laws are exercised: the position-carrying
+-- printer must reproduce them exactly, and the position-erased printer must
+-- lose exactly them.
 module Gen (genProg) where
 
 import           Test.QuickCheck
@@ -15,7 +17,7 @@ import qualified Core
 import           Basics (BinOp(..), UnaryOp(..), LibName(..))
 import           DCLabels
 import           RetCPS (VarName(..))
-import           TroupePositionInfo (noLoc)
+import           TroupePositionInfo (Located(..), PosInf(..))
 
 -- | Character set for generated names: ordinary identifier characters plus
 -- characters that exercise the string-escaping path (quote, backslash,
@@ -61,8 +63,20 @@ genVA = oneof
   , pure VarFunSelfRef
   ]
 
+-- | A source position. 'NoPos' is generated too: a document may mix located
+-- and unlocated nodes, and an unlocated one prints without the @\@@ wrapper.
+genPos :: Gen PosInf
+genPos = frequency
+  [ (6, SrcPosInf <$> genName <*> choose (0, 100000) <*> choose (0, 500))
+  , (2, RTGen <$> genName)
+  , (2, pure NoPos)
+  ]
+
+located :: Gen a -> Gen (Located a)
+located g = Loc <$> genPos <*> g
+
 genLVA :: Gen LVarAccess
-genLVA = noLoc <$> genVA
+genLVA = located genVA
 
 genLabelOp :: Gen LabelOp
 genLabelOp = elements [Conj, Disj]
@@ -154,9 +168,10 @@ genInst = oneof
 
 genBB :: Int -> Gen IRBBTree
 genBB depth = do
-  insts <- genSmallList (noLoc <$> genInst)
+  insts <- genSmallList (located genInst)
   term  <- genTerm depth
-  return (BB insts (noLoc term))
+  term' <- located (pure term)
+  return (BB insts term')
 
 genTerm :: Int -> Gen IRTerminator
 genTerm depth
@@ -183,9 +198,10 @@ genFun = do
   consts <- genSmallList ((,) <$> genVarName <*> genLit)
   depth  <- choose (0, 3)
   body   <- genBB depth
-  return (FunDef (HFN name) (noLoc (VN arg)) consts body)
+  argL   <- located (pure (VN arg))
+  return (FunDef (HFN name) argL consts body)
 
 genProg :: Gen IRProgram
 genProg = do
-  funs  <- do k <- choose (1, 3); vectorOf k (noLoc <$> genFun)
+  funs  <- do k <- choose (1, 3); vectorOf k (located genFun)
   return (IRProgram funs)

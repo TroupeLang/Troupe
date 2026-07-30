@@ -23,7 +23,7 @@ module OpReassoc (reassocProg, fileFixityEnv) where
 import           Basics
 import qualified Direct as D
 import qualified Surface as S
-import           TroupePositionInfo (Located(..), PosInf(..))
+import           TroupePositionInfo (Located(..), PosInf(..), unLoc)
 import           Control.Monad.Except
 import           Data.Map (Map)
 import qualified Data.Map as Map
@@ -127,6 +127,60 @@ resolve o1@(_, _, (l1, a1)) o2@(_, _, (l2, a2))
 data StackOp
     = SBin PosInf S.ChainOp Fix
     | SPre PosInf UnaryOp Int
+
+-- | Re-associate a pattern. Structural everywhere except 'S.PatChain', which
+-- is grouped by the same fixity table and the same pairwise discipline the
+-- term chains use -- so an operator cannot mean one thing in an expression and
+-- another in a pattern.
+reassocLPattern :: FixityLookup -> S.LPattern -> M D.LDeclPattern
+reassocLPattern env (Loc p sp) = Loc p <$> reassocPattern env sp
+
+reassocPattern :: FixityLookup -> S.Pattern -> M D.DeclPattern
+reassocPattern env sp = case sp of
+  S.VarPattern v        -> return (D.VarPattern v)
+  S.ValPattern l        -> return (D.ValPattern l)
+  S.Wildcard            -> return D.Wildcard
+  S.AtPattern q l       -> flip D.AtPattern l <$> go q
+  S.TuplePattern ps     -> D.TuplePattern <$> mapM go ps
+  S.ListPattern ps      -> D.ListPattern <$> mapM go ps
+  S.RecordPattern fs m  -> flip D.RecordPattern m
+                             <$> mapM (\(n, mp) -> (,) n <$> mapM go mp) fs
+  S.ConPattern q mp     -> D.ConPattern q <$> mapM go mp
+  -- The parser records an error and keeps going, but 'Parser.parseProg' fails
+  -- if any error was recorded, so a recovery placeholder never reaches here --
+  -- and past this boundary it is not representable at all.
+  S.ErrorPattern        -> throwError "OpReassoc: error-recovery pattern in a parsed program"
+  S.PatChain elems      -> unLoc <$> reassocPatChain env elems
+  where
+    go = reassocLPattern env
+
+-- | Group a flat pattern chain. Patterns carry no prefix operators, so this is
+-- the operand/infix case of 'reassocChain' and nothing else.
+reassocPatChain :: FixityLookup -> [S.PatChainElem] -> M D.LDeclPattern
+reassocPatChain env elems = do
+  ops <- mapM opOf [ (p, op) | S.PatInfix p op <- elems ]
+  operands <- mapM (reassocLPattern env) [ q | S.PatOperand q <- elems ]
+  case (operands, ops) of
+    ([q], [])   -> return q
+    (q : qs, _) | length qs == length ops -> build q (zip ops qs)
+    _           -> throwError "OpReassoc: malformed pattern chain"
+  where
+    opOf (p, op) = case builtinFix op of
+      Just f  -> return (p, op, f)
+      Nothing -> noFixityErr p (opSpelling op)
+    -- Right-associative folding is the only shape '::' admits; a second
+    -- pattern operator would come with its own fixity and route through
+    -- 'resolve', as the term chains do.
+    build q [] = return q
+    build q (((p, op, _), r) : rest) = do
+      r' <- build r rest
+      return (Loc p (mkConsPat op p q r'))
+    mkConsPat S.ChCons _ a b = D.ConsPattern a b
+    mkConsPat op p _ _       = internalPatOpError p (opSpelling op)
+
+internalPatOpError :: PosInf -> String -> a
+internalPatOpError p spelling =
+  error (ppPos p ++ "operator " ++ spelling ++ " is not valid in a pattern")
 
 reassocChain :: FixityLookup -> [S.ChainElem] -> M D.LTerm
 reassocChain lookupFix = start
@@ -262,12 +316,13 @@ reassocTerm env tm = case tm of
   S.OpChain _          -> throwError "OpReassoc: OpChain outside reassocLTerm"
   where
     go = reassocLTerm env
-    alt (pat, body) = (,) pat <$> go body
+    pat' = reassocLPattern env
+    alt (pat, body) = (,) <$> pat' pat <*> go body
     fields = mapM (\(n, mt) -> (,) n <$> mapM go mt)
-    lambda (S.Lambda pats body) = D.Lambda pats <$> go body
+    lambda (S.Lambda pats body) = D.Lambda <$> mapM pat' pats <*> go body
     handler (S.Handler pat mpat g body) =
-      D.Handler pat mpat <$> mapM go g <*> go body
-    decl (S.ValDecl pat t)  = D.ValDecl pat <$> go t
+      D.Handler <$> pat' pat <*> mapM pat' mpat <*> mapM go g <*> go body
+    decl (S.ValDecl pat t)  = D.ValDecl <$> pat' pat <*> go t
     decl (S.FunDecs fds)    = D.FunDecs <$> mapM fdecl fds
     decl S.ErrorDecl        = return D.ErrorDecl
     fdecl (Loc p (S.FunDecl n lams)) =

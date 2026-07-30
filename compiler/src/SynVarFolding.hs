@@ -715,7 +715,6 @@ patBound env (Loc _ p) = patBound' p
                 (patBound env) mp
         | (f, mp) <- fs ]
       ConPattern _ mp     -> maybe Set.empty (patBound env) mp
-      ErrorPattern        -> Set.empty
 
 rewritePat :: Env -> LDeclPattern -> RW LDeclPattern
 rewritePat env (Loc pos p) = Loc pos <$> rewritePat' env pos p
@@ -739,7 +738,6 @@ rewritePat' env pos = \case
   ListPattern ps      -> ListPattern <$> mapM (rewritePat env) ps
   RecordPattern fs md -> RecordPattern <$> mapM (rewriteField env pos) fs <*> pure md
   ConPattern q mp     -> rewriteConPat env pos q mp
-  ErrorPattern        -> return ErrorPattern
 
 -- | A record field pattern. A punned field @{x}@ abbreviates @{x = x}@, so its
 -- pattern side follows the same discipline as any pattern: when @x@ names a

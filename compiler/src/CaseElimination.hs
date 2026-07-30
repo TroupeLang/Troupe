@@ -227,10 +227,6 @@ collectPattern (_, Loc _ (S.ConPattern _ _)) =
   -- Constructor patterns are rewritten to tuple patterns by SynVarFolding
   -- before this pass runs, so none should remain here.
   internalError "unexpected constructor pattern after variant folding"
-collectPattern (_, Loc _ S.ErrorPattern) =
-  -- A parse-error recovery placeholder. 'Parser.parseProg' fails whenever any
-  -- error was recorded, so no program carrying one reaches the pipeline.
-  internalError "unexpected error-recovery pattern in a parsed program"
 collectPattern (lv, Loc _ (S.RecordPattern fieldPatterns mode)) = do
   let pos = getLoc lv
   -- Check for duplicate field names

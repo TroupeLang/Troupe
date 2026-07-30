@@ -28,7 +28,7 @@ module DCLabels
   , DisjTags(..)
   , DCLabel(..)) where
 import GHC.Generics(Generic)
-import Data.Serialize (Serialize)
+import Sexp
 import Data.List (sort, nub, dropWhileEnd)
 import Data.List.Utils (split)
 import Data.Char (toLower, isSpace)
@@ -160,14 +160,6 @@ opPrec :: LabelOp -> Int
 opPrec Conj = 100
 opPrec Disj = 10
 
-instance Serialize LabelConst
-instance Serialize LabelOp
-instance Serialize DisjTags
-instance Serialize CNF
-instance Serialize DCLabel
-instance Serialize LabelExp
-instance Serialize LabelComponent
-instance Serialize DCLabelExp
 
 -- pretty printing 
 --
@@ -259,3 +251,41 @@ v1LabelToDCLabelExp s =
         [t] -> let e = ExprComponent (TagExp t) in DCLabelExp (e, e)
         ts  -> let e = ExprComponent (foldr1 (\a b -> OpExp Conj a b) (map TagExp ts))
                in DCLabelExp (e, e)
+
+------------------------------------------------------------
+-- s-expression serialization (see "Sexp")
+------------------------------------------------------------
+
+instance Sexp DCLabelExp where
+  toSexp (DCLabelExp (c, i)) = Lst [Atom "dclabel", toSexp c, toSexp i]
+  fromSexp (Lst [Atom "dclabel", c1, c2]) = do
+    a <- fromSexp c1
+    b <- fromSexp c2
+    Right (DCLabelExp (a, b))
+  fromSexp d = Left ("expected (dclabel COMPONENT COMPONENT), got " ++ headHint d)
+
+instance Sexp LabelComponent where
+  toSexp (ConstComponent LabelTrue)  = Atom "#true"
+  toSexp (ConstComponent LabelFalse) = Atom "#false"
+  toSexp (ExprComponent le)          = toSexp le
+  fromSexp (Atom "#true")  = Right (ConstComponent LabelTrue)
+  fromSexp (Atom "#false") = Right (ConstComponent LabelFalse)
+  fromSexp d               = ExprComponent <$> fromSexp d
+
+instance Sexp LabelExp where
+  toSexp (TagExp t)       = Lst [Atom "tag", Str t]
+  toSexp (OpExp Conj a b) = Lst [Atom "and", toSexp a, toSexp b]
+  toSexp (OpExp Disj a b) = Lst [Atom "or", toSexp a, toSexp b]
+  fromSexp (Lst [Atom "tag", sD])     = TagExp <$> asName sD
+  fromSexp (Lst (Atom "and" : args))  = nary Conj args
+  fromSexp (Lst (Atom "or"  : args))  = nary Disj args
+  fromSexp d = Left ("not a valid label expression, got " ++ headHint d)
+
+-- | Decode an @and@/@or@ form. Accepts n-ary sugar (right-nested); the
+-- encoder only ever emits the binary form.
+nary :: LabelOp -> [Datum] -> Either String LabelExp
+nary op ds = do
+  es <- mapM fromSexp ds
+  case es of
+    (x : y : rest) -> Right (foldr1 (OpExp op) (x : y : rest))
+    _              -> Left "and/or requires at least two operands"

@@ -1,0 +1,191 @@
+import "./IR"
+import "./Blob"
+import { readFile, writeFile } SimpleFileIO
+import { base64Encode, base64Decode } BytesAndZips
+import Sexp
+import Outcome
+import List
+import String
+
+(* The interchange laws, checked on the Troupe side, over documents named on the command line.
+   Each is checked within this implementation, using structural equality on Troupe values --
+   never by comparing text with the other implementation's text, which is not part of the format.
+
+     D  (datum layer)  parse (print d) = d
+     L1 (round trip)   decode (encode x) = x, positions included
+     L2 (ingestion)    the document was written by the Haskell compiler, so decoding it at all
+                       is the text half of L2; the value half is what the Haskell suite checks
+                       when it parses the <name>.troupe.sexp written here.
+     L3 (blobs)        the recorded blob and the one a different compressor produced from it
+                       decode to the same IR here. Blob bytes are never compared.
+     L4 (framing)      unpack (pack doc) = doc.
+     L5 (rejection)    every way a blob can be malformed is refused, as a value rather than as a
+                       dead thread. A reader that accepts nonsense is not conformant either.
+
+   Every <name>.sexp names a <name>.blob and a <name>.node.blob beside it. With
+   --write-troupe-references, what this implementation prints and packs is written to
+   <name>.troupe.sexp and <name>.troupe.blob, which the Haskell conformance suite reads back --
+   the direction of the interchange in which Troupe is the producer.
+
+   Exits non-zero if any document fails, so a script can run it as a test. *)
+
+datatype result = PASSED | FAILED of string
+
+let fun say line = fwrite (stdout authority, line ^ "\x0a")
+
+    fun law (name, holds) = if holds then PASSED else FAILED name
+
+    (* `path` without its ".sexp" suffix. *)
+    fun stem path = String.substring (path, 0, String.size path - 5)
+
+    (* The IR value a recorded blob carries. Blob text may end in a newline; base64Decode
+       ignores whitespace. *)
+    fun valueOfBlob path =
+        case readFile (authority, path) of
+            ERR e => ERR ("cannot read " ^ path ^ ": " ^ e.reason)
+          | OK b64 =>
+              (case Blob.unpack b64 of
+                   ERR m  => ERR (path ^ ": " ^ m)
+                 | OK doc => (case IR.fromString doc of
+                                  ERR m => ERR (path ^ ": " ^ m)
+                                | OK u  => OK u))
+
+    (* The document laws. *)
+    fun checkDocument text =
+        case Sexp.parse text of
+            ERR e => FAILED ("parse: " ^ e.reason)
+          | OK datum =>
+              (case Sexp.parse (Sexp.print datum) of
+                   ERR e => FAILED ("D: re-parsing our own printed datum: " ^ e.reason)
+                 | OK datum' =>
+                     if not (datum = datum')
+                     then FAILED "D: parse (print d) <> d"
+                     else (case IR.decode datum of
+                               ERR m => FAILED ("decode: " ^ m)
+                             | OK x =>
+                                 (case IR.fromString (IR.toText x) of
+                                      ERR m => FAILED ("L1: re-reading our own text: " ^ m)
+                                    | OK y => law ("L1: decode (encode x) <> x", x = y))))
+
+    (* Every way a blob arriving from elsewhere can be wrong, derived from a valid one. A reader
+       that accepts nonsense is not conformant, and this implementation must refuse each of these
+       as a value rather than by dying: `unpack` is the entry point for foreign input. *)
+    fun malformedBlobs raw =
+        let val n     = String.size raw
+            fun cut k = base64Encode (String.substring (raw, 0, k))
+            fun framed (id, version, payload) =
+                base64Encode (id ^ String.strCode version ^ payload)
+            fun flipAt i =
+                base64Encode (String.substring (raw, 0, i)
+                              ^ String.strCode (255 - String.subCode (raw, i))
+                              ^ String.substring (raw, i + 1, n))
+        in [ ("empty input",               "")
+           , ("not base64",                "not base64!")
+           , ("base64 that decodes to nothing", base64Encode "")
+           , ("identifier only",           cut 4)
+           , ("header only",               cut 5)
+           , ("truncated to a quarter",    cut (n / 4))
+           , ("truncated to a half",       cut (n / 2))
+           , ("truncated by one byte",     cut (n - 1))
+           , ("a foreign identifier",      framed ("TRPX", 2, String.substring (raw, 5, n)))
+           , ("a version we do not read",  framed ("TRPI", 3, String.substring (raw, 5, n)))
+           , ("version 1, which carried cereal",
+                                           framed ("TRPI", 1, String.substring (raw, 5, n)))
+           , ("a header with no gzip stream", framed ("TRPI", 2, "not compressed"))
+           , ("a byte flipped mid-stream", flipAt (n / 2))
+           , ("a byte flipped near the end", flipAt (n - 3))
+             (* The case that found a divergence: this side rejected it because Node reads the
+                trailing bytes as a second gzip member, and the Haskell reader discarded them
+                until IRBlob was made strict about it. *)
+           , ("a valid stream with rubbish after it", base64Encode (raw ^ "rubbish"))
+           ]
+        end
+
+    fun checkRejection (name, bad) =
+        case Blob.unpack bad of
+            ERR _ => PASSED
+          | OK _  => FAILED ("L5: accepted a malformed blob: " ^ name)
+
+    fun rejectAll []                = PASSED
+      | rejectAll ((n, b) :: rest)  = (case checkRejection (n, b) of
+                                           PASSED   => rejectAll rest
+                                         | FAILED m => FAILED m)
+
+    (* The malformations are derived from the blob's bytes, so they are built from a decode of a
+       blob this implementation just wrote. *)
+    fun rejections blob =
+        case base64Decode blob of
+            ERR e => FAILED ("cannot decode our own blob: " ^ e.reason)
+          | OK raw => rejectAll (malformedBlobs raw)
+
+    (* The blob laws, and the references this implementation writes for the other one to read. *)
+    fun checkBlobs (base, write, docText) =
+        case valueOfBlob (base ^ ".blob") of
+            ERR m => FAILED m
+          | OK xh =>
+              (case valueOfBlob (base ^ ".node.blob") of
+                   ERR m => FAILED m
+                 | OK xn =>
+                     if not (xh = xn)
+                     then FAILED "L3: a differently compressed blob decodes to a different value"
+                     else let val doc = IR.toText xh
+                          in case Blob.unpack (Blob.pack doc) of
+                                 ERR m => FAILED ("L4: " ^ m)
+                               | OK doc' =>
+                                   if not (doc = doc')
+                                   then FAILED "L4: unpack (pack doc) <> doc"
+                                   else (case rejections (Blob.pack doc) of
+                                             FAILED m => FAILED m
+                                           | PASSED   =>
+                                               if not write
+                                               then PASSED
+                                               else writeReferences (base, doc, docText))
+                          end)
+
+    (* What this implementation prints, for the Haskell suite to parse and compare against its own
+       IR: the whole program as text, and the largest function as a blob. *)
+    and writeReferences (base, funDoc, progDoc) =
+        case writeFile (authority, base ^ ".troupe.blob", Blob.pack funDoc ^ "\x0a") of
+            ERR e => FAILED ("cannot write: " ^ e.reason)
+          | OK _  =>
+              (case writeFile (authority, base ^ ".troupe.sexp", progDoc) of
+                   ERR e => FAILED ("cannot write: " ^ e.reason)
+                 | OK _  => PASSED)
+
+    fun check (path, write) =
+        case readFile (authority, path) of
+            ERR e => FAILED ("cannot read: " ^ e.reason)
+          | OK text =>
+              (case checkDocument text of
+                   FAILED m => FAILED m
+                 | PASSED   =>
+                     (* the program document as this implementation re-prints it *)
+                     (case IR.fromString text of
+                          ERR m => FAILED m
+                        | OK prog => checkBlobs (stem path, write, IR.toText prog)))
+
+    fun report (path, PASSED)     = let val _ = say ("PASS " ^ path) in 0 end
+      | report (path, FAILED msg) = let val _ = say ("FAIL " ^ path ^ ": " ^ msg) in 1 end
+
+    fun run (_, [])          = 0
+      | run (write, p :: ps) = let val failed = report (p, check (p, write))
+                               in failed + run (write, ps)
+                               end
+
+    val flag  = "--write-troupe-references"
+    val args  = getCliArgs authority
+    val write = List.elem flag args
+    val paths = List.filter (fn a => a <> flag) args
+in
+    case paths of
+        [] => let val _ = say ("usage: conformance [" ^ flag ^ "] <document.sexp> ...")
+              in exit (authority, 2)
+              end
+      | _  => let val failed = run (write, paths)
+                  val n = List.length paths
+                  val _ = if failed = 0
+                          then say ("all " ^ toString n ^ " documents: D, L1, L3, L4 and L5 hold")
+                          else say (toString failed ^ " of " ^ toString n ^ " documents failed")
+              in exit (authority, if failed = 0 then 0 else 1)
+              end
+end

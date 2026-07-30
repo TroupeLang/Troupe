@@ -1,6 +1,6 @@
 {
   "deps": [
-    {"path": "modsrc/ModuleDiamondGreet", "hash": "jmuis7l8v1qotrikofat28eukfn0hett7j46q663sgdc7euvqirg", "name": "modsrc/ModuleDiamondGreet"},
-    {"path": "modsrc/util/ModuleDiamondFmt", "hash": "u815g7g8gr5djvts42h35qq81o9f0qbdre4q6n9tgveuuju5mm70", "name": "modsrc/util/ModuleDiamondFmt"}
+    {"path": "modsrc/ModuleDiamondGreet", "hash": "ucgpgc9a4e55td06dtta2s6tmjal5qtpvq7nn9an5uc490fdh8h0", "name": "modsrc/ModuleDiamondGreet"},
+    {"path": "modsrc/util/ModuleDiamondFmt", "hash": "lnku1vb0smlr0rfa3ld34cjam5gn3sb50ej5i550b0nqa4tg37n0", "name": "modsrc/util/ModuleDiamondFmt"}
   ]
 }

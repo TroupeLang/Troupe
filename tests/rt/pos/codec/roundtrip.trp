@@ -1,0 +1,85 @@
+import Unit
+import String
+import List
+
+(* The builtins as the runtime exposes them, before lib/BytesAndZips converts the two failing
+   directions into outcomes. What is pinned here is the runtime contract: the record shape, the
+   byte-string convention, and that a result says exactly as much as the input it came from. The
+   library's view of the same primitives, and the malformed-input corpus, are in
+   tests/lib/BytesAndZips.trp. *)
+
+let val nul   = "\x00"
+    val emoji = String.strCode 128512
+
+    fun double (s, 0) = s
+      | double (s, n) = double (s ^ s, n - 1)
+
+    val corpus = [ "", "a", nul, emoji, "mixed " ^ nul ^ " text " ^ emoji ^ " end"
+                 , double ("the quick brown fox. ", 16) ]
+
+    fun gzipRoundTrips s = gunzip (gzip s) = {tag = "Ok", value = s}
+
+    (* Every character of a byte string is a code unit at most 255. *)
+    fun isBytes s =
+        let fun go i = if i >= String.size s then true
+                       else if String.subCode (s, i) > 255 then false
+                       else go (i + 1)
+        in go 0
+        end
+
+    val tests = Unit.group "codec builtins" [
+            Unit.group "the result of the reading directions is a tagged record" [
+                Unit.it "gunzip of a gzip stream"
+                        (Unit.isEq {tag = "Ok", value = "hi"} (gunzip (gzip "hi")))
+              , Unit.it "gunzip of something else"
+                        (Unit.isEq "Err" (gunzip "not a gzip stream").tag)
+              , Unit.it "base64Decode of base64"
+                        (Unit.isEq {tag = "Ok", value = "hello"} (base64Decode "aGVsbG8="))
+              , Unit.it "base64Decode of something else"
+                        (Unit.isEq {tag = "Err", error = {reason = "not base64"}}
+                                   (base64Decode "not base64!"))
+            ],
+            Unit.group "the writing directions return the value itself" [
+                Unit.it "every corpus member survives a round trip"
+                        (Unit.isTrue (List.forall gzipRoundTrips corpus))
+              , Unit.it "the compressed form is a byte string"
+                        (Unit.isTrue (List.forall (fn s => isBytes (gzip s)) corpus))
+              , Unit.it "a known base64 vector"
+                        (Unit.isEq "aGVsbG8=" (base64Encode "hello"))
+              , Unit.it "compression is deterministic within one host"
+                        (Unit.isEq (gzip "hello, world") (gzip "hello, world"))
+            ],
+            (* The blob framing itself lives in Troupe code, not in the builtins: an identifier,
+             * a version byte, and a gzip stream, all base64 (see compiler/src/IRBlob.hs). *)
+            Unit.group "blob framing" [
+                let val doc  = "(troupe-ir-sexp 2 (fun \x22f\x22))"
+                    val blob = base64Encode ("TRPI" ^ String.strCode 2 ^ gzip doc)
+                    val raw  = (base64Decode blob).value
+                in Unit.group "assembled and taken apart in Troupe" [
+                       Unit.it "the identifier survives"
+                               (Unit.isEq "TRPI" (String.substring (raw, 0, 4)))
+                     , Unit.it "the version byte survives"
+                               (Unit.isEq 2 (String.subCode (raw, 4)))
+                     , Unit.it "the document survives"
+                               (Unit.isEq {tag = "Ok", value = doc}
+                                          (gunzip (String.substring (raw, 5, String.size raw))))
+                   ]
+                end
+            ],
+            Unit.group "information flow" [
+                let val secret = "hello, world" raisedTo `{alice}`
+                in Unit.group "a labeled argument labels the result" [
+                       Unit.it "gzip"
+                               (Unit.isEq (levelOf secret) (levelOf (gzip secret)))
+                     , Unit.it "the record gunzip returns"
+                               (Unit.isEq (levelOf secret) (levelOf (gunzip (gzip secret))))
+                     , Unit.it "and the tag inside it, which says whether the input decoded"
+                               (Unit.isEq (levelOf secret) (levelOf (gunzip (gzip secret)).tag))
+                   ]
+                end
+              , Unit.it "a public argument stays public"
+                        (Unit.isEq (levelOf "x") (levelOf (gzip "x")))
+            ]
+        ]
+in Unit.run authority tests
+end

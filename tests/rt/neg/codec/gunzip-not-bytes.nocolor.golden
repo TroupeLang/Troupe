@@ -1,0 +1,8 @@
+2026-07-29T14:05:20.790Z [RTM] info: Skipping network creation. Observe that all network operations will yield a runtime error.
+Runtime error in thread 326df6c0-bd06-403e-9c0d-7a68c32aaa9c@{}%{}
+
+  5 | print (gunzip (String.strCode 9731))
+    |        ^
+
+>> gunzip: argument is not a byte string: character 0 is code unit 9731, above 255
+>> at tests/rt/neg/codec/gunzip-not-bytes.trp:5:8

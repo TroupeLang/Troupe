@@ -1,8 +1,8 @@
 {
   "deps": [
-    {"path": "../progress/Progress", "hash": "i4ttjoj2vf5mdvdobur9b2t8u4isg5p2hf2md69ah34racrjbr1g", "name": "../progress/Progress"},
-    {"path": "Client", "hash": "3ishq07qq8h7o3vv698me3ei7sjb4fai0rg71n6e4sbtl1lirong", "name": "Client"},
-    {"path": "Path", "hash": "i133d0fbkp8hu7c10jf32h2a0nub82e14lbkks66p2nq6n0076f0", "name": "Path"},
-    {"path": "Theme", "hash": "4bktkn3luifc8u4q5opbte7cg3c0ooe2nhmobaocvl0cfqlee4i0", "name": "Theme"}
+    {"path": "../progress/Progress", "hash": "mj78iego456ihbabjjeppc5vduo2ehau1uaulqidd29hu3hod4o0", "name": "../progress/Progress"},
+    {"path": "Client", "hash": "g0j96b79l0pm8bt0k3bugie5egbt051dvr6g7vds1lef18tg0f50", "name": "Client"},
+    {"path": "Path", "hash": "d4pqjl6ml6gu1kceqs5ecs4h16m3nq3cm30gvf8puqertk7kp210", "name": "Path"},
+    {"path": "Theme", "hash": "b18u0n589gn7q9p28g9ptb9605qviaeputoscsme91jc7iobg5p0", "name": "Theme"}
   ]
 }

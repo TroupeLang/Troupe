@@ -6,7 +6,7 @@ module Basics
 where
 
 import GHC.Generics(Generic)
-import Data.Serialize (Serialize)
+import Sexp
 
 type VarName = String
 type FieldName = String
@@ -26,22 +26,18 @@ type SynVariantTag = Bool
 -- | Eq and Neq: deep equality check on the two parameters, including the types (any type inequality results in false being returned).
 data BinOp = Plus | Minus | Mult | Div | Mod |  Eq | Neq | Le | Lt | Ge | Gt | And | Or | RaisedTo | Concat| IntDiv | BinAnd | BinOr | BinXor | BinShiftLeft | BinShiftRight | BinZeroShiftRight | HasField | LatticeJoin
   deriving (Eq,Generic, Ord)
-instance Serialize BinOp
 data UnaryOp = IsList | IsTuple | IsRecord | Head | Tail | ListLength | TupleLength | RecordSize | LevelOf | UnMinus | Not
   deriving (Eq, Generic, Ord)
-instance Serialize UnaryOp
 
 -- | Associativity of a declared operator fixity: @infixl@ / @infixr@ /
 -- @infix@ (non-associative, Haskell's meaning — SML's bare @infix@ is left).
 data OpAssoc = OpLeft | OpRight | OpNon
   deriving (Eq, Show, Generic, Ord)
-instance Serialize OpAssoc
 
 -- | A declared operator fixity: associativity and level (0 through 9).
 -- Serializable because it travels with imports in 'ImportDecl'.
 data Fixity = Fixity OpAssoc Int
   deriving (Eq, Show, Generic, Ord)
-instance Serialize Fixity
 
 -- | Whether a name is an operator name: all operator characters ('$'-only
 -- operators included), or containing a character that is not legal in a
@@ -132,11 +128,9 @@ opPrec RaisedTo   = 50
 opPrec HasField   = 50
 
 newtype LibName = LibName String deriving (Eq, Show, Generic, Ord)
-instance Serialize LibName
 
 data ImportMode = Qualified | Unqualified
   deriving (Eq, Show, Ord, Generic)
-instance Serialize ImportMode
 
 
 
@@ -172,7 +166,6 @@ data ImportDecl = ImportDecl
       -- (they are compile-time only).
   } deriving (Eq, Show, Ord, Generic)
 
-instance Serialize ImportDecl
 
 data Imports = Imports [ImportDecl]
   deriving (Eq, Show, Ord)
@@ -197,3 +190,60 @@ consPrec = 6000
 
 projPrec :: Precedence 
 projPrec = 6100
+
+
+------------------------------------------------------------
+-- s-expression serialization (see "Sexp")
+------------------------------------------------------------
+
+-- | Operator name tables: Haskell constructor names, verbatim. One table per
+-- operator type serves both directions, so the two cannot drift apart. A new
+-- operator does not break the build here -- 'nameOf' fails at run time instead;
+-- the round-trip suite covers every constructor
+-- (@compiler/test/ir-sexp-test@).
+binOpTable :: [(String, BinOp)]
+binOpTable =
+  [ ("Plus", Plus), ("Minus", Minus), ("Mult", Mult), ("Div", Div)
+  , ("Mod", Mod), ("Eq", Eq), ("Neq", Neq), ("Le", Le), ("Lt", Lt)
+  , ("Ge", Ge), ("Gt", Gt), ("And", And), ("Or", Or)
+  , ("RaisedTo", RaisedTo), ("Concat", Concat)
+  , ("IntDiv", IntDiv), ("BinAnd", BinAnd), ("BinOr", BinOr)
+  , ("BinXor", BinXor), ("BinShiftLeft", BinShiftLeft)
+  , ("BinShiftRight", BinShiftRight), ("BinZeroShiftRight", BinZeroShiftRight)
+  , ("HasField", HasField), ("LatticeJoin", LatticeJoin)
+  ]
+
+unOpTable :: [(String, UnaryOp)]
+unOpTable =
+  [ ("IsList", IsList), ("IsTuple", IsTuple), ("IsRecord", IsRecord)
+  , ("Head", Head), ("Tail", Tail)
+  , ("ListLength", ListLength), ("TupleLength", TupleLength)
+  , ("RecordSize", RecordSize), ("LevelOf", LevelOf)
+  , ("UnMinus", UnMinus), ("Not", Not)
+  ]
+
+nameOf :: Eq a => String -> [(String, a)] -> a -> String
+nameOf what tbl x =
+  case [ n | (n, y) <- tbl, y == x ] of
+    (n : _) -> n
+    []      -> error ("Basics.nameOf: missing " ++ what)
+
+instance Sexp BinOp where
+  toSexp = Atom . nameOf "BinOp" binOpTable
+  fromSexp d = do
+    s <- asToken d
+    case lookup s binOpTable of
+      Just op -> Right op
+      Nothing -> Left ("unknown binary operator: " ++ s)
+
+instance Sexp UnaryOp where
+  toSexp = Atom . nameOf "UnaryOp" unOpTable
+  fromSexp d = do
+    s <- asToken d
+    case lookup s unOpTable of
+      Just op -> Right op
+      Nothing -> Left ("unknown unary operator: " ++ s)
+
+instance Sexp LibName where
+  toSexp (LibName l) = Str l
+  fromSexp d = LibName <$> asName d

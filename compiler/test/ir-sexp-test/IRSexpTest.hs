@@ -16,7 +16,9 @@ import           Test.Tasty
 import           Test.Tasty.HUnit
 import           Test.Tasty.QuickCheck (testProperty, forAll, (===), withMaxSuccess, Property)
 
-import           IRSexp (printProg, parseProg, erasePosProg)
+import           Data.Char (isHexDigit, digitToInt)
+
+import           IRSexp (printProg, printProgWithPos, parseProg, erasePosProg)
 import           Gen (genProg)
 import           IR
 import qualified Core
@@ -64,16 +66,67 @@ main = defaultMain $ testGroup "troupe-ir-sexp round-trip"
   , mkCases "literal forms"                litCases
   , mkCases "dc-label forms"               dcLabelCases
   , mkCases "structural extras"            structuralCases
-  , testProperty "R1: parse (print p) == p (positions erased)"
+  , testCase "NaN survives the round trip (compared by isNaN, not equality)" nanRoundTrip
+  , testCase "a string literal may carry unescaped control characters" rawControlRead
+  , testProperty "parse (print p) == p (positions erased)"
       (withMaxSuccess 2000 propRoundTrip)
+  , testProperty "parse (printWithPos p) == p (positions kept)"
+      (withMaxSuccess 2000 propRoundTripPos)
   ]
 
--- | R1, over generated wrapped documents: parsing a printed program
--- reproduces it structurally, modulo source positions.
+-- | NaN needs its own check: the structural equality the other cases use is not
+-- reflexive on it, so `parse (print p) == p` cannot hold for a program carrying
+-- one. What must hold is that the value comes back as a NaN.
+nanRoundTrip :: Assertion
+nanRoundTrip =
+  case parseProg (printProgWithPos (progLit (Core.LNumeric (Core.NumFloat (0/0))))) of
+    Left err -> assertFailure ("parse error: " ++ err)
+    Right p  -> case floatsOf p of
+                  [x] | isNaN x -> return ()
+                  xs -> assertFailure ("expected a single NaN literal, got " ++ show xs)
+  where
+    floatsOf (IRProgram funs) =
+      [ d | Loc _ (FunDef _ _ consts _) <- funs
+          , (_, Core.LNumeric (Core.NumFloat d)) <- consts ]
+      ++ [ d | Loc _ (FunDef _ _ _ bb) <- funs, d <- floatsBB bb ]
+    floatsBB (BB insts _) =
+      [ d | Loc _ (Assign _ (Const (Core.LNumeric (Core.NumFloat d)))) <- insts ]
+
+-- | Escaping a control character is a writer's choice, not a rule of the format:
+-- the second implementation (@trp-compiler/IR.trp@) prints them raw, where this
+-- one writes @\\uXXXX@. Every other case here goes through this side's printer,
+-- so the raw form reaches the reader only from the other implementation — which
+-- is exactly the case a round-trip test cannot reach. Written down as text here
+-- instead: the escapes this printer emitted are undone before reading it back.
+rawControlRead :: Assertion
+rawControlRead =
+  let p       = progLit (Core.LString "a\SOHb\US")
+      printed = unescape (printProgWithPos p)
+  in case parseProg printed of
+       Left err -> assertFailure ("parse error: " ++ err ++ "\n--- text ---\n" ++ printed)
+       Right actual
+         | actual == p -> return ()
+         | otherwise   -> assertFailure ("mismatch\n--- text ---\n" ++ printed)
+  where
+    unescape ('\\' : 'u' : a : b : c : d : rest)
+      | all isHexDigit [a, b, c, d] = toEnum (foldl (\n h -> n * 16 + digitToInt h) 0 [a,b,c,d])
+                                      : unescape rest
+    unescape (c : rest) = c : unescape rest
+    unescape []         = []
+
+-- | Over generated wrapped documents: parsing a printed program reproduces it
+-- structurally, modulo source positions.
 propRoundTrip :: Property
 propRoundTrip =
   forAll genProg $ \p ->
     parseProg (printProg p) === Right (erasePosProg p)
+
+-- | The same for the position-carrying printer, where nothing is lost: the
+-- parsed program equals the original, positions included.
+propRoundTripPos :: Property
+propRoundTripPos =
+  forAll genProg $ \p ->
+    parseProg (printProgWithPos p) === Right p
 
 ------------------------------------------------------------
 -- Program builders.
@@ -133,6 +186,13 @@ litCases =
   , ("float-neg",      progLit (Core.LNumeric (Core.NumFloat (-0.5))))
   , ("float-third",    progLit (Core.LNumeric (Core.NumFloat (1.0 / 3.0))))
   , ("float-zero",     progLit (Core.LNumeric (Core.NumFloat 0.0)))
+  , ("float-neg-zero",  progLit (Core.LNumeric (Core.NumFloat (-0.0))))
+    -- Reachable from source: an overflowing literal such as 1.0e400 lexes
+    -- through `read`, so the IR can hold an infinity and the format has to
+    -- carry one. (NaN cannot arise this way, and is covered separately since
+    -- it is not equal to itself.)
+  , ("float-infinity", progLit (Core.LNumeric (Core.NumFloat (1/0))))
+  , ("float-neg-infinity", progLit (Core.LNumeric (Core.NumFloat (-1/0))))
   , ("string-simple",  progLit (Core.LString "hello world"))
   , ("string-empty",   progLit (Core.LString ""))
   , ("string-escapes", progLit (Core.LString "a\"b\\c\nd\te\rf"))

@@ -4,16 +4,16 @@ let (* -- List Access -- *)
 
     (** Returns the head of the list, i.e. `nth 0 l`. This results in a runtime error if the list is
         `null`. *)
-    fun head x::_ = x
+    fun head (x::_) = x
 
     (** Returns the tail of the list, i.e. the list without `head xs`. This results in a runtime
      *  error if the list is `null`. *)
-    fun tail _::xs = xs
+    fun tail (_::xs) = xs
 
     (** Return the n-th element of the given list. The first element (head of the list) is at
         position 0. Raise Failure "nth" if the list is too short. *)
-    fun nth x::_  0 = x
-      | nth x::xs n = nth xs (n - 1)
+    fun nth (x::_)  0 = x
+      | nth (x::xs) n = nth xs (n - 1)
 
     (* -- List Information -- *)
 
@@ -25,7 +25,7 @@ let (* -- List Access -- *)
 
     (** Returns `true` if an element satisfies the given predicate. Tail-recursive. *)
     fun exist f []    = false
-      | exist f x::xs = if f x then true else exist f xs
+      | exist f (x::xs) = if f x then true else exist f xs
 
     (** Returns `true` if an element satisfies the given predicate. Tail-recursive.
      *
@@ -35,7 +35,7 @@ let (* -- List Access -- *)
      *)
     fun exist' f xs =
         let fun go acc []    = acc
-              | go acc x::xs = go ((f x) orelse acc) xs
+              | go acc (x::xs) = go ((f x) orelse acc) xs
         in go false xs
         end
 
@@ -56,7 +56,7 @@ let (* -- List Access -- *)
     (** Returns the length of the given list. Tail-recursive. *)
     fun length xs =
         let fun go acc []    = acc
-              | go acc x::xs = go (acc+1) xs
+              | go acc (x::xs) = go (acc+1) xs
         in go 0 xs end
 
     (* -- List Manipulation -- *)
@@ -64,32 +64,32 @@ let (* -- List Access -- *)
     (** List reversal. Tail-recursive. *)
     fun reverse ls =
         let fun rev [] a    = a
-              | rev x::xs a = rev xs (x::a)
+              | rev (x::xs) a = rev xs (x::a)
         in rev ls []
         end
 
     (** Catenate two lists. Not tail-recursive (length of the first argument). *)
     fun append []    ys = ys
-      | append x::xs ys = x::(append xs ys)
+      | append (x::xs) ys = x::(append xs ys)
 
     (* TODO: '@' operator? *)
 
     (** Catenate two lists, reversing the first. Tail-recursive. *)
     fun revAppend []    ys = ys
-      | revAppend x::xs ys = revAppend xs (x::ys)
+      | revAppend (x::xs) ys = revAppend xs (x::ys)
 
     (** Returns the sublist from `m` (inclusive) to `n` (exclusive). Not tail-recursive. *)
     fun sublist _ _ []    = []
       | sublist _ 0 _     = []
-      | sublist 0 n x::xs = x::(sublist 0 (n - 1) xs)
-      | sublist m n x::xs = sublist (m - 1) (n - 1) xs
+      | sublist 0 n (x::xs) = x::(sublist 0 (n - 1) xs)
+      | sublist m n (x::xs) = sublist (m - 1) (n - 1) xs
 
     (** The first `n` elements of `xs`, or all of `xs` when it is shorter. `n <= 0` yields `[]`.
      *  Not tail-recursive. *)
     fun take n xs =
         let fun go 0 _     = []
               | go _ []    = []
-              | go k y::ys = y::(go (k - 1) ys)
+              | go k (y::ys) = y::(go (k - 1) ys)
         in if n <= 0 then [] else go n xs
         end
 
@@ -98,7 +98,7 @@ let (* -- List Access -- *)
     fun drop n xs =
         let fun go 0 ys    = ys
               | go _ []    = []
-              | go k _::ys = go (k - 1) ys
+              | go k (_::ys) = go (k - 1) ys
         in if n <= 0 then xs else go n xs
         end
 
@@ -111,19 +111,19 @@ let (* -- List Access -- *)
 
     (** Catenate all lists in `xss`, in order. Not tail-recursive. *)
     fun concat []      = []
-      | concat xs::xss = append xs (concat xss)
+      | concat (xs::xss) = append xs (concat xss)
 
     (* -- List Iterators -- *)
 
     (** Applies function `f` to a list with the results returned by `f`. Not tail-recursive. *)
     fun map f []    = []
-      | map f x::xs = (f x)::(map f xs)
+      | map f (x::xs) = (f x)::(map f xs)
 
     (** Same as `List.map` but `f` is applied to the index of the element as first argument
         (counting from 0), and the element itself as second argument. Not tail-recursive. *)
     fun mapi f list =
         let fun mapi_aux j []    = []
-              | mapi_aux j x::xs = (f (j,x)) :: (mapi_aux (j+1) xs)
+              | mapi_aux j (x::xs) = (f (j,x)) :: (mapi_aux (j+1) xs)
         in mapi_aux 0 list
         end
 
@@ -131,10 +131,10 @@ let (* -- List Access -- *)
 
     (** Left-fold of `f` with start `y` over a list. *)
     fun foldl f y []    = y
-      | foldl f y x::xs = foldl f (f (x,y)) xs
+      | foldl f y (x::xs) = foldl f (f (x,y)) xs
 
     (** Left-fold of `f` on a non-empty list using the head as the initial value. *)
-    fun foldl1 f x::xs = foldl f x xs
+    fun foldl1 f (x::xs) = foldl f x xs
 
     (** Right-fold of `f` with start `y` over a list. Tail-recursive (folds left
         over the reversed list). *)
@@ -142,24 +142,24 @@ let (* -- List Access -- *)
 
     (** Returns the sublist of elements that satisfy `f`. Not tail-recursive. *)
     fun filter f []    = []
-      | filter f x::xs = let val xs' = filter f xs in if f x then x::xs' else xs' end
+      | filter f (x::xs) = let val xs' = filter f xs in if f x then x::xs' else xs' end
 
     (** Returns `SOME x` for the first element that satisfies `f`;
         otherwise `NONE`. Tail-recursive. *)
     fun find f []    = NONE
-      | find f x::xs = if f x then SOME x else find f xs
+      | find f (x::xs) = if f x then SOME x else find f xs
 
     (** Map `f` over the list, keeping the values of the `SOME` results
         and dropping the `NONE` ones. Not tail-recursive. *)
     fun mapPartial f []    = []
-      | mapPartial f x::xs = case f x of
+      | mapPartial f (x::xs) = case f x of
                                SOME v => v :: mapPartial f xs
                              | NONE   => mapPartial f xs
 
     (** Same as `List.filter` but `f` is applied to the index of the element as first argument
         (counting from 0), and the element itself as second argument. Not tail-recursive. *)
     fun filteri f l = let fun go i []    = []
-                            | go i x::xs = let val xs' = go (i+1) xs
+                            | go i (x::xs) = let val xs' = go (i+1) xs
                                            in if f (i,x) then x::xs' else xs' end
                       in go 0 l end
 
@@ -183,16 +183,16 @@ let (* -- List Access -- *)
 
     (** The longest prefix of `xs` whose elements all satisfy `f`. Not tail-recursive. *)
     fun takeWhile f []    = []
-      | takeWhile f x::xs = if f x then x::(takeWhile f xs) else []
+      | takeWhile f (x::xs) = if f x then x::(takeWhile f xs) else []
 
     (** `xs` without the longest prefix whose elements all satisfy `f`. Tail-recursive. *)
     fun dropWhile f []    = []
-      | dropWhile f x::xs = if f x then dropWhile f xs else x::xs
+      | dropWhile f (x::xs) = if f x then dropWhile f xs else x::xs
 
     (** `(takeWhile f xs, dropWhile f xs)`, computed in one pass. Tail-recursive. *)
     fun span f xs =
         let fun go acc []    = (reverse acc, [])
-              | go acc y::ys = if f y then go (y::acc) ys else (reverse acc, y::ys)
+              | go acc (y::ys) = if f y then go (y::acc) ys else (reverse acc, y::ys)
         in go [] xs
         end
 
@@ -227,7 +227,7 @@ let (* -- List Access -- *)
         let (* List `xs` split into a list of non-empty sorted lists. *)
             fun split []         acc = acc
               | split (x::[])    acc = [x]::acc
-              | split (x::y::xs) acc = let val acc' = (if cmp x y then [x,y] else [y,x])::acc
+              | split (x::(y::xs)) acc = let val acc' = (if cmp x y then [x,y] else [y,x])::acc
                                        in split xs acc' end
 
             (* Merge two sorted lists with `cmp`.
@@ -259,7 +259,7 @@ let (* -- List Access -- *)
              *)
             fun mergePairs []            acc = acc
               | mergePairs [xs,ys,zs]    acc = (merge3 xs ys zs)::acc
-              | mergePairs (xs::ys::xss) acc = mergePairs xss ((merge2 xs ys)::acc)
+              | mergePairs (xs::(ys::xss)) acc = mergePairs xss ((merge2 xs ys)::acc)
 
             (* Repeatedly call `mergePairs` until it is a list of length 0 or 1. *)
             fun sort_inner []   = []

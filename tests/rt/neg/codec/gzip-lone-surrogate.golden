@@ -1,0 +1,8 @@
+2026-07-29T14:26:25.590Z [RTM] [32minfo[39m: Skipping network creation. Observe that all network operations will yield a runtime error.
+Runtime error in thread c9ce487c-0aeb-4d08-9f13-84eaabd91edd@{}%{}
+
+  6 | print (gzip (String.strCode 55296))
+    |        ^
+
+>> gzip: argument has no UTF-8 encoding: it contains an unpaired surrogate
+>> at tests/rt/neg/codec/gzip-lone-surrogate.trp:6:8

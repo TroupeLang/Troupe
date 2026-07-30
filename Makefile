@@ -99,14 +99,42 @@ ci-test-golden-no-color:
 	mkdir -p out 
 	./bin/golden --no-color
 
-test: test/local test/multinode test/hostile-peer test/result-socket
+test: test/local test/ir-sexp-corpus-troupe test/multinode test/hostile-peer test/result-socket
 
 # Test target for Docker runner (no Haskell toolchain available).
 test/docker: ci-test-golden-no-color test/multinode test/hostile-peer test/result-socket
 
-test/local:
+# The golden tests shell out to the installed ./bin/troupec, which `stack build`
+# alone does not update -- so without these prerequisites a run can pass 1000+
+# tests against a compiler predating the changes under test, and look no
+# different from a run that exercised them. Depends on the library stamp too:
+# libraries carry serialized IR blobs, and a stale one is not readable by a
+# compiler whose blob format has moved.
+test/local: compiler lib/out/.build-stamp
 	mkdir -p out
 	cd compiler && $(MAKE) test
+	$(MAKE) test/ir-blob-interchange
+	$(MAKE) test/ir-sexp-troupe
+
+# The half of the IR blob interchange check that has to run outside Haskell:
+# confirms a Haskell-produced blob decompresses under Node's zlib, and that the
+# checked-in Node-compressed references are current. Cheap; needs no build.
+test/ir-blob-interchange:
+	node scripts/ir-blob-interchange.mjs --check
+
+# The interchange laws inside the second implementation: the Troupe reader in
+# trp-compiler/ decodes every conformance document and checks the datum-layer
+# and round-trip laws with Troupe's own structural equality. Needs the runtime
+# and the libraries, which `all` builds.
+test/ir-sexp-troupe: check-compiler lib/out/.build-stamp
+	./scripts/ir-sexp-troupe-conformance.sh
+
+# The interchange over every program in tests/rt/pos rather than the six in the
+# conformance corpus: each program's document goes through the Troupe reader and
+# printer, and the value that comes back is compared here. Needs the runtime and
+# the libraries, and takes minutes, so it is not part of test/local.
+test/ir-sexp-corpus-troupe: compiler rt lib/out/.build-stamp
+	cd compiler && IR_SEXP_TROUPE_CORPUS=1 stack test :ir-sexp-corpus-troupe-test $(STACK_OPTS)
 
 test/prop-compiler:
 	cd compiler && stack test :dclabels-prop-test $(STACK_OPTS)

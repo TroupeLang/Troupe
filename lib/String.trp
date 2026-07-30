@@ -38,8 +38,8 @@ let
 
     (** The concatenation of all strings in `xs` with string `s` as a separator. *)
     fun concatWith _ []    = ""
-      | concatWith _ x::[] = x
-      | concatWith s x::xs = let fun f (x,x') = x' ^ s ^ x
+      | concatWith _ (x::[]) = x
+      | concatWith s (x::xs) = let fun f (x,x') = x' ^ s ^ x
                              in List.foldl f x xs end
 
     (** The string of size one containing the character `c`.

@@ -77,7 +77,6 @@ data DeclPattern
     -- A bare nullary constructor is an ordinary 'VarPattern' and resolved
     -- to a constructor in a later pass.
     | ConPattern QName (Maybe LDeclPattern)
-    | ErrorPattern                                    -- Error recovery placeholder
       deriving (Eq)
 
 -- GetPosInfo for DeclPattern is no longer needed - use posInfo on LDeclPattern instead
@@ -451,7 +450,6 @@ ppDeclPattern (RecordPattern fields mode) =
               wildcard = case mode of
                 ExactMatch -> []
                 WildcardMatch -> [text ".."]
-ppDeclPattern ErrorPattern = text "<error>"
 
 -- | Print a binder or variable name: operator names are parenthesized with
 -- inner spaces ('( <+> )', '( * )'), which keeps the printed form

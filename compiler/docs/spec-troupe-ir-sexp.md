@@ -8,13 +8,15 @@ other document or on any external repository, and is meant to be dropped straigh
 repo. The audience is an agent working in the **Troupe repository** (the Haskell compiler under
 `compiler/`).
 
-- **Status:** specification — ready for a Troupe-side implementation (printer + parser + round-trip
-  property test). No part of it is yet implemented in the Troupe repo. Last re-verified against the
-  Troupe sources 2026-07-07: every type transcribed under *Source of truth* matches
-  `compiler/src/IR.hs` / `Core.hs` / `Basics.hs` / `DCLabels.hs` verbatim.
+- **Status:** implemented in the Troupe repo — `compiler/src/Sexp.hs` (datum layer and the `Sexp`
+  class), the `Sexp` instances in the modules defining each type, and `compiler/src/IRSexp.hs` (the
+  document layer). Exercised by `compiler/test/ir-sexp-test` and by `troupec --emit-ir-sexp` /
+  `--ingest-ir-sexp` / `--verify-ir-sexp`. Last re-verified against the Troupe sources 2026-07-28:
+  every type transcribed under *Source of truth* matches `compiler/src/IR.hs` / `Core.hs` /
+  `Basics.hs` / `DCLabels.hs` verbatim.
 - **Format:** `troupe-ir-sexp`. A readable, round-trippable textual encoding of the full Troupe IR
   AST (`compiler/src/IR.hs`), structured DC-label literals included.
-- **Versioning:** version `1`. Every document is wrapped in `(troupe-ir-sexp VERSION …)`; format
+- **Versioning:** version `2`. Every document is wrapped in `(troupe-ir-sexp VERSION …)`; format
   identification and the versioning policy are specified inline (§ *Format identification and
   versioning*).
 
@@ -43,12 +45,12 @@ translation that *produces* the IR.
 ## Source of truth — the AST being concretized
 
 The format is a 1:1 concretization of these Haskell types. Field order below is the order used in
-the s-expression. (Locations are erased — see *Source positions are erased*.)
+the s-expression. (Locations are optional — see *Source positions are optional*.)
 
 From `compiler/src/IR.hs`:
 
 ```haskell
-data IRProgram   = IRProgram C.Atoms [LFunDef]
+data IRProgram   = IRProgram [LFunDef]
 data FunDef      = FunDef HFN LVarName Consts IRBBTree          -- name, arg, consts, body
 newtype HFN      = HFN Ident                                    -- Ident = String
 type    Consts   = [(VarName, C.Lit)]
@@ -59,7 +61,7 @@ data IRInst      = Assign VarName IRExpr
 
 data IRExpr      = Bin Basics.BinOp LVarAccess LVarAccess
                  | Un  Basics.UnaryOp LVarAccess
-                 | Tuple [LVarAccess]
+                 | Tuple [LVarAccess] Basics.SynVariantTag      -- tag: is this a variant value?
                  | Record LFields                               -- [(FieldName, LVarAccess)]
                  | WithRecord LVarAccess LFields
                  | ProjField LVarAccess Basics.FieldName
@@ -84,22 +86,21 @@ data VarAccess   = VarLocal VarName | VarEnv VarName | VarFunSelfRef
 From `compiler/src/Core.hs`:
 
 ```haskell
-data Atoms   = Atoms [AtomName]                                 -- AtomName = String
 data Numeric = NumInt Integer | NumFloat Double
 data Lit     = LNumeric Numeric | LString String | LLabel String
-             | LDCLabel DCLabelExp | LUnit | LBool Bool | LAtom AtomName
+             | LDCLabel DCLabelExp | LUnit | LBool Bool
 ```
 
 From `compiler/src/Basics.hs`:
 
 ```haskell
-type VarName = String;  type AtomName = String;  type FieldName = String
+type VarName = String;  type FieldName = String;  type SynVariantTag = Bool
 newtype LibName = LibName String
 data BinOp   = Plus | Minus | Mult | Div | Mod | Eq | Neq | Le | Lt | Ge | Gt
-             | And | Or | RaisedTo | FlowsTo | Concat | IntDiv
+             | And | Or | RaisedTo | Concat | IntDiv
              | BinAnd | BinOr | BinXor | BinShiftLeft | BinShiftRight | BinZeroShiftRight
-             | HasField | LatticeJoin | LatticeMeet
-data UnaryOp = IsList | IsTuple | IsRecord | Head | Tail | Fst | Snd
+             | HasField | LatticeJoin
+data UnaryOp = IsList | IsTuple | IsRecord | Head | Tail
              | ListLength | TupleLength | RecordSize | LevelOf | UnMinus | Not
 ```
 
@@ -124,10 +125,31 @@ primitives therefore never change this grammar; they only add names the runtime 
 is a fixed point of the IR's *structure*, which has been stable for years, so the spec can be held
 as an independent contract while the primitive set evolves on both sides.
 
-**Source positions are erased.** `LVarAccess = Located VarAccess`, `LFunDef = Located FunDef`,
-`LVarName = Located VarName`, `LIRInst`/`LIRTerminator = Located …` all carry source positions. **The
-format does not represent positions.** The printer drops them; the parser fills the null position
-(`NoPos`). The round-trip law is therefore stated over **position-erased** ASTs.
+**Source positions are optional (version 2).** `LVarAccess = Located VarAccess`,
+`LFunDef = Located FunDef`, `LVarName = Located VarName`, `LIRInst`/`LIRTerminator = Located …`
+all carry source positions, from
+
+```haskell
+data PosInf = SrcPosInf String Int Int | RTGen String | NoPos   -- file, line, column
+```
+
+A located value with a position is written inside an `@` wrapper; a value at `NoPos` is written
+as its payload alone:
+
+```
+(@ ("examples/foo.trp" 12 3) (local "x"))    ; SrcPosInf
+(@ (rt "description") (local "x"))           ; RTGen
+(local "x")                                  ; NoPos
+```
+
+Any node may therefore appear with or without a wrapper, and a producer that has no positions to
+offer emits none. Two round-trip laws follow (see *Round-trip law*): with positions the AST comes
+back exactly, and a position-erased document comes back position-erased.
+
+Version 1 of this format could not represent positions at all. A version-1 document is a
+version-2 document that happens to have no `@` wrappers, but the version atom is part of the text
+and that text is a module's content-addressed identity (`compiler/src/ModuleHash.hs`), so the
+version bump repinned every module in the repository.
 
 ## Lexical layer
 
@@ -139,16 +161,40 @@ The surface is standard s-expressions, whitespace-insensitive.
   Used for node heads (`program`, `fun`, `bb`, `assign`, …), operators (the `BinOp`/`UnaryOp`
   constructor names), and the label-constant tokens `#true` / `#false`.
 - **Strings:** double-quoted, with escapes `\" \\ \n \t \r \uXXXX`. **All names** — `VarName`, the
-  `HFN` ident, `AtomName`, `LibName`, `FieldName`, label `Tag` — are written as **quoted strings**,
+  `HFN` ident, `LibName`, `FieldName`, label `Tag` — are written as **quoted strings**,
   because Troupe identifiers legitimately contain `$`, `.`, etc. (e.g. `"$$authorityarg"`,
   `"$env.x"`). (A reader MAY also accept a bare symbol where a name is expected, but the printer
   always quotes.)
 - **Integers:** optional `-`, then digits (`LNumeric (NumInt _)`). `NumInt` is `Integer` —
   unbounded; the reader must not truncate to a machine word.
-- **Floats:** decimal with a `.` and/or exponent (`LNumeric (NumFloat _)`). The printer MUST emit a
-  shortest round-trip representation of the `Double` (Haskell's `show @Double` suffices), so that
-  `read (show d) = d` — otherwise R1 fails on floats. `NaN` and `±Infinity` have no literal form and
-  are not representable; a generator for the property test must not produce them.
+- **Floats:** `LNumeric (NumFloat _)`, an IEEE-754 double. Two implementations will not spell the
+  same value the same way — Haskell renders `1.0e-3` where JavaScript renders `0.001`, and
+  `1.0` where JavaScript renders `1` — and that is allowed: what is fixed is the syntax every
+  reader must **accept**, not the syntax a writer must **emit**.
+
+  ```
+  FLOAT ::= ['-'] digit+ ['.' digit+] [('e'|'E') ['+'|'-'] digit+]
+          | ['-'] "Infinity"
+          | "NaN"
+  ```
+
+  A writer MUST emit a shortest round-trip representation, so that reading its output recovers the
+  same double. It MUST NOT emit a leading `+`, a leading `.` (`.5`), or a trailing `.` (`1.`):
+  Haskell's reader rejects the first two outright and consumes only the `1` of the third.
+
+  **Non-finite values are representable and do occur.** An overflowing source literal such as
+  `1.0e400` lexes through `read` into an infinity, so the IR can hold one, and `Infinity` /
+  `-Infinity` are the spellings both Haskell's `reads` and JavaScript's `Number` accept and
+  produce. `NaN` is accepted for completeness; no source construct produces it.
+
+  **A caveat for the laws below:** structural equality is not reflexive on `NaN`, so
+  `parse (print p) = p` cannot hold for a document carrying one. A conforming implementation
+  checks that case by asking whether the decoded value is a NaN, not whether it equals the
+  original (`compiler/test/ir-sexp-test` does this).
+
+  **Negative zero** is a distinct value that survives Haskell's `show`/`read` as `-0.0`, but
+  JavaScript's `String(-0)` is `"0"` — an implementation printing through it must special-case
+  the sign, or it silently loses the distinction.
 
 ## Grammar — node by node
 
@@ -158,8 +204,7 @@ numbers. Each rule names the AST constructor it denotes.
 **Program, functions, blocks.**
 
 ```
-PROGRAM   ::= (program ATOMS FUN*)                       -- IRProgram (Atoms …) [FunDef …]
-ATOMS     ::= (atoms STRING*)                            -- Core.Atoms [AtomName]
+PROGRAM   ::= (program FUN*)                             -- IRProgram [FunDef …]
 FUN       ::= (fun STRING (arg STRING) CONSTS BBTREE)    -- FunDef (HFN name) arg consts body
 CONSTS    ::= (consts (STRING LIT)*)                     -- [(VarName, Lit)]
 BBTREE    ::= (bb (INST*) TERM)                          -- BB [IRInst] IRTerminator
@@ -179,7 +224,8 @@ CLO  ::= (STRING STRING)                                 --   (VarName, HFN) clo
 ```
 EXPR ::= (bin BINOP VARACCESS VARACCESS)                 -- Bin
        | (un  UNOP  VARACCESS)                           -- Un
-       | (tuple VARACCESS*)                              -- Tuple
+       | (tuple VARACCESS*)                              -- Tuple … False (an ordinary tuple)
+       | (tuple-variant VARACCESS*)                      -- Tuple … True  (a syntactic-variant value)
        | (record (STRING VARACCESS)*)                    -- Record
        | (with-record VARACCESS (STRING VARACCESS)*)     -- WithRecord
        | (proj-field VARACCESS STRING)                   -- ProjField … FieldName
@@ -221,7 +267,6 @@ LIT ::= (int INT)                                        -- LNumeric (NumInt _)
       | (string STRING)                                  -- LString
       | (bool true) | (bool false)                       -- LBool
       | unit                                             -- LUnit
-      | (atom STRING)                                    -- LAtom AtomName
       | (label-string STRING)                            -- LLabel String  (legacy; raw surface text)
       | DCLABEL                                          -- LDCLabel DCLabelExp  (preferred; below)
 ```
@@ -232,15 +277,15 @@ readable aliases the parser also accepts, but the printer emits the constructor 
 
 ```
 BINOP ::= Plus | Minus | Mult | Div | Mod | Eq | Neq | Le | Lt | Ge | Gt
-        | And | Or | RaisedTo | FlowsTo | Concat | IntDiv
+        | And | Or | RaisedTo | Concat | IntDiv
         | BinAnd | BinOr | BinXor | BinShiftLeft | BinShiftRight | BinZeroShiftRight
-        | HasField | LatticeJoin | LatticeMeet
-UNOP  ::= IsList | IsTuple | IsRecord | Head | Tail | Fst | Snd
+        | HasField | LatticeJoin
+UNOP  ::= IsList | IsTuple | IsRecord | Head | Tail
         | ListLength | TupleLength | RecordSize | LevelOf | UnMinus | Not
 ```
 
 Note the label-relevant operators are ordinary `BinOp`s/`UnaryOp`s, not special forms: `RaisedTo`
-(`x raisedTo lev`), `FlowsTo` (`⊑`), `LatticeJoin` (`⊔`), `LatticeMeet` (`⊓`), `LevelOf`.
+(`x raisedTo lev`), `LatticeJoin` (`⊔`), `LevelOf`.
 
 ## Labels and authorities — the structured encoding
 
@@ -285,26 +330,62 @@ nodes already in this grammar:
 The format thus needs no authority-specific syntax; an emitter expresses authorities through these
 existing constructs.
 
-## The round-trip law (acceptance property)
+## The interchange laws (acceptance properties)
 
-Let `print : IRProgram → Text` and `parse : Text → Either Error IRProgram`. The required law, over
-**position-erased** ASTs:
+The point of the format is that two implementations can exchange IR. Conformance is stated on the
+**decoded value**, never on bytes or on text: gzip streams from different compressors differ while
+remaining mutually readable, and the s-expression layer is whitespace-insignificant, so neither
+compression output nor layout is part of the format.
 
-> **R1 (parse ∘ print = id).** For every well-formed `p : IRProgram`, `parse (print p) = Right p'`
-> where `p'` equals `p` structurally, modulo source positions.
+Let `print`/`parse` range over documents and `encodeBlob`/`deserialize` over blobs (see *Blobs*).
 
-Structural equality is the derived `Eq` on `FunDef`/`IRExpr`/`Lit`/…, with positions normalized.
-(`IRProgram` itself derives only `Generic`; compare component-wise: equal `Atoms` and pointwise-equal
-`FunDef`s. For `DCLabelExp`, R1 uses the *derived, syntactic* `Eq` — the `LabelExp` tree is preserved
-exactly — not the semantic `dcLabelEq`.)
+> **L1 (round trip).** For every well-formed `p`, `parse (print p) = Right p'` where `p'` is
+> structurally equal to `p`, positions included. Printing with positions erased instead gives back
+> the position-erased program.
+>
+> **L2 (text ingestion).** An implementation parses a document another implementation printed and
+> obtains a structurally equal value.
+>
+> **L3 (blob ingestion).** An implementation decompresses and decodes a blob another
+> implementation produced and obtains a structurally equal value. The blob bytes may differ.
+>
+> **L4 (framing).** `deserialize (encodeBlob u) = Right u` for every serialization unit `u`.
+>
+> **L5 (rejection).** A blob that is not one an encoder produced is refused, as a value the caller
+> can act on rather than as a crash or a hang.
 
-> **R2 (print ∘ parse = id, on canonical text).** `print` produces a **canonical** form (binary
-> `and`/`or`, quoted names, constructor-name operators, no comments, fixed spacing). For canonical
-> input `t`, `print (parse t) = t`. Non-canonical but valid input (extra whitespace, comments, n-ary
-> label sugar, bare-symbol names) parses to the same AST and *re-prints canonically*.
+Structural equality is the derived `Eq` on `FunDef`/`IRExpr`/`Lit`/… — for `DCLabelExp` the
+*syntactic* `Eq`, preserving the `LabelExp` tree, not the semantic `dcLabelEq` — with the `NaN`
+caveat noted under *Floats*.
 
-**Recommended test:** a property test generating arbitrary `IRProgram` values and checking R1
-(`parse (print p) == p` up to positions). This is the implementation's primary acceptance test.
+**Making L2 and L3 observable.** Do not compare one implementation's values with another's through
+a canonical text; there is no canonical text. Compare inside one implementation: parse the other
+side's artifact with your own reader and compare against your own value using your own equality.
+The check is then symmetric, and neither side needs to reproduce the other's layout or compression.
+
+**What the laws do not require.** Identical text, identical byte length, identical gzip output,
+identical float spelling, identical line breaking. An implementation may pretty-print, or emit
+everything on one line, and remain conformant.
+
+Checked in this repository by `compiler/test/ir-sexp-test` (L1 over generated and hand-built IR),
+`compiler/test/ir-sexp-corpus` (L1 over every program in the test corpus, module graphs included),
+`compiler/test/ir-sexp-conformance` (L1–L4 over the reference documents and blobs, including one
+compressed by Node rather than Haskell and one produced by the second implementation), and
+`scripts/ir-blob-interchange.mjs` (the other direction of the compression check).
+
+The second implementation is `trp-compiler/IR.trp` and `trp-compiler/Blob.trp`, written in Troupe.
+`scripts/ir-sexp-troupe-conformance.sh` runs the same laws inside it, over the same corpus, using
+Troupe's structural equality; `make test/local` runs both sides. `make test/ir-sexp-corpus-troupe`
+widens the text half from the six reference programs to every program in `tests/rt/pos`: each is
+compiled, printed, decoded and re-printed by the Troupe implementation, and parsed back here, with
+the two IR values compared.
+
+**A reader must also refuse.** Accepting a malformed blob is a conformance failure in the same way
+as rejecting a valid one, since blobs arrive from other nodes. Both implementations are held to the
+same list of malformations — truncations, a foreign identifier, an unreadable version, a flipped
+byte, a payload that is not a gzip stream, one that is not UTF-8, a decompression bomb, and a valid
+stream with trailing bytes after it. A blob is a header and exactly one gzip stream: input after
+that stream is refused rather than ignored, so that neither side admits what the other rejects.
 
 ## Format identification and versioning
 
@@ -320,16 +401,15 @@ its version. This wrapper is the outermost production, replacing `(program …)`
 
 ```
 DOCUMENT ::= (troupe-ir-sexp VERSION PROGRAM)
-VERSION  ::= a positive integer literal           ; current = 1
-PROGRAM  ::= (program ATOMS FUN*)                  ; unchanged
+VERSION  ::= a positive integer literal           ; current = 2
+PROGRAM  ::= (program FUN*)
 ```
 
 Example (the `a + b` program, wrapped):
 
 ```
-(troupe-ir-sexp 1
+(troupe-ir-sexp 2
   (program
-    (atoms)
     (fun "main" (arg "$$authorityarg")
       (consts)
       (bb ((assign "a" (const (int 1)))
@@ -340,7 +420,7 @@ Example (the `a + b` program, wrapped):
 
 **Printer / parser requirements.**
 
-- **Printer** emits the wrapper with the current version (`1`).
+- **Printer** emits the wrapper with the current version (`2`).
 - **Parser** MUST check the head symbol is exactly `troupe-ir-sexp` and that `VERSION` is one it
   supports; otherwise it **rejects with a clear error** — it must not attempt to parse an unknown
   head or version. This is the loud-on-drift guard, and it also distinguishes this format from
@@ -350,13 +430,40 @@ Example (the `a + b` program, wrapped):
 
 **Versioning policy.**
 
-- This spec defines **version 1**.
+- This spec defines **version 2**.
 - Bump the integer on any **backward-incompatible** grammar change (a renamed, removed, or retyped
   node). Purely additive changes need not bump — a `v1` parser may then loudly reject the unknown
   head, which is acceptable.
 - Maintain a changelog mapping each version number to its grammar revision.
 
-**Changelog.** `1` — initial grammar (this document).
+**Changelog.**
+
+- `1` — initial grammar.
+- `2` — optional source positions (the `@` wrapper); `(program …)` no longer carries an `(atoms …)`
+  list, atoms having been retired from the language.
+
+## Blobs — the mobile-code framing
+
+A blob is how a serialization unit travels: embedded per function in emitted JavaScript
+(`this.<fn>.serialized`, base64) and carried between nodes when a closure moves.
+
+```
+bytes 0-3 : "TRPI"                     format identifier
+byte  4   : version, currently 2
+bytes 5.. : gzip stream (RFC 1952) of the UTF-8 encoded document
+```
+
+The document inside is an ordinary `(troupe-ir-sexp 2 …)` whose body is either `(fun …)` — one
+function, the mobile-code case — or `(program …)`. Positions are carried: the receiving compiler
+rebuilds a source map for the relinked code from them.
+
+A reader MUST reject a blob whose identifier is absent or whose version it does not implement, and
+MUST bound decompression output (this implementation caps it at 64 MB) — blobs arrive from remote
+nodes, so a small input inflating without limit is a denial of service.
+
+Any conforming gzip implementation may produce the stream: Haskell's `zlib`, Node's `zlib` and a
+browser's `CompressionStream('gzip')` all interoperate, which L3 exists to check rather than
+assume. Compression level and therefore byte length are implementation choices.
 
 ## Conventions for a *runnable* whole program
 
@@ -383,7 +490,6 @@ The format faithfully represents any `IRProgram`; **running** one additionally r
 
 ```
 (program
-  (atoms)
   (fun "main" (arg "$$authorityarg")
     (consts)
     (bb ((assign "a" (const (int 1)))

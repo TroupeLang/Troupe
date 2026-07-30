@@ -17,6 +17,7 @@ build:
 
   # Dependency on `Outcome`
 	$(COMPILER) ./SimpleFileIO.trp -l
+	$(COMPILER) ./BytesAndZips.trp -l
 
   # Dependency on `Number`
 	$(COMPILER) ./Duration.trp -l

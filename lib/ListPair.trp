@@ -14,7 +14,7 @@ let (* -- ListPair Generation -- *)
     (** Unmerge a list of pairs into a pair of two lists. Tail-recursive. *)
     fun unzip xys =
         let fun unzip_inner []         (xs,ys) = (List.reverse xs, List.reverse ys)
-              | unzip_inner (x,y)::xys (xs,ys) = unzip_inner xys (x::xs, y::ys)
+              | unzip_inner ((x,y)::xys) (xs,ys) = unzip_inner xys (x::xs, y::ys)
         in unzip_inner xys ([], []) end
 
     (* -- ListPair Information -- *)
@@ -41,7 +41,7 @@ let (* -- ListPair Generation -- *)
     (** Returns `SOME value` for the first association of the `key` if
      *  it exists; otherwise `NONE`. Tail-recursive. *)
     fun findOpt []     _   = NONE
-      | findOpt (x,v)::xs key = if x = key
+      | findOpt ((x,v)::xs) key = if x = key
                                 then SOME v
                                 else findOpt xs key
 

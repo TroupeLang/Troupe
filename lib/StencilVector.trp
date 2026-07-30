@@ -99,7 +99,7 @@ let (*--- Constants ---*)
                       then List.mapi (fn (j,y) => if j = idx then x else y) xs
                       else let fun go j []    = [x]
                                  | go 0 ys    = x::ys
-                                 | go j y::ys = y::(go (j-1) ys)
+                                 | go j (y::ys) = y::(go (j-1) ys)
                            in go idx xs end
         in (bm', xs')
         end

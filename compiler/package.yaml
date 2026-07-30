@@ -17,7 +17,6 @@ description:         Please see the README on GitHub at <https://github.com/gith
 
 dependencies:
 - base >= 4.7 && < 5
-- cereal
 - zlib
 - mtl
 - containers
@@ -127,6 +126,53 @@ tests:
     - tasty-hunit
     - tasty-quickcheck
     - QuickCheck
+  ir-sexp-corpus-test:
+    main: Main.hs
+    source-dirs:
+    - test/ir-sexp-corpus
+    - test/ir-sexp-shared
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - Troupe-compiler
+    - tasty
+    - tasty-hunit
+    - directory
+    - filepath
+  ir-sexp-conformance-test:
+    main: Main.hs
+    source-dirs: test/ir-sexp-conformance
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - Troupe-compiler
+    - tasty
+    - tasty-hunit
+    - directory
+    - filepath
+    - bytestring
+    - base64-bytestring
+    - zlib
+  ir-sexp-corpus-troupe-test:
+    main: Main.hs
+    source-dirs:
+    - test/ir-sexp-corpus-troupe
+    - test/ir-sexp-shared
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - Troupe-compiler
+    - tasty
+    - tasty-hunit
+    - directory
+    - filepath
+    - process
   dclabels-prop-test:
     main: DCLabelsProps.hs
     source-dirs: test/prop

@@ -1,8 +1,8 @@
 {
   "deps": [
-    {"path": "lambda/Eval", "hash": "aj4jb0i72m1ue9hj4qt20q1inl8jeevvjbhqspb3ahqehcj29u4g", "name": "lambda/Eval"},
-    {"path": "lambda/Print", "hash": "jf29b07jdqtgi5crc75dr5k01kcn5ti1mn72qvrrsc95168q4tsg", "name": "lambda/Print"},
-    {"path": "lambda/Programs", "hash": "7mdnuraho7tti3j07qe89tgjvgk5s6s7o81ulsvvpck8n69ie0ug", "name": "lambda/Programs"},
-    {"path": "lambda/Term", "hash": "brh9kcs6o6rpqt1gog6pv9l2ogt8rfne6og895ct2qfr6j76tieg", "name": "lambda/Term"}
+    {"path": "lambda/Eval", "hash": "droo1r1ikc2rsgg9fu1qba0iq5j1ckeb9pdlhjd1rm3an4vl573g", "name": "lambda/Eval"},
+    {"path": "lambda/Print", "hash": "gdemitqspskcnjsg9oh9i6o3qkl6cd5ll2tolqjh4lcun5m3a900", "name": "lambda/Print"},
+    {"path": "lambda/Programs", "hash": "kl8jgo8vs6umauo917hmgsoivq4i5v2uv4791po1ck15o3g6kqbg", "name": "lambda/Programs"},
+    {"path": "lambda/Term", "hash": "nsanipg82283olleg2g4g6simsoad854hafitvpmu5lfnd9v2g70", "name": "lambda/Term"}
   ]
 }

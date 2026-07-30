@@ -20,7 +20,7 @@ where
 
 
 import GHC.Generics(Generic)
-import Data.Serialize (Serialize)
+import Sexp (Sexp(..), Datum(..), asName, headHint)
 
 data PosInf = SrcPosInf String Int Int
             | RTGen String
@@ -28,7 +28,6 @@ data PosInf = SrcPosInf String Int Int
             deriving (Eq, Ord, Generic)
 
 
-instance Serialize PosInf
 
 instance Show PosInf
   where show (SrcPosInf filename row col) = filename ++ ":" ++ (show row) ++ ":" ++ (show col)
@@ -55,7 +54,6 @@ data Located a = Loc !PosInf a
 instance Ord a => Ord (Located a) where
   compare (Loc _ x) (Loc _ y) = compare x y
 
-instance Serialize a => Serialize (Located a)
 
 instance GetPosInfo (Located a) where
   posInfo = getLoc
@@ -83,3 +81,43 @@ mapLoc = fmap
 -- | Combine two located values, keeping the position of the first
 withLocOf :: Located a -> b -> Located b
 withLocOf (Loc p _) x = Loc p x
+
+------------------------------------------------------------
+-- s-expression serialization (see "Sexp")
+------------------------------------------------------------
+
+-- | A position is written as its own datum, carried by the @\@@ wrapper of the
+-- located value it belongs to:
+--
+-- > ("examples/foo.trp" 12 3)   -- SrcPosInf
+-- > (rt "some description")     -- RTGen
+-- > none                        -- NoPos
+--
+-- 'NoPos' has no wrapper of its own (see the 'Located' instance), so the @none@
+-- form appears only if something writes a position datum on its own.
+instance Sexp PosInf where
+  toSexp (SrcPosInf f l c) = Lst [Str f, toSexp (toInteger l), toSexp (toInteger c)]
+  toSexp (RTGen s)         = Lst [Atom "rt", Str s]
+  toSexp NoPos             = Atom "none"
+  fromSexp (Atom "none")         = Right NoPos
+  fromSexp (Lst [Atom "rt", sD]) = RTGen <$> asName sD
+  fromSexp (Lst [fD, lD, cD])    = do
+    f <- asName fD
+    l <- fromSexp lD
+    c <- fromSexp cD
+    Right (SrcPosInf f (fromInteger l) (fromInteger c))
+  fromSexp d = Left ("not a valid source position, got " ++ headHint d)
+
+-- | A located value carries its position in an @\@@ wrapper:
+--
+-- > (@ ("examples/foo.trp" 12 3) (local "x"))
+--
+-- A value at 'NoPos' is written as its payload alone, so a position-erased
+-- program prints exactly as it did before positions were representable, and a
+-- document that omits positions entirely stays legal. Decoding a payload with
+-- no wrapper fills 'NoPos'.
+instance Sexp a => Sexp (Located a) where
+  toSexp (Loc NoPos x) = toSexp x
+  toSexp (Loc p x)     = Lst [Atom "@", toSexp p, toSexp x]
+  fromSexp (Lst [Atom "@", pD, xD]) = Loc <$> fromSexp pD <*> fromSexp xD
+  fromSexp d                        = noLoc <$> fromSexp d

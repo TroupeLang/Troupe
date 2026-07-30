@@ -1,10 +1,6 @@
-tests/cmp/synvar/number-heads-application.trp:4:17: parse error
-  (while parsing function or pattern match)
+tests/cmp/synvar/number-heads-application.trp:4:14: parse error
+  (while parsing a pattern)
   4 | in case x of 11 22 => 0 | _ => 1 end
-    |                 ^
-  unexpected number 22
-  expected one of: '@', '=>', '::'
-
-Suggestion: Missing '=>' after pattern?
-  Syntax: fn pattern => expression
+    |              ^
+  only a constructor can be applied to an argument in a pattern
 

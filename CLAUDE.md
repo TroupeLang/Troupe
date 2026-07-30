@@ -87,6 +87,11 @@ current pc and blocking labels for correct information.
 
 ## Compiler work
 
+- **Never add a compiler flag without explicit consent.** `troupec`'s option list is user-facing
+  surface, and a flag added to serve a test or a harness stays there for good. This covers
+  development-only and test-only flags — those are the ones that accumulate. Propose the flag, say
+  what needs it, and wait for a decision. If a check needs the compile pipeline, reach for a
+  library entry point and a test suite before reaching for a flag.
 - `troupec -v` writes per-stage generated files into `out/` under the working directory; inspect
   these to debug codegen.
 - `--no-rawopt` disables Raw optimizations and can surface corner-case compiler bugs.

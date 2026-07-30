@@ -25,7 +25,7 @@ module RetCPS
 where
 
 import GHC.Generics
-import qualified Data.Serialize as Serialize
+import Sexp (Sexp(..), Datum(..), asName)
 
 import Basics(BinOp(..),UnaryOp(..),Precedence)
 import qualified Basics
@@ -43,7 +43,6 @@ newtype VarName = VN Basics.VarName
     deriving (Eq, Ord, Generic)
 
 
-instance Serialize.Serialize VarName
 instance Show VarName where
   show (VN x) = show x
 
@@ -309,3 +308,11 @@ ppKTerm' (AssertElseError vname kt1 verr) = do
     kt1Doc $$
     text "elseError" <+>
     textv verr
+
+------------------------------------------------------------
+-- s-expression serialization (see "Sexp")
+------------------------------------------------------------
+
+instance Sexp VarName where
+  toSexp (VN v) = Str v
+  fromSexp d = VN <$> asName d

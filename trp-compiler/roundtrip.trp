@@ -1,0 +1,21 @@
+import "./IR"
+import { readFile, writeFile } SimpleFileIO
+import Outcome
+
+(* Read a troupe-ir-sexp document, decode it into the IR datatypes, re-encode it, and write the
+   result. Conformance is then observed by handing both documents to troupec: if they decode to
+   the same IR, the code it generates from them is identical. *)
+let val args = getCliArgs authority
+in case args of
+       [inPath, outPath] =>
+         (case readFile (authority, inPath) of
+              ERR e => print ("cannot read " ^ inPath)
+            | OK text =>
+                (case IR.fromString text of
+                     ERR msg => print ("DECODE FAILED: " ^ msg)
+                   | OK unit =>
+                       (case writeFile (authority, outPath, IR.toText unit) of
+                            ERR e => print ("cannot write " ^ outPath)
+                          | OK _  => print "OK")))
+     | _ => print "usage: roundtrip <in.sexp> <out.sexp>"
+end

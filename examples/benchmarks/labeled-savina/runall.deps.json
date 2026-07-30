@@ -1,6 +1,6 @@
 {
   "deps": [
-    {"path": "../../savina/SavinaReport", "hash": "nki815r3j6sde8eljkkqv84qfrtmitpfj6h2ng177nd2r4prf5n0", "name": "../../savina/SavinaReport"},
-    {"path": "LabeledSavina", "hash": "m89obd4c4mfpiphf6ki5fjlo65pm99cvbn7acadrr9ouf8e43100", "name": "LabeledSavina"}
+    {"path": "../../savina/SavinaReport", "hash": "nc1c97gvf3l38mkkgqfa0jsgodm85oodt4vuq74156hjsnvm57f0", "name": "../../savina/SavinaReport"},
+    {"path": "LabeledSavina", "hash": "t9ai696sekd7kdcnq5puoh6bisaishas90n9smlo0e2b1fj3v6tg", "name": "LabeledSavina"}
   ]
 }

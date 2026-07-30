@@ -15,6 +15,12 @@
       [33m[ TEST ][0m it a string literal      [32m[ PASS ][0m it a string literal
       [33m[ TEST ][0m it an empty string literal      [32m[ PASS ][0m it an empty string literal
       [33m[ TEST ][0m it escapes decode      [32m[ PASS ][0m it escapes decode
+      [33m[ TEST ][0m it a \u escape decodes to its character      [32m[ PASS ][0m it a \u escape decodes to its character
+      [33m[ TEST ][0m it a \u escape decodes above ASCII      [32m[ PASS ][0m it a \u escape decodes above ASCII
+      [33m[ TEST ][0m it a \u escape of a control character decodes to it      [32m[ PASS ][0m it a \u escape of a control character decodes to it
+      [33m[ TEST ][0m it \u and the short form agree      [32m[ PASS ][0m it \u and the short form agree
+      [33m[ TEST ][0m it hex digits are read in either case      [32m[ PASS ][0m it hex digits are read in either case
+      [33m[ TEST ][0m it a raw control character is string material      [32m[ PASS ][0m it a raw control character is string material
   [34mend [0m
   [34mbegin [0mparse lists
       [33m[ TEST ][0m it the empty list      [32m[ PASS ][0m it the empty list
@@ -47,6 +53,8 @@
       [33m[ TEST ][0m it atmosphere with no form, at the end offset      [32m[ PASS ][0m it atmosphere with no form, at the end offset
       [33m[ TEST ][0m it an unknown escape points at the escaped character      [32m[ PASS ][0m it an unknown escape points at the escaped character
       [33m[ TEST ][0m it a backslash at end of input points at the backslash      [32m[ PASS ][0m it a backslash at end of input points at the backslash
+      [33m[ TEST ][0m it a non-hex digit in a \u escape points at the digit      [32m[ PASS ][0m it a non-hex digit in a \u escape points at the digit
+      [33m[ TEST ][0m it a \u escape with too few digits points at the backslash      [32m[ PASS ][0m it a \u escape with too few digits points at the backslash
   [34mend [0m
   [34mbegin [0mpretty
       [33m[ TEST ][0m it a list that fits stays on one line      [32m[ PASS ][0m it a list that fits stays on one line
@@ -67,6 +75,6 @@
   [34mend [0m
 [34mend [0m
 
-Total:  49
-Passes: 49
+Total:  57
+Passes: 57
 >>> Main thread finished with value: true@{alice}%{alice}

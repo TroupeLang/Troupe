@@ -18,7 +18,8 @@ module Stack2JS where
 
 import IR (HFN(..)
           , ppFunCall, ppArgs
-          , serializeFunDef )
+          )
+import           IRBlob (serializeFunDef)
 import qualified Data.ByteString.Lazy.Char8 as BL
 import qualified IR
 import qualified Raw

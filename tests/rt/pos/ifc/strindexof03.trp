@@ -1,0 +1,5 @@
+let val s = "Hello, World!"
+    val needle = "World"
+    val from = 0 raisedTo `{charlie}`
+in strIndexOf (s, needle, from)
+end

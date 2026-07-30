@@ -1,0 +1,8 @@
+2026-07-30T17:29:32.477Z [RTM] [32minfo[39m: Skipping network creation. Observe that all network operations will yield a runtime error.
+Runtime error in thread 3a5c0814-8406-4f11-a27d-729ea295423f@{}%{}
+
+  1 | strIndexOf ("Hello, World", "World")
+    | ^
+
+>> value ("Hello, World"@{}%{}, "World"@{}%{})@{}%{} is not a 3-tuple
+>> at tests/rt/neg/core/strindexof04.trp:1:1

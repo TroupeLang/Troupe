@@ -1,0 +1,8 @@
+let val s = "one\ntwo\nthree"
+    val astral = "a" ^ charFromCode 128512 ^ "b"
+in ( strIndexOf (s, "\n", 0)
+   , strIndexOf (s, "\n", 4)
+   , strIndexOf (s, "\n", 8)
+   , strIndexOf (astral, "b", 0)
+   )
+end

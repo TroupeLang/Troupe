@@ -1,0 +1,8 @@
+2026-07-30T17:29:32.483Z [RTM] [32minfo[39m: Skipping network creation. Observe that all network operations will yield a runtime error.
+Runtime error in thread 20a9993d-2436-4245-8690-8213609a9e60@{}%{}
+
+  1 | strIndexOf (42, "World", 0)
+    | ^
+
+>> value 42@{}%{} is not a string
+>> at tests/rt/neg/core/strindexof01.trp:1:1

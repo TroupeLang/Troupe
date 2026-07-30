@@ -1,0 +1,7 @@
+( strIndexOf ("Hello, World", "", 0)
+, strIndexOf ("Hello, World", "", 3)
+, strIndexOf ("Hello, World", "", 1000)
+, strIndexOf ("Hello, World", "", -5)
+, strIndexOf ("", "", 0)
+, strIndexOf ("", "a", 0)
+)

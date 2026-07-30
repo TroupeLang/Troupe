@@ -1,5 +1,6 @@
 import Unit
 import String
+import Option
 
 let val tests = Unit.group "String" [
             Unit.group "size" [
@@ -86,6 +87,16 @@ let val tests = Unit.group "String" [
                   , Unit.it "is 'b_' for 'b'"    (Unit.isEq "b_"   (String.translate f "b"))
                   , Unit.it "is 'a_b_' for 'ab'" (Unit.isEq "a_b_" (String.translate f "ab"))
                   , Unit.it "is 'b_a_' for 'ba'" (Unit.isEq "b_a_" (String.translate f "ba"))
+                ]
+            end,
+            let val s = "Hello Troupe!"
+            in Unit.group "indexOf" [
+                    Unit.it "is (SOME 6) for 'Troupe'"  (Unit.isEq (SOME 6)  (String.indexOf "Troupe" s))
+                  , Unit.it "is (SOME 0) for 'Hello'"   (Unit.isEq (SOME 0)  (String.indexOf "Hello" s))
+                  , Unit.it "is (SOME 12) for '!'"      (Unit.isEq (SOME 12) (String.indexOf "!" s))
+                  , Unit.it "is (SOME 0) for ''"        (Unit.isEq (SOME 0)  (String.indexOf "" s))
+                  , Unit.it "is NONE for 'xyz'"         (Unit.isEq NONE      (String.indexOf "xyz" s))
+                  , Unit.it "is NONE for a long needle" (Unit.isEq NONE      (String.indexOf "Hello Troupe!!" s))
                 ]
             end
         ]

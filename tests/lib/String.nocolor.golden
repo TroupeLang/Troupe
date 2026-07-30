@@ -1,4 +1,4 @@
-2026-03-09T22:33:19.178Z [RTM] info: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+2026-07-30T17:29:56.919Z [RTM] info: Skipping network creation. Observe that all network operations will yield a runtime error.
 [34mbegin [0mString
   [34mbegin [0msize
       [33m[ TEST ][0m it is 0 for ''      [32m[ PASS ][0m it is 0 for ''
@@ -74,8 +74,16 @@
       [33m[ TEST ][0m it is 'a_b_' for 'ab'      [32m[ PASS ][0m it is 'a_b_' for 'ab'
       [33m[ TEST ][0m it is 'b_a_' for 'ba'      [32m[ PASS ][0m it is 'b_a_' for 'ba'
   [34mend [0m
+  [34mbegin [0mindexOf
+      [33m[ TEST ][0m it is (SOME 6) for 'Troupe'      [32m[ PASS ][0m it is (SOME 6) for 'Troupe'
+      [33m[ TEST ][0m it is (SOME 0) for 'Hello'      [32m[ PASS ][0m it is (SOME 0) for 'Hello'
+      [33m[ TEST ][0m it is (SOME 12) for '!'      [32m[ PASS ][0m it is (SOME 12) for '!'
+      [33m[ TEST ][0m it is (SOME 0) for ''      [32m[ PASS ][0m it is (SOME 0) for ''
+      [33m[ TEST ][0m it is NONE for 'xyz'      [32m[ PASS ][0m it is NONE for 'xyz'
+      [33m[ TEST ][0m it is NONE for a long needle      [32m[ PASS ][0m it is NONE for a long needle
+  [34mend [0m
 [34mend [0m
 
-Total:  54
-Passes: 54
+Total:  60
+Passes: 60
 >>> Main thread finished with value: true@{}%{}

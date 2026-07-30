@@ -1,0 +1,1 @@
+strIndexOf ("Hello, World", 42, 0)

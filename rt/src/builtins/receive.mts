@@ -85,7 +85,8 @@ export function BuiltinReceive<TBase extends Constructor<UserRuntimeZero>>(Base:
           let i = arg.val[0]
           let lowb = arg.val[1]
           let highb = arg.val[2]
-          let mclear = this.runtime.$t.mailbox.mclear
+          let theThread = this.runtime.$t
+          let mclear = theThread.mailbox.mclear
           // peek is CHECK-FREE (it removes nothing, so it carries neither the occurrence
           // nor the floor premise); its whole disclosure is confined by the read taint,
           // which carries the region folds Δ ⊔ Δlab. Under the REGION-COVERED consume
@@ -95,6 +96,15 @@ export function BuiltinReceive<TBase extends Constructor<UserRuntimeZero>>(Base:
           // observer before the close pays for it. Machine-checked on the Lean side
           // (ranged_receive_peek_needs_region_fold_under_covered_occurrence.lean); the
           // earlier fold-free verdict was correct only under the hard occurrence premise.
+          //
+          // The same coverage applies to the peek's BLOCKING channel: whether an i-th
+          // in-interval message exists is a firing decision that reads the operands and
+          // the Δ-covered sub-stream (which in-region removals perturb
+          // secret-dependently), so the operand labels and the ceiling folds quarantine
+          // the thread's blocking label: bl ⊔= ld(i) ⊔ ld(l1) ⊔ ld(l2) ⊔ Δ ⊔ Δlab.
+          // (The __mbox.peek path additionally raises bl by l2 ⊔ boost_level.)
+          theThread.raiseBlockingThreadLev (lub (i.lev, lowb.lev, highb.lev,
+                                                 mclear.delta, mclear.deltaLab))
           return this.runtime.__mbox.peek (
               lub (this.runtime.$t.pc, i.lev, lowb.lev, highb.lev, highb.val,
                    mclear.boost_level, mclear.delta, mclear.deltaLab),
@@ -171,9 +181,14 @@ export function BuiltinReceive<TBase extends Constructor<UserRuntimeZero>>(Base:
             theThread.threadError (errorMessage)
           }
 
-          // Blocking label absorbs ld(l1) ⊔ ld(l2) ⊔ lev(i) ⊔ l2 (the __mbox.consume path
-          // additionally raises bl by l2 ⊔ boost_level).
-          theThread.raiseBlockingThreadLev (lub (lowb.lev, highb.lev, i.lev, highb.val))
+          // Blocking label absorbs ld(l1) ⊔ ld(l2) ⊔ lev(i) ⊔ l2 ⊔ Δ ⊔ Δlab ⊔ Φlab — the
+          // operand labels plus the fold registers the firing decision reads: the covered
+          // occurrence and the admission draw on the Δ-covered sub-stream, and the floor
+          // check reads Φ under Φlab, so the folds quarantine the consume's blocking
+          // channel exactly as the read taint confines its value channel. (The
+          // __mbox.consume path additionally raises bl by l2 ⊔ boost_level.)
+          theThread.raiseBlockingThreadLev (lub (lowb.lev, highb.lev, i.lev, highb.val,
+                                                 mclear.delta, mclear.deltaLab, mclear.phiLab))
 
           // Result taint: v.data ⊔ pc ⊔ lev(i) ⊔ l2 ⊔ Δ ⊔ Δlab ⊔ Φlab, plus the ld(l1)/ld(l2)
           // operand terms; v.data is joined inside __mbox.consume. boost_level kept (legacy).

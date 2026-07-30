@@ -1293,10 +1293,18 @@ export class Thread {
                   (lub (hi.val, Delta), lub (lo.val, Delta), authLevel, this.bl, this.isNmifcMode, this.pc);
         const okToDg = dgDecision.kind === "SUCCESS";
 
-        // Both returned components are labelled pc ⊔ ld(lo) ⊔ ld(hi) ⊔ ld(auth) ⊔ Δlab.
-        // The Δlab term is necessary: the certification bit consults Δ, whose value comes
-        // from the enclosing enables' operands, so it must carry their labels.
-        const capLabel = lub (this.pc, lo.lev, hi.lev, auth.lev, mc.deltaLab);
+        // Covered-read blocking quarantine: the enable's operand match is a blocking
+        // decision (a secret-labelled operand whose constructor diverges across runs
+        // opens the region in one run and sticks in the other), so the operand data
+        // labels quarantine the thread's blocking label:
+        // bl ⊔= ld(lo) ⊔ ld(hi) ⊔ ld(auth).
+        this.raiseBlockingThreadLev (lub (lo.lev, hi.lev, auth.lev));
+
+        // Both returned components are labelled pc ⊔ ld(lo) ⊔ ld(hi) ⊔ ld(auth) ⊔ Δlab ⊔ Φlab.
+        // The fold-label terms are necessary: the certification bit consults Δ, and the
+        // region push joins both folds, whose values come from the enclosing enables'
+        // operands — so the result must carry their labels.
+        const capLabel = lub (this.pc, lo.lev, hi.lev, auth.lev, mc.deltaLab, mc.phiLab);
 
         // One uniform push path, certified or not: chain the capability, join the folds;
         // the capability snapshots the pre-enable record so a (valid) disable restores it

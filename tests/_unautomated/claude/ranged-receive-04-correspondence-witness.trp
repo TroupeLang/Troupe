@@ -1,0 +1,62 @@
+(* Ranged-receive v2 witness 4: the correspondence witness — the same endorsing
+   selection performed twice, once by the native instant consumeWithAuthority and once
+   as the encoded v2 bracket, must yield identically-labelled results. This is the
+   proven top-level (Delta = ⊥) correspondence (floored_bracket_iff;
+   plan-raise-lower-clearance.md, the consumeWithAuthority correspondence section):
+
+     consumeWithAuthority (i, l1, l2, auth)
+       ≡  let val (ok, cap) = enableRangedReceive (l1, lev(i) ⊔ l2, auth) in
+          if ok then let val v = consume (i, l1, l2) in
+                     let val _ = disableRangedReceive cap in v
+          else (refuse)
+
+   Harness as in witness 2: the sender's pc is raised to untrusted integrity before its
+   sends, so both messages carry presence strictly inside the endorsing interval
+   [ `< ; alice>` , `< ; >` ]. The selection: index 0 over that interval under
+   alice-auth; here lev(i) = ⊥ so the enable's ceiling lev(i) ⊔ l2 is just `< ; >`.
+
+   Expected verdict: both consumes are accepted; the two results print with IDENTICAL
+   labels (payload values 1 then 2 — the same selection replayed on the same stream;
+   the labels are the correspondence claim). The bracket run: ok = true, the disable
+   succeeds, and the program completes.
+*)
+
+let val main = self ()
+    val untrusted = 0 raisedTo `< ; >`
+    val _ = spawn (fn () =>
+              let val _ = if untrusted = 0
+                          then let val _ = send (main, 1)
+                                   val _ = send (main, 2)
+                               in () end
+                          else let val _ = send (main, 1)
+                                   val _ = send (main, 2)
+                               in () end
+              in () end)
+
+    val aliceAuth = attenuate (authority, `< ; alice>`)
+
+    (* the native instant form (regionless — must run before any region opens) *)
+    val r1 = consumeWithAuthority (0, `< ; alice>`, `< ; >`, aliceAuth)
+    val _ = printWithLabels r1
+
+    (* the encoded bracket: certify at the open over [l1, lev(i) ⊔ l2], consume, close.
+       The guard on ok is an early-exit branch with BALANCED arms: the branch-balance
+       discipline forbids closing inside a branch a region opened outside it (the
+       clearance record must match the branch-entry snapshot at return), so the refuse
+       arm exits and the consume + disable run straight-line after the guard. *)
+    val (ok, cap) = enableRangedReceive (`< ; alice>`, `< ; >`, aliceAuth)
+    val _ = printWithLabels ok
+    val _ = if ok then () else exit (authority, 1)      (* the (refuse) arm *)
+    val r2 = consume (0, `< ; alice>`, `< ; >`)
+    val _ = disableRangedReceive cap
+    val _ = printWithLabels r2
+in ()
+end
+
+(* Actual (./local.sh):
+   r1 = (1@{}%{}, {senderNode="<local>"@{#NULL}%{#NULL}}@{#NULL}%{#NULL})@{#NULL}%{#NULL}
+   ok = true@{}%{}
+   r2 = (2@{}%{}, {senderNode="<local>"@{#NULL}%{#NULL}}@{#NULL}%{#NULL})@{#NULL}%{#NULL}
+   then the main thread completes. IDENTICAL labels on r1 and r2 at every position
+   (payloads 1 vs 2 — the same selection replayed on the same stream): the native
+   instant form and the encoded bracket agree at top level. Matches expected. *)

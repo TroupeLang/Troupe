@@ -301,6 +301,7 @@ instance WellFormedIRCheck IRExpr where
                      , "charFromCode"
                      , "coalesce"
                      , "consume"
+                     , "consumeWithAuthority"
                      , "_debug"
                      , "debugMbox"
                      , "debugpc"
@@ -310,7 +311,6 @@ instance WellFormedIRCheck IRExpr where
                      , "disableRangedReceive"
                      , "downgrade"
                      , "downgradeType"
-                     , "exit"
                      , "enableRangedReceive"
                      , "endorse"
                      -- SimpleFileIO whole-file primitives (ROOT-authority; see builtins/simplefileio.mts)
@@ -323,6 +323,7 @@ instance WellFormedIRCheck IRExpr where
                      , "removeFile"
                      , "writeFile"
                      , "endorseType"
+                     , "exit"
                      , "floor"
                      , "flowsTo"                     
                      , "freadln"

@@ -1,6 +1,6 @@
 import { UserRuntimeZero, Constructor, mkBase, mkService } from './UserRuntimeZero.mjs'
-import { assertNormalState, assertIsNTuple, assertIsLevel, assertIsList, assertIsNumber, assertIsUnit, assertIsFunction } from '../Asserts.mjs'
-import { flowsTo, lub, glb, BOT } from '../Level.mjs';
+import { assertNormalState, assertIsNTuple, assertIsLevel, assertIsList, assertIsNumber, assertIsUnit, assertIsFunction, assertIsAuthority } from '../Asserts.mjs'
+import { flowsTo, lub, glb, BOT, privFlowsTo } from '../Level.mjs';
 import { RuntimeInterface } from '../RuntimeInterface.mjs';
 import { ReceiveTaintAction } from '../ReceiveTaintAction.mjs';
 import { LVal } from '../Lval.mjs';
@@ -194,6 +194,97 @@ export function BuiltinReceive<TBase extends Constructor<UserRuntimeZero>>(Base:
           // operand terms; v.data is joined inside __mbox.consume. boost_level kept (legacy).
           let consume_l = lub (theThread.pc, i.lev, lowb.lev, highb.lev, highb.val,
                                mclear.boost_level, mclear.delta, mclear.deltaLab, mclear.phiLab)
+          return this.runtime.__mbox.consume ( consume_l, i.val, lowb.val, highb.val )
+        })
+
+        // The native instant authorized consume — consumeWithAuthority (i, lowb, highb, auth).
+        // A direct runnable oracle for the formal machine's authority-carrying consume rule:
+        // remove the i-th message with presence in [lowb, highb], authorized per selection by
+        // the SHOWN authority (no standing clearance region, no raise/lower protocol). Under
+        // the ranged-receive v2 protocol it is exactly the region-free (Delta = BOT) instance
+        // of the encoded bracket
+        //   enableRangedReceive (lowb, lev(i) ⊔ highb, auth); consume; disableRangedReceive
+        // (floored_bracket_iff), which is why the regionlessness premise below is a premise
+        // and not a courtesy: the formal machine's point mailbox observations require no open
+        // region, and the equivalence is stated at the top level.
+        consumeWithAuthority = mkBase (arg => {
+          assertIsNTuple(arg, 4)
+          assertIsNumber(arg.val[0])
+          assertIsLevel (arg.val[1])
+          assertIsLevel (arg.val[2])
+          assertIsAuthority (arg.val[3])
+          let i = arg.val[0]
+          let lowb = arg.val[1]
+          let highb = arg.val[2]
+          let auth = arg.val[3]
+
+          let theThread = this.runtime.$t
+          let mclear = theThread.mailbox.mclear
+
+          // The regionlessness premise: the instant form is the bare-thread (top-level)
+          // instance. An open clearance region — a non-empty capability chain, from
+          // enableRangedReceive or the legacy raisembox — is refused; so is a residual
+          // legacy standing clearance (boost_level above BOT). Inside a region the
+          // program already holds the bracket spelling; the instant form does not
+          // compose with a standing region's folds.
+          if (theThread.mailbox.caps != null) {
+            let errorMessage =
+              "consumeWithAuthority requires no open clearance region: an enableRangedReceive (or legacy raisembox) region is open\n" +
+              ` | open capability chain head: ${theThread.mailbox.caps}`
+            theThread.threadError (errorMessage)
+          }
+          if (!flowsTo (mclear.boost_level, BOT)) {
+            let errorMessage =
+              "consumeWithAuthority requires no standing mailbox clearance\n" +
+              ` | mailbox clearance: ${mclear.boost_level.stringRep()}`
+            theThread.threadError (errorMessage)
+          }
+
+          // The occurrence premise, HARD (no region cover, no boost): whether the removal
+          // fires must not depend on data above the floor. The authority operand's .lev
+          // folds in — the selection check reads the authority, so it co-determines
+          // whether the removal fires.
+          // pc ⊔ i.lev ⊔ lowb.lev ⊔ highb.lev ⊔ auth.lev ⊑ lowb.
+          let occ = lub (theThread.pc, i.lev, lowb.lev, highb.lev, auth.lev)
+          if (!flowsTo (occ, lowb.val)) {
+            let errorMessage =
+              "consumeWithAuthority occurrence check failed: whether the removal fires depends on data above the floor\n" +
+              ` | receive lower bound (floor): ${lowb.val.stringRep()}\n` +
+              ` | occurrence level (occ)     : ${occ.stringRep()}\n` +
+              ` | pc level                   : ${theThread.pc.stringRep()}`
+            theThread.threadError (errorMessage)
+          }
+
+          // The selection premise, authorized by the SHOWN authority's level alone (the
+          // standing clearance plays no role): privFlowsTo aLev (highb ⊔ lev(i)) lowb —
+          // on integrity, I_auth ∧ I_(highb ⊔ lev(i)) ⟹ I_lowb.
+          let Hi = lub (highb.val, i.lev)
+          let aLev = auth.val.authorityLevel
+          if (!privFlowsTo (aLev, Hi, lowb.val)) {
+            let errorMessage =
+              "Insufficient authority for this consume: the shown authority does not cover the selection down to the floor\n" +
+              ` | receive lower bound (floor)            : ${lowb.val.stringRep()}\n` +
+              ` | receive upper bound                    : ${highb.val.stringRep()}\n` +
+              ` | index label                            : ${i.lev.stringRep()}\n` +
+              ` | selection boundary (highb ⊔ lev(i))    : ${Hi.stringRep()}\n` +
+              ` | authority provided                     : ${aLev.stringRep()}`
+            theThread.threadError (errorMessage)
+          }
+
+          // Blocking label absorbs the operand data labels plus the selection boundary:
+          // whether an i-th in-interval message exists is a firing decision that reads all
+          // four operands (the authority operand included — the selection check consults
+          // it, mirroring the enable's auth.lev fold). bl ⊔= i.lev ⊔ lowb.lev ⊔ highb.lev
+          // ⊔ auth.lev ⊔ highb ⊔ i.lev. (The __mbox.consume path additionally raises bl
+          // by highb ⊔ boost_level; boost_level = BOT here by the regionlessness premise.)
+          theThread.raiseBlockingThreadLev (lub (i.lev, lowb.lev, highb.lev, auth.lev, Hi))
+
+          // Result: readTainted at occ ⊔ highb ⊔ i.lev — v.data is joined inside
+          // __mbox.consume. No fold/boost terms: the regionlessness premise pins them at
+          // BOT, so this is exactly the formal readTainted level. Unlike the three-argument consume this
+          // builtin writes nothing back into any standing clearance: the instant rule
+          // raises bl and taints the result but grows no persistent mailbox taint.
+          let consume_l = lub (occ, Hi)
           return this.runtime.__mbox.consume ( consume_l, i.val, lowb.val, highb.val )
         })
 

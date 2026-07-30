@@ -1,0 +1,52 @@
+(* Ranged-receive v2 witness 2: the two-axis discriminator — the endorsing-interval
+   selection the legacy raisembox/lowermbox bracket refuses, accepted by the native
+   instant consumeWithAuthority under exactly the partial (alice) integrity authority.
+
+   Harness: a local send's presence is the sender's pc, maximally trusted by default —
+   so the sender branches on a value raisedTo `< ; >`, raising its pc to untrusted
+   integrity (#NULL) before the send; the message's presence then lies strictly inside
+   the endorsing interval [ `< ; alice>` , `< ; >` ].
+
+   The selection: consumeWithAuthority (0, `< ; alice>`, `< ; >`, alice-auth).
+     - occurrence, hard: pc ⊔ ld(operands) = ⊥ ⊑ `< ; alice>`                 ✓
+     - selection, shown authority: `< ; >` ⊔ lev(0) ⊑[alice-auth] `< ; alice>`
+       (integrity: alice ∧ True ⟹ alice)                                     ✓
+   This is the §2.1 program of troupe-vs-model-integrity-clearances.md, whose only
+   legacy spellings are the root-authority close or the permanent-taint confinement
+   (integrity-bracket-consume-{partial-auth-refused,root-auth}.trp).
+
+   Sub-span negative, same file: the identical selection under a bob-only authority —
+   bob covers less than the selection's integrity span (bob ⟹̸ alice) — is REFUSED at
+   the selection check (nothing needs to be in the mailbox: the check precedes the
+   blocking read).
+
+   Expected verdict: the alice-auth consume is ACCEPTED, r printed with untrusted
+   integrity labels; then the bob-auth consume raises "Insufficient authority for this
+   consume"; the final print is unreachable.
+*)
+
+let val main = self ()
+    val untrusted = 0 raisedTo `< ; >`
+    val _ = spawn (fn () =>
+              let val _ = if untrusted = 0 then send (main, 1) else send (main, 2)
+              in () end)
+
+    (* the endorsing-interval selection, instant form, partial authority: accepted *)
+    val r = consumeWithAuthority (0, `< ; alice>`, `< ; >`, attenuate (authority, `< ; alice>`))
+    val _ = printWithLabels r
+
+    (* sub-span negative: bob-authority does not cover the alice-sized gap: refused *)
+    val _ = consumeWithAuthority (0, `< ; alice>`, `< ; >`, attenuate (authority, `< ; bob>`))
+    val _ = print "UNREACHABLE: sub-span authority accepted"
+in ()
+end
+
+(* Actual (./local.sh): the alice-auth consume is ACCEPTED —
+   r = (1@{}%{}, {senderNode="<local>"@{#NULL}%{#NULL}}@{#NULL}%{#NULL})@{#NULL}%{#NULL}
+   (the removed message at the readTainted level occ ⊔ highb ⊔ lev(i) = {#NULL});
+   then the bob-auth consume raises
+   "Insufficient authority for this consume: the shown authority does not cover the
+    selection down to the floor | ... | selection boundary (highb ⊔ lev(i)): {#NULL}
+    | authority provided: <#null-confidentiality;bob>".
+   The UNREACHABLE print does not run. Matches expected: the two-axis accept holds
+   under the partial alice authority, and the sub-span authority is refused. *)

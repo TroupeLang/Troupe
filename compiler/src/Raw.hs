@@ -139,6 +139,16 @@ data RawInst
   -- Is inserted before an "if".
   -- See stack/execution model.
   | SetBranchFlag
+  -- | Set the branch flag of the current frame when the label in the given
+  -- variable (the function-value label of a call) does not flow to the current
+  -- PC, i.e. exactly when the call's PC raise is an actual raise. A call on a
+  -- secret-labelled closure is a control transfer selected by data above the
+  -- context — a branch for the branch-balance discipline — so an unbalanced
+  -- change of the mailbox clearance inside such a call must be caught by the
+  -- same balance check at the return. Label-silent calls (in particular every
+  -- public call) do not flag. Emitted only for tail calls, before the
+  -- corresponding PC raise; the flag decision is taken at runtime.
+  | SetBranchFlagOnCallRaise RawVar
   -- | The sparse bit is tracking whether data in the current closure is bounded by PC.
   -- If this condition is invalidated by introducing new labels (like with the raisedTo instruction),
   -- this instruction must be added to ensure that the required join operations happen.
@@ -257,6 +267,10 @@ instructionType i = case i of
   AssignLVal _ (ConstructLVal _ _ _) -> RegularInstruction RegConstructor
   AssignRaw _ (ProjectLVal _ _) -> RegularInstruction RegDestructor
   SetBranchFlag -> RegularInstruction RegConstructor
+  -- RegOther, not RegConstructor: instOrder must never move the PC-setting
+  -- label instruction of the call's raise ahead of this check (the check reads
+  -- the pre-raise PC), and no reordering rule crosses a RegOther from the left.
+  SetBranchFlagOnCallRaise _ -> RegularInstruction RegOther
   InvalidateSparseBit -> RegularInstruction RegOther
   SetState s _ ->
     case s of
@@ -343,6 +357,7 @@ qqFields fields =
 
 ppIR :: RawInst -> PP PP.Doc
 ppIR SetBranchFlag = pure $ text "<setbranchflag>"
+ppIR (SetBranchFlagOnCallRaise r) = pure $ text "<setbranchflag-on-call-raise>" <+> ppId r
 ppIR (AssignRaw vn st) = pure $ ppId vn <+> text "=(raw)" <+> ppRawExpr st
 ppIR (AssignLVal vn expr) =
   pure $ ppId vn <+> text "=(lval)" <+> ppRawExpr expr

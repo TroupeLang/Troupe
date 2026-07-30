@@ -756,7 +756,14 @@ tr2raw (Loc pos term) = case term of
   -- Revision 2023-08: Equivalent except for the additional redundant raise.
   -- lv1 and lv2 are now LVarAccess (from IRTerminator)
   IR.TailCall lv1 lv2 -> do
-    raisePCAndBlock $ ValLbl lv1
+    -- Branch-balance discipline for the call-label channel: a call whose
+    -- function-value label actually raises the PC (checked at runtime, against
+    -- the pre-raise PC) marks the current frame's branch flag, so the mailbox
+    -- clearance balance check at the return also covers clearance changes made
+    -- under a secret-labelled call. Public (label-silent) calls do not flag.
+    fnlbl <- compLabel $ ValLbl lv1
+    tell [ Loc pos (SetBranchFlagOnCallRaise fnlbl) ]
+    raisePCAndBlock $ Lbl fnlbl
     -- Note: The raise here is redundant because we have already raised by the value label above.
     -- However, optimizations aware of the relation between type- and value label will remove it.
     assertTypeAndRaise lv1 RawFunction

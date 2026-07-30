@@ -622,6 +622,8 @@ ir2jsWithPos _pos (LabelGroup lii) = do
 
 ir2jsWithPos _pos SetBranchFlag = return $
   text "_T.setBranchFlag()"
+ir2jsWithPos _pos (SetBranchFlagOnCallRaise r) = return $
+  jsFunCall (text "_T.setBranchFlagOnCallRaise") [ppId r]
 ir2jsWithPos _pos InvalidateSparseBit = return $
   text "rt.raw_invalidateSparseBit()"
 

@@ -778,6 +778,22 @@ export class Thread {
     setBranchFlag () {
         this.callStack[this._sp - BRANCHFLAGOFFSET] = BRANCH_FLAG_ON
     }
+
+    /**
+     * Branch-balance discipline for the call-label channel: a call whose
+     * function-value label does not flow to the current (pre-raise) PC is a
+     * control transfer selected by data above the context — a branch for the
+     * clearance discipline — so it sets the current frame's branch flag, and
+     * the mailbox-clearance balance check at `returnImmediate` covers the
+     * call. Called from generated code after the frame push and before the
+     * call's PC raise; label-silent calls (in particular every public call)
+     * do not flag.
+     */
+    setBranchFlagOnCallRaise (fnlev) {
+        if (!flowsTo(fnlev, this.pc)) {
+            this.setBranchFlag()
+        }
+    }
     
     returnSuspended (arg) {
         let rv = new LValCopyAt (arg, this.pc);

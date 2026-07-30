@@ -1,0 +1,16 @@
+(* Call-label channel control: the same unbalanced mailbox-clearance raise
+   inside a PUBLIC call.
+
+   The function value is public, so the call is label-silent (its label flows
+   to the pc): the call-raise flag must NOT be set, and the unbalanced raise
+   inside the call remains accepted, as before the call-label fix.
+
+   Expected verdict: ACCEPT — prints "done"@{}%{} (clearance stays {alice}). *)
+
+let val f = fn () => raisembox (`{alice}`)
+    val _ = f ()
+in printWithLabels "done"
+end
+
+(* Actual (./local.sh): "done"@{}%{}; main thread finished with ()@{}%{}.
+   Matches expected (ACCEPT). *)

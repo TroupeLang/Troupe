@@ -44,6 +44,18 @@ reviewed rigorously rather than depend on the monitor.
                     width, with groups that occupy one line when they fit and stack when they do
                     not. Exports the operators `<.>` (beside), `<+>` (beside with a space), and
                     `$$` (above); see [docs/OPERATORS.md](../docs/OPERATORS.md).
+- `Rope`          : Persistent text buffer held as a binary tree of string leaves. Nodes cache
+                    length, newline count and depth, so `length`, `lineCount` and `depth` are
+                    O(1), and `charAt`, `insert`, `delete`, `concat`, `splitAt`, `offsetOfLine`,
+                    `lineAt`, `offsetToPosition` and `positionToOffset` are O(depth), where the
+                    tree is rebuilt whenever its depth would pass `depthLimit`. Leaves carry the
+                    offsets of their own newlines, so `fromString` is the only operation that
+                    scans the text; it finds newlines with `strIndexOf`, about 50ms for a
+                    megabyte. `text` is the buffer as a string -- not `toString`, which a
+                    library cannot export without shadowing the builtin `print` is built from.
+                    Offsets, lengths and columns are UTF-16 code units, lines are separated by
+                    `"\n"` and counted from zero, and every operation clamps an out-of-range
+                    argument rather than failing.
 - `Set`           : Set of elements via a comparator function.
 - `Sexp`          : Reader and printer for Lisp-style s-expressions: `ATOM` / `STR` / `LST`,
                     `parse` returning an `Outcome`, and both a single-line and a `Pretty`-based

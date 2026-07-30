@@ -1,0 +1,444 @@
+(* Rope — a persistent text buffer over string leaves.
+ *
+ * A rope is a binary tree whose leaves are strings of bounded length and whose
+ * nodes cache the total length, the total newline count, and the depth of the
+ * subtree below them. `length`, `lineCount` and `depth` are therefore O(1), and
+ * every other operation walks one node per level rather than the text.
+ *
+ * A leaf also carries the offsets of its own newlines, ascending and relative to
+ * the start of the leaf. That list is what makes an edit cheap: splitting a leaf
+ * partitions the offsets instead of rescanning its text, so `fromString` is the
+ * only operation in the module that looks for newlines at all. It finds them
+ * with `strIndexOf`, one call per newline, so the scan costs 0.05us per
+ * character of the text and a leaf's offsets are worth keeping rather than
+ * recomputing: `substring` and `^` do their copying inside the JS engine, and a
+ * design that rescanned a leaf per edit would add that scan to every keystroke.
+ *
+ * Concatenation merges the leaves at the seam when they fit within `leafLimit`,
+ * so repeated insertion at one point extends a leaf rather than deepening the
+ * tree. When a node would exceed `depthLimit` the leaves under it are collected
+ * and rebuilt into a tree of minimal depth.
+ *
+ * INVARIANTS. Every rope this module returns satisfies all of these, and
+ * `validate` checks all of them:
+ *
+ *   1. A leaf holds at most `leafLimit` code units. Established by `fromString`,
+ *      preserved by `joinLeaves`, which is called only under that bound.
+ *   2. A leaf's cached length is the length of its string, its cached newline
+ *      count is the length of its offset list, and that list holds exactly the
+ *      offsets of the newlines in its string, ascending. Established by
+ *      `fromString`, preserved by `splitLeaf` and `joinLeaves`.
+ *   3. A node's cached length and newline count are the sums of its children's,
+ *      and its cached depth is one more than the deeper child's. `mkNode` is the
+ *      only place a node is built, so it is the only place this can break.
+ *   4. An empty leaf appears only as a whole rope, never inside a node. `concat`
+ *      returns the other side rather than building such a node, and `leafList`
+ *      drops empty leaves when rebuilding.
+ *   5. The depth is at most `depthLimit`, enforced by `mk`.
+ *
+ * The constructors `RLEAF` and `RNODE` are an implementation detail. Troupe
+ * exports the constructors of a library's datatypes whether or not the library
+ * lists them, so they are visible to importers; they are not part of the
+ * interface and a client that builds or matches a rope directly will break when
+ * the representation changes.
+ *
+ * INDICES. All offsets and lengths are UTF-16 code units, not code points: a
+ * character outside the basic plane occupies two positions, and slicing between
+ * them yields an unpaired surrogate. Lines are separated by "\n" and a "\r" is
+ * ordinary text; `lineCount` is one more than the number of newlines, so a text
+ * ending in a newline has a final empty line and the empty rope has one line.
+ * Lines and columns count from zero.
+ *
+ * CLAMPING. Every operation is total. An offset, length, line or column outside
+ * the rope is clamped to it, as `String.substring` clamps; the exception is
+ * `charAt`, which returns "" for an index outside the rope, as `String.sub`
+ * does. No operation fails on an out-of-range argument.
+ *)
+
+import List
+
+datatype rope = RLEAF of string * int * int * int list
+              | RNODE of rope * rope * int * int * int
+
+let (*--- Tuning constants ---*)
+
+    (** The length `fromString` builds leaves at. Larger leaves mean a shallower
+     *  tree and fewer nodes to walk, but more per-edit work in `splitLeaf` and
+     *  `joinLeaves`, which copy a leaf's newline offsets. On the one-character
+     *  insert of `tests/_unautomated/claude/rope/tune.trp`, 512 measured 213.5us
+     *  per edit, 1024 201.5us, 2048 212us and 4096 291.5us; see
+     *  `_dev_planning/text-editor/rope-benchmarks.md`. The value may change; a
+     *  client must not assume it beyond using it to size its own chunking. *)
+    val leafSize = 1024
+
+    (* The largest leaf `joinLeaves` may build (invariant 1). Twice `leafSize`,
+     * so that two adjacent leaves left by a split can always merge back. *)
+    val leafLimit = 2 * leafSize
+
+    (* The depth at which `mk` rebuilds (invariant 5). A rebuilt tree of n leaves
+     * has depth ceil(log2 n) -- 10 for a megabyte of 1024-character leaves --
+     * so a rebuild always lands far below this and no rope oscillates between
+     * rebuilds. On the same benchmark a limit of 12 costs 2287.5us per edit,
+     * where rebuilding dominates; 32 costs 201.5us, 64 costs 185us and never
+     * rebuilding costs 186.5us. Bounding the depth is therefore worth about 8%
+     * of an edit, and it is what keeps every query O(depth). Exported, like
+     * `leafSize`, so that tests of the bound track the constant; the value may
+     * change and a client must not assume it. *)
+    val depthLimit = 32
+
+    (* The only line separator this module recognizes. *)
+    val newline = "\n"
+
+    (** The empty rope. *)
+    val empty = RLEAF ("", 0, 0, [])
+
+    (*--- Cached measures ---*)
+
+    (** The number of code units in the rope. O(1). *)
+    fun length (RLEAF (_, n, _, _))    = n
+      | length (RNODE (_, _, n, _, _)) = n
+
+    (* The number of newlines. O(1). Callers outside the module use `lineCount`. *)
+    fun newlines (RLEAF (_, _, k, _))    = k
+      | newlines (RNODE (_, _, _, k, _)) = k
+
+    (** The number of lines, i.e. one more than the number of newlines. O(1). *)
+    fun lineCount r = newlines r + 1
+
+    (** The depth of the tree, which invariant 5 bounds by `depthLimit`. O(1).
+     *  For tests and diagnostics; no editing operation needs it. *)
+    fun depth (RLEAF _)               = 0
+      | depth (RNODE (_, _, _, _, d)) = d
+
+    (*--- Nodes and balance ---*)
+
+    (* All three cached fields of a child in one match. Three calls to `length`,
+     * `newlines` and `depth` instead measured 9% slower on the insert
+     * benchmark, since `mkNode` is on the path of every edit. *)
+    fun measures (RLEAF (_, n, k, _))    = (n, k, 0)
+      | measures (RNODE (_, _, n, k, d)) = (n, k, d)
+
+    (* The only place a node is built: invariant 3 lives here. *)
+    fun mkNode (l, r) =
+        let val (nl, kl, dl) = measures l
+            val (nr, kr, dr) = measures r
+        in RNODE (l, r, nl + nr, kl + kr, 1 + (if dl > dr then dl else dr))
+        end
+
+    (* The leaves of `r`, left to right, prepended to `acc`. Empty leaves are
+     * dropped, which is what keeps invariant 4 across a rebuild. *)
+    fun leafList (RNODE (l, r, _, _, _), acc) = leafList (l, leafList (r, acc))
+      | leafList (leaf, acc) = if length leaf = 0 then acc else leaf :: acc
+
+    fun pairUp (a :: b :: rest) = mkNode (a, b) :: pairUp rest
+      | pairUp xs               = xs
+
+    (* A tree of minimal depth over a list of leaves, built bottom-up. *)
+    fun buildFrom []  = empty
+      | buildFrom [x] = x
+      | buildFrom xs  = buildFrom (pairUp xs)
+
+    (* The rope's leaves rebuilt into a tree of minimal depth. O(number of
+     * leaves); no character is read. *)
+    fun rebalance r = buildFrom (leafList (r, []))
+
+    (* A node, rebuilt if it has grown too deep: invariant 5 lives here. *)
+    fun mk (l, r) =
+        let val n = mkNode (l, r)
+        in if depth n > depthLimit then rebalance n else n end
+
+    (*--- Leaves ---*)
+
+    fun isLeaf (RLEAF _) = true
+      | isLeaf _         = false
+
+    (* The newline offsets of a leaf split at `i`, as (offsets before `i`, how
+     * many, offsets from `i` rebased to the new leaf, how many). *)
+    fun splitOffsets (offsets, i) =
+        let val (before, after) = List.span (fn p => p < i) offsets
+        in (before, List.length before,
+            List.map (fn q => q - i) after, List.length after)
+        end
+
+    (* Both halves of a leaf split at `i`, which callers keep strictly inside the
+     * leaf so that neither half is empty (invariant 4). *)
+    fun splitLeaf (RLEAF (s, n, _, offsets), i) =
+        let val (lo, lk, ro, rk) = splitOffsets (offsets, i)
+        in (RLEAF (substring (s, 0, i), i, lk, lo),
+            RLEAF (substring (s, i, n), n - i, rk, ro))
+        end
+
+    (* Two leaves as one. Callers check the combined length against `leafLimit`
+     * first (invariant 1). *)
+    fun joinLeaves (RLEAF (s1, n1, k1, o1), RLEAF (s2, n2, k2, o2)) =
+        RLEAF (s1 ^ s2, n1 + n2, k1 + k2,
+               List.append o1 (List.map (fn q => q + n1) o2))
+
+    (*--- Concatenation and splitting ---*)
+
+    (** The concatenation of two ropes. O(depth). The leaves at the seam are
+     *  merged when they fit in one leaf, so appending to a rope, or typing at
+     *  one point in it, extends a leaf instead of deepening the tree. *)
+    fun concat (a, b) =
+        if length a = 0 then b
+        else if length b = 0 then a
+        else case (a, b) of
+               (RLEAF _, RLEAF _) =>
+                 if length a + length b <= leafLimit
+                 then joinLeaves (a, b)
+                 else mk (a, b)
+             | (RLEAF _, RNODE (bl, br, _, _, _)) =>
+                 if isLeaf bl andalso length a + length bl <= leafLimit
+                 then mk (joinLeaves (a, bl), br)
+                 else mk (a, b)
+             | (RNODE (al, ar, _, _, _), RLEAF _) =>
+                 if isLeaf ar andalso length ar + length b <= leafLimit
+                 then mk (al, joinLeaves (ar, b))
+                 else mk (a, b)
+             | _ => mk (a, b)
+
+    (** The pair of ropes holding the code units before `i` and from `i` on.
+     *  O(depth). An index outside the rope puts everything on one side. *)
+    fun splitAt (r, i) =
+        let val n = length r
+        in if i <= 0 then (empty, r)
+           else if i >= n then (r, empty)
+           else case r of
+                  RLEAF _ => splitLeaf (r, i)
+                | RNODE (l, rr, _, _, _) =>
+                    let val ln = length l
+                    in if i < ln
+                       then let val (a, b) = splitAt (l, i)
+                            in (a, concat (b, rr)) end
+                       else if i > ln
+                       then let val (a, b) = splitAt (rr, i - ln)
+                            in (concat (l, a), b) end
+                       else (l, rr)
+                    end
+        end
+
+    (*--- Conversion ---*)
+
+    (* The offsets of the newlines in `s`, ascending. One `strIndexOf` per
+     * newline: the search runs inside the JS engine, so the loop here takes a
+     * step per line rather than per character. *)
+    fun newlineOffsets s =
+        let fun go (i, acc) =
+                let val p = strIndexOf (s, newline, i)
+                in if p < 0 then List.reverse acc else go (p + 1, p :: acc) end
+        in go (0, []) end
+
+    (** The rope holding `s`. Its leaves end at newlines once they have reached
+     *  `leafSize`, so a leaf holds whole lines wherever the text has them; a run
+     *  without a newline is cut at `leafLimit`. O(length of `s`) in the engine's
+     *  scanning and O(number of newlines) in this module -- about 0.05us per
+     *  character, 50ms for a megabyte of 62-character lines. A leaf cannot be
+     *  addressed by line until its newlines are known, so this is the one place
+     *  the whole text is read. *)
+    fun fromString s =
+        let val n = strlen s
+            (* `offsets` are absolute and lie inside the leaf being cut. *)
+            fun cut (start, stop, offsets) =
+                RLEAF (substring (s, start, stop), stop - start,
+                       List.length offsets,
+                       List.map (fn p => p - start) offsets)
+            (* `acc` holds the newlines of the leaf that starts at `start`,
+             * newest first; `leaves` holds the finished leaves, newest first. *)
+            fun go (start, [], acc, leaves) =
+                  if n - start > leafLimit
+                  then go (start + leafLimit, [], [],
+                           cut (start, start + leafLimit, List.reverse acc) :: leaves)
+                  else if n > start
+                  then cut (start, n, List.reverse acc) :: leaves
+                  else leaves
+              | go (start, p :: rest, acc, leaves) =
+                  if p + 1 - start > leafLimit
+                  then go (start + leafLimit, p :: rest, [],
+                           cut (start, start + leafLimit, List.reverse acc) :: leaves)
+                  else if p + 1 - start >= leafSize
+                  then go (p + 1, rest, [],
+                           cut (start, p + 1, List.reverse (p :: acc)) :: leaves)
+                  else go (start, rest, p :: acc, leaves)
+        in if n = 0 then empty
+           else buildFrom (List.reverse (go (0, newlineOffsets s, [], [])))
+        end
+
+    (** The text of the rope, as one string. O(number of leaves). *)
+    fun text r =
+        let fun go (RLEAF (s, _, _, _), acc)     = acc ^ s
+              | go (RNODE (l, rr, _, _, _), acc) = go (rr, go (l, acc))
+        in go (r, "") end
+
+    (*--- Indexed access ---*)
+
+    (** The text from `i` (inclusive) to `j` (exclusive), as `String.substring`
+     *  takes its bounds. Indices are clamped and an empty range gives "".
+     *  O(depth + leaves in the range). *)
+    fun slice (r, i, j) =
+        let val n = length r
+            val a = if i < 0 then 0 else if i > n then n else i
+            val b = if j < 0 then 0 else if j > n then n else j
+            fun go (RLEAF (s, _, _, _), lo, hi, acc) = acc ^ substring (s, lo, hi)
+              | go (RNODE (l, rr, _, _, _), lo, hi, acc) =
+                  let val ln = length l
+                  in if hi <= ln then go (l, lo, hi, acc)
+                     else if lo >= ln then go (rr, lo - ln, hi - ln, acc)
+                     else go (rr, 0, hi - ln, go (l, lo, ln, acc))
+                  end
+        in if b <= a then "" else go (r, a, b, "")
+        end
+
+    (** The one-character string at `i`, or "" when `i` is outside the rope, as
+     *  `String.sub` answers. O(depth). *)
+    fun charAt (r, i) =
+        let fun go (RLEAF (s, _, _, _), k) = substring (s, k, k + 1)
+              | go (RNODE (l, rr, _, _, _), k) =
+                  let val ln = length l
+                  in if k < ln then go (l, k) else go (rr, k - ln) end
+        in if i < 0 orelse i >= length r then "" else go (r, i)
+        end
+
+    (*--- Editing ---*)
+
+    (** The rope with `s` inserted at `i`. The index is clamped, so inserting
+     *  past the end appends. O(depth + length of `s`). *)
+    fun insert (r, i, s) =
+        if strlen s = 0 then r
+        else let val (a, b) = splitAt (r, i)
+             in concat (concat (a, fromString s), b)
+             end
+
+    (** The rope with `len` code units removed from `i`. The range is clamped to
+     *  the rope and a non-positive length removes nothing. O(depth). *)
+    fun delete (r, i, len) =
+        if len <= 0 then r
+        else let val (a, b) = splitAt (r, i)
+                 val (_, c) = splitAt (b, len)
+             in concat (a, c)
+             end
+
+    (*--- Lines ---*)
+
+    (* The offset of the `k`th newline, counting from zero. `k` must be less than
+     * the rope's newline count; `offsetOfLine` and `lineEnd` ensure that. *)
+    fun newlineOffset (RLEAF (_, _, _, offsets), k) = List.nth offsets k
+      | newlineOffset (RNODE (l, r, _, _, _), k) =
+          let val lk = newlines l
+          in if k < lk then newlineOffset (l, k)
+             else length l + newlineOffset (r, k - lk)
+          end
+
+    (** The offset at which line `line` starts. The line number is clamped, so a
+     *  number past the last line gives the last line's start.
+     *  O(depth + newlines in one leaf). *)
+    fun offsetOfLine (r, line) =
+        let val last = newlines r
+            val k = if line > last then last else line
+        in if k <= 0 then 0 else newlineOffset (r, k - 1) + 1
+        end
+
+    (* The offset just past line `line`, excluding its newline. `line` must
+     * already be clamped to the rope. *)
+    fun lineEnd (r, line) =
+        if line >= newlines r then length r else newlineOffset (r, line)
+
+    (** The text of line `line` without its trailing newline. The line number is
+     *  clamped. O(depth + length of the line). *)
+    fun lineAt (r, line) =
+        let val last = newlines r
+            val k = if line < 0 then 0 else if line > last then last else line
+        in slice (r, offsetOfLine (r, k), lineEnd (r, k))
+        end
+
+    (* The number of newlines strictly before offset `i`.
+     *
+     * `List.length (List.takeWhile (fn p => p < i) offsets)` says the leaf case
+     * in one line, but builds the prefix in order to measure it: 38.5us against
+     * 32.5us per offsetToPosition on tests/_unautomated/claude/rope/parts.trp,
+     * on the path every keystroke takes. List has no combinator that counts
+     * without building. *)
+    fun newlinesBefore (RLEAF (_, _, _, offsets), i) =
+          let fun go ([], k)        = k
+                | go (p :: rest, k) = if p < i then go (rest, k + 1) else k
+          in go (offsets, 0) end
+      | newlinesBefore (RNODE (l, r, _, _, _), i) =
+          let val ln = length l
+          in if i <= ln then newlinesBefore (l, i)
+             else newlines l + newlinesBefore (r, i - ln)
+          end
+
+    (** The `(line, column)` of offset `i`. The offset is clamped, so the offset
+     *  one past the last character is the end of the last line.
+     *  O(depth + newlines in one leaf). *)
+    fun offsetToPosition (r, i) =
+        let val n = length r
+            val p = if i < 0 then 0 else if i > n then n else i
+            val line = newlinesBefore (r, p)
+        in (line, p - offsetOfLine (r, line))
+        end
+
+    (** The offset of `(line, column)`. Both are clamped, and a column past the
+     *  end of its line gives that line's end rather than an offset on a later
+     *  line. O(depth + newlines in one leaf). *)
+    fun positionToOffset (r, line, col) =
+        let val last = newlines r
+            val k = if line < 0 then 0 else if line > last then last else line
+            val start = offsetOfLine (r, k)
+            val stop  = lineEnd (r, k)
+            val c = if col < 0 then 0
+                    else if col > stop - start then stop - start
+                    else col
+        in start + c
+        end
+
+    (*--- Diagnostics ---*)
+
+    (** "" when the rope satisfies the five invariants in this file's header, and
+     *  the first one it breaks otherwise. Recomputes every cached field and
+     *  rescans every leaf, so it costs a `fromString` and is meant for tests of
+     *  the representation rather than for callers. *)
+    fun validate r =
+        let fun leafOk (s, n, k, offsets) =
+                if not (strlen s = n) then "leaf length is not its string's length"
+                else if n > leafLimit then "leaf longer than leafLimit"
+                else if not (k = List.length offsets) then "leaf newline count"
+                else if not (offsets = newlineOffsets s) then "leaf newline offsets"
+                else ""
+            fun go (RLEAF (s, n, k, offsets)) = leafOk (s, n, k, offsets)
+              | go (RNODE (l, r, n, k, d)) =
+                  let val (nl, kl, dl) = measures l
+                      val (nr, kr, dr) = measures r
+                      val errL = go l
+                      val errR = go r
+                  in if not (errL = "") then errL
+                     else if not (errR = "") then errR
+                     else if nl = 0 orelse nr = 0 then "empty leaf inside a node"
+                     else if not (n = nl + nr) then "node length"
+                     else if not (k = kl + kr) then "node newline count"
+                     else if not (d = 1 + (if dl > dr then dl else dr)) then "node depth"
+                     else ""
+                  end
+        in if depth r > depthLimit then "depth above depthLimit" else go r
+        end
+
+in [ ("leafSize", leafSize)
+   , ("depthLimit", depthLimit)
+   , ("empty", empty)
+   , ("length", length)
+   , ("lineCount", lineCount)
+   , ("fromString", fromString)
+   , ("text", text)
+   , ("slice", slice)
+   , ("charAt", charAt)
+   , ("concat", concat)
+   , ("splitAt", splitAt)
+   , ("insert", insert)
+   , ("delete", delete)
+   , ("offsetOfLine", offsetOfLine)
+   , ("lineAt", lineAt)
+   , ("offsetToPosition", offsetToPosition)
+   , ("positionToOffset", positionToOffset)
+   , ("depth", depth)
+   , ("validate", validate)
+   ]
+end

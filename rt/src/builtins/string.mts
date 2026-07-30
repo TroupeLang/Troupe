@@ -60,6 +60,30 @@ export function BuiltinString <TBase extends Constructor<UserRuntimeZero>> (Base
                                                       , arg.val[2].lev
                                                       )))
         })
+
+        // The index of the first occurrence of `needle` in `s` at or after `from`, in UTF-16
+        // code units, or -1 when there is none. JS String.prototype.indexOf semantics: an
+        // empty needle answers `from` clamped to [0, length of `s`], and a negative `from`
+        // is read as 0. The result carries the join of the three arguments' labels.
+        //
+        // Named `strIndexOf` rather than `indexOf` because lib/String.trp exports `indexOf`:
+        // a builtin of that name is shadowed in every program that imports String unqualified,
+        // which is the shadowing that already afflicts `toString`.
+        strIndexOf = mkBase (arg => {
+            assertIsNTuple(arg, 3)
+            assertIsString(arg.val[0])
+            assertIsString(arg.val[1])
+            assertIsNumber(arg.val[2])
+            let s: string = arg.val[0].val
+            let needle: string = arg.val[1].val
+            let from: number = arg.val[2].val
+            return this.runtime.ret (new LVal( s.indexOf (needle, from)
+                                             , lub ( arg.lev
+                                                   , arg.val[0].lev
+                                                   , arg.val[1].lev
+                                                   , arg.val[2].lev
+                                                   )))
+        })
     }
  
 }

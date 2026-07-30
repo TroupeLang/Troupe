@@ -133,14 +133,13 @@ let
         end
 
     (** Returns `SOME i` for the least `i` at which `needle` occurs in
-     *  `s`; otherwise `NONE`. The empty needle matches at 0. *)
+     *  `s`; otherwise `NONE`. The empty needle matches at 0.
+     *
+     * The search itself is `strIndexOf`, so it runs inside the JS engine and
+     * reads no character through the language. *)
     fun indexOf needle s =
-        let val nl = size needle
-            val n  = size s
-            fun go i = if i + nl > n then NONE
-                       else if substring (s, i, i + nl) = needle then SOME i
-                       else go (i + 1)
-        in go 0 end
+        let val i = strIndexOf (s, needle, 0)
+        in if i < 0 then NONE else SOME i end
 
     (*--- Splitting ---*)
 

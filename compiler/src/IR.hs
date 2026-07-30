@@ -454,6 +454,7 @@ instance WellFormedIRCheck IRExpr where
                      , "stdin"
                      , "stdout"
                      , "stderr"
+                     , "strIndexOf"
                      , "stringToInt"
                      , "strlen"
                      , "restore"

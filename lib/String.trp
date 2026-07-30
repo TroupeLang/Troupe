@@ -147,17 +147,26 @@ let
      *  separator `sep`. Consecutive separators yield empty strings; a leading
      *  or trailing separator yields a leading or trailing empty string. An
      *  empty separator does not split (`split "" s` is `[s]`). Not
-     *  tail-recursive. *)
+     *  tail-recursive.
+     *
+     * Each occurrence is found with `strIndexOf`, so the loop here takes a step
+     * per field rather than per character of `s`. The next search starts past
+     * the whole separator, so occurrences that overlap do not both split:
+     * `split "aa" "aaa"` is `["", "a"]`.
+     *
+     * The empty separator is answered before the loop because `strIndexOf`
+     * answers the position it was given for an empty needle, which would never
+     * advance. *)
     fun split sep s =
         let val sl = size sep
             val n  = size s
-            fun go start i =
-                if i + sl > n
-                then [substring (s, start, n)]
-                else if substring (s, i, i + sl) = sep
-                then substring (s, start, i) :: go (i + sl) (i + sl)
-                else go start (i + 1)
-        in if sl = 0 then [s] else go 0 0
+            fun go start =
+                let val i = strIndexOf (s, sep, start)
+                in if i < 0
+                   then [substring (s, start, n)]
+                   else substring (s, start, i) :: go (i + sl)
+                end
+        in if sl = 0 then [s] else go 0
         end
 
     (** Splits `s` on newlines. Inverse of `unlines`. *)

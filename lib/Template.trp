@@ -68,15 +68,6 @@ let
                   else go cs (c :: cur) acc
         in go chars [] [] end
 
-    (* Index of the first occurrence of the 2-char pattern `pat` in `s` at or after
-     * `from`, or -1 if none. *)
-    fun indexOf2 (s, pat, from) =
-        let val n = String.size s
-            fun go i = if i + 2 > n then (0 - 1)
-                       else if substring (s, i, i + 2) = pat then i
-                       else go (i + 1)
-        in go from end
-
     fun toLowerChar c =
         let val k = charCode c
         in if k >= 65 andalso k <= 90 then String.sub ("abcdefghijklmnopqrstuvwxyz", k - 65) else c end
@@ -311,26 +302,38 @@ let
      *   {tag="InterpChunk", body=.., offset=..}
      *   {tag="TagChunk",    body=.., offset=..}
      * Comments {# .. #} are dropped.
+     *
+     * Both searches -- for the next opening brace and for the closing delimiter
+     * that answers it -- are `strIndexOf`, so they run inside the JS engine and
+     * this module takes a step per delimiter rather than per character of the
+     * template. Offsets are positions in the template and are reported in parse
+     * errors, so they are counted from the brace, not from where a search
+     * started.
      *)
     fun tokenizeTemplate s =
         let val n = String.size s
             fun mkText textStart i acc =
                 if i > textStart then {tag = "TextChunk", text = substring (s, textStart, i)} :: acc else acc
+            (* Every delimiter opens with a brace, so nothing between `i` and the
+             * next brace can open one; a brace that opens nothing is text and is
+             * stepped over. *)
             fun scan i textStart acc =
-                if i >= n then OK (List.reverse (mkText textStart n acc))
-                else
-                  let val two = substring (s, i, i + 2)
-                  in if two = "{{" then handleDelim i textStart acc "}}" "InterpChunk"
-                     else if two = "{%" then handleDelim i textStart acc "%}" "TagChunk"
-                     else if two = "{#" then
-                       let val closeIdx = indexOf2 (s, "#}", i + 2)
-                       in if closeIdx < 0 then ERR {reason = "unclosed comment (missing #})", offset = i}
-                          else scan (closeIdx + 2) (closeIdx + 2) (mkText textStart i acc)
-                       end
-                     else scan (i + 1) textStart acc
-                  end
+                let val b = strIndexOf (s, "{", i)
+                in if b < 0 then OK (List.reverse (mkText textStart n acc))
+                   else
+                     let val two = substring (s, b, b + 2)
+                     in if two = "{{" then handleDelim b textStart acc "}}" "InterpChunk"
+                        else if two = "{%" then handleDelim b textStart acc "%}" "TagChunk"
+                        else if two = "{#" then
+                          let val closeIdx = strIndexOf (s, "#}", b + 2)
+                          in if closeIdx < 0 then ERR {reason = "unclosed comment (missing #})", offset = b}
+                             else scan (closeIdx + 2) (closeIdx + 2) (mkText textStart b acc)
+                          end
+                        else scan (b + 1) textStart acc
+                     end
+                end
             and handleDelim i textStart acc close kind =
-                let val closeIdx = indexOf2 (s, close, i + 2)
+                let val closeIdx = strIndexOf (s, close, i + 2)
                 in if closeIdx < 0
                    then ERR {reason = "unclosed " ^ (if kind = "TagChunk" then "tag (missing %})" else "interpolation (missing }})"),
                                     offset = i}

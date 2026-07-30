@@ -5,10 +5,14 @@ import Outcome
 import List
 import String
 
-(* Read every `<name>.sexp` in a directory, decode it into the IR datatypes, and write the
-   re-encoded document to `<name>.reprint`. One process for the whole corpus: the caller compares
-   what comes back against its own IR, so this side is a pure decode-and-print and holds no
-   opinion about what the documents contain.
+(* Read every `<name>.sexp` in one directory, decode it into the IR datatypes, and write the
+   re-encoded document as `<name>.reprint` in another. One process for the whole corpus: the caller
+   compares what comes back against its own IR, so this side is a pure decode-and-print and holds
+   no opinion about what the documents contain.
+
+   The output directory is separate from the input so that the same corpus can be re-printed by
+   this reader compiled more than one way -- the caller runs it once per compiler configuration,
+   as the golden runner does for every test it collects.
 
    Used by the whole-corpus differential (`make test/ir-sexp-corpus-troupe`), where the caller is
    the Haskell suite that produced the documents in the first place.
@@ -21,9 +25,9 @@ let fun say line = fwrite (stdout authority, line ^ "\x0a")
 
     fun stem name = String.substring (name, 0, String.size name - 5)
 
-    fun reprint (dir, name) =
-        let val inPath  = dir ^ "/" ^ name
-            val outPath = dir ^ "/" ^ stem name ^ ".reprint"
+    fun reprint (inDir, outDir, name) =
+        let val inPath  = inDir ^ "/" ^ name
+            val outPath = outDir ^ "/" ^ stem name ^ ".reprint"
         in case readFile (authority, inPath) of
                ERR e => SOME ("cannot read " ^ name ^ ": " ^ e.reason)
              | OK text =>
@@ -35,28 +39,30 @@ let fun say line = fwrite (stdout authority, line ^ "\x0a")
                            | OK _  => NONE))
         end
 
-    fun run (_, [], failed)          = failed
-      | run (dir, name :: rest, failed) =
-          case reprint (dir, name) of
-              NONE     => run (dir, rest, failed)
-            | SOME msg => let val _ = say ("FAIL " ^ msg) in run (dir, rest, failed + 1) end
+    fun run (_, _, [], failed)              = failed
+      | run (inDir, outDir, name :: rest, failed) =
+          case reprint (inDir, outDir, name) of
+              NONE     => run (inDir, outDir, rest, failed)
+            | SOME msg => let val _ = say ("FAIL " ^ msg)
+                          in run (inDir, outDir, rest, failed + 1)
+                          end
 in
     case getCliArgs authority of
-        [dir] =>
-          (case readDir (authority, dir) of
-               ERR e => let val _ = say ("cannot list " ^ dir ^ ": " ^ e.reason)
+        [inDir, outDir] =>
+          (case readDir (authority, inDir) of
+               ERR e => let val _ = say ("cannot list " ^ inDir ^ ": " ^ e.reason)
                         in exit (authority, 2)
                         end
              | OK entries =>
                  let val names  = List.map (fn e => e.name)
                                            (List.filter (fn e => e.kind = "file") entries)
                      val docs   = List.filter isDocument names
-                     val failed = run (dir, docs, 0)
+                     val failed = run (inDir, outDir, docs, 0)
                      val _      = say ("reprinted " ^ toString (List.length docs - failed)
                                        ^ " of " ^ toString (List.length docs) ^ " documents")
                  in exit (authority, if failed = 0 then 0 else 1)
                  end)
-      | _ => let val _ = say "usage: reprint <directory of .sexp documents>"
+      | _ => let val _ = say "usage: reprint <directory of .sexp documents> <output directory>"
              in exit (authority, 2)
              end
 end

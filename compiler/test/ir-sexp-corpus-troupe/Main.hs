@@ -20,7 +20,7 @@
 -- the suite says so rather than passing quietly.
 module Main (main) where
 
-import           Control.Monad (filterM, forM, unless)
+import           Control.Monad (filterM, forM, forM_, unless)
 import           Data.List (isInfixOf)
 import           Data.Maybe (catMaybes)
 import           System.Directory (createDirectoryIfMissing, doesFileExist, removePathForcibly)
@@ -64,47 +64,63 @@ main = do
         return ((,) (makeRelative root f) <$> ir)
 
       let scratch = root </> "out" </> "ir-sexp-corpus-troupe"
+          docsDir = scratch </> "documents"
       removePathForcibly scratch
-      createDirectoryIfMissing True scratch
+      createDirectoryIfMissing True docsDir
 
       -- Documents are named by index: corpus paths hold separators and the
       -- exchange is by position, not by name.
       let named = zip [(0 :: Int) ..] compiled
-      mapM_ (\(i, (_, ir)) -> writeFile (scratch </> show i <.> "sexp") (printProgWithPos ir))
+      mapM_ (\(i, (_, ir)) -> writeFile (docsDir </> show i <.> "sexp") (printProgWithPos ir))
             named
 
-      _ <- run (root </> "bin" </> "troupec")
-             [ root </> "trp-compiler" </> "reprint.trp"
-             , "-m", "--output=" ++ scratch </> "reprint.js" ]
-      out <- run "node"
-               [ root </> "rt" </> "built" </> "troupe.mjs"
-               , "-f=" ++ scratch </> "reprint.js"
-               , "--localonly", "--suppress-local-info-message"
-               , "--suppress-main-thread-finished-message"
-               , "--io-root=" ++ scratch, "--", "." ]
+      -- Both configurations the golden runner uses for every test it collects.
+      -- The reader is 500 lines of pattern matching compiled by this compiler,
+      -- and --no-rawopt is the setting that surfaces corner-case codegen; a
+      -- reader checked only optimized is checked half. Each configuration writes
+      -- into its own directory, so neither can be read for the other.
+      let configs = [("Raw optimized", [] :: [String]), ("--no-rawopt", ["--no-rawopt"])]
 
-      -- A thread error leaves the runtime exiting 0, so the exit code alone
-      -- would accept a run that read nothing. The reprinter says what it did,
-      -- and that is what is believed.
-      let expected = "reprinted " ++ show (length named) ++ " of "
-                     ++ show (length named) ++ " documents"
-      unless (expected `isInfixOf` out) $
-        ioError (userError ("the Troupe reader did not report '" ++ expected
-                            ++ "'; it said:\n" ++ out))
+      forM_ configs $ \(label, flags) -> do
+        let outDir = scratch </> dirFor label
+        createDirectoryIfMissing True outDir
+        _ <- run (root </> "bin" </> "troupec")
+               (flags ++ [ root </> "trp-compiler" </> "reprint.trp"
+                         , "-m", "--output=" ++ scratch </> dirFor label <.> "js" ])
+        out <- run "node"
+                 [ root </> "rt" </> "built" </> "troupe.mjs"
+                 , "-f=" ++ scratch </> dirFor label <.> "js"
+                 , "--localonly", "--suppress-local-info-message"
+                 , "--suppress-main-thread-finished-message"
+                 , "--io-root=" ++ scratch, "--", "documents", dirFor label ]
+
+        -- A thread error leaves the runtime exiting 0, so the exit code alone
+        -- would accept a run that read nothing. The reprinter says what it did,
+        -- and that is what is believed.
+        let expected = "reprinted " ++ show (length named) ++ " of "
+                       ++ show (length named) ++ " documents"
+        unless (expected `isInfixOf` out) $
+          ioError (userError ("the Troupe reader, compiled with " ++ label
+                              ++ ", did not report '" ++ expected ++ "'; it said:\n" ++ out))
 
       defaultMain $ testGroup "troupe-ir-sexp across implementations, over the compiled corpus"
-        [ testCase name $ do
-            let reprinted = scratch </> show i <.> "reprint"
-            exists <- doesFileExist reprinted
-            unless exists $ assertFailure "the Troupe reader produced no document for this program"
-            text <- readFile reprinted
-            case parseProg text of
-              Left err -> assertFailure ("parsing what Troupe printed failed: " ++ err)
-              Right p  -> assertBool (mismatch (printProgWithPos p) (printProgWithPos ir))
-                                     (p == ir)
-        | (i, (name, ir)) <- named
+        [ testGroup ("the reader compiled with " ++ label)
+            [ testCase name $ do
+                let reprinted = scratch </> dirFor label </> show i <.> "reprint"
+                exists <- doesFileExist reprinted
+                unless exists $
+                  assertFailure "the Troupe reader produced no document for this program"
+                text <- readFile reprinted
+                case parseProg text of
+                  Left err -> assertFailure ("parsing what Troupe printed failed: " ++ err)
+                  Right p  -> assertBool (mismatch (printProgWithPos p) (printProgWithPos ir))
+                                         (p == ir)
+            | (i, (name, ir)) <- named ]
+        | (label, _) <- configs
         ]
   where
+    -- A directory name per configuration, from its label.
+    dirFor = map (\c -> if c `elem` (" -" :: String) then '_' else c)
     mismatch got expected =
       "the value differs from the one this compiler started with\n--- via Troupe ---\n" ++ got
       ++ "\n--- expected ---\n" ++ expected

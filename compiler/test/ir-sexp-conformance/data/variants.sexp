@@ -2,17 +2,11 @@
  2
  (program
   (@
-   ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/synvar/option-match.trp"
-    5
-    9)
+   ("tests/rt/pos/synvar/option-match.trp" 5 9)
    (fun
     "gensym103"
     (arg
-     (@
-      ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/synvar/option-match.trp"
-       5
-       18)
-      "unwrap_arg242"))
+     (@ ("tests/rt/pos/synvar/option-match.trp" 5 18) "unwrap_arg242"))
     (consts
      ("gensym117" (int 1))
      ("gensym119" (bool false))
@@ -30,9 +24,7 @@
     (bb
      ()
      (@
-      ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/synvar/option-match.trp"
-       5
-       9)
+      ("tests/rt/pos/synvar/option-match.trp" 5 9)
       (stack-expand
        "gensym108"
        (bb
@@ -75,9 +67,7 @@
          (bb
           ()
           (@
-           ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/synvar/option-match.trp"
-            5
-            9)
+           ("tests/rt/pos/synvar/option-match.trp" 5 9)
            (stack-expand
             "gensym133"
             (bb
@@ -115,58 +105,38 @@
             (bb
              ()
              (@
-              ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/synvar/option-match.trp"
-               5
-               9)
+              ("tests/rt/pos/synvar/option-match.trp" 5 9)
               (assert-else-error
                (@
-                ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/synvar/option-match.trp"
-                 5
-                 9)
+                ("tests/rt/pos/synvar/option-match.trp" 5 9)
                 (local "gensym133"))
                (bb
                 ((assign "gensym130" (proj-idx (local "unwrap_arg242") 1)))
                 (ret (local "gensym130")))
                (@
-                ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/synvar/option-match.trp"
-                 5
-                 9)
+                ("tests/rt/pos/synvar/option-match.trp" 5 9)
                 (local "gensym134")))))))))))))))
   (@
-   ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/synvar/option-match.trp"
-    5
-    9)
+   ("tests/rt/pos/synvar/option-match.trp" 5 9)
    (fun
     "unwrap40"
     (arg
-     (@
-      ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/synvar/option-match.trp"
-       5
-       16)
-      "unwrap_arg141"))
+     (@ ("tests/rt/pos/synvar/option-match.trp" 5 16) "unwrap_arg141"))
     (consts)
     (bb
      ((@
-       ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/synvar/option-match.trp"
-        5
-        9)
+       ("tests/rt/pos/synvar/option-match.trp" 5 9)
        (mkclos
         (("unwrap_arg141"
           (@
-           ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/synvar/option-match.trp"
-            5
-            9)
+           ("tests/rt/pos/synvar/option-match.trp" 5 9)
            (local "unwrap_arg141"))))
         (("gensym103" "gensym103")))))
      (@
-      ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/synvar/option-match.trp"
-       5
-       9)
+      ("tests/rt/pos/synvar/option-match.trp" 5 9)
       (ret
        (@
-        ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/synvar/option-match.trp"
-         5
-         9)
+        ("tests/rt/pos/synvar/option-match.trp" 5 9)
         (local "gensym103")))))))
   (fun
    "fwriteln2"
@@ -342,9 +312,7 @@
        ("printWithLabels6" "printWithLabels6")
        ("inputLine7" "inputLine7")))
      (@
-      ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/synvar/option-match.trp"
-       5
-       9)
+      ("tests/rt/pos/synvar/option-match.trp" 5 9)
       (mkclos () (("unwrap40" "unwrap40")))))
     (@
      (rt "CaseElimination")
@@ -353,85 +321,55 @@
       (bb
        ()
        (@
-        ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/synvar/option-match.trp"
-         8
-         10)
+        ("tests/rt/pos/synvar/option-match.trp" 8 10)
         (stack-expand
          "gensym184"
          (bb
           ()
           (@
-           ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/synvar/option-match.trp"
-            8
-            10)
+           ("tests/rt/pos/synvar/option-match.trp" 8 10)
            (tail-call
             (@
-             ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/synvar/option-match.trp"
-              8
-              10)
+             ("tests/rt/pos/synvar/option-match.trp" 8 10)
              (local "unwrap40"))
             (@
-             ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/synvar/option-match.trp"
-              8
-              10)
+             ("tests/rt/pos/synvar/option-match.trp" 8 10)
              (local "gensym190")))))
          (bb
           ((@
-            ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/synvar/option-match.trp"
-             8
-             20)
+            ("tests/rt/pos/synvar/option-match.trp" 8 20)
             (assign
              "gensym189"
              (tuple-variant
               (@
-               ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/synvar/option-match.trp"
-                8
-                20)
+               ("tests/rt/pos/synvar/option-match.trp" 8 20)
                (local "gensym188"))
               (@
-               ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/synvar/option-match.trp"
-                8
-                20)
+               ("tests/rt/pos/synvar/option-match.trp" 8 20)
                (local "gensym187"))))))
           (@
-           ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/synvar/option-match.trp"
-            8
-            20)
+           ("tests/rt/pos/synvar/option-match.trp" 8 20)
            (stack-expand
             "gensym183"
             (bb
              ()
              (@
-              ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/synvar/option-match.trp"
-               8
-               10)
+              ("tests/rt/pos/synvar/option-match.trp" 8 10)
               (tail-call
                (@
-                ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/synvar/option-match.trp"
-                 8
-                 10)
+                ("tests/rt/pos/synvar/option-match.trp" 8 10)
                 (local "gensym184"))
                (@
-                ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/synvar/option-match.trp"
-                 8
-                 10)
+                ("tests/rt/pos/synvar/option-match.trp" 8 10)
                 (local "gensym189")))))
             (bb
              ()
              (@
-              ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/synvar/option-match.trp"
-               8
-               3)
+              ("tests/rt/pos/synvar/option-match.trp" 8 3)
               (tail-call
+               (@ ("tests/rt/pos/synvar/option-match.trp" 8 3) (local "print5"))
                (@
-                ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/synvar/option-match.trp"
-                 8
-                 3)
-                (local "print5"))
-               (@
-                ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/synvar/option-match.trp"
-                 8
-                 3)
+                ("tests/rt/pos/synvar/option-match.trp" 8 3)
                 (local "gensym183")))))))))))
       (bb
        ()
@@ -442,105 +380,67 @@
          (bb
           ()
           (@
-           ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/synvar/option-match.trp"
-            9
-            10)
+           ("tests/rt/pos/synvar/option-match.trp" 9 10)
            (stack-expand
             "gensym179"
             (bb
              ()
              (@
-              ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/synvar/option-match.trp"
-               9
-               10)
+              ("tests/rt/pos/synvar/option-match.trp" 9 10)
               (tail-call
                (@
-                ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/synvar/option-match.trp"
-                 9
-                 10)
+                ("tests/rt/pos/synvar/option-match.trp" 9 10)
                 (local "unwrap40"))
                (@
-                ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/synvar/option-match.trp"
-                 9
-                 10)
+                ("tests/rt/pos/synvar/option-match.trp" 9 10)
                 (local "gensym182")))))
             (bb
              ((@
-               ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/synvar/option-match.trp"
-                9
-                19)
+               ("tests/rt/pos/synvar/option-match.trp" 9 19)
                (assign
                 "gensym181"
                 (tuple-variant
                  (@
-                  ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/synvar/option-match.trp"
-                   9
-                   19)
+                  ("tests/rt/pos/synvar/option-match.trp" 9 19)
                   (local "gensym180"))))))
              (@
-              ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/synvar/option-match.trp"
-               9
-               10)
+              ("tests/rt/pos/synvar/option-match.trp" 9 10)
               (stack-expand
                "gensym178"
                (bb
                 ()
                 (@
-                 ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/synvar/option-match.trp"
-                  9
-                  10)
+                 ("tests/rt/pos/synvar/option-match.trp" 9 10)
                  (tail-call
                   (@
-                   ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/synvar/option-match.trp"
-                    9
-                    10)
+                   ("tests/rt/pos/synvar/option-match.trp" 9 10)
                    (local "gensym179"))
                   (@
-                   ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/synvar/option-match.trp"
-                    9
-                    10)
+                   ("tests/rt/pos/synvar/option-match.trp" 9 10)
                    (local "gensym181")))))
                (bb
                 ()
                 (@
-                 ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/synvar/option-match.trp"
-                  9
-                  3)
+                 ("tests/rt/pos/synvar/option-match.trp" 9 3)
                  (tail-call
+                  (@ ("tests/rt/pos/synvar/option-match.trp" 9 3) (local "print5"))
                   (@
-                   ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/synvar/option-match.trp"
-                    9
-                    3)
-                   (local "print5"))
-                  (@
-                   ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/synvar/option-match.trp"
-                    9
-                    3)
+                   ("tests/rt/pos/synvar/option-match.trp" 9 3)
                    (local "gensym178")))))))))))
          (bb
           ()
           (@
-           ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/synvar/option-match.trp"
-            10
-            35)
+           ("tests/rt/pos/synvar/option-match.trp" 10 35)
            (stack-expand
             "gensym155"
             (bb
              ()
              (@
-              ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/synvar/option-match.trp"
-               10
-               3)
+              ("tests/rt/pos/synvar/option-match.trp" 10 3)
               (tail-call
+               (@ ("tests/rt/pos/synvar/option-match.trp" 10 3) (local "print5"))
                (@
-                ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/synvar/option-match.trp"
-                 10
-                 3)
-                (local "print5"))
-               (@
-                ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/synvar/option-match.trp"
-                 10
-                 3)
+                ("tests/rt/pos/synvar/option-match.trp" 10 3)
                 (local "gensym157")))))
             (bb
              ()

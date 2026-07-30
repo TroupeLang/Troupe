@@ -2,174 +2,89 @@
  2
  (program
   (@
-   ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/core/fib10.trp"
-    1
-    9)
+   ("tests/rt/pos/core/fib10.trp" 1 9)
    (fun
     "fib40"
-    (arg
-     (@
-      ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/core/fib10.trp"
-       1
-       13)
-      "fib_arg141"))
+    (arg (@ ("tests/rt/pos/core/fib10.trp" 1 13) "fib_arg141"))
     (consts
      ("gensym114" (int 2))
      ("gensym111" (int 1))
      ("gensym112" (int 1)))
     (bb
      ((@
-       ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/core/fib10.trp"
-        2
-        12)
+       ("tests/rt/pos/core/fib10.trp" 2 12)
        (assign
         "gensym113"
         (bin
          Gt
-         (@
-          ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/core/fib10.trp"
-           2
-           10)
-          (local "fib_arg141"))
-         (@
-          ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/core/fib10.trp"
-           2
-           14)
-          (local "gensym114"))))))
+         (@ ("tests/rt/pos/core/fib10.trp" 2 10) (local "fib_arg141"))
+         (@ ("tests/rt/pos/core/fib10.trp" 2 14) (local "gensym114"))))))
      (@
-      ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/core/fib10.trp"
-       2
-       7)
+      ("tests/rt/pos/core/fib10.trp" 2 7)
       (if
-       (@
-        ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/core/fib10.trp"
-         2
-         7)
-        (local "gensym113"))
+       (@ ("tests/rt/pos/core/fib10.trp" 2 7) (local "gensym113"))
        (bb
         ((@
-          ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/core/fib10.trp"
-           3
-           19)
+          ("tests/rt/pos/core/fib10.trp" 3 19)
           (assign
            "gensym110"
            (bin
             Minus
-            (@
-             ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/core/fib10.trp"
-              3
-              17)
-             (local "fib_arg141"))
-            (@
-             ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/core/fib10.trp"
-              3
-              21)
-             (local "gensym111"))))))
+            (@ ("tests/rt/pos/core/fib10.trp" 3 17) (local "fib_arg141"))
+            (@ ("tests/rt/pos/core/fib10.trp" 3 21) (local "gensym111"))))))
         (@
-         ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/core/fib10.trp"
-          3
-          12)
+         ("tests/rt/pos/core/fib10.trp" 3 12)
          (stack-expand
           "gensym106"
           (bb
            ()
            (@
-            ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/core/fib10.trp"
-             3
-             12)
+            ("tests/rt/pos/core/fib10.trp" 3 12)
             (tail-call
-             (@
-              ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/core/fib10.trp"
-               3
-               12)
-              self)
-             (@
-              ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/core/fib10.trp"
-               3
-               12)
-              (local "gensym110")))))
+             (@ ("tests/rt/pos/core/fib10.trp" 3 12) self)
+             (@ ("tests/rt/pos/core/fib10.trp" 3 12) (local "gensym110")))))
           (bb
            ((@
-             ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/core/fib10.trp"
-              3
-              33)
+             ("tests/rt/pos/core/fib10.trp" 3 33)
              (assign
               "gensym108"
               (bin
                Minus
-               (@
-                ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/core/fib10.trp"
-                 3
-                 31)
-                (local "fib_arg141"))
-               (@
-                ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/core/fib10.trp"
-                 3
-                 35)
-                (local "gensym114"))))))
+               (@ ("tests/rt/pos/core/fib10.trp" 3 31) (local "fib_arg141"))
+               (@ ("tests/rt/pos/core/fib10.trp" 3 35) (local "gensym114"))))))
            (@
-            ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/core/fib10.trp"
-             3
-             26)
+            ("tests/rt/pos/core/fib10.trp" 3 26)
             (stack-expand
              "gensym107"
              (bb
               ()
               (@
-               ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/core/fib10.trp"
-                3
-                26)
+               ("tests/rt/pos/core/fib10.trp" 3 26)
                (tail-call
-                (@
-                 ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/core/fib10.trp"
-                  3
-                  26)
-                 self)
-                (@
-                 ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/core/fib10.trp"
-                  3
-                  26)
-                 (local "gensym108")))))
+                (@ ("tests/rt/pos/core/fib10.trp" 3 26) self)
+                (@ ("tests/rt/pos/core/fib10.trp" 3 26) (local "gensym108")))))
              (bb
               ((@
-                ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/core/fib10.trp"
-                 3
-                 24)
+                ("tests/rt/pos/core/fib10.trp" 3 24)
                 (assign
                  "gensym105"
                  (bin
                   Plus
-                  (@
-                   ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/core/fib10.trp"
-                    3
-                    12)
-                   (local "gensym106"))
-                  (@
-                   ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/core/fib10.trp"
-                    3
-                    26)
-                   (local "gensym107"))))))
+                  (@ ("tests/rt/pos/core/fib10.trp" 3 12) (local "gensym106"))
+                  (@ ("tests/rt/pos/core/fib10.trp" 3 26) (local "gensym107"))))))
               (@
-               ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/core/fib10.trp"
-                3
-                24)
+               ("tests/rt/pos/core/fib10.trp" 3 24)
                (ret
                 (@
-                 ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/core/fib10.trp"
-                  3
-                  24)
+                 ("tests/rt/pos/core/fib10.trp" 3 24)
                  (local "gensym105")))))))))))
        (bb
         ()
         (@
-         ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/core/fib10.trp"
-          4
-          12)
+         ("tests/rt/pos/core/fib10.trp" 4 12)
          (ret
           (@
-           ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/core/fib10.trp"
-            4
-            12)
+           ("tests/rt/pos/core/fib10.trp" 4 12)
            (local "gensym112"))))))))))
   (fun
    "fwriteln2"
@@ -335,33 +250,19 @@
        ("printWithLabels6" "printWithLabels6")
        ("inputLine7" "inputLine7")))
      (@
-      ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/core/fib10.trp"
-       1
-       9)
+      ("tests/rt/pos/core/fib10.trp" 1 9)
       (mkclos () (("fib40" "fib40")))))
     (@
-     ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/core/fib10.trp"
-      5
-      4)
+     ("tests/rt/pos/core/fib10.trp" 5 4)
      (stack-expand
       "gensym123"
       (bb
        ()
        (@
-        ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/core/fib10.trp"
-         5
-         4)
+        ("tests/rt/pos/core/fib10.trp" 5 4)
         (tail-call
-         (@
-          ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/core/fib10.trp"
-           5
-           4)
-          (local "fib40"))
-         (@
-          ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/core/fib10.trp"
-           5
-           4)
-          (local "gensym124")))))
+         (@ ("tests/rt/pos/core/fib10.trp" 5 4) (local "fib40"))
+         (@ ("tests/rt/pos/core/fib10.trp" 5 4) (local "gensym124")))))
       (bb
        ()
        (@

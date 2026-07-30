@@ -169,27 +169,17 @@
        ("printWithLabels6" "printWithLabels6")
        ("inputLine7" "inputLine7"))))
     (@
-     ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/core/float_scientific.trp"
-      4
-      13)
+     ("tests/rt/pos/core/float_scientific.trp" 4 13)
      (stack-expand
       "$decltemp$48"
       (bb
        ()
        (@
-        ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/core/float_scientific.trp"
-         5
-         4)
+        ("tests/rt/pos/core/float_scientific.trp" 5 4)
         (tail-call
+         (@ ("tests/rt/pos/core/float_scientific.trp" 5 4) (local "print5"))
          (@
-          ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/core/float_scientific.trp"
-           5
-           4)
-          (local "print5"))
-         (@
-          ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/core/float_scientific.trp"
-           5
-           4)
+          ("tests/rt/pos/core/float_scientific.trp" 5 4)
           (local "gensym107")))))
       (bb
        ()
@@ -200,19 +190,11 @@
          (bb
           ()
           (@
-           ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/core/float_scientific.trp"
-            6
-            4)
+           ("tests/rt/pos/core/float_scientific.trp" 6 4)
            (tail-call
+            (@ ("tests/rt/pos/core/float_scientific.trp" 6 4) (local "print5"))
             (@
-             ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/core/float_scientific.trp"
-              6
-              4)
-             (local "print5"))
-            (@
-             ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/core/float_scientific.trp"
-              6
-              4)
+             ("tests/rt/pos/core/float_scientific.trp" 6 4)
              (local "gensym106")))))
          (bb
           ()
@@ -223,19 +205,11 @@
             (bb
              ()
              (@
-              ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/core/float_scientific.trp"
-               7
-               4)
+              ("tests/rt/pos/core/float_scientific.trp" 7 4)
               (tail-call
+               (@ ("tests/rt/pos/core/float_scientific.trp" 7 4) (local "print5"))
                (@
-                ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/core/float_scientific.trp"
-                 7
-                 4)
-                (local "print5"))
-               (@
-                ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/core/float_scientific.trp"
-                 7
-                 4)
+                ("tests/rt/pos/core/float_scientific.trp" 7 4)
                 (local "gensym105")))))
             (bb
              ()
@@ -246,19 +220,11 @@
                (bb
                 ()
                 (@
-                 ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/core/float_scientific.trp"
-                  8
-                  4)
+                 ("tests/rt/pos/core/float_scientific.trp" 8 4)
                  (tail-call
+                  (@ ("tests/rt/pos/core/float_scientific.trp" 8 4) (local "print5"))
                   (@
-                   ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/core/float_scientific.trp"
-                    8
-                    4)
-                   (local "print5"))
-                  (@
-                   ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/core/float_scientific.trp"
-                    8
-                    4)
+                   ("tests/rt/pos/core/float_scientific.trp" 8 4)
                    (local "gensym104")))))
                (bb
                 ()

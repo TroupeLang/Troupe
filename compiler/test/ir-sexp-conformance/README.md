@@ -46,6 +46,7 @@ and compression are not part of the format. A reference that no longer *parses t
 a format change, and needs a version bump in `IRSexp.formatVersion` plus the changelog entry in the
 spec.
 
-Note the documents embed absolute source paths, because that is what the compiler puts in a
-position. Regenerating in a different checkout will therefore rewrite every `.sexp` and `.blob`;
-that is expected and is not a format change.
+The positions in the documents name their program by its path relative to the repository root
+(`tests/rt/pos/core/fib10.trp`), because the suite compiles from the repository root and hands the
+compiler that relative path. The corpus therefore contains no path from the checkout that produced
+it, and regenerating it in another checkout leaves the recorded paths unchanged.

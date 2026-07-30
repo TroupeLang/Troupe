@@ -37,7 +37,8 @@ import qualified Data.ByteString.Char8 as BSC
 import qualified Data.ByteString.Lazy as BSL
 import           Data.List (maximumBy)
 import           Data.Ord (comparing)
-import           System.Directory (createDirectoryIfMissing, doesFileExist, getCurrentDirectory)
+import           System.Directory (createDirectoryIfMissing, doesFileExist, getCurrentDirectory,
+                                  withCurrentDirectory)
 import           System.Environment (lookupEnv)
 import           System.FilePath (takeDirectory, (</>), (<.>))
 
@@ -109,16 +110,23 @@ referenceDir :: FilePath -> FilePath
 referenceDir root = root </> "compiler" </> "test" </> "ir-sexp-conformance" </> "data"
 
 -- | Compile a reference program to IR with the library pipeline.
-compileReference :: FilePath -> FilePath -> IO IRProgram
-compileReference root rel = do
-  let file = root </> rel
-      opts = Pipeline.CompileOpts { Pipeline.coMode     = Normal
+--
+-- The compiler records a position under the name it was handed for the
+-- compilation unit ('Pipeline.frontEndFold' passes it to the parser), so this
+-- names the program by its repository-relative path, from the repository root
+-- as the working directory. Every position in the corpus is then relative, and
+-- a reference document is the same text in every checkout; compiling from an
+-- absolute path would write the regenerating checkout's prefix into the corpus
+-- and make it unreadable anywhere else.
+compileReference :: FilePath -> IO IRProgram
+compileReference rel = do
+  let opts = Pipeline.CompileOpts { Pipeline.coMode     = Normal
                                   , Pipeline.coDump     = Pipeline.silentDump
                                   , Pipeline.coPPConfig = mkPPConfig False (parsePosFormat "inline")
                                   }
-  pins   <- maybe [] (either (const []) id) <$> readDepsFile (depsFilePath file)
-  input  <- readFile file
-  folded <- Pipeline.frontEndFold (Enforce pins) (takeDirectory file) opts file input
+  pins   <- maybe [] (either (const []) id) <$> readDepsFile (depsFilePath rel)
+  input  <- readFile rel
+  folded <- Pipeline.frontEndFold (Enforce pins) (takeDirectory rel) opts rel input
   Pipeline.frontEndIR opts folded
 
 -- | The function a reference blob carries: the largest one in the program, by
@@ -137,8 +145,11 @@ main = do
   let dir = referenceDir root
   createDirectoryIfMissing True dir
 
-  cases <- forM conformancePrograms $ \(name, rel) -> do
-    ir <- compileReference root rel
+  -- Compiled from the repository root so that the paths in 'conformancePrograms'
+  -- are the paths the compiler records. 'dir' is already absolute, so the
+  -- reference files are written to the same place either way.
+  cases <- withCurrentDirectory root $ forM conformancePrograms $ \(name, rel) -> do
+    ir <- compileReference rel
     let sexpPath = dir </> name <.> "sexp"
         blobPath = dir </> name <.> "blob"
         progUnit = ProgramSerialization ir

@@ -170,27 +170,19 @@
        ("printWithLabels6" "printWithLabels6")
        ("inputLine7" "inputLine7"))))
     (@
-     ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/ifc/dclabel-whitespace.trp"
-      3
-      18)
+     ("tests/rt/pos/ifc/dclabel-whitespace.trp" 3 18)
      (stack-expand
       "$decltemp$50"
       (bb
        ()
        (@
-        ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/ifc/dclabel-whitespace.trp"
-         9
-         5)
+        ("tests/rt/pos/ifc/dclabel-whitespace.trp" 9 5)
         (tail-call
          (@
-          ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/ifc/dclabel-whitespace.trp"
-           9
-           5)
+          ("tests/rt/pos/ifc/dclabel-whitespace.trp" 9 5)
           (local "print5"))
          (@
-          ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/ifc/dclabel-whitespace.trp"
-           9
-           5)
+          ("tests/rt/pos/ifc/dclabel-whitespace.trp" 9 5)
           (local "gensym112")))))
       (bb
        ()
@@ -201,19 +193,13 @@
          (bb
           ()
           (@
-           ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/ifc/dclabel-whitespace.trp"
-            10
-            5)
+           ("tests/rt/pos/ifc/dclabel-whitespace.trp" 10 5)
            (tail-call
             (@
-             ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/ifc/dclabel-whitespace.trp"
-              10
-              5)
+             ("tests/rt/pos/ifc/dclabel-whitespace.trp" 10 5)
              (local "print5"))
             (@
-             ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/ifc/dclabel-whitespace.trp"
-              10
-              5)
+             ("tests/rt/pos/ifc/dclabel-whitespace.trp" 10 5)
              (local "gensym112")))))
          (bb
           ()
@@ -224,19 +210,13 @@
             (bb
              ()
              (@
-              ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/ifc/dclabel-whitespace.trp"
-               11
-               5)
+              ("tests/rt/pos/ifc/dclabel-whitespace.trp" 11 5)
               (tail-call
                (@
-                ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/ifc/dclabel-whitespace.trp"
-                 11
-                 5)
+                ("tests/rt/pos/ifc/dclabel-whitespace.trp" 11 5)
                 (local "print5"))
                (@
-                ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/ifc/dclabel-whitespace.trp"
-                 11
-                 5)
+                ("tests/rt/pos/ifc/dclabel-whitespace.trp" 11 5)
                 (local "gensym112")))))
             (bb
              ()
@@ -247,19 +227,13 @@
                (bb
                 ()
                 (@
-                 ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/ifc/dclabel-whitespace.trp"
-                  12
-                  5)
+                 ("tests/rt/pos/ifc/dclabel-whitespace.trp" 12 5)
                  (tail-call
                   (@
-                   ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/ifc/dclabel-whitespace.trp"
-                    12
-                    5)
+                   ("tests/rt/pos/ifc/dclabel-whitespace.trp" 12 5)
                    (local "print5"))
                   (@
-                   ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/ifc/dclabel-whitespace.trp"
-                    12
-                    5)
+                   ("tests/rt/pos/ifc/dclabel-whitespace.trp" 12 5)
                    (local "gensym112")))))
                (bb
                 ()
@@ -270,19 +244,13 @@
                   (bb
                    ()
                    (@
-                    ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/ifc/dclabel-whitespace.trp"
-                     13
-                     5)
+                    ("tests/rt/pos/ifc/dclabel-whitespace.trp" 13 5)
                     (tail-call
                      (@
-                      ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/ifc/dclabel-whitespace.trp"
-                       13
-                       5)
+                      ("tests/rt/pos/ifc/dclabel-whitespace.trp" 13 5)
                       (local "print5"))
                      (@
-                      ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/ifc/dclabel-whitespace.trp"
-                       13
-                       5)
+                      ("tests/rt/pos/ifc/dclabel-whitespace.trp" 13 5)
                       (local "gensym112")))))
                   (bb
                    ()
@@ -293,19 +261,13 @@
                      (bb
                       ()
                       (@
-                       ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/ifc/dclabel-whitespace.trp"
-                        14
-                        5)
+                       ("tests/rt/pos/ifc/dclabel-whitespace.trp" 14 5)
                        (tail-call
                         (@
-                         ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/ifc/dclabel-whitespace.trp"
-                          14
-                          5)
+                         ("tests/rt/pos/ifc/dclabel-whitespace.trp" 14 5)
                          (local "print5"))
                         (@
-                         ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/ifc/dclabel-whitespace.trp"
-                          14
-                          5)
+                         ("tests/rt/pos/ifc/dclabel-whitespace.trp" 14 5)
                          (local "gensym107")))))
                      (bb
                       ()
@@ -316,19 +278,13 @@
                         (bb
                          ()
                          (@
-                          ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/ifc/dclabel-whitespace.trp"
-                           15
-                           5)
+                          ("tests/rt/pos/ifc/dclabel-whitespace.trp" 15 5)
                           (tail-call
                            (@
-                            ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/ifc/dclabel-whitespace.trp"
-                             15
-                             5)
+                            ("tests/rt/pos/ifc/dclabel-whitespace.trp" 15 5)
                             (local "print5"))
                            (@
-                            ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/ifc/dclabel-whitespace.trp"
-                             15
-                             5)
+                            ("tests/rt/pos/ifc/dclabel-whitespace.trp" 15 5)
                             (local "gensym106")))))
                         (bb
                          ()
@@ -339,44 +295,30 @@
                            (bb
                             ()
                             (@
-                             ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/ifc/dclabel-whitespace.trp"
-                              16
-                              5)
+                             ("tests/rt/pos/ifc/dclabel-whitespace.trp" 16 5)
                              (tail-call
                               (@
-                               ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/ifc/dclabel-whitespace.trp"
-                                16
-                                5)
+                               ("tests/rt/pos/ifc/dclabel-whitespace.trp" 16 5)
                                (local "print5"))
                               (@
-                               ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/ifc/dclabel-whitespace.trp"
-                                16
-                                5)
+                               ("tests/rt/pos/ifc/dclabel-whitespace.trp" 16 5)
                                (local "gensym105")))))
                            (bb
                             ()
                             (@
-                             ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/ifc/dclabel-whitespace.trp"
-                              17
-                              5)
+                             ("tests/rt/pos/ifc/dclabel-whitespace.trp" 17 5)
                              (stack-expand
                               "gensym103"
                               (bb
                                ()
                                (@
-                                ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/ifc/dclabel-whitespace.trp"
-                                 17
-                                 5)
+                                ("tests/rt/pos/ifc/dclabel-whitespace.trp" 17 5)
                                 (tail-call
                                  (@
-                                  ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/ifc/dclabel-whitespace.trp"
-                                   17
-                                   5)
+                                  ("tests/rt/pos/ifc/dclabel-whitespace.trp" 17 5)
                                   (local "print5"))
                                  (@
-                                  ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/ifc/dclabel-whitespace.trp"
-                                   17
-                                   5)
+                                  ("tests/rt/pos/ifc/dclabel-whitespace.trp" 17 5)
                                   (local "gensym104")))))
                               (bb
                                ()

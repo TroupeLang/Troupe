@@ -169,68 +169,32 @@
        ("printWithLabels6" "printWithLabels6")
        ("inputLine7" "inputLine7")))
      (@
-      ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/core/list00.trp"
-       1
-       13)
+      ("tests/rt/pos/core/list00.trp" 1 13)
       (assign
        "gensym110"
        (list
-        (@
-         ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/core/list00.trp"
-          1
-          14)
-         (local "gensym109")))))
+        (@ ("tests/rt/pos/core/list00.trp" 1 14) (local "gensym109")))))
      (@
-      ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/core/list00.trp"
-       2
-       14)
+      ("tests/rt/pos/core/list00.trp" 2 14)
       (assign
        "gensym107"
        (cons
-        (@
-         ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/core/list00.trp"
-          2
-          13)
-         (local "gensym108"))
-        (@
-         ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/core/list00.trp"
-          2
-          16)
-         (local "gensym110")))))
+        (@ ("tests/rt/pos/core/list00.trp" 2 13) (local "gensym108"))
+        (@ ("tests/rt/pos/core/list00.trp" 2 16) (local "gensym110")))))
      (@
-      ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/core/list00.trp"
-       2
-       10)
+      ("tests/rt/pos/core/list00.trp" 2 10)
       (assign
        "gensym105"
        (cons
-        (@
-         ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/core/list00.trp"
-          2
-          9)
-         (local "gensym106"))
-        (@
-         ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/core/list00.trp"
-          2
-          14)
-         (local "gensym107")))))
+        (@ ("tests/rt/pos/core/list00.trp" 2 9) (local "gensym106"))
+        (@ ("tests/rt/pos/core/list00.trp" 2 14) (local "gensym107")))))
      (@
-      ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/core/list00.trp"
-       2
-       6)
+      ("tests/rt/pos/core/list00.trp" 2 6)
       (assign
        "gensym103"
        (cons
-        (@
-         ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/core/list00.trp"
-          2
-          5)
-         (local "gensym104"))
-        (@
-         ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/core/list00.trp"
-          2
-          10)
-         (local "gensym105"))))))
+        (@ ("tests/rt/pos/core/list00.trp" 2 5) (local "gensym104"))
+        (@ ("tests/rt/pos/core/list00.trp" 2 10) (local "gensym105"))))))
     (@
      (rt "CaseElimination")
      (ret (@ (rt "CaseElimination") (local "gensym103"))))))))

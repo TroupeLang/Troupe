@@ -165,45 +165,29 @@
        ("printWithLabels6" "printWithLabels6")
        ("inputLine7" "inputLine7")))
      (@
-      ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/core/float_literals.trp"
-       3
-       15)
+      ("tests/rt/pos/core/float_literals.trp" 3 15)
       (assign
        "gensym104"
        (bin
         Plus
         (@
-         ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/core/float_literals.trp"
-          3
-          13)
+         ("tests/rt/pos/core/float_literals.trp" 3 13)
          (local "gensym106"))
         (@
-         ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/core/float_literals.trp"
-          3
-          17)
+         ("tests/rt/pos/core/float_literals.trp" 3 17)
          (local "gensym105"))))))
     (@
-     ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/core/float_literals.trp"
-      3
-      15)
+     ("tests/rt/pos/core/float_literals.trp" 3 15)
      (stack-expand
       "gensym103"
       (bb
        ()
        (@
-        ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/core/float_literals.trp"
-         4
-         4)
+        ("tests/rt/pos/core/float_literals.trp" 4 4)
         (tail-call
+         (@ ("tests/rt/pos/core/float_literals.trp" 4 4) (local "print5"))
          (@
-          ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/core/float_literals.trp"
-           4
-           4)
-          (local "print5"))
-         (@
-          ("/Users/aslan/Prime/Troupe-ir-sexp/tests/rt/pos/core/float_literals.trp"
-           4
-           4)
+          ("tests/rt/pos/core/float_literals.trp" 4 4)
           (local "gensym104")))))
       (bb
        ()

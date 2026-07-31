@@ -35,6 +35,9 @@ build:
 	$(COMPILER) ./IfcUtil.trp -l
 	$(COMPILER) ./StencilVector.trp -l
 
+  # Dependency on `List`, `Outcome`, and `IfcUtil`
+	$(COMPILER) ./Tty.trp -l
+
   # Dependency on `List` and `Number`
 	$(COMPILER) ./String.trp -l
 

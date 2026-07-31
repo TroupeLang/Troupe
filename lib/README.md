@@ -96,6 +96,18 @@ reviewed rigorously rather than depend on the monitor.
                     it, not the empty string.
 - `ThreadUtil`    : Additional functions for thread management.
 - `Time`          : Date and time manipulation.
+- `Tty`           : Terminal queries, raw mode, and keystroke delivery as mailbox events. The
+                    runtime ships bytes, not decoded keys: `subscribe (fd, pid)` delivers one
+                    `ttyEvent` per input chunk (`TTY_DATA` of the latin1-decoded bytes,
+                    `TTY_RESIZE` of the new size, `TTY_EOF`), with presence and payload at the
+                    stdio channel level. A plain `receive` never sees them: `listen (fd, auth)`
+                    opens the ranged-receive region up to the channel level and `nextEvent`
+                    receives at that interval; `nextEventWith` appends the caller's own handlers
+                    so one receive waits on terminal events and its own protocol together.
+                    `nextEventAtLevel` receives and declassifies an event's payload, the
+                    `IfcUtil.freadlnAtLevel` idiom. Query and effect results are `Outcome`
+                    values; the raw builtins (`ttySize`, `ttyRawMode`, ...) stay ambient and
+                    return tagged records that never match `OK`, so call the wrappers.
 - `timeout`       : Timers that send a message or exit the program after a duration.
 - `Unit`          : Unit testing.
 - `VariantsDemo`  : Datatype groups (`color`, `'a box`, `shape`) and functions over them, exported

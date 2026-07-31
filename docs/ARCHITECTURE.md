@@ -91,10 +91,40 @@ Key components:
 ## External resource access
 
 Every runtime operation that reaches outside the program — standard streams, persistence, the
-network registry, and file I/O — is gated on authority rather than on ordinary label flow. With the
-exception of `send` (governed by wire label/trust checks), these operations require **full (ROOT)
-authority**: `stdio` defaults its level to ROOT, and `persist`, `cliargs`, `exit`, `register`, and
-the `SimpleFileIO` primitives call `assertIsRootAuthority`.
+network registry, and file I/O — is gated on authority rather than on ordinary label flow, with
+one exception besides `send` (governed by wire label/trust checks): stdio under the IFC model
+(below) is gated on label flow at the operations. The authority-gated operations require **full
+(ROOT) authority**: `persist`, `cliargs`, `exit`, `register`, and the `SimpleFileIO` primitives
+call `assertIsRootAuthority`.
+
+### Standard streams (stdio)
+
+`rt/src/builtins/stdio.mts` and `rt/src/builtins/tty.mts`. Two enforcement models, selected by
+`--stdio-model` (default `capability`); `--stdiolev` sets the channel level `L` (default ROOT),
+in either V1 (`'{alice}'`) or V2 (`'<alice;#root-integrity>'`) syntax.
+
+- **`capability`** — acquiring a descriptor via `stdin`/`stdout`/`stderr` is checked
+  `actsFor(authorityLevel, L)`; the operations themselves are unchecked.
+- **`ifc`** — stdio is a pair of channels at `L`. Acquisition is unchecked (a descriptor names a
+  stream and grants nothing). Observations drawn through the channel — a line from `freadln`, a
+  pushed event, `ttyIsTTY`, `ttySize` — are labelled at `L`. Effects on the channel — `fwrite`,
+  consuming a line, a raw-mode change, arming or disarming event delivery — are checked
+  `flowsTo(lub(pc, operand levels), L)` after raising the pc to the blocking label, in both
+  label dimensions: what comes from the channel is `L`-data, what goes to the channel must flow
+  to `L`.
+
+Terminal support beyond the streams: `ttyIsTTY`/`ttySize`/`ttyLevel` (queries), `ttyRawMode`
+(line-discipline switch; entering raw mode closes the lazily-created readline interface, which a
+later `freadln` re-creates), and `ttySubscribe`/`ttyUnsubscribe` (event delivery). Events are
+runtime-built mailbox messages with string tags — `("TTYDATA", bytes)` one per chunk,
+latin1-decoded; `("TTYRESIZE", cols, rows)`; the bare string `"TTYEOF"` — delivered on the
+network's mailbox ingress path with presence and payload at `L`. There is exactly one
+subscriber, module-private, replaced on re-subscribe; if it has died, the next event tears the
+subscription down and leaves raw mode. `lib/Tty.trp` names the events as a datatype and
+packages the receive ceremony (a ranged-receive region up to `L`). `ttyRestore`, run from
+`cleanupAsync` for every program, detaches the listeners, resets raw mode if the runtime set it,
+and pauses stdin; it restores termios, not screen state, and no signal handlers are installed —
+an external SIGTERM leaves a raw terminal raw.
 
 ### File I/O (`SimpleFileIO`)
 

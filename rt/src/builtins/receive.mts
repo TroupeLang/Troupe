@@ -89,18 +89,18 @@ export function BuiltinReceive<TBase extends Constructor<UserRuntimeZero>>(Base:
           let mclear = theThread.mailbox.mclear
           // peek is CHECK-FREE (it removes nothing, so it carries neither the occurrence
           // nor the floor premise); its whole disclosure is confined by the read taint,
-          // which carries the region folds Δ ⊔ Δlab. Under the REGION-COVERED consume
-          // occurrence premise the fold terms are necessary: a secret-driven in-region
-          // consume — admissible under the coverage — perturbs the residual low
-          // sub-stream, and a fold-free peek would hand that perturbation to a low
-          // observer before the close pays for it. Machine-checked on the Lean side
-          // (ranged_receive_peek_needs_region_fold_under_covered_occurrence.lean); the
-          // earlier fold-free verdict was correct only under the hard occurrence premise.
+          // which carries the active ceiling and its label, Δ ⊔ Δlab. Under the ADMITTED
+          // consume occurrence premise the ceiling terms are necessary: a secret-driven
+          // in-region consume — within the admission bound — perturbs the residual low
+          // sub-stream, and a peek without the ceiling terms would hand that perturbation
+          // to a low observer before the close pays for it. Machine-checked on the Lean
+          // side (ranged_receive_peek_needs_region_fold_under_covered_occurrence.lean);
+          // only under the hard occurrence premise would the ceiling terms be redundant.
           //
-          // The same coverage applies to the peek's BLOCKING channel: whether an i-th
-          // in-interval message exists is a firing decision that reads the operands and
-          // the Δ-covered sub-stream (which in-region removals perturb
-          // secret-dependently), so the operand labels and the ceiling folds quarantine
+          // The same admission bound governs the peek's BLOCKING channel: whether an
+          // i-th in-interval message exists is a firing decision that reads the operands
+          // and the sub-stream up to the active ceiling (which in-region removals perturb
+          // secret-dependently), so the operand labels and the ceiling terms quarantine
           // the thread's blocking label: bl ⊔= ld(i) ⊔ ld(l1) ⊔ ld(l2) ⊔ Δ ⊔ Δlab.
           // (The __mbox.peek path additionally raises bl by l2 ⊔ boost_level.)
           theThread.raiseBlockingThreadLev (lub (i.lev, lowb.lev, highb.lev,
@@ -123,37 +123,39 @@ export function BuiltinReceive<TBase extends Constructor<UserRuntimeZero>>(Base:
           let theThread = this.runtime.$t
           let mclear = theThread.mailbox.mclear
 
-          // Premise 1 — occurrence, REGION-COVERED: the region is the declassification
+          // The occurrence premise, ADMITTED: the region is the declassification
           // boundary for ALL mailbox observations, removals included, so an in-region
-          // consume's occurrence is covered by the ambient fold:
-          // pc ⊔ ld(i) ⊔ ld(l1) ⊔ ld(l2) ⊑ l1 ⊔ Δ. During coexistence the coverage side
-          // also carries the legacy standing clearance, exactly as the admission does —
-          // this restores the shape of the original combined check
-          // pc ⊔ highb ⊑ lowb ⊔ clearance, whose pc was clearance-covered all along.
+          // consume's occurrence must stay within the admission bound — the read's
+          // floor joined with the active ceiling:
+          // pc ⊔ ld(i) ⊔ ld(l1) ⊔ ld(l2) ⊑ l1 ⊔ Δ. During coexistence the admission
+          // bound also carries the legacy standing clearance, exactly as the admission
+          // premise does — this restores the shape of the original combined check
+          // pc ⊔ highb ⊑ lowb ⊔ clearance, whose pc the standing clearance admitted
+          // all along.
           // Outside any region (Δ = ⊥, clearance = ⊥) the premise degenerates to the
           // hard pc ⊔ ld(·) ⊑ l1.
           let occ = lub (theThread.pc, i.lev, lowb.lev, highb.lev)
           let occCover = lub (lowb.val, mclear.delta, mclear.boost_level)
           if (!flowsTo (occ, occCover)) {
             let errorMessage =
-              "Ranged-receive consume occurrence check failed: whether the removal fires depends on data above the region's coverage\n" +
-              ` | receive lower bound (floor)        : ${lowb.val.stringRep()}\n` +
-              ` | coverage (floor, region, clearance): ${occCover.stringRep()}\n` +
-              ` | occurrence level (occ)             : ${occ.stringRep()}\n` +
-              ` | pc level                           : ${theThread.pc.stringRep()}`
+              "Ranged-receive consume occurrence check failed: whether the removal fires depends on data above the admission bound\n" +
+              ` | receive lower bound (floor)                          : ${lowb.val.stringRep()}\n` +
+              ` | admission bound (floor ⊔ active ceiling ⊔ clearance) : ${occCover.stringRep()}\n` +
+              ` | occurrence level (occ)                               : ${occ.stringRep()}\n` +
+              ` | pc level                                             : ${theThread.pc.stringRep()}`
             theThread.threadError (errorMessage);
           }
 
-          // Premise 2 — floor: the consume may not read below any open region floor. Φ ⊑ l1.
+          // The floor premise: the consume may not read below any open region floor. Φ ⊑ l1.
           if (!flowsTo (mclear.phi, lowb.val)) {
             let errorMessage =
-              "Ranged-receive consume floor check failed: the consume reads below an active region floor\n" +
+              "Ranged-receive consume floor check failed: the consume reads below the active floor\n" +
               ` | receive lower bound (floor): ${lowb.val.stringRep()}\n` +
               ` | active floor (Phi)         : ${mclear.phi.stringRep()}`
             theThread.threadError (errorMessage);
           }
 
-          // Premise 3 — admission: lev(i) ⊔ l2 ⊑ l1 ⊔ Δ. The legacy standing clearance
+          // The admission premise: lev(i) ⊔ l2 ⊑ l1 ⊔ Δ. The legacy standing clearance
           // (boost_level) is kept in the target alongside Δ so legacy raisembox programs
           // still admit.
           let is_admitted =
@@ -161,11 +163,11 @@ export function BuiltinReceive<TBase extends Constructor<UserRuntimeZero>>(Base:
           if (!is_admitted) {
             let errorMessage =
               "Not enough mailbox clearance for this receive\n" +
-              ` | receive lower bound: ${lowb.val.stringRep()}\n` +
-              ` | receive upper bound: ${highb.val.stringRep()}\n` +
-              ` | index label        : ${i.lev.stringRep()}\n` +
-              ` | region fold (Delta): ${mclear.delta.stringRep()}\n` +
-              ` | mailbox clearance  : ${mclear.boost_level.stringRep()}`
+              ` | receive lower bound   : ${lowb.val.stringRep()}\n` +
+              ` | receive upper bound   : ${highb.val.stringRep()}\n` +
+              ` | index label           : ${i.lev.stringRep()}\n` +
+              ` | active ceiling (Delta): ${mclear.delta.stringRep()}\n` +
+              ` | mailbox clearance     : ${mclear.boost_level.stringRep()}`
             theThread.threadError (errorMessage);
           }
 
@@ -182,11 +184,12 @@ export function BuiltinReceive<TBase extends Constructor<UserRuntimeZero>>(Base:
           }
 
           // Blocking label absorbs ld(l1) ⊔ ld(l2) ⊔ lev(i) ⊔ l2 ⊔ Δ ⊔ Δlab ⊔ Φlab — the
-          // operand labels plus the fold registers the firing decision reads: the covered
-          // occurrence and the admission draw on the Δ-covered sub-stream, and the floor
-          // check reads Φ under Φlab, so the folds quarantine the consume's blocking
-          // channel exactly as the read taint confines its value channel. (The
-          // __mbox.consume path additionally raises bl by l2 ⊔ boost_level.)
+          // operand labels plus the active-range registers the firing decision reads: the
+          // admitted occurrence and the admission draw on the sub-stream up to the active
+          // ceiling, and the floor check reads Φ under Φlab, so the active-range terms
+          // quarantine the consume's blocking channel exactly as the read taint confines
+          // its value channel. (The __mbox.consume path additionally raises bl by
+          // l2 ⊔ boost_level.)
           theThread.raiseBlockingThreadLev (lub (lowb.lev, highb.lev, i.lev, highb.val,
                                                  mclear.delta, mclear.deltaLab, mclear.phiLab))
 
@@ -226,7 +229,7 @@ export function BuiltinReceive<TBase extends Constructor<UserRuntimeZero>>(Base:
           // enableRangedReceive or the legacy raisembox — is refused; so is a residual
           // legacy standing clearance (boost_level above BOT). Inside a region the
           // program already holds the bracket spelling; the instant form does not
-          // compose with a standing region's folds.
+          // compose with a standing region's active range.
           if (theThread.mailbox.caps != null) {
             let errorMessage =
               "consumeWithAuthority requires no open clearance region: an enableRangedReceive (or legacy raisembox) region is open\n" +
@@ -240,10 +243,10 @@ export function BuiltinReceive<TBase extends Constructor<UserRuntimeZero>>(Base:
             theThread.threadError (errorMessage)
           }
 
-          // The occurrence premise, HARD (no region cover, no boost): whether the removal
-          // fires must not depend on data above the floor. The authority operand's .lev
-          // folds in — the selection check reads the authority, so it co-determines
-          // whether the removal fires.
+          // The occurrence premise, HARD (no active ceiling, no boost): whether the
+          // removal fires must not depend on data above the floor. The authority
+          // operand's .lev joins in — the selection check reads the authority, so it
+          // co-determines whether the removal fires.
           // pc ⊔ i.lev ⊔ lowb.lev ⊔ highb.lev ⊔ auth.lev ⊑ lowb.
           let occ = lub (theThread.pc, i.lev, lowb.lev, highb.lev, auth.lev)
           if (!flowsTo (occ, lowb.val)) {
@@ -274,14 +277,14 @@ export function BuiltinReceive<TBase extends Constructor<UserRuntimeZero>>(Base:
           // Blocking label absorbs the operand data labels plus the selection boundary:
           // whether an i-th in-interval message exists is a firing decision that reads all
           // four operands (the authority operand included — the selection check consults
-          // it, mirroring the enable's auth.lev fold). bl ⊔= i.lev ⊔ lowb.lev ⊔ highb.lev
+          // it, mirroring the enable's auth.lev join). bl ⊔= i.lev ⊔ lowb.lev ⊔ highb.lev
           // ⊔ auth.lev ⊔ highb ⊔ i.lev. (The __mbox.consume path additionally raises bl
           // by highb ⊔ boost_level; boost_level = BOT here by the regionlessness premise.)
           theThread.raiseBlockingThreadLev (lub (i.lev, lowb.lev, highb.lev, auth.lev, Hi))
 
           // Result: readTainted at occ ⊔ highb ⊔ i.lev — v.data is joined inside
-          // __mbox.consume. No fold/boost terms: the regionlessness premise pins them at
-          // BOT, so this is exactly the formal readTainted level. Unlike the three-argument consume this
+          // __mbox.consume. No active-range/boost terms: the regionlessness premise pins
+          // them at BOT, so this is exactly the formal readTainted level. Unlike the three-argument consume this
           // builtin writes nothing back into any standing clearance: the instant rule
           // raises bl and taints the result but grows no persistent mailbox taint.
           let consume_l = lub (occ, Hi)

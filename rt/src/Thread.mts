@@ -89,19 +89,22 @@ class  MboxClearance {
   boost_level: any;
   pc_at_creation: any;
 
-  // Ranged-receive region folds (enable/disable). These live inside the same record
-  // that the branch-balance discipline (returnImmediate) snapshots and compares by
-  // object identity, so every mutation allocates a fresh record. The folds are over
-  // ALL open regions, certified or not — an uncertified (ok_to_dg = false) region is
-  // an ordinary region that never closes: its own disable fails on validity, and the
-  // LIFO chain-head check blocks every enclosing close while it stays open (exactly
-  // like a legacy raise that no authority can lower). Δ = delta is what admission may
-  // draw on; Φ = phi is the floor every consume must respect; every reader of delta
-  // is tainted with deltaLab, every reader of phi with phiLab.
-  delta: any;      // join of the open regions' ceilings hi          (base BOT)
-  phi: any;        // join of the open regions' floors  lo           (base BOT)
-  deltaLab: any;   // join of the open regions' ld(hi)               (base BOT)
-  phiLab: any;     // join of the open regions' ld(lo)               (base BOT)
+  // The ranged-receive ACTIVE RECEIVE RANGE (enable/disable). These live inside the
+  // same record that the branch-balance discipline (returnImmediate) snapshots and
+  // compares by object identity, so every mutation allocates a fresh record. The
+  // active range spans ALL open regions, certified or not; under nesting it is the
+  // JOIN of the open ranges (floors joined, ceilings joined), not their intersection.
+  // An uncertified (ok_to_dg = false) region is an ordinary region that never closes:
+  // its own disable fails on validity, and the LIFO chain-head check blocks every
+  // enclosing close while it stays open (exactly like a legacy raise that no authority
+  // can lower). Δ = delta, the active ceiling, is what admission may draw on;
+  // Φ = phi, the active floor, is what every consume must respect; every reader of
+  // delta is tainted with deltaLab (the ceiling label), every reader of phi with
+  // phiLab (the floor label).
+  delta: any;      // the active ceiling: join of the open regions' ceilings hi (base BOT)
+  phi: any;        // the active floor:   join of the open regions' floors  lo  (base BOT)
+  deltaLab: any;   // the ceiling label:  join of the open regions' ld(hi)      (base BOT)
+  phiLab: any;     // the floor label:    join of the open regions' ld(lo)      (base BOT)
 
   constructor (lclear:any, pc:any, folds:any = null) {
     this.boost_level = lclear;
@@ -115,7 +118,7 @@ class  MboxClearance {
 
   // Allocate a fresh record, preserving every field unless overridden. `overrides`
   // may carry `boost_level`, `pc_at_creation`, and a `folds` object with any subset
-  // of the four fold fields.
+  // of the four active-range fields.
   copyWith (overrides:any) {
     const f = {
       delta: this.delta, phi: this.phi, deltaLab: this.deltaLab, phiLab: this.phiLab,
@@ -1274,12 +1277,12 @@ export class Thread {
     // close while it is open — exactly like a legacy raise no authority can lower).
     enableRangedReceive (lo:any, hi:any, auth:any) {
         const mc = this.mailbox.mclear;
-        const Delta = mc.delta;                     // the ambient fold BEFORE this enable
+        const Delta = mc.delta;                     // the ambient active ceiling BEFORE this enable
         const authLevel = auth.val.authorityLevel;
 
         // Certification, evaluated at the open: may (hi ⊔ Δ) flow to (lo ⊔ Δ) under the
         // shown authority? Sound to decide here because the LIFO discipline makes the
-        // ambient fold at the matching disable exactly this Δ, so the check decided now
+        // ambient active ceiling at the matching disable exactly this Δ, so the check decided now
         // is the check that would be decided then. The decision goes through the SAME
         // pure downgrade-decision function every other downgrade runs (okToDowngrade with
         // the mailbox kind and the cross-dimensional target, exactly as the legacy
@@ -1293,7 +1296,7 @@ export class Thread {
                   (lub (hi.val, Delta), lub (lo.val, Delta), authLevel, this.bl, this.isNmifcMode, this.pc);
         const okToDg = dgDecision.kind === "SUCCESS";
 
-        // Covered-read blocking quarantine: the enable's operand match is a blocking
+        // Admitted-read blocking quarantine: the enable's operand match is a blocking
         // decision (a secret-labelled operand whose constructor diverges across runs
         // opens the region in one run and sticks in the other), so the operand data
         // labels quarantine the thread's blocking label:
@@ -1301,12 +1304,12 @@ export class Thread {
         this.raiseBlockingThreadLev (lub (lo.lev, hi.lev, auth.lev));
 
         // Both returned components are labelled pc ⊔ ld(lo) ⊔ ld(hi) ⊔ ld(auth) ⊔ Δlab ⊔ Φlab.
-        // The fold-label terms are necessary: the certification bit consults Δ, and the
-        // region push joins both folds, whose values come from the enclosing enables'
-        // operands — so the result must carry their labels.
+        // The range-label terms are necessary: the certification bit consults Δ, and the
+        // region push joins the active range, whose bounds come from the enclosing
+        // enables' operands — so the result must carry their labels.
         const capLabel = lub (this.pc, lo.lev, hi.lev, auth.lev, mc.deltaLab, mc.phiLab);
 
-        // One uniform push path, certified or not: chain the capability, join the folds;
+        // One uniform push path, certified or not: chain the capability, join the active range;
         // the capability snapshots the pre-enable record so a (valid) disable restores it
         // by identity. The only difference for an uncertified region is valid = false.
         const uid = uuidv4();

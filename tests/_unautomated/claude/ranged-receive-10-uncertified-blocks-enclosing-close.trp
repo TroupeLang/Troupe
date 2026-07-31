@@ -4,7 +4,7 @@
    that never closes, exactly like the legacy raise/lower behaviour where an un-lowerable
    raise blocks every enclosing lower. Certified region A (root authority, ceiling alice)
    is open when an uncertified enable U (null-confidentiality authority, ceiling bob)
-   pushes on top of it: the folds widen to Delta = alice join bob and capU becomes the
+   pushes on top of it: the active ceiling widens to Delta = alice join bob and capU becomes the
    chain head. A consume with l2 = bob is admitted through the widened Delta, its result
    tainted with both terms. Then `disableRangedReceive capA` is REFUSED as ill-scoped —
    capA is no longer the chain head; U sits above it and U can never close, so A's

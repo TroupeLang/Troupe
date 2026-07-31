@@ -29,15 +29,27 @@ function lineListener(input) {
     }
 }
 
-/** Node's readline interface */
-const readline = rl.createInterface({
-    input: process.stdin,
-    output: process.stdout
-})
-readline.on('line', lineListener)
+/** Node's readline interface. Created lazily on first use: on a terminal,
+ * creating the interface puts stdin into raw mode with readline's own echo,
+ * so a program that never reads a line must never trigger it. */
+let readline: rl.Interface | null = null
+
+function getReadline(): rl.Interface {
+    if (readline === null) {
+        readline = rl.createInterface({
+            input: process.stdin,
+            output: process.stdout
+        })
+        readline.on('line', lineListener)
+    }
+    return readline
+}
 
 export function closeReadline() {
-    readline.close()
+    if (readline !== null) {
+        readline.close()
+        readline = null
+    }
 }
 
 export function BuiltinStdIo<TBase extends Constructor<UserRuntimeZero>>(Base: TBase) {
@@ -96,6 +108,8 @@ export function BuiltinStdIo<TBase extends Constructor<UserRuntimeZero>>(Base: T
                 this.runtime.$t
                     .threadError(`value ${fd.stringRep()} is not an input descriptor`);
             }
+
+            getReadline()
 
             this.runtime.$t.raiseBlockingThreadLev(stdio_level)
 

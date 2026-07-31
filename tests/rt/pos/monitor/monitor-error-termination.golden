@@ -1,0 +1,10 @@
+2026-07-31T23:36:46.890Z [RTM] [32minfo[39m: Skipping network creation. Observe that all network operations will yield a runtime error.
+Runtime error in thread 39ad1b3f-0bfd-45f7-9416-3ad0970c849e@{}%{}
+
+  4 | let fun worker () = let val n = receive [ hn y => y + 1 ]
+    |                                                   ^
+
+>> value () is not a number
+>> at tests/rt/pos/monitor/monitor-error-termination.trp:4:51
+(1, "value () is not a number")
+>>> Main thread finished with value: ()@{}%{}

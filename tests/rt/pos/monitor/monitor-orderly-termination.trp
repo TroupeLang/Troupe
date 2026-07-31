@@ -1,0 +1,11 @@
+(* monitorlocal delivers ("DONE", ref, pid, reason) when the monitored process
+   terminates normally; the reason is the status 0. The monitor notification is
+   built outside any thread context of the monitoring process, so this also
+   pins that the node survives the notification. *)
+let fun worker () = receive [ hn x => () ]
+    val pid = spawn worker
+    val _ = monitorlocal pid
+    val _ = send (pid, ())
+    val r = receive [ hn ("DONE", ref, p, reason) => reason ]
+in print r
+end

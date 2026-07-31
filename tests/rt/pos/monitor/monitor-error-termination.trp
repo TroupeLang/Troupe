@@ -1,0 +1,11 @@
+(* monitorlocal delivers ("DONE", ref, pid, reason) when the monitored process
+   dies of a thread error; the reason is a pair of the status 1 and the error
+   text. *)
+let fun worker () = let val n = receive [ hn y => y + 1 ]
+                    in () end
+    val pid = spawn worker
+    val _ = monitorlocal pid
+    val _ = send (pid, ())
+    val r = receive [ hn ("DONE", ref, p, (st, msg)) => (st, msg) ]
+in print r
+end

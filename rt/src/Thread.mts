@@ -22,6 +22,7 @@ import { TroupeType } from './TroupeTypes.mjs'
 import { RuntimeInterface } from './RuntimeInterface.mjs';
 import { __unit } from './UnitVal.mjs';
 import { Level } from './Level.mjs';
+import { mkTuple } from './ValuesUtil.mjs';
 import { SchedulerInterface } from './SchedulerInterface.mjs';
 import { getRuntimeObject } from './SysState.mjs';
 import { HnState } from './SandboxStatus.mjs';
@@ -83,18 +84,74 @@ export class Capability<T> {
 }
 
 class  MboxClearance {
-  boost_level: any; 
-  pc_at_creation: any; 
-  constructor (lclear:any, pc:any) {
+  // Legacy raise/lower machinery (raisembox/lowermbox); untouched by the ranged
+  // receive protocol below.
+  boost_level: any;
+  pc_at_creation: any;
+
+  // The ranged-receive ACTIVE RECEIVE RANGE (enable/disable). These live inside the
+  // same record that the branch-balance discipline (returnImmediate) snapshots and
+  // compares by object identity, so every mutation allocates a fresh record. The
+  // active range spans ALL open regions, certified or not; under nesting it is the
+  // JOIN of the open ranges (floors joined, ceilings joined), not their intersection.
+  // An uncertified (ok_to_dg = false) region is an ordinary region that never closes:
+  // its own disable fails on validity, and the LIFO chain-head check blocks every
+  // enclosing close while it stays open (exactly like a legacy raise that no authority
+  // can lower). Δ = delta, the active ceiling, is what the receive clearance draws on;
+  // Φ = phi, the active floor, is what every consume must respect; every reader of
+  // delta is tainted with deltaLab (the ceiling label), every reader of phi with
+  // phiLab (the floor label).
+  delta: any;      // the active ceiling: join of the open regions' ceilings hi (base BOT)
+  phi: any;        // the active floor:   join of the open regions' floors  lo  (base BOT)
+  deltaLab: any;   // the ceiling label:  join of the open regions' ld(hi)      (base BOT)
+  phiLab: any;     // the floor label:    join of the open regions' ld(lo)      (base BOT)
+
+  constructor (lclear:any, pc:any, folds:any = null) {
     this.boost_level = lclear;
     this.pc_at_creation = pc;
+    const B = levels.BOT;
+    this.delta     = folds?.delta     ?? B;
+    this.phi       = folds?.phi       ?? B;
+    this.deltaLab  = folds?.deltaLab  ?? B;
+    this.phiLab    = folds?.phiLab    ?? B;
+  }
+
+  // Allocate a fresh record, preserving every field unless overridden. `overrides`
+  // may carry `boost_level`, `pc_at_creation`, and a `folds` object with any subset
+  // of the four active-range fields.
+  copyWith (overrides:any) {
+    const f = {
+      delta: this.delta, phi: this.phi, deltaLab: this.deltaLab, phiLab: this.phiLab,
+      ...(overrides.folds ?? {})
+    };
+    return new MboxClearance (
+      overrides.boost_level ?? this.boost_level,
+      overrides.pc_at_creation ?? this.pc_at_creation,
+      f);
   }
 
   stringRep () {
     return this.boost_level.stringRep ()
   }
+}
 
-  
+// The payload a ranged-receive capability carries: the enable-time clearance record
+// (restored by object identity at the matching disable, so a balanced enable/disable
+// inside a branch leaves the mailbox record identical and passes the branch-balance
+// check), the pc at the enable and the region's floor lo (the disable's two occurrence
+// floors), and the validity bit (an uncertified region's capability is invalid: no
+// disable accepts it, so the region never closes).
+class RangedReceiveCap {
+  mclearSnapshot: MboxClearance;
+  pc_enable: any;
+  lo: any;
+  valid: boolean;
+  constructor (snapshot: MboxClearance, pc_enable:any, lo:any, valid:boolean) {
+    this.mclearSnapshot = snapshot;
+    this.pc_enable = pc_enable;
+    this.lo = lo;
+    this.valid = valid;
+  }
 }
 
 
@@ -724,6 +781,22 @@ export class Thread {
     setBranchFlag () {
         this.callStack[this._sp - BRANCHFLAGOFFSET] = BRANCH_FLAG_ON
     }
+
+    /**
+     * Branch-balance discipline for the call-label channel: a call whose
+     * function-value label does not flow to the current (pre-raise) PC is a
+     * control transfer selected by data above the context — a branch for the
+     * clearance discipline — so it sets the current frame's branch flag, and
+     * the mailbox-clearance balance check at `returnImmediate` covers the
+     * call. Called from generated code after the frame push and before the
+     * call's PC raise; label-silent calls (in particular every public call)
+     * do not flag.
+     */
+    setBranchFlagOnCallRaise (fnlev) {
+        if (!flowsTo(fnlev, this.pc)) {
+            this.setBranchFlag()
+        }
+    }
     
     returnSuspended (arg) {
         let rv = new LValCopyAt (arg, this.pc);
@@ -1137,9 +1210,11 @@ export class Thread {
         } */
 
         let uid = uuidv4() ;
-        let cap = this.mkVal (new Capability(uid, this.mailbox.mclear, this.mailbox.caps, this.pc)) 
+        let cap = this.mkVal (new Capability(uid, this.mailbox.mclear, this.mailbox.caps, this.pc))
         this.mailbox.caps = uid;
-        this.mailbox.mclear = new MboxClearance(lub (new_lclear.val, this.mailbox.mclear.boost_level), this.pc);
+        this.mailbox.mclear = this.mailbox.mclear.copyWith(
+            { boost_level: lub (new_lclear.val, this.mailbox.mclear.boost_level)
+            , pc_at_creation: this.pc });
 
         // this.returnSuspended( cap ); 
         // this.sched.stepThread();         
@@ -1191,6 +1266,119 @@ export class Thread {
         this.mailbox.caps = cap.prev;
 
         return this.returnImmediateLValue(__unit);
+    }
+
+    // Ranged-receive: open a clearance region ⟨lo, hi⟩ whose close is certified up front
+    // by the shown authority. Never refuses (beyond the builtin's type checks). Returns
+    // the pair (ok_to_dg, cap); when the shown authority does not cover restoring the
+    // mailbox view from hi down to lo, ok_to_dg is false and the capability is invalid —
+    // the region is pushed all the same, as an ordinary region that never closes (its
+    // disable fails on validity, and the LIFO chain-head check blocks every enclosing
+    // close while it is open — exactly like a legacy raise no authority can lower).
+    enableRangedReceive (lo:any, hi:any, auth:any) {
+        const mc = this.mailbox.mclear;
+        const Delta = mc.delta;                     // the ambient active ceiling BEFORE this enable
+        const authLevel = auth.val.authorityLevel;
+
+        // Certification, evaluated at the open: may (hi ⊔ Δ) flow to (lo ⊔ Δ) under the
+        // shown authority? Sound to decide here because the LIFO discipline makes the
+        // ambient active ceiling at the matching disable exactly this Δ, so the check decided now
+        // is the check that would be decided then. The decision goes through the SAME
+        // pure downgrade-decision function every other downgrade runs (okToDowngrade with
+        // the mailbox kind and the cross-dimensional target, exactly as the legacy
+        // lowermbox's _validateDowngradeOrThrow does) — so with NMIFC on the certification
+        // inherits the robust-declassification / transparent-endorsement discipline by
+        // construction; with NMIFC off it is the plain privilege relation (privFlowsTo).
+        // Unlike the legacy path the enable never throws: an unfavourable decision
+        // degrades to ok_to_dg = false (an ordinary region that never closes).
+        const dgDecision: DowngradeResult =
+            levels.okToDowngrade (DowngradeKind.MAILBOX, DowngradeDimension.BOTH)
+                  (lub (hi.val, Delta), lub (lo.val, Delta), authLevel, this.bl, this.isNmifcMode, this.pc);
+        const okToDg = dgDecision.kind === "SUCCESS";
+
+        // Blocking-label quarantine: the enable's operand match is a blocking
+        // decision (a secret-labelled operand whose constructor diverges across runs
+        // opens the region in one run and sticks in the other), so the operand data
+        // labels quarantine the thread's blocking label:
+        // bl ⊔= ld(lo) ⊔ ld(hi) ⊔ ld(auth).
+        this.raiseBlockingThreadLev (lub (lo.lev, hi.lev, auth.lev));
+
+        // Both returned components are labelled pc ⊔ ld(lo) ⊔ ld(hi) ⊔ ld(auth) ⊔ Δlab ⊔ Φlab.
+        // The range-label terms are necessary: the certification bit consults Δ, and the
+        // region push joins the active range, whose bounds come from the enclosing
+        // enables' operands — so the result must carry their labels.
+        const capLabel = lub (this.pc, lo.lev, hi.lev, auth.lev, mc.deltaLab, mc.phiLab);
+
+        // One uniform push path, certified or not: chain the capability, join the active range;
+        // the capability snapshots the pre-enable record so a (valid) disable restores it
+        // by identity. The only difference for an uncertified region is valid = false.
+        const uid = uuidv4();
+        const capObj = new Capability (uid, new RangedReceiveCap (mc, this.pc, lo.val, okToDg), this.mailbox.caps, capLabel);
+        this.mailbox.caps = uid;
+        this.mailbox.mclear = mc.copyWith ({ folds: {
+            delta:    lub (mc.delta,    hi.val),
+            phi:      lub (mc.phi,      lo.val),
+            deltaLab: lub (mc.deltaLab, hi.lev),
+            phiLab:   lub (mc.phiLab,   lo.lev),
+        }});
+
+        const okLval  = new LVal (okToDg, capLabel, capLabel);
+        const capLval = new LVal (capObj, capLabel, capLabel);
+        const tuple   = mkTuple ([okLval, capLval]);
+        return this.returnImmediateLValue (new LVal (tuple, capLabel, capLabel));
+    }
+
+    // Ranged-receive: close a region opened by enableRangedReceive. Authority-free — the
+    // capability is the certificate. Order of attribution: occurrence, validity, LIFO.
+    disableRangedReceive (cap_lval:any) {
+        const cap: Capability<RangedReceiveCap> = cap_lval.val;
+        const data = cap.data;
+
+        // (a) Occurrence — hard: pc ⊔ ld(cap) ⊑ pc_enable AND pc ⊔ ld(cap) ⊑ lo; bl absorbs
+        // ld(cap) BEFORE any branching on the capability, so a secret-selected capability
+        // cannot make the disable's outcome observable below the secret.
+        this.raiseBlockingThreadLev (cap_lval.lev);
+        if (!levels.flowsTo (lub (this.pc, cap_lval.lev), data.pc_enable)) {
+            this.threadError ("Ranged-receive disable occurrence check failed: the capability's context is more sensitive than the pc at the enable\n" +
+                              `| pc level               : ${this.pc.stringRep()}\n` +
+                              `| capability label        : ${cap_lval.lev.stringRep()}\n` +
+                              `| pc level at the enable  : ${data.pc_enable.stringRep()}`, false, null, ErrorKind.IFCCheck);
+        }
+        // The release level: the close's observable restoration lands at the region's
+        // floor lo, so its occurrence must not depend on anything above lo — a region
+        // enabled at a high pc with a low floor must not close inside the high context
+        // (every emitting step must have pc below the event level).
+        if (!levels.flowsTo (lub (this.pc, cap_lval.lev), data.lo)) {
+            this.threadError ("Ranged-receive disable occurrence check failed: the capability's context is more sensitive than the region's floor\n" +
+                              `| pc level               : ${this.pc.stringRep()}\n` +
+                              `| capability label        : ${cap_lval.lev.stringRep()}\n` +
+                              `| region floor (lo)       : ${data.lo.stringRep()}`, false, null, ErrorKind.IFCCheck);
+        }
+
+        // (b) Validity — an invalid (uncertified) capability has no close and fails.
+        if (!data.valid) {
+            this.threadError ("Ranged-receive disable on an invalid capability: the region was uncertified (ok_to_dg = false) and has no close", false, null, ErrorKind.IFCCheck);
+        }
+
+        // (c) LIFO scoping — the capability must be the head of the chain.
+        if (this.mailbox.caps == null) {
+            this.threadError ("unmatched ranged-receive disable", false, null, ErrorKind.IFCCheck);
+        }
+        if (this.mailbox.caps != cap.uid) {
+            this.threadError ("Ill-scoped enable/disable of ranged receive:\n" +
+                              `expected cap: ${this.mailbox.caps}\n` +
+                              `provided cap: ${cap.uid}`, false, null, ErrorKind.IFCCheck);
+        }
+
+        // (d) No authority check — the downgrade was certified at the enable. Pop: restore
+        // the enable-time record by identity and the previous capability-chain head. The
+        // verbatim restore is right under the uniform LIFO discipline: every region,
+        // certified or not, sits on the chain, so a pop only happens with everything
+        // above it closed — an uncertified region above would have failed this disable
+        // at the chain-head check.
+        this.mailbox.mclear = data.mclearSnapshot;
+        this.mailbox.caps = cap.prev;
+        return this.returnImmediateLValue (__unit);
     }
 }
 

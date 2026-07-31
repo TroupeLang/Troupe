@@ -62,6 +62,10 @@ data StackInst
   | StoreStack Assignable StackPos
   | SetState MonComponent RawVar
   | SetBranchFlag
+  -- | Set the branch flag of the current frame when the label in the given
+  -- variable (the function-value label of a call) does not flow to the current
+  -- PC; see 'Raw.SetBranchFlagOnCallRaise'.
+  | SetBranchFlagOnCallRaise RawVar
   | InvalidateSparseBit
   -- | Create function closures. Uses LVarAccess to preserve source positions for environment bindings.
   | MkFunClosures [(VarName, LVarAccess)] [(VarName, HFN)]
@@ -127,6 +131,7 @@ ppEsc esc =
 
 ppIR :: StackInst -> PP PP.Doc
 ppIR SetBranchFlag = pure $ text "<setbranchflag>"
+ppIR (SetBranchFlagOnCallRaise r) = pure $ text "<setbranchflag-on-call-raise>" <+> ppId r
 ppIR InvalidateSparseBit = pure $ text "<invalidate sparse bit>"
 ppIR (AssignRaw _ vn st) = pure $ ppId vn <+> text "=" <+> ppRawExpr st
 ppIR (AssignLVal vn expr) =

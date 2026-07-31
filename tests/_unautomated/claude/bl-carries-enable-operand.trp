@@ -1,0 +1,22 @@
+(* Blocking-label quarantine, the enable variant: the enable's operand match is
+   a blocking decision — a secret-labelled operand whose constructor diverges across
+   runs opens the region in one and sticks in the other — so the operand data labels
+   quarantine the thread's blocking label: bl ⊔= ld(lo) ⊔ ld(hi) ⊔ ld(auth).
+
+   Here lo is a public level value carried at a secret data label (raisedTo alice), so
+   the enable must land alice in bl.
+
+   Expected: first debugpc shows bl = {}; second debugpc (after the enable) shows
+   bl = <alice;#root-integrity>. The enable's result label also carries alice (operand
+   label in the occurrence join). *)
+
+let val _ = debugpc ()
+    val lo = `<;#root-integrity>` raisedTo `<alice;#root-integrity>`
+    val (ok, cap) = enableRangedReceive (lo, `<alice;#root-integrity>`, authority)
+    val _ = debugpc ()
+    val _ = printWithLabels ok
+in ()
+end
+
+(* Actual (./local.sh): BL:{} before; BL:<alice;#root-integrity> after the enable;
+   ok = true@<alice;#root-integrity>%<alice;#root-integrity>. Matches expected. *)

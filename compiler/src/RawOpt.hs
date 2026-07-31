@@ -62,6 +62,7 @@ instance Substitutable RawInst where
         AssertRecordHasField v f -> AssertRecordHasField (apply subst v) f
         AssertNotZero r -> AssertNotZero (apply subst r))
       InvalidateSparseBit -> i
+      SetBranchFlagOnCallRaise r -> SetBranchFlagOnCallRaise (apply subst r)
       -- SourcePosAnnotation: apply substitution to the RawVar to track the actual variable used
       SourcePosAnnotation r -> SourcePosAnnotation (apply subst r)
       _ -> i
@@ -440,6 +441,8 @@ pevalInst li = do
       MkFunClosures ee _ -> _keep $ markUsed (snd (unzip ee))
       -- No applicable optimizations.
       SetBranchFlag -> return [li']
+      -- Keep the label variable alive: the runtime check needs its value.
+      SetBranchFlagOnCallRaise r -> _keep $ markUsed r
       InvalidateSparseBit -> return [li']
       -- Source position annotations: pass through unchanged
       SourcePosAnnotation _ -> return [li']
@@ -539,6 +542,9 @@ hoistStackExpand bb@(BB insts ltr) =
           isFrameSpecific li =
             case unLoc li of
               SetBranchFlag -> True
+              -- Must run after the frame push: the flag belongs to the frame
+              -- whose return restores the PC raised by the call.
+              SetBranchFlagOnCallRaise _ -> True
               SetState _ _ -> True
               InvalidateSparseBit -> True -- to be safe, we define this frame-specific
               _ -> False

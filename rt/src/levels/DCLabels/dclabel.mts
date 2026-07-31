@@ -478,7 +478,22 @@ export class DCLevelSystem extends AbstractLevelSystem<DCLabel> {
         return a.actsFor(b, options);
     }
 
-    
+    /**
+     * DC privilege relation "x may flow to y given authority auth":
+     *   secrecy:   (S_y ∧ S_auth) ⟹ S_x
+     *   integrity: (I_x ∧ I_auth) ⟹ I_y
+     * i.e. auth, treated as authority, covers the flow of x down to y on both
+     * axes. With auth = TRUST_NULL this degenerates to plain `x flowsTo y`.
+     */
+    privFlowsTo(auth: DCLabel, x: DCLabel, y: DCLabel): boolean {
+        const enough_confidentiality =
+            implies(conjunction(y.confidentiality, auth.confidentiality), x.confidentiality)
+        const enough_integrity =
+            implies(conjunction(x.integrity, auth.integrity), y.integrity)
+        return enough_confidentiality && enough_integrity
+    }
+
+
 
     glb(a: DCLabel, b: DCLabel): DCLabel {
          return a.meet(b)

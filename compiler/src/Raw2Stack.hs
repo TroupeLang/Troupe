@@ -66,6 +66,7 @@ trInsts ii = work [] [] ii  where
         (Loc pos (Stack.AssignLVal x e)):(store (Raw.AssignableLVal x))
       Raw.SetState cmp x -> return [Loc pos (Stack.SetState cmp x)]
       Raw.SetBranchFlag -> return [Loc pos Stack.SetBranchFlag]
+      Raw.SetBranchFlagOnCallRaise x -> return [Loc pos (Stack.SetBranchFlagOnCallRaise x)]
       Raw.InvalidateSparseBit -> return [Loc pos Stack.InvalidateSparseBit]
       Raw.MkFunClosures envmap vars -> do
         let stores = concat $ map (\v -> store (Raw.AssignableLVal v)) (fst (unzip vars))

@@ -1,0 +1,17 @@
+(* Call-label channel control, ranged-receive pair: the same unbalanced
+   enableRangedReceive inside a PUBLIC call.
+
+   The function value is public, so the call is label-silent: no flag, and
+   the open region survives the call's return, as before the fix.
+
+   Expected verdict: ACCEPT — prints "done"@{}%{} (region stays open). *)
+
+let val f = fn () =>
+      let val (ok, cap) = enableRangedReceive (`{}`, `{alice}`, authority)
+      in () end
+    val _ = f ()
+in printWithLabels "done"
+end
+
+(* Actual (./local.sh): "done"@{}%{}; main thread finished with ()@{}%{}.
+   Matches expected (ACCEPT). *)

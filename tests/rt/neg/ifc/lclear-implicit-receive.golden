@@ -1,12 +1,12 @@
-2026-01-06T14:33:34.638Z [RTM] [32minfo[39m: Skipping network creation. Observe that all external IO operations will yield a runtime error.
-Runtime error in thread d47f53a6-a959-4ffe-a26d-86ed2740f489@{}%{}
+2026-07-31T08:17:00.345Z [RTM] [32minfo[39m: Skipping network creation. Observe that all network operations will yield a runtime error.
+Runtime error in thread 7328f05d-db62-48bc-9db5-725106f460c8@{}%{}
 
   10 |         then rcvp (`{}`, [hn x => x]) 
      |              ^
 
->> Not enough mailbox clearance for this receive
- | receive lower bound: {}
- | receive upper bound: {}
- | pc level           : {alice}
- | mailbox clearance  : {}
+>> Ranged-receive consume occurrence check failed: whether the removal fires depends on data above the receive clearance
+ | receive lower bound (floor): {}
+ | receive clearance          : {}
+ | occurrence level (occ)     : {alice}
+ | pc level                   : {alice}
 >> at tests/rt/neg/ifc/lclear-implicit-receive.trp:10:14

@@ -1,0 +1,28 @@
+(* Blocking-label quarantine, the consume variant: an in-region consume's
+   firing decision reads the active-range registers — the occurrence and the selection
+   premises draw on the sub-stream up to the active ceiling, the floor check reads Φ
+   under Φlab — so the active-range terms quarantine the consume's blocking channel:
+   bl ⊔= ... ⊔ Δ ⊔ Δlab ⊔ Φlab, on top of the operand terms.
+
+   Here a region [public, alice] is open (Δ = alice), and a public point consume at the
+   floor fires; all its operands are public, so the alice that lands in bl comes from
+   the active ceiling Δ alone.
+
+   Expected: debugpc after the enable shows bl = {} (public operands); debugpc after
+   the consume shows bl = <alice;#root-integrity> — the ceiling term arrived in bl. *)
+
+let val me = self ()
+    val _ = send (me, 42)
+    val (ok, cap) = enableRangedReceive (`<;#root-integrity>`, `<alice;#root-integrity>`, authority)
+    val _ = debugpc ()
+    val v = consume (0, `<;#root-integrity>`, `<;#root-integrity>`)
+    val _ = debugpc ()
+    val _ = printWithLabels v
+    val _ = disableRangedReceive cap
+in ()
+end
+
+(* Actual (./local.sh): BL:{} after the enable (public operands); BL:<alice;#root-integrity>
+   after the consume — the active ceiling Δ arrived in bl; the removed message prints
+   confined at the standing taint (@<alice;#root-integrity>); the disable succeeds.
+   Matches expected. *)

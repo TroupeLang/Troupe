@@ -1,0 +1,87 @@
+(* Screen — the terminal escapes battallion writes, and the assembly of one frame.
+ *
+ * A program-relative module of examples/battallion. Pure: every function returns a string; no
+ * descriptor, no process, no effect. Two consumers write those strings:
+ *
+ *   - the supervisor writes the terminal-*mode* escapes (`enterAlt`, `leaveAlt`, `hideCursor`,
+ *     `showCursor`), because entering and leaving the alternate screen is terminal setup and
+ *     teardown, which the supervisor owns;
+ *   - the renderer writes `frame`, the whole visible screen, on every redraw.
+ *
+ * ESCAPES. `\x1b[?1049h` / `\x1b[?1049l` are the xterm private mode that switches to the
+ * alternate screen buffer and back, so the shell's scrollback is untouched by the session.
+ * `\x1b[?25l` / `\x1b[?25h` hide and show the cursor: a full-frame redraw would otherwise trail
+ * the cursor across the screen. `\x1b[H` homes the cursor, `\x1b[K` erases from the cursor to
+ * the end of the line, and `\x1b[<row>;<col>H` positions the cursor, rows and columns counting
+ * from one.
+ *
+ * WHY `\x1b[K` PER LINE AND NOT `\x1b[2J`. Both give a correct frame. Erasing each line as it is
+ * rewritten means the screen is never blank between the clear and the draw, which a clear-then-
+ * draw frame shows as a flicker on a slow connection.
+ *
+ * LINE ENDINGS ARE CRLF, written out rather than left to the driver. Whether a lone LF returns
+ * the cursor to column one depends on the terminal's output post-processing, which raw mode may
+ * or may not leave on — this runtime's raw mode does, measured as CR CR LF arriving on the wire
+ * for each row of a frame — so a frame that relied on it would be correct on one terminal and a
+ * staircase on the next.
+ *
+ * TRUNCATION IS BY CODE UNIT. A line is cut to the terminal's width with `String.substring`,
+ * which counts UTF-16 code units, so a character outside the basic plane counts as two and a
+ * line of wide (double-width) characters overflows the width it was cut to. The mvp viewer does
+ * not measure display width; this is the same simplification `lib/Rope.trp` documents for its
+ * offsets.
+ *
+ * THE LAST CELL IS NOT WRITTEN. A frame ends its last line without a newline, and truncation
+ * leaves the bottom-right cell alone, because writing the last cell of the last row scrolls the
+ * alternate screen by one line on most terminals.
+ *)
+
+import String
+
+let val esc = "\x1b"
+
+    (*------------------------------  Terminal mode  ------------------------------*)
+
+    (** Switch to the alternate screen buffer. *)
+    val enterAlt = esc ^ "[?1049h"
+
+    (** Switch back to the normal screen buffer. *)
+    val leaveAlt = esc ^ "[?1049l"
+
+    val hideCursor = esc ^ "[?25l"
+    val showCursor = esc ^ "[?25h"
+
+    (*---------------------------------  Frames  ----------------------------------*)
+
+    (** Move the cursor to `(row, col)`, both counting from zero here and emitted counting from
+     *  one, which is what the terminal expects. *)
+    fun cursorTo (row, col) =
+        esc ^ "[" ^ toString (row + 1) ^ ";" ^ toString (col + 1) ^ "H"
+
+    (** `line` cut to `width` code units. *)
+    fun truncate (line, width) =
+        if String.size line <= width then line else String.substring (line, 0, width)
+
+    (** The whole visible screen: `lines` laid out from the top, each erased to the end of the
+     *  line as it is written, with the cursor left at `(curRow, curCol)`.
+     *
+     *  `lines` is expected to hold exactly `rows` entries; a shorter list draws fewer rows and
+     *  leaves the rest of the screen as it was, which is what a caller wants when the buffer has
+     *  fewer lines than the terminal has rows only if it padded the list itself. `Editor.frameOf`
+     *  pads. *)
+    fun frame (lines, width, curRow, curCol) =
+        let fun go ([], acc)      = acc
+              | go ([l], acc)     = acc ^ truncate (l, width) ^ esc ^ "[K"
+              | go (l :: ls, acc) = go (ls, acc ^ truncate (l, width) ^ esc ^ "[K" ^ "\r\n")
+        in go (lines, esc ^ "[H") ^ cursorTo (curRow, curCol)
+        end
+
+in [ ("enterAlt", enterAlt)
+   , ("leaveAlt", leaveAlt)
+   , ("hideCursor", hideCursor)
+   , ("showCursor", showCursor)
+   , ("cursorTo", cursorTo)
+   , ("truncate", truncate)
+   , ("frame", frame)
+   ]
+end

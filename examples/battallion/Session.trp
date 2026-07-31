@@ -1,0 +1,274 @@
+(* Session — the process constellation a battallion session runs as.
+ *
+ * A program-relative module of examples/battallion. `run` is the whole editor: it acquires the
+ * terminal, spawns the kernel and the renderer, runs the supervisor's event loop, and restores
+ * the terminal before returning an exit code. The caller supplies the buffer and the keymap; it
+ * keeps the root authority, which never leaves this module's `run` frame.
+ *
+ *   supervisor  the process that calls `run`. Holds the root authority and the terminal: it
+ *               subscribes to terminal events, traps SIGTERM, enters raw mode and the alternate
+ *               screen, and undoes all of that on the way out, whatever ended the session.
+ *      kernel   the editor state machine. Receives forwarded events, folds the keymap over the
+ *               decoded keys, asks the renderer for a frame, and answers the supervisor.
+ *      renderer holds the stdout descriptor and writes frames. Nothing else writes a frame.
+ *
+ * WHY THE SUPERVISOR IS THE SUBSCRIBER. The runtime's own safety net keys on the subscriber:
+ * when an event arrives for a subscriber that has died, the runtime unsubscribes and restores
+ * termios (rt/src/builtins/tty.mts:107-134). Making the process that must survive the session
+ * the subscriber keeps that net behind the one process whose death would wedge the terminal.
+ *
+ * WHY EVERY EVENT IS ACKNOWLEDGED. The supervisor forwards one event and waits for the kernel's
+ * answer before receiving the next, so a keystroke's frame is on the screen before the following
+ * keystroke is read. The wait is what makes a dead kernel observable — see the next paragraph —
+ * and the serialisation costs nothing at a human typing rate.
+ *
+ * A DEAD KERNEL IS FOUND BY A TIMER, NOT BY `monitorlocal`.
+ * The architecture calls for the supervisor to monitor the kernel and act on
+ * ("DONE", ref, pid, reason). That message cannot be delivered by the runtime as it stands: any
+ * monitored thread's termination — orderly or by error — brings the whole node down with a host
+ * TypeError raised inside `Scheduler.notifyMonitors`. The probe, the repro on the repository's
+ * own tests/_old_tests/monitors/mon01.trp, and the cause are recorded in
+ * tests/_unautomated/claude/battallion-viewer/probe-monitor-defect.trp. Until that is fixed,
+ * every wait for the kernel carries a timer (the `lib/timeout.trp` idiom, whose message is
+ * matched inside the same ranged-receive region — probe-timer-level.trp), and a wait that the
+ * timer wins is read as a lost kernel: the supervisor restores the terminal and exits
+ * `exitKernelLost`. This is a substitute for supervision, not supervision: it detects a kernel
+ * that stopped answering, and it cannot tell a crash from a hang.
+ *
+ * LABELS. Terminal events carry the channel level (ROOT by default), so everything the kernel
+ * computes from a keystroke does too, and so does every frame. Rather than declassify at the
+ * decoder, each of the three processes receives at the interval [bot, channel level]: the
+ * supervisor in a certified region opened with the root authority, the kernel and the renderer
+ * in confined regions opened with a null-attenuated authority, which they never close because
+ * they receive for their whole lives (lib/Tty.trp's `listen`, and probe-render-path.trp). The
+ * kernel therefore runs permanently tainted by the terminal, which is what it is: a process
+ * whose entire state is what the terminal said. No value is declassified anywhere in battallion.
+ *
+ * HANDLERS PROJECT; EFFECTS HAPPEN AFTER THE RECEIVE RETURNS. An effect inside an `hn` body is
+ * refused while a ranged-receive region is open, with a diagnostic about a branch that the
+ * program does not contain (probe-render-path.trp records the exact failure). Every receive
+ * below returns a value and acts on it afterwards.
+ *
+ * THE REGION IS OPENED AND CLOSED IN STRAIGHT-LINE CODE, per lib/Tty.trp: `Tty.listen` sits in
+ * `run`'s startup sequence and `Tty.unlisten` in its teardown sequence, with the whole event
+ * loop between them. That extends to `run`'s caller: a region can only be closed from its floor,
+ * and code inside a branch on a channel-level value runs above it, so `Session.run` must itself
+ * be called from straight-line code. bt.trp's header says how, and
+ * tests/_unautomated/claude/battallion-viewer/probe-pc-and-unlisten.trp measures it.
+ *)
+
+import IfcUtil
+import Outcome
+import Tty
+import timeout
+import "./Screen"
+import "./Editor"
+import "./Key"
+
+let (** How long the supervisor waits for the kernel before calling it lost. Two seconds is far
+     *  above any frame the viewer draws — a megabyte buffer's line read is measured in
+     *  microseconds (_dev_planning/text-editor/rope-benchmarks.md) — and far below a person's
+     *  patience with a wedged terminal. *)
+    val watchdogMs = 2000
+
+    (** The session ended the way it was asked to: `q`, CTRL-c, end of input, or SIGTERM. *)
+    val exitOk = 0
+
+    (** The kernel stopped answering. *)
+    val exitKernelLost = 3
+
+    (** The terminal size to assume when stdout is not a terminal, so that a session started over
+     *  a pipe still runs rather than failing at startup. *)
+    val fallbackCols = 80
+    val fallbackRows = 24
+
+    (*=============================  The renderer process  =============================*)
+
+    (** Write frames until told to stop. The frame carries the kernel's pid, which is answered
+     *  with "RENDERED" so that the kernel knows the screen is up to date before it releases the
+     *  supervisor. *)
+    fun rendererLoop (out, lev) =
+        let val m = rcv ( IfcUtil.bot, lev
+                        , [ hn ("FRAME", from, lines, width, curRow, curCol) =>
+                                ("FRAME", from, lines, width, curRow, curCol)
+                          , hn "STOP" => "STOP" ])
+        in case m of
+                ("FRAME", from, lines, width, curRow, curCol) =>
+                    let val _ = fwrite (out, Screen.frame (lines, width, curRow, curCol))
+                        val _ = send (from, "RENDERED")
+                    in rendererLoop (out, lev)
+                    end
+              | _ => ()
+        end
+
+    (** The renderer's whole life. The loop is called with its result bound rather than in tail
+     *  position: the region opened above is never closed, and a frame that opened one must not
+     *  end in a tail call — the loop's eventual return would then unwind past this frame into a
+     *  caller's, where the mailbox-clearance balance check refuses the mismatch. The measurement
+     *  is in tests/_unautomated/claude/battallion-viewer/probe-region-tail-call.trp. *)
+    fun renderer (out, lev, weak) =
+        let val (ok, cap) = enableRangedReceive (IfcUtil.bot, lev, weak)
+            val _ = rendererLoop (out, lev)
+        in ()
+        end
+
+    (*==============================  The kernel process  ==============================*)
+
+    (** Hand the renderer a frame of `st` and wait until it has been written. *)
+    fun draw (rend, lev, st) =
+        let val (lines, curRow, curCol) = Editor.frameOf st
+            val _ = send (rend, ("FRAME", self (), lines, st.cols, curRow, curCol))
+            val _ = rcv (IfcUtil.bot, lev, [ hn "RENDERED" => () ])
+        in ()
+        end
+
+    (** The keymap folded over a list of keys, stopping at the first key that quits. *)
+    fun applyKeys (onKey, st, [])        = (st, false)
+      | applyKeys (onKey, st, k :: rest) =
+          let val (st', quit) = onKey (st, k)
+          in if quit then (st', true) else applyKeys (onKey, st', rest)
+          end
+
+    (** One forwarded event: decode, fold, redraw, answer. `carry` is the decoder's remainder,
+     *  the bytes of an escape sequence that has not finished arriving.
+     *
+     *  A lone ESC stays in `carry` rather than being resolved by a timer. The viewer binds no
+     *  key to Esc, and the decoder's carry is transparent: pressing Esc and then a command
+     *  produces the same keys whether the bytes arrive together or apart (Key.trp, invariant 3).
+     *  Stage 5's insert mode, where Esc *is* a binding, is where the timer has to appear; the
+     *  arrangement it needs is the one this module already uses for the watchdog — a
+     *  `lib/timeout.trp` message matched by an extra handler in the same ranged receive. *)
+    fun kernelLoop (sup, rend, lev, onKey, st, carry) =
+        let val m = rcv ( IfcUtil.bot, lev
+                        , [ hn ("KEY", bytes)       => ("KEY", bytes)
+                          , hn ("RESIZE", cols, rows) => ("RESIZE", cols, rows) ])
+            val (st', carry', quit) =
+                    case m of
+                         ("KEY", bytes) =>
+                             let val (keys, rest) = Key.decode (carry ^ bytes)
+                                 val (s, q) = applyKeys (onKey, st, keys)
+                             in (s, rest, q)
+                             end
+                       | ("RESIZE", cols, rows) => (Editor.onResize (st, cols, rows), carry, false)
+                       | _                      => (st, carry, false)
+            val _ = if quit
+                    then send (sup, "QUIT")
+                    else let val _ = draw (rend, lev, st')
+                         in send (sup, "ACK")
+                         end
+        in if quit then () else kernelLoop (sup, rend, lev, onKey, st', carry')
+        end
+
+    (** Draw the first frame, tell the supervisor the session is on the screen, then loop. The
+     *  loop's result is bound rather than tail-called, for the reason given at `renderer`. *)
+    fun kernel (sup, rend, lev, weak, onKey, st) =
+        let val (ok, cap) = enableRangedReceive (IfcUtil.bot, lev, weak)
+            val _ = draw (rend, lev, st)
+            val _ = send (sup, "READY")
+            val _ = kernelLoop (sup, rend, lev, onKey, st, "")
+        in ()
+        end
+
+    (*============================  The supervisor process  ============================*)
+
+    (** Wait for the kernel's next word, under the watchdog. Returns one of "ready", "ack",
+     *  "quit", "sigterm" or "lost".
+     *
+     *  SIGTERM is answered here as well as in the event loop so that a signal arriving while a
+     *  frame is being drawn is acted on at once rather than after the frame. *)
+    fun awaitKernel (me, lev) =
+        let val nonce = mkuuid ()
+            val _ = timeout.timeout me ("WATCHDOG", nonce) watchdogMs
+        in rcv ( IfcUtil.bot, lev
+               , [ hn "READY"   => "ready"
+                 , hn "ACK"     => "ack"
+                 , hn "QUIT"    => "quit"
+                 , hn "SIGTERM" => "sigterm"
+                 , hn ("WATCHDOG", n) when n = nonce => "lost" ])
+        end
+
+    (** The event loop. One terminal event at a time is forwarded to the kernel and answered
+     *  before the next is taken.
+     *
+     *  The extra handlers pick up SIGTERM and the spent watchdog timers of events the kernel
+     *  answered in time: a timer whose nonce no `awaitKernel` is waiting for any more would
+     *  otherwise sit in the mailbox for the rest of the session. *)
+    fun eventLoop (me, kern, lev) =
+        let val ev = Tty.nextEventWith ( lev
+                                       , [ hn "SIGTERM"        => "sigterm"
+                                         , hn ("WATCHDOG", _)  => "stale" ])
+            val (forward, msg) =
+                    case ev of TTY_DATA b               => (true, ("KEY", b))
+                             | TTY_RESIZE {cols, rows}  => (true, ("RESIZE", cols, rows))
+                             | TTY_EOF                  => (false, "quit")
+                             | other                    => (false, other)
+            val answer = if forward
+                         then let val _ = send (kern, msg) in awaitKernel (me, lev) end
+                         else if msg = "sigterm" then "quit" else msg
+        in      if answer = "ack"   then eventLoop (me, kern, lev)
+           else if answer = "stale" then eventLoop (me, kern, lev)
+           else if answer = "lost"  then exitKernelLost
+           else exitOk
+        end
+
+    (** The terminal's size, or the fallback when stdout is not a terminal. *)
+    fun terminalSize out =
+        case Tty.size out of OK s  => (s.cols, s.rows)
+                           | ERR _ => (fallbackCols, fallbackRows)
+
+    (** The session's exit code, given the kernel's first word. Named so that `run`'s own body
+     *  stays a flat sequence with the region's open and close in it and nothing else between
+     *  them but this one call. *)
+    fun sessionCode (me, kern, lev, first) =
+             if first = "ready" then eventLoop (me, kern, lev)
+        else if first = "lost"  then exitKernelLost
+        else exitOk
+
+    (** Run a session over `buffer`, with `onKey` as the keymap, and return an exit code.
+     *
+     *  `auth` must be the root authority: subscribing, raw mode, the SIGTERM trap and the
+     *  certified receive region all need it. It is not passed to the kernel or the renderer,
+     *  which get a null-attenuated authority sufficient only to open a confined region. *)
+    fun run (auth, buffer, path, onKey) =
+        let val i = stdin auth
+            val out = stdout auth
+            val weak = attenuate (auth, IfcUtil.null)
+            val me = self ()
+            val lev = Tty.level i
+
+            val (cols, rows) = terminalSize out
+
+            (*--- Acquire the terminal. ---*)
+            val _ = trapSigterm (auth, me)
+            val _ = Tty.subscribe (i, me)
+            val _ = Tty.rawMode (i, true)
+            val _ = fwrite (out, Screen.enterAlt ^ Screen.hideCursor)
+
+            (*--- The constellation. ---*)
+            val rend = spawn (fn () => renderer (out, lev, weak))
+            val st0  = Editor.init (buffer, path, cols, rows)
+            val kern = spawn (fn () => kernel (me, rend, lev, weak, onKey, st0))
+
+            (*--- The region, opened and closed in straight-line code. ---*)
+            val (ok, cap) = Tty.listen (i, auth)
+            val first = awaitKernel (me, lev)
+            val code = sessionCode (me, kern, lev, first)
+            val _ = Tty.unlisten cap
+
+            (*--- Give the terminal back. Cooked mode first: it is the state a terminal is
+                  least usable in, so it is the one to leave earliest, and it makes the last
+                  escapes written the observable proof that the mode is already back. ---*)
+            val _ = Tty.rawMode (i, false)
+            val _ = fwrite (out, Screen.showCursor ^ Screen.leaveAlt)
+            val _ = Tty.unsubscribe i
+            val _ = untrapSigterm auth
+            val _ = send (rend, "STOP")
+        in code
+        end
+
+in [ ("watchdogMs", watchdogMs)
+   , ("exitOk", exitOk)
+   , ("exitKernelLost", exitKernelLost)
+   , ("run", run)
+   ]
+end

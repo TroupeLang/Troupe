@@ -1,0 +1,69 @@
+(* bt — battallion, a terminal text editor written in Troupe. At this stage it is a viewer.
+ *
+ *   ./local.sh examples/battallion/bt.trp --io-root <dir> -- <file>
+ *
+ * `--io-root` names the subtree file access is confined to, and the argument after `--` is the
+ * file to open, resolved inside it. Both belong to the runtime, not to this program:
+ * `SimpleFileIO.readFile` refuses a path outside the subtree, and `getCliArgs` returns exactly
+ * the arguments after `--`.
+ *
+ * WHAT IT DOES. Opens the file full-screen on the alternate screen buffer, draws the viewport,
+ * and navigates: `h j k l` and the arrows, `0` and Home, `$` and End, PageUp/PageDown and
+ * CTRL-b/CTRL-f, with the viewport scrolling to follow the cursor. `q` and CTRL-c quit. A window
+ * resize redraws at the new size. The terminal is given back — cooked mode, normal screen,
+ * cursor shown, subscription and signal trap released — on every way out, including a kernel
+ * that stops answering.
+ *
+ * WHAT IT DOES NOT DO YET. No editing, no modes, no status line, no saving: those are stage 5 of
+ * _dev_planning/text-editor/mvp-plan.md.
+ *
+ * WHERE THE PARTS ARE. `Session.trp` is the process constellation and holds every design note
+ * about it; `Editor.trp` is the state and the keymap; `Screen.trp` is the escapes and the frame;
+ * `Key.trp` is the decoder. This file is the argument handling and the file read — the part that
+ * must fail before the terminal has been touched.
+ *
+ * THE KEYMAP IS A PARAMETER. `Session.run` takes the function it folds over decoded keys, so a
+ * session can be run with a different keymap without touching the constellation. Stage 6's
+ * `VimMotions` plugin is that parameter; the crash probe in
+ * tests/_unautomated/claude/battallion-viewer/ is another consumer of the same seam.
+ *
+ * THE SESSION IS STARTED FROM STRAIGHT-LINE CODE. The argument list and the file-read outcome
+ * both carry the channel level, and code inside a branch on such a value runs at a pc raised to
+ * it — which the supervisor may not be at when it opens its receive region, because a region can
+ * only be closed from its floor. So the branches below produce values and nothing else, and the
+ * session is started after them. The measurements are in
+ * tests/_unautomated/claude/battallion-viewer/probe-pc-and-unlisten.trp.
+ *)
+
+import Rope
+import SimpleFileIO
+import Outcome
+import "./Session"
+import "./Editor"
+
+let val a = authority
+    val err = stderr a
+
+    val usage = "usage: bt.trp --io-root <dir> -- <file>"
+
+    fun fail (message, code) =
+        let val _ = fwrite (err, "battallion: " ^ message ^ "\n")
+        in exit (a, code)
+        end
+
+    (** The file named after `--`, or a usage message and exit 2. *)
+    fun argPath () = case getCliArgs a of []     => fail (usage, 2)
+                                        | p :: _ => p
+
+    (** The contents of `path` as a rope, or a message and exit 1. A file that cannot be read is
+     *  a startup failure, reported on stderr with the terminal untouched. *)
+    fun openBuffer path =
+        case SimpleFileIO.readFile (a, path) of
+             OK text => Rope.fromString text
+           | ERR e   => fail ("cannot open " ^ e.path ^ ": " ^ e.reason, 1)
+
+    val path = argPath ()
+    val buffer = openBuffer path
+    val code = Session.run (a, buffer, path, Editor.onKey)
+in exit (a, code)
+end

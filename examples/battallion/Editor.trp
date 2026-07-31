@@ -1,0 +1,160 @@
+(* Editor — the viewer's state and the keymap over it.
+ *
+ * A program-relative module of examples/battallion. Pure: no process, no receive, no descriptor.
+ * The kernel process (Session.trp) threads a `state` record through `onKey` and `onResize` and
+ * hands `frameOf` to the renderer.
+ *
+ * STATE IS A RECORD, NOT A DATATYPE, so that later stages can add fields — a mode, a dirty flag,
+ * an undo list — without breaking the matches written against it (open record patterns,
+ * `{a = p, ..}`). The fields at this stage:
+ *
+ *   buffer   the text, a lib/Rope.trp rope
+ *   path     the file the text came from, for later stages; unused by the viewer
+ *   top      the buffer line drawn on the terminal's first row
+ *   line     the cursor's buffer line, counting from zero
+ *   col      the cursor's column within that line, counting from zero
+ *   cols     the terminal's width, in code units
+ *   rows     the terminal's height, in rows
+ *
+ * THE CURSOR MAY SIT ONE PAST THE LAST CHARACTER of its line, i.e. `col` ranges over
+ * `0..length`, not `0..length-1`. A viewer has no reason to forbid the position and stage 5's
+ * insert mode needs it; a vi-style normal mode that stops one earlier is a keymap decision, and
+ * the keymap is what stage 6 extracts.
+ *
+ * THE COLUMN IS NOT REMEMBERED ACROSS VERTICAL MOTIONS. Moving down from column 40 onto a short
+ * line puts the cursor at that line's end, and moving down again keeps it there rather than
+ * returning to 40. The remembered "goal column" that vi has is a keymap feature; it belongs with
+ * the motions plugin of stage 6, not in the state the kernel owns.
+ *
+ * TABS ARE NOT EXPANDED. A tab in the text is one code unit for both the column arithmetic and
+ * the renderer's truncation, and the terminal draws it as a jump to the next tab stop, so the
+ * cursor lands left of where the character appears. Expanding tabs is a rendering-width question
+ * — the same one wide characters raise (Screen.trp's header) — and the mvp viewer does not
+ * measure display width.
+ *
+ * KEYS. `h j k l` and the arrows move by one; `0` and Home go to the line's start, `$` and End
+ * to its end; PageUp/PageDown and CTRL-b/CTRL-f move by one screen; `q` and CTRL-c quit. CTRL-c
+ * quits because in raw mode it arrives as the byte 0x03 with no signal raised, so without a
+ * binding the habit of pressing it would do nothing at all. Every other key is ignored.
+ *)
+
+import String
+import List
+import Rope
+import "./Key"
+
+let (*--------------------------------  Construction  --------------------------------*)
+
+    (** The state a session starts in: the whole buffer, cursor at the start. *)
+    fun init (buffer, path, cols, rows) =
+        { buffer = buffer, path = path, top = 0, line = 0, col = 0, cols = cols, rows = rows }
+
+    (*----------------------------------  Queries  -----------------------------------*)
+
+    (** The number of terminal rows that show text. Every row does, at this stage; a status line
+     *  would take one, and this is the one place that would change. *)
+    fun textRows st = st.rows
+
+    fun lastLine st = Rope.lineCount st.buffer - 1
+
+    fun lineLength (st, l) = String.size (Rope.lineAt (st.buffer, l))
+
+    (*----------------------------------  Motions  -----------------------------------*)
+
+    fun clampLine (st, l) =
+        let val last = lastLine st
+        in if l < 0 then 0 else if l > last then last else l
+        end
+
+    fun clampCol (st, l, c) =
+        let val n = lineLength (st, l)
+        in if c < 0 then 0 else if c > n then n else c
+        end
+
+    (** The top line that keeps `line` on the screen, moving the viewport by the least it can. *)
+    fun scrollTo (st, line) =
+        let val h = textRows st
+        in      if line < st.top          then line
+           else if line >= st.top + h     then line - h + 1
+           else st.top
+        end
+
+    (** The state with the cursor at `(l, c)`, both clamped, and the viewport following it. *)
+    fun moveTo (st, l, c) =
+        let val l' = clampLine (st, l)
+            val c' = clampCol (st, l', c)
+        in { st with line = l', col = c', top = scrollTo (st, l') }
+        end
+
+    (*----------------------------------  The keymap  --------------------------------*)
+
+    (** `(state', quit)` for one key. `quit` is true when the key ends the session. *)
+    fun onKey (st, KEY_PRINT c) =
+             if c = "h"      then (moveTo (st, st.line, st.col - 1), false)
+        else if c = "l"      then (moveTo (st, st.line, st.col + 1), false)
+        else if c = "j"      then (moveTo (st, st.line + 1, st.col), false)
+        else if c = "k"      then (moveTo (st, st.line - 1, st.col), false)
+        else if c = "0"      then (moveTo (st, st.line, 0), false)
+        else if c = "$"      then (moveTo (st, st.line, lineLength (st, st.line)), false)
+        else if c = "q"      then (st, true)
+        else (st, false)
+      | onKey (st, KEY_LEFT)     = (moveTo (st, st.line, st.col - 1), false)
+      | onKey (st, KEY_RIGHT)    = (moveTo (st, st.line, st.col + 1), false)
+      | onKey (st, KEY_DOWN)     = (moveTo (st, st.line + 1, st.col), false)
+      | onKey (st, KEY_UP)       = (moveTo (st, st.line - 1, st.col), false)
+      | onKey (st, KEY_HOME)     = (moveTo (st, st.line, 0), false)
+      | onKey (st, KEY_END)      = (moveTo (st, st.line, lineLength (st, st.line)), false)
+      | onKey (st, KEY_PAGEDOWN) = (moveTo (st, st.line + textRows st, st.col), false)
+      | onKey (st, KEY_PAGEUP)   = (moveTo (st, st.line - textRows st, st.col), false)
+      | onKey (st, KEY_CTRL c)   = if c = "f" then (moveTo (st, st.line + textRows st, st.col), false)
+                                   else if c = "b" then (moveTo (st, st.line - textRows st, st.col), false)
+                                   else if c = "c" then (st, true)
+                                   else (st, false)
+      | onKey (st, _)            = (st, false)
+
+    (** Every key in order. Stops at the first one that quits. *)
+    fun onKeys (st, [])        = (st, false)
+      | onKeys (st, k :: rest) =
+          let val (st', quit) = onKey (st, k)
+          in if quit then (st', true) else onKeys (st', rest)
+          end
+
+    (*----------------------------------  Resizing  ----------------------------------*)
+
+    (** The state on a new terminal size. The cursor keeps its buffer position and the viewport
+     *  is recomputed around it, so a shrink that would have left the cursor off-screen scrolls
+     *  instead of losing it. *)
+    fun onResize (st, cols, rows) =
+        let val st' = { st with cols = cols, rows = rows }
+        in moveTo (st', st'.line, st'.col)
+        end
+
+    (*-----------------------------------  Frames  -----------------------------------*)
+
+    (** The visible lines, one per terminal row, and the cursor's position on the screen.
+     *
+     *  Rows past the end of the buffer are drawn as "~", the filler vi has used since the
+     *  seventies to say "this row is not part of the file". *)
+    fun frameOf st =
+        let val h    = textRows st
+            val last = lastLine st
+            fun rowsFrom (i, acc) =
+                if i >= h then List.reverse acc
+                else let val l = st.top + i
+                     in rowsFrom (i + 1, (if l > last then "~" else Rope.lineAt (st.buffer, l)) :: acc)
+                     end
+            val curCol = if st.col >= st.cols then st.cols - 1 else st.col
+        in (rowsFrom (0, []), st.line - st.top, curCol)
+        end
+
+in [ ("init", init)
+   , ("textRows", textRows)
+   , ("lastLine", lastLine)
+   , ("lineLength", lineLength)
+   , ("moveTo", moveTo)
+   , ("onKey", onKey)
+   , ("onKeys", onKeys)
+   , ("onResize", onResize)
+   , ("frameOf", frameOf)
+   ]
+end

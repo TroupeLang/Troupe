@@ -91,11 +91,11 @@ Key components:
 ## External resource access
 
 Every runtime operation that reaches outside the program — standard streams, persistence, the
-network registry, and file I/O — is gated on authority rather than on ordinary label flow, with
-one exception besides `send` (governed by wire label/trust checks): stdio under the IFC model
-(below) is gated on label flow at the operations. The authority-gated operations require **full
-(ROOT) authority**: `persist`, `cliargs`, `exit`, `register`, and the `SimpleFileIO` primitives
-call `assertIsRootAuthority`.
+network registry, and file I/O — requires authority rather than ordinary label flow, with one
+exception besides `send` (governed by wire label/trust checks): under the IFC stdio model
+(below), stdio is checked by label flow at the operations. The rest require **full (ROOT)
+authority**: `persist`, `cliargs`, `exit`, `register`, and the `SimpleFileIO` primitives call
+`assertIsRootAuthority`.
 
 ### Standard streams (stdio)
 

@@ -20,7 +20,7 @@ import { stdio_level, IFC_MODEL, checkChannelEffect, suspendReadline } from './s
  * `ttyUnsubscribe`). The queries change no state: no listeners, no termios, no
  * interaction with readline, so they behave identically under both stdio
  * models, an observation being no effect and nothing for the sink check to
- * gate. The three operations are effects on the channel and carry the sink
+ * refuse. The three operations are effects on the channel and carry the sink
  * check under the IFC model, as `fwrite` does — a subscription resumes the
  * stream and starts draining input from the OS buffer, which a later reader can
  * observe.
@@ -319,8 +319,8 @@ export function BuiltinTty<TBase extends Constructor<UserRuntimeZero>>(Base: TBa
          *
          * Raw mode changes the echo and the line discipline of the channel
          * visibly, so under the IFC model it carries the same sink check as
-         * `fwrite`; under the capability model it is unchecked, the descriptor
-         * having been the gate.
+         * `fwrite`; under the capability model it is unchecked, admission
+         * having been decided when the descriptor was acquired.
          *
          * Entering raw mode first releases readline: on a terminal the
          * interface owns stdin's mode and its own echo, so raw mode has to be

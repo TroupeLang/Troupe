@@ -101,11 +101,11 @@ export function checkChannelEffect($t, operation: string, ...operandLevels: Leve
 export function BuiltinStdIo<TBase extends Constructor<UserRuntimeZero>>(Base: TBase) {
     return class extends Base {
         /**
-         * The capability model's acquisition gate: the authority shown must
+         * The capability model's acquisition check: the authority shown must
          * suffice for the channel level, which is `actsFor(authority, level)`
-         * — the relation the downgrade checks use. Under the IFC model there
-         * is no gate: acquiring a descriptor observes nothing and effects
-         * nothing, and enforcement sits on the operations.
+         * — the relation the downgrade checks use. Under the IFC model
+         * acquisition is unchecked: acquiring a descriptor observes nothing
+         * and effects nothing, and enforcement sits on the operations.
          */
         checkAcquisition(arg, streamName: string) {
             if (IFC_MODEL) {

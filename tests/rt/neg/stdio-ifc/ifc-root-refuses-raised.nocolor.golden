@@ -1,0 +1,11 @@
+2026-07-31T16:09:00.748Z [RTM] info: Skipping network creation. Observe that all network operations will yield a runtime error.
+Runtime error in thread 37045da2-663c-49f0-817c-de19e4b5d034@{}%{}
+
+  6 | in print secret
+    |    ^
+
+>> write to stdout above the stdio channel level
+ | effect level  {alice}
+ | pc level      {}
+ | channel level {#ROOT}
+>> at tests/rt/neg/stdio-ifc/ifc-root-refuses-raised.trp:6:4

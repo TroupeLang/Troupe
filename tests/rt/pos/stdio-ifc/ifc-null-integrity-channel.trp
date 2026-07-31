@@ -1,0 +1,9 @@
+(* IFC stdio model with the channel at <#root-confidentiality;#null-integrity>:
+   every label flows to it, so data raised in either dimension is written. *)
+let val aliceData = 1 raisedTo `{alice}`
+    val bobData = 2 raisedTo `{bob}`
+    val tainted = 3 raisedTo `<;bob>`
+    val _ = print aliceData
+    val _ = print bobData
+in print tainted
+end

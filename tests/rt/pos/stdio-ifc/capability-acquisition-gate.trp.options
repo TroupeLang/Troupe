@@ -1,0 +1,2 @@
+# The capability model is the default; the channel level is what the gate reads.
+--stdiolev '{alice}'

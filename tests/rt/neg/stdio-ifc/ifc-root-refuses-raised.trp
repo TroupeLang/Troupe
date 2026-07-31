@@ -1,0 +1,7 @@
+(* IFC stdio model at the default ROOT channel level: flowing to ROOT requires
+   root integrity, and a V1 literal is self-dual, so raising by {alice} weakens
+   integrity and the write is refused. The endorsed contrast is the positive
+   test ifc-endorse-for-root-channel. *)
+let val secret = 42 raisedTo `{alice}`
+in print secret
+end

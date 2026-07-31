@@ -1,0 +1,10 @@
+(* IFC stdio model: acquiring a descriptor is unchecked. An authority
+   attenuated to BOT acquires all three streams, and the write that follows is
+   admitted on its labels alone. Under the capability model the same program
+   fails at the acquisition (ifc-capability-refuses-bot-authority). *)
+let val botAuth = attenuate (authority, `{}`)
+    val out = stdout botAuth
+    val _ = stdin botAuth
+    val _ = stderr botAuth
+in fwrite (out, "acquired with an authority attenuated to BOT\n")
+end

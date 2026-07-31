@@ -1,0 +1,17 @@
+(* The terminal queries under the golden runner, where stdin, stdout and stderr
+   are pipes rather than terminals.
+
+   ttyIsTTY reports false for every descriptor. ttySize returns an Err value
+   rather than throwing: on a pipe process.stdout.columns is undefined, and a
+   missing terminal is an environment condition, not a programming error. *)
+let val a = authority
+    val i = stdin a
+    val o = stdout a
+    val e = stderr a
+    val _ = print (ttyIsTTY i)
+    val _ = print (ttyIsTTY o)
+    val _ = print (ttyIsTTY e)
+    val _ = print (ttySize o)
+    val _ = print (ttySize e)
+in ()
+end

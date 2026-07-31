@@ -10,7 +10,7 @@ const argv = getCliArgs();
 
 import * as rl from 'node:readline';
 
-const stdio_level = argv[TroupeCliArg.Stdiolev]
+export const stdio_level = argv[TroupeCliArg.Stdiolev]
     ? levelFromFlag (TroupeCliArg.Stdiolev, argv[TroupeCliArg.Stdiolev])
     : ROOT
 

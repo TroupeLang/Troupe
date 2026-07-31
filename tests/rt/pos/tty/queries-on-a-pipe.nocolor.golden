@@ -1,0 +1,7 @@
+2026-07-31T16:37:29.440Z [RTM] info: Skipping network creation. Observe that all network operations will yield a runtime error.
+false
+false
+false
+{tag="Err", error={reason="not a terminal"}}
+{tag="Err", error={reason="not a terminal"}}
+>>> Main thread finished with value: ()@{}%{}

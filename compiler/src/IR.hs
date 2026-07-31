@@ -383,6 +383,10 @@ instance WellFormedIRCheck IRExpr where
                      , "restore"
                      , "toStringL"
                      , "toString"
+                     -- Terminal query primitives (see builtins/tty.mts)
+                     , "ttyIsTTY"
+                     , "ttyLevel"
+                     , "ttySize"
                      , "whereis"
                                       
                      ]

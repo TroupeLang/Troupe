@@ -214,6 +214,7 @@ export function BuiltinReceive<TBase extends Constructor<UserRuntimeZero>>(Base:
         // and not a courtesy: the formal machine's point mailbox observations require no open
         // region, and the equivalence is stated at the top level.
         consumeWithAuthority = mkBase (arg => {
+          assertNormalState("consumeWithAuthority")
           assertIsNTuple(arg, 4)
           assertIsNumber(arg.val[0])
           assertIsLevel (arg.val[1])

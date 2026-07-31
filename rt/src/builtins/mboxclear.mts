@@ -23,6 +23,7 @@ export function BuiltinMboxClear <TBase extends Constructor<UserRuntimeZero>> (B
         // shown authority. The null authority is legal (it yields ok_to_dg = false / a
         // confined region rather than a type error).
         enableRangedReceive = mkBase((arg) => {
+            assertNormalState("enableRangedReceive");
             assertIsNTuple(arg, 3);
             assertIsLevel(arg.val[0]);
             assertIsLevel(arg.val[1]);
@@ -32,6 +33,7 @@ export function BuiltinMboxClear <TBase extends Constructor<UserRuntimeZero>> (B
 
         // Ranged receive: close a region. Authority-free — the capability is the certificate.
         disableRangedReceive = mkBase((arg) => {
+            assertNormalState("disableRangedReceive");
             assertIsCapability(arg);
             return this.runtime.$t.disableRangedReceive(arg)
         })

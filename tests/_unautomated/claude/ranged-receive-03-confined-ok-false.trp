@@ -3,8 +3,8 @@
    The shown authority has no confidentiality power (attenuated to `<;#root-integrity>`),
    so it cannot certify restoring the mailbox view from `<alice;...>` down to public.
    The enable still SUCCEEDS: ok = false and the capability is invalid — the region is
-   pushed like any other (uniform LIFO), it just never closes. The consume is still
-   admitted (drawing on the widened Delta = alice) and its result is alice-tainted for as
+   pushed like any other (uniform LIFO), it just never closes. The consume still
+   passes (its selection premise draws on the widened Delta = alice) and its result is alice-tainted for as
    long as the region stays open, which is forever. The disable is REFUSED on the invalid
    capability (an uncertified region has no close).
 
@@ -18,7 +18,7 @@ let val me = self ()
     val nullConfAuth = attenuate (authority, `<;#root-integrity>`)
     val (ok, cap) = enableRangedReceive (`<;#root-integrity>`, `<alice;#root-integrity>`, nullConfAuth)
     val _ = printWithLabels ok
-    (* admitted via the widened Delta = alice; v is confined (the region never closes) *)
+    (* the selection premise draws on the widened Delta = alice; v is confined (the region never closes) *)
     val v = consume (0, `<;#root-integrity>`, `<alice;#root-integrity>`)
     val _ = printWithLabels v
     (* the capability is invalid: no close *)

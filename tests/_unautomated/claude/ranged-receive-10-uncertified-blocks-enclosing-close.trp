@@ -5,7 +5,7 @@
    raise blocks every enclosing lower. Certified region A (root authority, ceiling alice)
    is open when an uncertified enable U (null-confidentiality authority, ceiling bob)
    pushes on top of it: the active ceiling widens to Delta = alice join bob and capU becomes the
-   chain head. A consume with l2 = bob is admitted through the widened Delta, its result
+   chain head. A consume with l2 = bob passes the selection premise through the widened Delta, its result
    tainted with both terms. Then `disableRangedReceive capA` is REFUSED as ill-scoped —
    capA is no longer the chain head; U sits above it and U can never close, so A's
    capability is permanently un-fireable (the accepted side effect of uniform LIFO).
@@ -21,7 +21,7 @@ let val me = self ()
     val nullConfAuth = attenuate (authority, `<;#root-integrity>`)
     val (okU, capU) = enableRangedReceive (`<;#root-integrity>`, `<bob;#root-integrity>`, nullConfAuth)
     val _ = printWithLabels okU
-    (* admitted through the widened Delta = alice join bob *)
+    (* the selection premise passes through the widened Delta = alice join bob *)
     val v1 = consume (0, `<;#root-integrity>`, `<bob;#root-integrity>`)
     val _ = printWithLabels v1
     (* capA is not the chain head: U sits above it and never closes *)

@@ -97,7 +97,7 @@ class  MboxClearance {
   // An uncertified (ok_to_dg = false) region is an ordinary region that never closes:
   // its own disable fails on validity, and the LIFO chain-head check blocks every
   // enclosing close while it stays open (exactly like a legacy raise that no authority
-  // can lower). Δ = delta, the active ceiling, is what admission may draw on;
+  // can lower). Δ = delta, the active ceiling, is what the receive clearance draws on;
   // Φ = phi, the active floor, is what every consume must respect; every reader of
   // delta is tainted with deltaLab (the ceiling label), every reader of phi with
   // phiLab (the floor label).
@@ -1296,7 +1296,7 @@ export class Thread {
                   (lub (hi.val, Delta), lub (lo.val, Delta), authLevel, this.bl, this.isNmifcMode, this.pc);
         const okToDg = dgDecision.kind === "SUCCESS";
 
-        // Admitted-read blocking quarantine: the enable's operand match is a blocking
+        // Blocking-label quarantine: the enable's operand match is a blocking
         // decision (a secret-labelled operand whose constructor diverges across runs
         // opens the region in one run and sticks in the other), so the operand data
         // labels quarantine the thread's blocking label:

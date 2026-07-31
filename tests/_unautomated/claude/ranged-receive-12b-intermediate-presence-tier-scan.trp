@@ -1,7 +1,7 @@
 (* Ranged-receive v2 witness 12b: per-tier regions as the route to tier-precision labels.
 
    Library-shape decision input, half 2. The same-interval loop (12a) is THE idiom under
-   the admitted occurrence premise: it removes intermediate-presence messages
+   the relaxed occurrence premise: it removes intermediate-presence messages
    directly, with everything confined at the standing taint. This witness pins down what
    label precision remains available and where. Setup: two messages at presence
    `<alice;#root-integrity>` — strictly between public and `<alice & bob;#root-integrity>`
@@ -9,14 +9,14 @@
 
    Part (i) — inside a wide region there is NO tier precision, by design: every in-window
    mailbox observation is confined at the standing taint. peek's result carries the
-   active ceiling Delta ⊔ Deltalab — necessary under the admitted occurrence premise,
-   where a secret-driven in-region consume is within the admission bound and would
+   active ceiling Delta ⊔ Deltalab — necessary under the relaxed occurrence premise,
+   where a secret-driven in-region consume is within the receive clearance and would
    otherwise show in the residual low sub-stream through a peek without the ceiling
    terms (machine-checked:
    ranged_receive_peek_needs_region_fold_under_covered_occurrence.lean). So even the
    narrow peek(0, `<alice;...>`, `<alice;...>`) under the [public, alice&bob] region
    returns at the CEILING alice&bob; the branch goes to the ceiling; the tier consume
-   still fires (its occurrence is within the admission bound) and removes the message,
+   still fires (its occurrence is within the receive clearance) and removes the message,
    the value at the ceiling. The tier scan inside a wide region narrows nothing.
 
    Part (ii) — per-tier REGIONS are the only route to tier-precision labels: a
@@ -66,7 +66,7 @@ end
    part (i)  m1 = 42@<alice&bob;#root-integrity>%<alice&bob;#root-integrity> — the
              narrow peek returns at the CEILING inside the wide region (ceiling-confined);
              v1 = (42-payload)@<alice&bob;#root-integrity>%<alice&bob;#root-integrity> —
-             the tier consume fired within the admission bound, removed, value at the ceiling;
+             the tier consume fired within the receive clearance, removed, value at the ceiling;
    okT = true@{}%{};
    part (ii) m2 = 43@<alice;#root-integrity>%<alice;#root-integrity>;
              v2 = (43-payload)@<alice;#root-integrity>%<alice;#root-integrity> — the

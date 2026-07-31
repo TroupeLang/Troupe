@@ -3,7 +3,7 @@
 
    Region A opens with floor `<alice;#root-integrity>`; nested region B opens with floor
    `<bob;#root-integrity>`. The active floor is now Phi = alice ⊔ bob = <alice & bob>.
-   A consume at floor l1 = `<alice;#root-integrity>` — which region A ALONE would admit —
+   A consume at floor l1 = `<alice;#root-integrity>` — which region A ALONE would permit —
    is refused, because B's bob floor has joined into Phi. This pins Phi as a genuine join
    over the nested layers (a single alice-floored region would not refuse this consume).
 

@@ -1,12 +1,12 @@
-(* Ranged-receive v2 witness 6: the admitted occurrence premise.
+(* Ranged-receive v2 witness 6: the occurrence premise and its receive clearance.
 
    The region is the declassification boundary for all mailbox observations, removals
    included: an in-region consume's occurrence premise is pc ⊔ ld(·) ⊑ l1 ⊔ Δ (plus the
    legacy clearance during coexistence), no longer hard.
 
    Positive half — the idiom: region [public, alice]; the pc is raised INSIDE the window
-   (a raisedTo-alice branch); the consume at the window floor public is ADMITTED — the
-   occurrence stays within the admission bound, the floor joined with the active
+   (a raisedTo-alice branch); the consume at the window floor public FIRES — the
+   occurrence flows to the receive clearance, the floor joined with the active
    ceiling Delta — and the value is confined at the standing taint (the consume taint
    joins Delta = alice).
 
@@ -16,18 +16,18 @@
 
    (Also confirmed this session, not runnable here past the error: an in-region consume
    whose pc raise is OUTSIDE the window — a secret branch under an alice-ceiling region —
-   stays refused: the admission bound reaches only up to the region's own ceiling.)
+   stays refused: the receive clearance reaches only up to the region's own ceiling.)
 
-   Expected verdict: ok = true; v prints at `<alice;#root-integrity>` (admitted,
+   Expected verdict: ok = true; v prints at `<alice;#root-integrity>` (in-clearance,
    confined); region closes; then REFUSE at the out-of-region consume — occurrence check,
-   admission bound = the bare floor.
+   receive clearance = the bare floor.
 *)
 
 let val me = self ()
     val _ = send (me, 42)
     val _ = send (me, 43)
 
-    (* Positive: in-window pc raise, consume at the window floor — admitted through Delta *)
+    (* Positive: in-window pc raise, consume at the window floor — cleared through Delta *)
     val (ok, cap) = enableRangedReceive (`<;#root-integrity>`, `<alice;#root-integrity>`, authority)
     val _ = printWithLabels ok
     val v = if (true raisedTo `<alice;#root-integrity>`)
@@ -44,8 +44,8 @@ in ()
 end
 
 (* Actual (./local.sh): ok = true@{}%{};
-   v = (42-payload)@<alice;#root-integrity>%<alice;#root-integrity> — admitted in the
+   v = (42-payload)@<alice;#root-integrity>%<alice;#root-integrity> — cleared in the
    high branch at the window floor, confined at the standing taint; disable succeeds;
-   then thread error at the out-of-region twin: "occurrence check failed ... admission
-   bound (floor ⊔ active ceiling ⊔ clearance) : {}" with occ = <alice;#root-integrity>.
+   then thread error at the out-of-region twin: "occurrence check failed ... receive
+   clearance          : {}" with occ = <alice;#root-integrity>.
    Matches expected. *)

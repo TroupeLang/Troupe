@@ -89,15 +89,16 @@ export function BuiltinReceive<TBase extends Constructor<UserRuntimeZero>>(Base:
           let mclear = theThread.mailbox.mclear
           // peek is CHECK-FREE (it removes nothing, so it carries neither the occurrence
           // nor the floor premise); its whole disclosure is confined by the read taint,
-          // which carries the active ceiling and its label, Δ ⊔ Δlab. Under the ADMITTED
-          // consume occurrence premise the ceiling terms are necessary: a secret-driven
-          // in-region consume — within the admission bound — perturbs the residual low
-          // sub-stream, and a peek without the ceiling terms would hand that perturbation
-          // to a low observer before the close pays for it. Machine-checked on the Lean
-          // side (ranged_receive_peek_needs_region_fold_under_covered_occurrence.lean);
+          // which carries the active ceiling and its label, Δ ⊔ Δlab. Under the consume
+          // occurrence premise's receive clearance the ceiling terms are necessary: a
+          // secret-driven in-region consume — within the receive clearance — perturbs the
+          // residual low sub-stream, and a peek without the ceiling terms would hand that
+          // perturbation to a low observer before the close pays for it. Machine-checked
+          // on the Lean side
+          // (ranged_receive_peek_needs_region_fold_under_covered_occurrence.lean);
           // only under the hard occurrence premise would the ceiling terms be redundant.
           //
-          // The same admission bound governs the peek's BLOCKING channel: whether an
+          // The same receive-clearance reasoning governs the peek's BLOCKING channel: whether an
           // i-th in-interval message exists is a firing decision that reads the operands
           // and the sub-stream up to the active ceiling (which in-region removals perturb
           // secret-dependently), so the operand labels and the ceiling terms quarantine
@@ -123,26 +124,26 @@ export function BuiltinReceive<TBase extends Constructor<UserRuntimeZero>>(Base:
           let theThread = this.runtime.$t
           let mclear = theThread.mailbox.mclear
 
-          // The occurrence premise, ADMITTED: the region is the declassification
-          // boundary for ALL mailbox observations, removals included, so an in-region
-          // consume's occurrence must stay within the admission bound — the read's
-          // floor joined with the active ceiling:
-          // pc ⊔ ld(i) ⊔ ld(l1) ⊔ ld(l2) ⊑ l1 ⊔ Δ. During coexistence the admission
-          // bound also carries the legacy standing clearance, exactly as the admission
-          // premise does — this restores the shape of the original combined check
-          // pc ⊔ highb ⊑ lowb ⊔ clearance, whose pc the standing clearance admitted
-          // all along.
+          // The occurrence premise: the region is the declassification boundary for
+          // ALL mailbox observations, removals included, so an in-region consume's
+          // occurrence must flow to the receive clearance — the read's floor joined
+          // with the active ceiling:
+          // pc ⊔ ld(i) ⊔ ld(l1) ⊔ ld(l2) ⊑ l1 ⊔ Δ. During coexistence the receive
+          // clearance also carries the legacy standing clearance, exactly as the
+          // selection premise's bound does — this restores the shape of the original
+          // combined check pc ⊔ highb ⊑ lowb ⊔ clearance, whose pc the standing
+          // clearance cleared all along.
           // Outside any region (Δ = ⊥, clearance = ⊥) the premise degenerates to the
           // hard pc ⊔ ld(·) ⊑ l1.
           let occ = lub (theThread.pc, i.lev, lowb.lev, highb.lev)
-          let occCover = lub (lowb.val, mclear.delta, mclear.boost_level)
-          if (!flowsTo (occ, occCover)) {
+          let rcvClearance = lub (lowb.val, mclear.delta, mclear.boost_level)
+          if (!flowsTo (occ, rcvClearance)) {
             let errorMessage =
-              "Ranged-receive consume occurrence check failed: whether the removal fires depends on data above the admission bound\n" +
-              ` | receive lower bound (floor)                          : ${lowb.val.stringRep()}\n` +
-              ` | admission bound (floor ⊔ active ceiling ⊔ clearance) : ${occCover.stringRep()}\n` +
-              ` | occurrence level (occ)                               : ${occ.stringRep()}\n` +
-              ` | pc level                                             : ${theThread.pc.stringRep()}`
+              "Ranged-receive consume occurrence check failed: whether the removal fires depends on data above the receive clearance\n" +
+              ` | receive lower bound (floor): ${lowb.val.stringRep()}\n` +
+              ` | receive clearance          : ${rcvClearance.stringRep()}\n` +
+              ` | occurrence level (occ)     : ${occ.stringRep()}\n` +
+              ` | pc level                   : ${theThread.pc.stringRep()}`
             theThread.threadError (errorMessage);
           }
 
@@ -155,12 +156,12 @@ export function BuiltinReceive<TBase extends Constructor<UserRuntimeZero>>(Base:
             theThread.threadError (errorMessage);
           }
 
-          // The admission premise: lev(i) ⊔ l2 ⊑ l1 ⊔ Δ. The legacy standing clearance
+          // The selection premise: lev(i) ⊔ l2 ⊑ l1 ⊔ Δ. The legacy standing clearance
           // (boost_level) is kept in the target alongside Δ so legacy raisembox programs
-          // still admit.
-          let is_admitted =
+          // still pass.
+          let selection_ok =
             flowsTo (lub (i.lev, highb.val), lub (lowb.val, mclear.delta, mclear.boost_level))
-          if (!is_admitted) {
+          if (!selection_ok) {
             let errorMessage =
               "Not enough mailbox clearance for this receive\n" +
               ` | receive lower bound   : ${lowb.val.stringRep()}\n` +
@@ -185,7 +186,7 @@ export function BuiltinReceive<TBase extends Constructor<UserRuntimeZero>>(Base:
 
           // Blocking label absorbs ld(l1) ⊔ ld(l2) ⊔ lev(i) ⊔ l2 ⊔ Δ ⊔ Δlab ⊔ Φlab — the
           // operand labels plus the active-range registers the firing decision reads: the
-          // admitted occurrence and the admission draw on the sub-stream up to the active
+          // occurrence and the selection premises draw on the sub-stream up to the active
           // ceiling, and the floor check reads Φ under Φlab, so the active-range terms
           // quarantine the consume's blocking channel exactly as the read taint confines
           // its value channel. (The __mbox.consume path additionally raises bl by

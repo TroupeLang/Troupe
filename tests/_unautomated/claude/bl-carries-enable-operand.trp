@@ -1,4 +1,4 @@
-(* Admitted-read blocking quarantine, the enable variant: the enable's operand match is
+(* Blocking-label quarantine, the enable variant: the enable's operand match is
    a blocking decision — a secret-labelled operand whose constructor diverges across
    runs opens the region in one and sticks in the other — so the operand data labels
    quarantine the thread's blocking label: bl ⊔= ld(lo) ⊔ ld(hi) ⊔ ld(auth).

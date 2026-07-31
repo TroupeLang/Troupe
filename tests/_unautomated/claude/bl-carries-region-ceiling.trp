@@ -1,6 +1,6 @@
-(* Admitted-read blocking quarantine, the consume variant: an in-region consume's
-   firing decision reads the active-range registers — the admitted occurrence and the
-   admission draw on the sub-stream up to the active ceiling, the floor check reads Φ
+(* Blocking-label quarantine, the consume variant: an in-region consume's
+   firing decision reads the active-range registers — the occurrence and the selection
+   premises draw on the sub-stream up to the active ceiling, the floor check reads Φ
    under Φlab — so the active-range terms quarantine the consume's blocking channel:
    bl ⊔= ... ⊔ Δ ⊔ Δlab ⊔ Φlab, on top of the operand terms.
 

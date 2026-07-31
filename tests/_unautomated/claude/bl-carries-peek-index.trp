@@ -1,4 +1,4 @@
-(* Admitted-read blocking quarantine, the peek variant: whether an i-th in-interval
+(* Blocking-label quarantine, the peek variant: whether an i-th in-interval
    message exists is a firing decision that reads the operands and the sub-stream up
    to the active ceiling, so the peek builtin raises bl ⊔= ld(i) ⊔ ld(l1) ⊔ ld(l2) ⊔ Δ ⊔ Δlab
    (on top of the l2 ⊔ boost raise inside __mbox.peek).

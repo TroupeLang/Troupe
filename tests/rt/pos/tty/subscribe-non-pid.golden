@@ -1,0 +1,8 @@
+2026-07-31T17:21:15.817Z [RTM] [32minfo[39m: Skipping network creation. Observe that all network operations will yield a runtime error.
+Runtime error in thread 8ef6f289-5565-4155-96c7-29710ed6bf5e@{}%{}
+
+  7 |     val _ = ttySubscribe (i, 42)
+    |             ^
+
+>> value 42@{}%{} is not a process id
+>> at tests/rt/pos/tty/subscribe-non-pid.trp:7:13

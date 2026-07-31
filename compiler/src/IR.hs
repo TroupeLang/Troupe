@@ -388,6 +388,8 @@ instance WellFormedIRCheck IRExpr where
                      , "ttyLevel"
                      , "ttyRawMode"
                      , "ttySize"
+                     , "ttySubscribe"
+                     , "ttyUnsubscribe"
                      , "whereis"
                                       
                      ]

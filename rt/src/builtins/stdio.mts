@@ -130,7 +130,7 @@ export function BuiltinStdIo<TBase extends Constructor<UserRuntimeZero>>(Base: T
             const fd = arg.val._value;
             if (fd !== process.stdin) {
                 this.runtime.$t
-                    .threadError(`value ${fd.stringRep()} is not an input descriptor`);
+                    .threadError(`value ${arg.val.stringRep()} is not an input descriptor`);
             }
 
             // Consuming a line is an observable effect on the channel: a later
@@ -169,7 +169,7 @@ export function BuiltinStdIo<TBase extends Constructor<UserRuntimeZero>>(Base: T
             const fd = arg.val[0].val._value;
             if (fd !== process.stdout && fd !== process.stderr) {
                 this.runtime.$t
-                    .threadError(`value ${fd.stringRep()} is not an output descriptor`);
+                    .threadError(`value ${arg.val[0].val.stringRep()} is not an output descriptor`);
             }
 
             assertIsString(arg.val[1]);

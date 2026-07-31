@@ -1,0 +1,3 @@
+let val _ = fwrite (stdin authority, "x")
+in print "unreachable"
+end

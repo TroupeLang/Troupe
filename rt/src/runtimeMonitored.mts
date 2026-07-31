@@ -14,6 +14,7 @@ import * as levels from './Level.mjs'
 import * as DS from './deserialize.mjs'
 import { p2p, P2pUserError } from './p2p/p2p.mjs'
 import { closeReadline } from './builtins/stdio.mjs';
+import { ttyRestore } from './builtins/tty.mjs';
 import { __theRegister } from './builtins/whereis.mjs';
 import { assertIsFunction } from './Asserts.mjs'
 import runId from './runId.mjs'
@@ -479,6 +480,7 @@ setRuntimeObject(__rtObj)
 
 async function cleanupAsync() {
   await sendSocketMessageAndClose({ type: 'process-exit', exitCode: 0 });
+  ttyRestore()
   closeReadline()
   DS.stopCompiler();
   if (__p2pRunning) {

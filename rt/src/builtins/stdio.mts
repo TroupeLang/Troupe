@@ -22,7 +22,7 @@ export const stdio_level = argv[TroupeCliArg.Stdiolev]
  * `stdio_level`: acquisition is unchecked, observations are labelled at the
  * channel level, and every effect on the channel is checked against it.
  */
-const IFC_MODEL = argv[TroupeCliArg.StdioModel] === 'ifc'
+export const IFC_MODEL = argv[TroupeCliArg.StdioModel] === 'ifc'
 
 /** Buffer of input lines that have been provided but not consumed. */
 const lineBuffer = [];
@@ -64,6 +64,20 @@ export function closeReadline() {
 }
 
 /**
+ * Release the terminal from readline before another component takes it over.
+ *
+ * This closes the interface rather than pausing it: `pause()` leaves stdin in
+ * readline's raw mode and merely stops delivering, whereas `close()` resets the
+ * mode and releases the stream, which is the base state `ttyRawMode` then sets
+ * raw mode from. `close()` is irreversible for an interface object, which is
+ * why the interface is created lazily and can be re-created: a later `freadln`
+ * builds a fresh one.
+ */
+export function suspendReadline() {
+    closeReadline()
+}
+
+/**
  * The sink check of the IFC stdio model: an effect on the stdio channel is
  * admitted only when everything it may reveal flows to the channel level.
  *
@@ -71,7 +85,7 @@ export function closeReadline() {
  * first, because performing the effect discloses everything the thread has
  * observed so far; the operand levels then join the pc for the check.
  */
-function checkChannelEffect($t, operation: string, ...operandLevels: Level[]) {
+export function checkChannelEffect($t, operation: string, ...operandLevels: Level[]) {
     $t.raiseCurrentThreadPCToBlockingLev();
     const effectLevel = lub($t.pc, ...operandLevels);
     if (!flowsTo(effectLevel, stdio_level)) {

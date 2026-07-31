@@ -2,17 +2,20 @@ import { UserRuntimeZero, Constructor, mkBase } from './UserRuntimeZero.mjs'
 import { LVal } from '../Lval.mjs';
 import { Record } from '../Record.mjs';
 import { lub, Level } from '../Level.mjs';
-import { assertIsLocalObject, assertNormalState } from '../Asserts.mjs'
-import { stdio_level } from './stdio.mjs';
+import { assertIsBoolean, assertIsLocalObject, assertIsNTuple, assertNormalState } from '../Asserts.mjs'
+import { __unitbase } from '../UnitBase.mjs';
+import { stdio_level, IFC_MODEL, checkChannelEffect, suspendReadline } from './stdio.mjs';
 
 /**
- * Terminal query primitives.
+ * Terminal primitives.
  *
- * Three pure queries over the stdio channel: whether a stream is a terminal,
- * what its dimensions are, and what level the channel runs at. None of them
- * changes any state — no listeners, no termios, no interaction with readline —
- * so they behave identically under both stdio models: an observation is not an
- * effect, and there is nothing for the sink check to gate.
+ * Three pure queries over the stdio channel — whether a stream is a terminal,
+ * what its dimensions are, and what level the channel runs at — and one
+ * operation that changes the terminal's line discipline. The queries change no
+ * state: no listeners, no termios, no interaction with readline, so they behave
+ * identically under both stdio models, an observation being no effect and
+ * nothing for the sink check to gate. `ttyRawMode` is an effect on the channel
+ * and carries the sink check under the IFC model, as `fwrite` does.
  *
  * Labelling follows the channel model
  * (_dev_planning/text-editor/stdin-stdout-primitive-design.md §1.1, §5.1):
@@ -29,13 +32,53 @@ import { stdio_level } from './stdio.mjs';
  * Error disposition follows the SimpleFileIO rule: a bad argument is fatal, a
  * bad environment is a value. A non-descriptor or the wrong descriptor kills
  * the thread; a stream that is a pipe rather than a terminal is an `Err`
- * record, because `process.stdout.columns` is *undefined* on a pipe and an
- * unguarded read would surface as an internal runtime crash.
+ * record, because `process.stdout.columns` and `process.stdin.setRawMode` are
+ * *undefined* on a pipe and an unguarded read or call would surface as an
+ * internal runtime crash. `setRawMode` throwing — EIO on a terminal that has
+ * gone away — is the same class and is also an `Err`.
  *
  * Helper names carry a prefix: every builtin mixin contributes to one prototype
  * chain, so a plain `mkOk`/`mkErr` here would be shadowed by the identically
  * named helper of a mixin applied later (simplefileio.mts has both).
  */
+/**
+ * Whether *this* component put stdin into raw mode. A program that read a line
+ * on a terminal is in readline's raw mode instead, and readline's own `close()`
+ * resets that; the restore hook must not reach past its own doing.
+ */
+let weSetRawMode = false;
+
+/**
+ * Reset the terminal state the runtime is responsible for. Called from
+ * `cleanupAsync` (runtimeMonitored.mts), which runs for every program, on every
+ * termination route that reaches it — so this must be safe when nothing was set
+ * up, and safe to run twice.
+ *
+ * It runs outside any thread: no labels, no `$t`, no scheduler.
+ *
+ * It restores *termios*, not screen state. The alternate screen buffer, cursor
+ * visibility and cursor shape are escapes a program emitted, and unwinding them
+ * is the program's business
+ * (_dev_planning/text-editor/stdin-stdout-primitive-design.md §4.4).
+ */
+export function ttyRestore() {
+    try {
+        if (weSetRawMode && process.stdin.isTTY) {
+            process.stdin.setRawMode(false);
+        }
+    } catch (e) {
+        // A terminal that has gone away throws here; cleanup must not fail.
+    }
+    weSetRawMode = false;
+    try {
+        // Releases the event-loop reference the stream may hold. Separate from
+        // the reset above so that a throwing reset does not skip it.
+        process.stdin.pause();
+    } catch (e) {
+        // Same: nothing this hook does may fail cleanup.
+    }
+}
+
 export function BuiltinTty<TBase extends Constructor<UserRuntimeZero>>(Base: TBase) {
     return class extends Base {
         /** The channel level joined with the pc: the level of an observation. */
@@ -117,5 +160,51 @@ export function BuiltinTty<TBase extends Constructor<UserRuntimeZero>>(Base: TBa
             // Run configuration, not channel content: the result is at the pc.
             return this.runtime.ret(this.runtime.$t.mkVal(stdio_level));
         }, "ttyLevel");
+
+        /**
+         * Put the terminal into or out of raw mode.
+         *
+         * Raw mode changes the echo and the line discipline of the channel
+         * visibly, so under the IFC model it carries the same sink check as
+         * `fwrite`; under the capability model it is unchecked, the descriptor
+         * having been the gate.
+         *
+         * Entering raw mode first releases readline: on a terminal the
+         * interface owns stdin's mode and its own echo, so raw mode has to be
+         * set from a base state readline is not holding. A later `freadln`
+         * re-creates the interface.
+         */
+        ttyRawMode = mkBase((arg) => {
+            assertNormalState("ttyRawMode")
+            assertIsNTuple(arg, 2);
+            const fd = this.ttyDescriptor(
+                arg.val[0], [process.stdin], "an input descriptor");
+            assertIsBoolean(arg.val[1]);
+            const on = arg.val[1].val === true;
+
+            if (IFC_MODEL) {
+                checkChannelEffect(this.runtime.$t, "terminal raw-mode change",
+                                   arg.lev, arg.val[0].lev, arg.val[1].lev)
+            }
+
+            if (fd.isTTY !== true || typeof fd.setRawMode !== 'function') {
+                return this.runtime.ret(this.mkTtyErr("not a terminal"));
+            }
+            try {
+                if (on) {
+                    suspendReadline();
+                    fd.setRawMode(true);
+                    weSetRawMode = true;
+                } else {
+                    fd.setRawMode(false);
+                    weSetRawMode = false;
+                }
+            } catch (e) {
+                return this.runtime.ret(
+                    this.mkTtyErr(e instanceof Error ? e.message : String(e)));
+            }
+            return this.runtime.ret(
+                this.mkTtyOk(new LVal(__unitbase, this.ttyObservationLevel())));
+        }, "ttyRawMode");
     }
 }

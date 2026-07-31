@@ -1,0 +1,11 @@
+2026-07-31T16:56:55.272Z [RTM] info: Skipping network creation. Observe that all network operations will yield a runtime error.
+Runtime error in thread c2f1ea79-fcf1-453f-8802-d41f0c5106e8@{}%{}
+
+  6 |     val _ = if secret > 0 then ttyRawMode (fd, true) else ttyRawMode (fd, false)
+    |                                ^
+
+>> terminal raw-mode change above the stdio channel level
+ | effect level  {alice}
+ | pc level      {alice}
+ | channel level {#ROOT}
+>> at tests/rt/neg/stdio-ifc/ifc-rawmode-raised-pc.trp:6:32

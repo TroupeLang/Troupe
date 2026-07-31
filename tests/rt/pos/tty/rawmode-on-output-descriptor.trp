@@ -1,0 +1,7 @@
+(* ttyRawMode takes the input descriptor. Handing it an output descriptor is a
+   programming error and kills the thread, the same disposition ttySize uses for
+   the input descriptor. *)
+let val a = authority
+    val o = stdout a
+in print (ttyRawMode (o, true))
+end

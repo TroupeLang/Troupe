@@ -383,9 +383,10 @@ instance WellFormedIRCheck IRExpr where
                      , "restore"
                      , "toStringL"
                      , "toString"
-                     -- Terminal query primitives (see builtins/tty.mts)
+                     -- Terminal primitives (see builtins/tty.mts)
                      , "ttyIsTTY"
                      , "ttyLevel"
+                     , "ttyRawMode"
                      , "ttySize"
                      , "whereis"
                                       

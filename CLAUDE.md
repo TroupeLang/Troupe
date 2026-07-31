@@ -180,3 +180,7 @@ _dev_planning/<feature-name>/
 
 There is no template directory. `_dev_planning/property-testing/` is an existing plan in this
 layout; use it as the reference when creating a new one.
+
+## How to communicate pre-existing failures
+
+On occassion you may detect a failure while testing something else. Do not hide this under the rug. We strive for high code quality in the project. Do not simply report them in a by-the-way manner. Such findings are important to the health of the project and need to be properly highlighted with high alertness.

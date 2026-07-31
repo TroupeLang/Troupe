@@ -1,0 +1,81 @@
+(* Crosslang — kernels for the cross-language comparison (Troupe side).
+ *
+ * This is a program-relative module: it exports `all`, the descriptor list
+ * ({name, bench : size -> result, check : size -> result -> bool, sizes}),
+ * and is imported by runall.trp via `import "./Crosslang"`. Structured
+ * exactly like examples/benchmarks/clbg/Clbg.trp. The whole import graph is
+ * recompiled on every run, so there is no artifact to republish.
+ *
+ * Every kernel here has a counterpart in python/kernels.py. The two sides
+ * share their `check` values — the same closed form computed by a different
+ * algorithm than the one under test — so agreement on the answer is evidence
+ * that both sides ran the same computation, which is this suite's substitute
+ * for the single-language `check` discipline.
+ *
+ * Parity policy: same algorithm, written idiomatically in each language
+ * (the Are-We-Fast-Yet rule). Where the natural data representation differs
+ * between the two, the descriptor comment says so and the difference is part
+ * of what the row measures — see `listsum`. The suite README records this per
+ * benchmark; a ratio quoted without it is not interpretable.
+ *
+ * `sizes` must match python/kernels.py exactly. Nothing enforces that at
+ * build time; compare.trp reports any (benchmark, size) cell that appears in
+ * one language and not the other, which is where a drift shows up.
+ *)
+
+let
+    (*==================== fib ====================*)
+    (* Call-dominated, allocation-free: naive double recursion over small
+     * integers. Isolates call and arithmetic overhead — the one shape where
+     * no data structure stands between the two languages, so its ratio is
+     * the closest thing here to a like-for-like runtime comparison.
+     *
+     * `check` recomputes the value iteratively (a different algorithm, no
+     * recursion), so a bug in the recursion cannot pass unnoticed. The
+     * recursion bottoms out at 1 for x <= 2, which makes bench n the n-th
+     * Fibonacci number under F(1) = F(2) = 1. *)
+    val fib =
+        let fun f x = if x > 2 then f (x - 1) + f (x - 2) else 1
+
+            fun expected n =
+                let fun go (i, a, b) = if i >= n then b else go (i + 1, b, a + b)
+                in go (1, 0, 1) end
+
+        in { name  = "fib"
+           , bench = f
+           , check = fn n => fn r => r = expected n
+           , sizes = [30, 32, 34]
+           } end
+
+    (*==================== listsum ====================*)
+    (* Allocation-dominated: build a sequence of n integers, then fold it.
+     *
+     * REPRESENTATION DIFFERS between the two sides, deliberately. Troupe
+     * builds a cons list — one labelled heap cell per element; Python appends
+     * to a list — one contiguous array. Each is the idiomatic way to express
+     * "build a sequence and fold it" in its language, so this follows the
+     * parity policy, but the two do not allocate alike and the gap measured
+     * here is not runtime speed alone. Read alongside `fib`: the spread
+     * between the two ratios is the point of having both.
+     *
+     * `check` is the closed form n(n+1)/2 — arithmetic only, no allocation,
+     * so an error in the build or the fold cannot pass unnoticed. *)
+    val listsum =
+        let fun build (0, acc) = acc
+              | build (n, acc) = build (n - 1, n :: acc)
+
+            fun total ([], a)      = a
+              | total (x :: xs, a) = total (xs, a + x)
+
+            fun f n = total (build (n, []), 0)
+
+        in { name  = "listsum"
+           , bench = f
+           , check = fn n => fn r => r = n * (n + 1) / 2
+           , sizes = [200000, 400000, 800000]
+           } end
+
+    val all = [ fib, listsum ]
+
+in [ ("all", all) ]
+end

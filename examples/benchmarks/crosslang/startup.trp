@@ -1,0 +1,6 @@
+(* startup — a program that does nothing, used by run.sh to measure the fixed
+ * cost of getting a Troupe program to the point of running: troupec, node
+ * startup and runtime initialisation. Its Python counterpart is
+ * python/startup.py. Kept trivial on purpose: any work here would be
+ * attributed to startup. *)
+()

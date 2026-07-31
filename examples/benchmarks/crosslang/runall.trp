@@ -1,0 +1,112 @@
+(* runall — the Troupe side of the cross-language comparison.
+ *
+ * Emits measurement rows on stdout and nothing else, one per line, in the
+ * lib/Bench row format:
+ *
+ *     <name> n=<size> rep=<i> ms=<elapsed> ok=<bool>
+ *
+ * `suite=NAME` picks the benchmark set: `kernels` (default) is the pair of
+ * hand-written cross-language kernels in ./Crosslang; `awfy` is the existing
+ * Are-We-Fast-Yet suite, whose descriptors are reused unchanged and whose
+ * Python counterpart is vendored under python/awfy/.
+ *
+ * Keeping stdout clean is what lets run.sh redirect it straight into a row
+ * file; python/runall.py emits the identical format, and compare.trp reads
+ * both. Diagnostics go to stderr, and an unknown benchmark name exits 2
+ * rather than silently measuring a subset.
+ *
+ * Timing, warmup and validation are lib/Bench's (`collectRows`): one untimed
+ * warmup per size, then `reps` timed runs, each checked. getTime is
+ * whole-millisecond wall clock, so sizes are chosen to keep every timed run
+ * well above ten milliseconds on this side.
+ *
+ *   ./local.sh examples/benchmarks/crosslang/runall.trp \
+ *       --suppress-local-info-message --suppress-main-thread-finished-message
+ *   ./local.sh examples/benchmarks/crosslang/runall.trp \
+ *       --suppress-local-info-message --suppress-main-thread-finished-message \
+ *       -- reps=5 fib
+ *
+ * Normally invoked through run.sh, which supplies those flags, interleaves
+ * the languages and writes the file headers.
+ *)
+
+import List
+import String
+import Bench
+import "./Crosslang"
+import "../awfy/Awfy"
+
+let val args = getCliArgs authority
+
+    val repsPrefix  = "reps="
+    val suitePrefix = "suite="
+    val modePrefix  = "mode="
+
+    fun optValue (prefix, a) = substring (a, String.size prefix, String.size a)
+
+    fun valuesOf prefix = List.map (fn a => optValue (prefix, a))
+                                   (List.filter (String.startsWith prefix) args)
+
+    fun isOpt a = String.startsWith repsPrefix a
+                  orelse String.startsWith suitePrefix a
+                  orelse String.startsWith modePrefix a
+
+    val names = List.filter (fn a => not (isOpt a)) args
+
+    val reps = case valuesOf repsPrefix of
+                 []     => 3
+               | r :: _ => stringToInt r
+
+    val suite = case valuesOf suitePrefix of
+                  []     => "kernels"
+                | s :: _ => s
+
+    (* Suites the Troupe side can run. `awfy` reuses the descriptors of the
+       existing single-language suite unchanged, imported across directories —
+       a module's identity is the hash of its code, not its location, so this
+       is the same module examples/benchmarks/awfy/runall.trp runs. *)
+    val descriptors = case suite of
+                        "kernels" => Crosslang.all
+                      | "awfy"    => Awfy.all
+                      | _         => []
+
+    val knownSuite = suite = "kernels" orelse suite = "awfy"
+
+    fun named a = List.filter (fn d => d.name = a) descriptors
+
+    val selected =
+        if List.length names = 0 then descriptors
+        else List.filter (fn d => List.length
+                                    (List.filter (fn a => a = d.name) names) > 0)
+                         descriptors
+
+    val unknown = List.filter (fn a => List.length (named a) = 0) names
+
+    fun runOne d = Bench.collectRows authority d.name d.sizes reps d.bench d.check
+
+    (* `mode=list` prints the benchmark names, one per line, and measures
+       nothing. run.sh asks both languages for their list and refuses to run if
+       the two disagree, which catches a kernel added on one side only.
+       It is an option rather than a bare word because AWFY has a benchmark
+       actually called `list`, and a bare `list` would shadow it — which it did,
+       silently replacing that benchmark's rows with the name listing. *)
+    val listOnly = case valuesOf modePrefix of
+                     m :: _ => m = "list"
+                   | []     => false
+
+in if not knownSuite
+   then let val _ = fwrite (stderr authority,
+                            "unknown suite: " ^ suite ^ " (have: awfy, kernels)\n")
+        in exit (authority, 2) end
+   else if listOnly
+   then let val _ = List.map (fn d => fwrite (stdout authority, d.name ^ "\n"))
+                             descriptors
+        in () end
+   else if List.length unknown > 0
+   then let val _ = fwrite (stderr authority,
+                            "unknown benchmarks: "
+                            ^ String.concatWith ", " unknown ^ "\n")
+        in exit (authority, 2) end
+   else let val _ = List.map runOne selected
+        in () end
+end

@@ -1,0 +1,15 @@
+(* Untrapping is idempotent: it succeeds with nothing trapped and succeeds
+   again after a trap has already been cleared, so that a supervisor can call
+   it unconditionally on its teardown path. The program then finishes on its
+   own, which is also what shows that a registered trap does not hold the
+   runtime open. *)
+let val a = authority
+    val _ = untrapSigterm a
+    val _ = printString "untrap with nothing trapped: ok"
+    val _ = trapSigterm (a, self ())
+    val _ = printString "trap: ok"
+    val _ = untrapSigterm a
+    val _ = printString "untrap: ok"
+    val _ = untrapSigterm a
+in printString "untrap again: ok"
+end

@@ -383,6 +383,8 @@ instance WellFormedIRCheck IRExpr where
                      , "restore"
                      , "toStringL"
                      , "toString"
+                     -- Signal disposition (see builtins/signals.mts)
+                     , "trapSigterm"
                      -- Terminal primitives (see builtins/tty.mts)
                      , "ttyIsTTY"
                      , "ttyLevel"
@@ -390,6 +392,7 @@ instance WellFormedIRCheck IRExpr where
                      , "ttySize"
                      , "ttySubscribe"
                      , "ttyUnsubscribe"
+                     , "untrapSigterm"
                      , "whereis"
                                       
                      ]

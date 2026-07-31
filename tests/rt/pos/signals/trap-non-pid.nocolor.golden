@@ -1,0 +1,8 @@
+2026-07-31T21:07:12.576Z [RTM] info: Skipping network creation. Observe that all network operations will yield a runtime error.
+Runtime error in thread 615b3d5f-239a-4ed7-83e8-d2a97c2d3018@{}%{}
+
+  5 | let val _ = trapSigterm (authority, 42)
+    |             ^
+
+>> value 42@{}%{} is not a process id
+>> at tests/rt/pos/signals/trap-non-pid.trp:5:13

@@ -78,6 +78,7 @@ function _receiveFromMailbox ($r:RuntimeInterface, lowb, highb, handlers) {
 export function BuiltinReceive<TBase extends Constructor<UserRuntimeZero>>(Base: TBase) {
     return class extends Base {
         peek = mkBase (arg => {
+          assertNormalState("peek")
           assertIsNTuple(arg, 3)
           assertIsNumber(arg.val[0])
           assertIsLevel (arg.val[1])
@@ -92,6 +93,7 @@ export function BuiltinReceive<TBase extends Constructor<UserRuntimeZero>>(Base:
         })
 
         consume = mkBase (arg => {
+          assertNormalState("consume")
           assertIsNTuple(arg, 3)
           assertIsNumber(arg.val[0])
           assertIsLevel (arg.val[1])
@@ -143,14 +145,15 @@ export function BuiltinReceive<TBase extends Constructor<UserRuntimeZero>>(Base:
           let theThread = this.runtime.$t
           theThread.raiseCurrentThreadPC(lub (f.lev, taintLimitArg.lev, taintLimitArg.val))
 
-          let tntLim = theThread.bl 
-          let guard_sp : number = null 
+          let tntLim = theThread.bl
+          let pcInGuard = theThread.pc
+          let guard_sp : number = null
           theThread.handlerState = new SandboxStatus.INHANDLER (
             () => { // trapper - invoked upon side-effects and guard check failure
-              theThread._sp = guard_sp 
+              theThread._sp = guard_sp
               theThread.invalidateSparseBit()
-              theThread.pc = taintLimitArg.val 
-              theThread.bl = taintLimitArg.val 
+              theThread.pc = pcInGuard
+              theThread.bl = tntLim
               theThread.handlerState = new SandboxStatus.NORMAL ()
               return theThread.returnImmediateLValue(def)
             },

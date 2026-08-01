@@ -63,17 +63,21 @@ let val esc = "\x1b"
         if String.size line <= width then line else String.substring (line, 0, width)
 
     (** The whole visible screen: `lines` laid out from the top, each erased to the end of the
-     *  line as it is written, with the cursor left at `(curRow, curCol)`.
+     *  line as it is written, the cursor left at `(curRow, curCol)`, and `tail` written after it.
      *
      *  `lines` is expected to hold exactly `rows` entries; a shorter list draws fewer rows and
      *  leaves the rest of the screen as it was, which is what a caller wants when the buffer has
      *  fewer lines than the terminal has rows only if it padded the list itself. `Editor.frameOf`
-     *  pads. *)
-    fun frame (lines, width, curRow, curCol) =
+     *  pads.
+     *
+     *  `tail` is escapes that belong to the frame but not to any row — the cursor's shape, which
+     *  CursorStyle.trp picks per frame. It goes last, after the cursor has been positioned, so
+     *  that a frame's rows are exactly the text between the home and the position escapes. *)
+    fun frame (lines, width, curRow, curCol, tail) =
         let fun go ([], acc)      = acc
               | go ([l], acc)     = acc ^ truncate (l, width) ^ esc ^ "[K"
               | go (l :: ls, acc) = go (ls, acc ^ truncate (l, width) ^ esc ^ "[K" ^ "\r\n")
-        in go (lines, esc ^ "[H") ^ cursorTo (curRow, curCol)
+        in go (lines, esc ^ "[H") ^ cursorTo (curRow, curCol) ^ tail
         end
 
 in [ ("enterAlt", enterAlt)

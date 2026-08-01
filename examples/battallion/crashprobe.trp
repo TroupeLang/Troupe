@@ -2,16 +2,21 @@
  *
  *   ./local.sh examples/battallion/crashprobe.trp --io-root <dir> -- <file>
  *
- * Identical to examples/battallion/bt.trp except for the keymap it hands `Session.run`: the key
- * "!" evaluates a dynamic type error, which stops the kernel thread. Everything else — the
- * supervisor, the renderer, the terminal handling — is the same compiled modules, imported from
- * examples/battallion, so what this program exercises is the shipped constellation and not a
- * copy of it.
+ * Identical to examples/battallion/bt.trp except for one field of the plugin set it hands
+ * `Session.run`: a keymap whose "!" key evaluates a dynamic type error, which stops the kernel
+ * thread. Everything else — the supervisor, the renderer, the terminal handling, the other three
+ * plugins — is the same compiled modules, imported from examples/battallion, so what this program
+ * exercises is the shipped constellation and not a copy of it.
  *
  * WHY A SEPARATE PROGRAM. The crash has to come from inside the kernel process, and bt.trp must
- * not carry a key that crashes it. `Session.run` already takes the keymap as a parameter — the
- * seam stage 6 extracts plugins through — so a different keymap is all a crash probe needs, and
- * no test-only branch enters the shipped program.
+ * not carry a key that crashes it. `Session.run` takes the plugin set as a parameter, so replacing
+ * its keymap is all a crash probe needs, and no test-only branch enters the shipped program.
+ *
+ * WHY THE KEYMAP IS NOT RUN UNDER `guard`. It would trap exactly this crash and return the
+ * unchanged state, and the supervision path this program exists to exercise would never be taken.
+ * The measurement behind that statement is
+ * tests/_unautomated/claude/battallion-plugins/probe-guard-hook.trp; Editor.trp's header states
+ * the decision.
  *
  * WHY IT LIVES HERE AND NOT BESIDE THE HARNESS. It was written in
  * tests/_unautomated/claude/battallion-viewer/, importing these modules as `../../../../…`, and
@@ -57,9 +62,13 @@ let val a = authority
      *  when the module is built. *)
     fun boom () = "crash" + 1
 
-    (** The viewer's keymap, plus one key that kills the kernel. *)
-    fun onKey (st, KEY_PRINT c) = if c = "!" then (st, boom ()) else Editor.onKey (st, KEY_PRINT c)
-      | onKey (st, k)           = Editor.onKey (st, k)
+    (** The editor's plugin set, and its keymap, which every key but "!" is handed to. *)
+    val base = Editor.plugins
+
+    fun onKey (st, KEY_PRINT c) = if c = "!" then (st, boom ()) else base.onKey (st, KEY_PRINT c)
+      | onKey (st, k)           = base.onKey (st, k)
+
+    val plugins = { base with onKey = onKey }
 
     fun argPath () = case getCliArgs a of []     => fail ("no file given", 2)
                                         | p :: _ => p
@@ -71,6 +80,6 @@ let val a = authority
 
     val path = argPath ()
     val buffer = openBuffer path
-    val code = Session.run (a, buffer, path, onKey)
+    val code = Session.run (a, buffer, path, plugins)
 in exit (a, code)
 end

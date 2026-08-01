@@ -1,0 +1,62 @@
+(* FileOps — what a command line means: `:w`, `:q`, `:q!`, `:wq`.
+ *
+ * A plugin. It imports `Api` and nothing else, holds no authority, no pid and no descriptor, and
+ * cannot write a file: the ROOT authority a write needs never leaves the supervisor's frame
+ * (Session.trp). What it does instead is leave a request in the state — the shape the architecture
+ * document calls edits-as-data, applied to the one effect the mvp editor performs.
+ *
+ * TWO HOOKS. `run (api, st, cmd)` is the command word, returning `(state', quit)` exactly as a key
+ * does; the keymap calls it on Enter, and for `q` and CTRL-c with the word "q", which is what makes
+ * those refuse a modified buffer exactly as `:q` does. `onWritten (api, st, ok, message)` is the
+ * answer coming back: the kernel asked the supervisor to write, and this is what the state becomes
+ * when it has.
+ *
+ * THE COMMANDS are `w`, `q`, `q!`, `wq` and `x` (a synonym for `wq`); anything else is reported in
+ * the status line. The mvp has no ranges, no arguments and no `:w <other-path>` — the path is the
+ * supervisor's own, so nothing the terminal said can redirect a write.
+ *
+ * QUITTING A MODIFIED BUFFER IS REFUSED, by `q`, by CTRL-c and by `:q` alike: the status line says
+ * so and the session stays up. `:q!` is the override, `:wq` the other way out. The mvp key set
+ * names both `:q` and `:q!`, which is only a distinction if `:q` can refuse.
+ *
+ * A WRITE THAT QUITS IS ONE REQUEST, not two: `REQ_WRITE`'s payload carries whether to quit, and
+ * `onWritten` reads it back with `api.writeQuits`. A refused write spends the request, leaves the
+ * buffer modified, and puts the reason in the status line — the session survives a full disk or a
+ * read-only file.
+ *)
+
+import "./Api"
+
+let (** The refusal a modified buffer earns. The wording is vi's, which is what a user who reaches
+     *  for `:q!` will be looking for. *)
+    val modifiedMessage = "no write since last change (add ! to override)"
+
+    (** Quitting: refused while the buffer is modified. *)
+    fun quit (api, st) =
+        if st.dirty then (api.setStatus (st, modifiedMessage), false) else (st, true)
+
+    (** The command word, run against a state the keymap has already returned to normal mode.
+     *  Returns `(state', quit)` like a key does; a command that writes quits through `onWritten`
+     *  instead, once the write has succeeded. *)
+    fun run (api, st, c) =
+             if c = "w"                 then (api.requestWrite (st, false), false)
+        else if c = "wq" orelse c = "x" then (api.requestWrite (st, true), false)
+        else if c = "q"                 then quit (api, st)
+        else if c = "q!"                then (st, true)
+        else (api.setStatus (st, "not an editor command: " ^ c), false)
+
+    (** The state after the kernel has written the buffer out. `ok` says whether the write
+     *  succeeded and `message` is what to show — the reason on failure. A successful write clears
+     *  the modified flag and, for `:wq`, ends the session; a failed one leaves the buffer modified
+     *  and the session up. Either way the request is spent. *)
+    fun onWritten (api, st, ok, message) =
+        let val quitAfter = api.writeQuits st
+            val st' = api.setStatus (api.clearRequest st, message)
+            val st'' = if ok then api.setDirty (st', false) else st'
+        in (st'', ok andalso quitAfter)
+        end
+
+in [ ("run", run)
+   , ("onWritten", onWritten)
+   ]
+end

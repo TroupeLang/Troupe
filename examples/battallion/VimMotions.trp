@@ -1,0 +1,125 @@
+(* VimMotions — battallion's keymap: modes, motions and the editing keys.
+ *
+ * A plugin. It imports `Api` for the state operations and `Key` for the key values, holds no
+ * authority, no pid and no descriptor, and its whole effect on the editor is the state it returns.
+ * The kernel hands it the `api` record and a command interpreter and folds its `onKey` over the
+ * decoded keys.
+ *
+ * ONE KEY IN, ONE STATE OUT. `onKey (api, commands, st, k)` returns `(state', quit)`; `quit` is
+ * true when the key ends the session. A key that asks for something the kernel must do — a write —
+ * leaves a request in the state instead (`api.requestWrite`), which the kernel carries out before
+ * folding the keys behind it.
+ *
+ * THE COMMAND WORD IS NOT THIS PLUGIN'S. `:` opens the command line and this module edits it, but
+ * what a command *means* is FileOps.trp's: on Enter the line is handed to the `commands` function
+ * the kernel passed in, with the mode already back to normal and the line cleared. `q` and CTRL-c
+ * go through the same function as the word "q", which is what makes them refuse a modified buffer
+ * exactly as `:q` does.
+ *
+ * NORMAL MODE. `h j k l` and the arrows move by one; `0` and Home go to the line's start, `$` and
+ * End to its end; PageUp/PageDown and CTRL-b/CTRL-f move by one screen. `i` enters insert mode,
+ * `o` opens a line below and enters it, `x` deletes the character under the cursor, `u` undoes,
+ * `:` starts a command line. `q` and CTRL-c quit, refusing on a modified buffer exactly as `:q`
+ * does. CTRL-c quits because in raw mode it arrives as the byte 0x03 with no signal raised, so
+ * without a binding the habit of pressing it would do nothing at all. Every other key is ignored.
+ *
+ * INSERT MODE. A printable key inserts itself, whatever it is: the payload of `KEY_PRINT` is one
+ * code point as a string and it goes into the buffer as it stands, so a multibyte character typed
+ * or pasted is stored as typed. Enter splits the line, Tab inserts a tab, Backspace deletes the
+ * character to the left and joins with the line above when there is none, Delete removes the
+ * character under the cursor, Esc returns to normal mode. Motions work in insert mode too.
+ *
+ * COMMAND MODE. `:` opens it. Printable keys extend the command, Backspace shortens it and
+ * leaves the mode when the command is empty — as backspacing over the colon does in vi — Esc
+ * cancels, Enter runs it.
+ *
+ * WHAT A VI USER WILL MISS, and why it is not here. There is no goal column: moving down from
+ * column 40 onto a short line and down again stays at that line's end rather than returning to 40
+ * (Api.trp's header says where the column lives). Leaving insert mode does not pull the cursor
+ * left. Undo is per keystroke, so a typed word takes as many `u`s as it had letters. All three are
+ * this plugin's to fix, and none of them is in the mvp key set.
+ *)
+
+import String
+import "./Api"
+import "./Key"
+
+let (*----------------------------------  Motions  -----------------------------------*)
+
+    (** The motions, shared by normal and insert mode. Any other key leaves the state alone. *)
+    fun motion (api, st, KEY_LEFT)     = api.moveTo (st, st.line, st.col - 1)
+      | motion (api, st, KEY_RIGHT)    = api.moveTo (st, st.line, st.col + 1)
+      | motion (api, st, KEY_DOWN)     = api.moveTo (st, st.line + 1, st.col)
+      | motion (api, st, KEY_UP)       = api.moveTo (st, st.line - 1, st.col)
+      | motion (api, st, KEY_HOME)     = api.moveTo (st, st.line, 0)
+      | motion (api, st, KEY_END)      = api.moveTo (st, st.line, api.lineLength (st, st.line))
+      | motion (api, st, KEY_PAGEDOWN) = api.moveTo (st, st.line + api.textRows st, st.col)
+      | motion (api, st, KEY_PAGEUP)   = api.moveTo (st, st.line - api.textRows st, st.col)
+      | motion (api, st, _)            = st
+
+    (*--------------------------------  Normal mode  ---------------------------------*)
+
+    fun normalKey (api, commands, st, KEY_PRINT c) =
+             if c = "h"      then (api.moveTo (st, st.line, st.col - 1), false)
+        else if c = "l"      then (api.moveTo (st, st.line, st.col + 1), false)
+        else if c = "j"      then (api.moveTo (st, st.line + 1, st.col), false)
+        else if c = "k"      then (api.moveTo (st, st.line - 1, st.col), false)
+        else if c = "0"      then (api.moveTo (st, st.line, 0), false)
+        else if c = "$"      then (api.moveTo (st, st.line, api.lineLength (st, st.line)), false)
+        else if c = "i"      then (api.setMode (st, INSERT), false)
+        else if c = "o"      then (api.openBelow st, false)
+        else if c = "x"      then (api.deleteChar st, false)
+        else if c = "u"      then (api.undo st, false)
+        else if c = ":"      then (api.setCmd (api.setMode (st, COMMAND), ""), false)
+        else if c = "q"      then commands (st, "q")
+        else (st, false)
+      | normalKey (api, commands, st, KEY_CTRL c) =
+             if c = "f" then (api.moveTo (st, st.line + api.textRows st, st.col), false)
+        else if c = "b" then (api.moveTo (st, st.line - api.textRows st, st.col), false)
+        else if c = "c" then commands (st, "q")
+        else (st, false)
+      | normalKey (api, commands, st, KEY_DELETE) = (api.deleteChar st, false)
+      | normalKey (api, commands, st, k)          = (motion (api, st, k), false)
+
+    (*--------------------------------  Insert mode  ---------------------------------*)
+
+    fun insertKey (api, st, KEY_PRINT c)   = (api.insertText (st, c), false)
+      | insertKey (api, st, KEY_ENTER)     = (api.insertText (st, "\n"), false)
+      | insertKey (api, st, KEY_TAB)       = (api.insertText (st, "\t"), false)
+      | insertKey (api, st, KEY_BACKSPACE) = (api.backspace st, false)
+      | insertKey (api, st, KEY_DELETE)    = (api.deleteChar st, false)
+      | insertKey (api, st, KEY_ESC)       = (api.setMode (st, NORMAL), false)
+      | insertKey (api, st, k)             = (motion (api, st, k), false)
+
+    (*--------------------------------  Command mode  --------------------------------*)
+
+    (** The command line back to normal mode and empty, which is the state a command runs
+     *  against. *)
+    fun closeCommand (api, st) = api.setCmd (api.setMode (st, NORMAL), "")
+
+    fun commandKey (api, commands, st, KEY_PRINT c) = (api.setCmd (st, st.cmd ^ c), false)
+      | commandKey (api, commands, st, KEY_ENTER)   = commands (closeCommand (api, st), st.cmd)
+      | commandKey (api, commands, st, KEY_ESC)     = (closeCommand (api, st), false)
+      | commandKey (api, commands, st, KEY_BACKSPACE) =
+          if st.cmd = "" then (api.setMode (st, NORMAL), false)
+          else (api.setCmd (st, String.substring (st.cmd, 0, String.size st.cmd - 1)), false)
+      | commandKey (api, commands, st, KEY_CTRL c) =
+          if c = "c" then (closeCommand (api, st), false) else (st, false)
+      | commandKey (api, commands, st, _) = (st, false)
+
+    (*-----------------------------------  The map  ----------------------------------*)
+
+    (** `(state', quit)` for one key.
+     *
+     *  A transient status message is cleared here rather than where it is set, so every message
+     *  is shown for exactly as long as it takes the user to press the next key. *)
+    fun onKey (api, commands, st0, k) =
+        let val st = if st0.status = "" then st0 else api.setStatus (st0, "")
+        in case st.mode of INSERT  => insertKey (api, st, k)
+                         | COMMAND => commandKey (api, commands, st, k)
+                         | _       => normalKey (api, commands, st, k)
+        end
+
+in [ ("onKey", onKey)
+   ]
+end

@@ -2,15 +2,17 @@
  *
  * A program-relative module of examples/battallion. `run` is the whole editor: it acquires the
  * terminal, spawns the kernel and the renderer, runs the supervisor's event loop, and restores
- * the terminal before returning an exit code. The caller supplies the buffer and the keymap; it
- * keeps the root authority, which never leaves this module's `run` frame.
+ * the terminal before returning an exit code. The caller supplies the buffer and the plugin set
+ * (Editor.trp's header gives its shape); it keeps the root authority, which never leaves this
+ * module's `run` frame.
  *
  *   supervisor  the process that calls `run`. Holds the root authority and the terminal: it
  *               subscribes to terminal events, traps SIGTERM, enters raw mode and the alternate
  *               screen, monitors the kernel, writes the buffer out when the kernel asks, and
  *               undoes all of that on the way out, whatever ended the session.
- *      kernel   the editor state machine. Receives forwarded events, folds the keymap over the
- *               decoded keys, asks the renderer for a frame, and answers the supervisor.
+ *      kernel   the editor state machine. Receives forwarded events, folds the plugin set's
+ *               keymap over the decoded keys, asks the renderer for a frame, and answers the
+ *               supervisor.
  *      renderer holds the stdout descriptor and writes frames. Nothing else writes a frame.
  *
  * WHY THE SUPERVISOR IS THE SUBSCRIBER. The runtime's own safety net keys on the subscriber:
@@ -36,7 +38,7 @@
  * the timer wins exits `exitKernelHung`. The two codes are kept apart because they say different
  * things about what went wrong.
  *
- * WHO WRITES THE FILE. The keymap is pure and the kernel holds a null-attenuated authority, while
+ * WHO WRITES THE FILE. The plugins are pure and the kernel holds a null-attenuated authority, while
  * `SimpleFileIO.writeFile` requires the root one — which never leaves the supervisor. So `:w`
  * does not write: it leaves a request in the state, the kernel sends the supervisor
  * ("WRITE", contents), the supervisor writes to the path the session was opened with, and answers
@@ -114,12 +116,12 @@ let (** How long the supervisor waits for the kernel before calling it wedged. T
      *  supervisor. *)
     fun rendererLoop (out, lev) =
         let val m = rcv ( IfcUtil.bot, lev
-                        , [ hn ("FRAME", from, lines, width, curRow, curCol) =>
-                                ("FRAME", from, lines, width, curRow, curCol)
+                        , [ hn ("FRAME", from, lines, width, curRow, curCol, tail) =>
+                                ("FRAME", from, lines, width, curRow, curCol, tail)
                           , hn "STOP" => "STOP" ])
         in case m of
-                ("FRAME", from, lines, width, curRow, curCol) =>
-                    let val _ = fwrite (out, Screen.frame (lines, width, curRow, curCol))
+                ("FRAME", from, lines, width, curRow, curCol, tail) =>
+                    let val _ = fwrite (out, Screen.frame (lines, width, curRow, curCol, tail))
                         val _ = send (from, "RENDERED")
                     in rendererLoop (out, lev)
                     end
@@ -139,10 +141,12 @@ let (** How long the supervisor waits for the kernel before calling it wedged. T
 
     (*==============================  The kernel process  ==============================*)
 
-    (** Hand the renderer a frame of `st` and wait until it has been written. *)
-    fun draw (rend, lev, st) =
-        let val (lines, curRow, curCol) = Editor.frameOf st
-            val _ = send (rend, ("FRAME", self (), lines, st.cols, curRow, curCol))
+    (** Hand the renderer a frame of `st` and wait until it has been written. The frame carries the
+     *  cursor-shape escape the plugin set picked for this state; the renderer writes it after the
+     *  cursor is in place. *)
+    fun draw (rend, lev, plugins, st) =
+        let val (lines, curRow, curCol, tail) = Editor.frameOf (plugins, st)
+            val _ = send (rend, ("FRAME", self (), lines, st.cols, curRow, curCol, tail))
             val _ = rcv (IfcUtil.bot, lev, [ hn "RENDERED" => () ])
         in ()
         end
@@ -150,30 +154,33 @@ let (** How long the supervisor waits for the kernel before calling it wedged. T
     (** The keymap folded over a list of keys. Stops at the first key that quits and at the first
      *  key that asks the kernel for something, handing back the keys it has not reached: a `:w`
      *  in the middle of a chunk must be carried out before the keys after it are folded, or the
-     *  file would be written from a state the user has already typed past. *)
-    fun applyKeys (onKey, st, [])        = (st, false, [])
-      | applyKeys (onKey, st, k :: rest) =
-          let val (st', quit) = onKey (st, k)
+     *  file would be written from a state the user has already typed past.
+     *
+     *  This is the one call site a delivered plugin closure would be folded at, and the one that
+     *  would then wrap the call in `guard` — see Editor.trp's header for what that buys and what
+     *  it costs. *)
+    fun applyKeys (plugins, st, [])        = (st, false, [])
+      | applyKeys (plugins, st, k :: rest) =
+          let val (st', quit) = plugins.onKey (st, k)
           in if quit then (st', true, rest)
-             else case st'.req of REQ_NONE => applyKeys (onKey, st', rest)
-                                | _        => (st', false, rest)
+             else if Editor.hasRequest st' then (st', false, rest)
+             else applyKeys (plugins, st', rest)
           end
 
     (** Fold the keys, carrying out any request they raise. A write is a round trip through the
      *  supervisor — the authority is there, not here — and the outcome goes back into the state
      *  before the remaining keys are folded. *)
-    fun runKeys (sup, lev, onKey, st, keys) =
-        let val (st1, quit, rest) = applyKeys (onKey, st, keys)
-        in case st1.req of
-                REQ_NONE => (st1, quit)
-              | _ =>
-                  let val _ = send (sup, ("WRITE", Editor.contents st1))
-                      val (ok, message) = rcv ( IfcUtil.bot, lev
-                                              , [ hn ("WROTE", o, m) => (o, m) ])
-                      val (st2, quitAfter) = Editor.onWritten (st1, ok, message)
-                  in if quit orelse quitAfter then (st2, true)
-                     else runKeys (sup, lev, onKey, st2, rest)
-                  end
+    fun runKeys (sup, lev, plugins, st, keys) =
+        let val (st1, quit, rest) = applyKeys (plugins, st, keys)
+        in if Editor.hasRequest st1
+           then let val _ = send (sup, ("WRITE", Editor.contents st1))
+                    val (ok, message) = rcv ( IfcUtil.bot, lev
+                                            , [ hn ("WROTE", o, m) => (o, m) ])
+                    val (st2, quitAfter) = plugins.onWritten (st1, ok, message)
+                in if quit orelse quitAfter then (st2, true)
+                   else runKeys (sup, lev, plugins, st2, rest)
+                end
+           else (st1, quit)
         end
 
     (** Arm the escape timer and return the nonce that identifies it. Timers are never cancelled
@@ -201,7 +208,7 @@ let (** How long the supervisor waits for the kernel before calling it wedged. T
      *  would arrive stale, arm its successor, and invalidate the one due to fire, so the flush
      *  that clears the carry would never come and the kernel would spin for the rest of the
      *  session. Arming at the one place the carry changes leaves exactly one live timer. *)
-    fun kernelLoop (sup, rend, lev, onKey, st, carry, nonce) =
+    fun kernelLoop (sup, rend, lev, plugins, st, carry, nonce) =
         let val m = rcv ( IfcUtil.bot, lev
                         , [ hn ("KEY", bytes)        => ("KEY", bytes)
                           , hn ("RESIZE", cols, rows) => ("RESIZE", cols, rows)
@@ -219,25 +226,25 @@ let (** How long the supervisor waits for the kernel before calling it wedged. T
                              then (st, Key.flush carry, "", false, true, false)
                              else (st, [], carry, false, false, false)
                        | _ => (st, [], carry, false, false, false)
-            val (st', quit) = runKeys (sup, lev, onKey, st0, keys)
+            val (st', quit) = runKeys (sup, lev, plugins, st0, keys)
             val nonce' = if rearm then armEscape () else nonce
             val _ = if quit
                     then send (sup, "QUIT")
                     else if act
-                    then let val _ = draw (rend, lev, st')
+                    then let val _ = draw (rend, lev, plugins, st')
                          in if answer then send (sup, "ACK") else ()
                          end
                     else ()
-        in if quit then () else kernelLoop (sup, rend, lev, onKey, st', carry0, nonce')
+        in if quit then () else kernelLoop (sup, rend, lev, plugins, st', carry0, nonce')
         end
 
     (** Draw the first frame, tell the supervisor the session is on the screen, then loop. The
      *  loop's result is bound rather than tail-called, for the reason given at `renderer`. *)
-    fun kernel (sup, rend, lev, weak, onKey, st) =
+    fun kernel (sup, rend, lev, weak, plugins, st) =
         let val (ok, cap) = enableRangedReceive (IfcUtil.bot, lev, weak)
-            val _ = draw (rend, lev, st)
+            val _ = draw (rend, lev, plugins, st)
             val _ = send (sup, "READY")
-            val _ = kernelLoop (sup, rend, lev, onKey, st, "", mkuuid ())
+            val _ = kernelLoop (sup, rend, lev, plugins, st, "", mkuuid ())
         in ()
         end
 
@@ -328,13 +335,14 @@ let (** How long the supervisor waits for the kernel before calling it wedged. T
         else if first = "hung"  then exitKernelHung
         else exitOk
 
-    (** Run a session over `buffer`, with `onKey` as the keymap, and return an exit code.
+    (** Run a session over `buffer`, with `plugins` as the plugin set, and return an exit code.
      *
      *  `auth` must be the root authority: subscribing, raw mode, the SIGTERM trap, the certified
      *  receive region and the file write all need it. It is not passed to the kernel or the
-     *  renderer, which get a null-attenuated authority sufficient only to open a confined
-     *  region. *)
-    fun run (auth, buffer, path, onKey) =
+     *  renderer, which get a null-attenuated authority sufficient only to open a confined region,
+     *  and it is not passed to a plugin at all — a plugin's whole reach is the state it is handed
+     *  back. *)
+    fun run (auth, buffer, path, plugins) =
         let val i = stdin auth
             val out = stdout auth
             val weak = attenuate (auth, IfcUtil.null)
@@ -353,7 +361,7 @@ let (** How long the supervisor waits for the kernel before calling it wedged. T
                   monitored exactly once and the reference is never released. ---*)
             val rend = spawn (fn () => renderer (out, lev, weak))
             val st0  = Editor.init (buffer, path, cols, rows)
-            val kern = spawn (fn () => kernel (me, rend, lev, weak, onKey, st0))
+            val kern = spawn (fn () => kernel (me, rend, lev, weak, plugins, st0))
             val kref = monitorlocal kern
 
             (*--- The region, opened and closed in straight-line code. ---*)
@@ -364,9 +372,11 @@ let (** How long the supervisor waits for the kernel before calling it wedged. T
 
             (*--- Give the terminal back. Cooked mode first: it is the state a terminal is
                   least usable in, so it is the one to leave earliest, and it makes the last
-                  escapes written the observable proof that the mode is already back. ---*)
+                  escapes written the observable proof that the mode is already back. The cursor's
+                  shape is the plugin set's to undo, and it is undone here rather than by the
+                  kernel because the kernel may be the reason the session is ending. ---*)
             val _ = Tty.rawMode (i, false)
-            val _ = fwrite (out, Screen.showCursor ^ Screen.leaveAlt)
+            val _ = fwrite (out, Screen.showCursor ^ plugins.cursorReset ^ Screen.leaveAlt)
             val _ = Tty.unsubscribe i
             val _ = untrapSigterm auth
             val _ = send (rend, "STOP")

@@ -18,18 +18,17 @@
  * cooked mode, normal screen, cursor shown, subscription and signal trap released — on every way
  * out, including a kernel that dies or stops answering.
  *
- * WHAT IT DOES NOT DO YET. The four mvp plugins of stage 6 in
- * _dev_planning/text-editor/mvp-plan.md are still inlined here rather than extracted.
- *
  * WHERE THE PARTS ARE. `Session.trp` is the process constellation and holds every design note
- * about it; `Editor.trp` is the state and the keymap; `Screen.trp` is the escapes and the frame;
- * `Key.trp` is the decoder. This file is the argument handling and the file read — the part that
- * must fail before the terminal has been touched.
+ * about it; `Api.trp` is the state and the operations a plugin is handed; `Editor.trp` is the
+ * kernel and the plugin set — `VimMotions.trp`, `StatusLine.trp`, `CursorStyle.trp` and
+ * `FileOps.trp` are the plugins in it; `Screen.trp` is the escapes and the frame; `Key.trp` is the
+ * decoder. This file is the argument handling and the file read — the part that must fail before
+ * the terminal has been touched.
  *
- * THE KEYMAP IS A PARAMETER. `Session.run` takes the function it folds over decoded keys, so a
- * session can be run with a different keymap without touching the constellation. Stage 6's
- * `VimMotions` plugin is that parameter; `crashprobe.trp` beside this file is another consumer of
- * the same seam.
+ * THE PLUGIN SET IS A PARAMETER. `Session.run` takes the record of hooks it folds into the
+ * session, so a session can be run with a different keymap, status line or cursor without touching
+ * the constellation. `Editor.plugins` is the mvp's set; `crashprobe.trp` beside this file replaces
+ * one field of it and keeps the rest.
  *
  * THE SESSION IS STARTED FROM STRAIGHT-LINE CODE. The argument list and the file-read outcome
  * both carry the channel level, and code inside a branch on such a value runs at a pc raised to
@@ -68,6 +67,6 @@ let val a = authority
 
     val path = argPath ()
     val buffer = openBuffer path
-    val code = Session.run (a, buffer, path, Editor.onKey)
+    val code = Session.run (a, buffer, path, Editor.plugins)
 in exit (a, code)
 end

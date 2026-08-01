@@ -1,8 +1,13 @@
 {
   "deps": [
-    {"path": "Editor", "hash": "uo21vnnan1vappgqeabso9k2kes7b7fnq15ur5a9kpcthldctrqg", "name": "Editor"},
+    {"path": "Api", "hash": "d5hbet3160st2m727a8ic9uc9fdrm2qt7gci6ud136qh6lngov2g", "name": "Api"},
+    {"path": "CursorStyle", "hash": "a0btpul0cgegjqmav7tpbla5qvas4duhbsi75edphjtrgo1nlr7g", "name": "CursorStyle"},
+    {"path": "Editor", "hash": "jfulf341im7bh779m14ddr2so11mkemnje9r8p801qidqrkn4ikg", "name": "Editor"},
+    {"path": "FileOps", "hash": "tr5dqotoqpra2c4m1j6k35char53aeoob8h9b1gbme3d3ec0k90g", "name": "FileOps"},
     {"path": "Key", "hash": "7tlonfjpr39d35nh1f6kfaipgivoaeondg939fnl47p8ii66li80", "name": "Key"},
-    {"path": "Screen", "hash": "r3h4ev3pcrmkc1c36ns6n4rpb3l30do17ajrbco0h9t51rguot4g", "name": "Screen"},
-    {"path": "Session", "hash": "b0mih531d46rh3ejpfaeevib9ajri4u5157hp2nu7g4l1qagtu00", "name": "Session"}
+    {"path": "Screen", "hash": "qpkqhqjahi32c3s88d6hekre56nhg61a2bnoo0trq4qho97o8cr0", "name": "Screen"},
+    {"path": "Session", "hash": "b9nf3k4eu87e1qj8t2398035le10s99jltjdq3s2llvtcq4qqbmg", "name": "Session"},
+    {"path": "StatusLine", "hash": "63g9i32229q131abcf04mqi25dssm61qauq20dc4gmi6iq0b0rvg", "name": "StatusLine"},
+    {"path": "VimMotions", "hash": "8hfvn8eocvg9555rjp2th6u2h1ap5k0mke8tam52joatqh15poo0", "name": "VimMotions"}
   ]
 }

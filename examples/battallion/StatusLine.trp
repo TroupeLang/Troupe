@@ -1,0 +1,42 @@
+(* StatusLine — the bottom row of the frame.
+ *
+ * A plugin, and a pure function of the editor state: `render (api, st)` is the row's text. The
+ * kernel asks for it once per frame and puts it where the row goes; how many rows are left for
+ * the text, and whether there is room for this one at all, stay the kernel's arithmetic
+ * (`Api.textRows`, `Api.hasStatus`), so a terminal of one row keeps that row for the text and this
+ * plugin is not asked.
+ *
+ * WHAT THE ROW SAYS. In command mode it is the command line, colon and all, because that is where
+ * the cursor sits while a command is being typed. Otherwise it names the file, flags a modified
+ * buffer with `[+]`, names the mode, gives the cursor's one-based line and column, and carries a
+ * transient message when there is one — a message set by whatever key produced it, and cleared by
+ * the next key.
+ *
+ * THE ROW IS NOT PADDED and not styled. It is drawn like any other row: cut to the terminal's
+ * width and erased to the end of the line (Screen.trp), so it ends where its text ends rather
+ * than in a bar across the screen. Reverse video would be one escape around the string, and it is
+ * left out of the mvp because the truncation question it raises — an escape is not a column —
+ * is the same one wide characters raise and the mvp does not measure display width.
+ *
+ * COLUMNS COUNT CODE UNITS, as everything else in the editor does (Api.trp), so the column shown
+ * for a cursor past an astral character counts that character as two.
+ *)
+
+import "./Api"
+
+let (** The bottom row: the command line while one is being typed, and otherwise the file, the
+     *  modified flag, the mode, the cursor's one-based position and any transient message. *)
+    fun render (api, st) =
+        case st.mode of
+             COMMAND => ":" ^ st.cmd
+           | m       =>
+               let val flag = if st.dirty then " [+]" else ""
+                   val name = case m of INSERT => "INSERT" | _ => "NORMAL"
+                   val pos  = toString (st.line + 1) ^ "," ^ toString (st.col + 1)
+                   val base = st.path ^ flag ^ "  " ^ name ^ "  " ^ pos
+               in if st.status = "" then base else base ^ "  " ^ st.status
+               end
+
+in [ ("render", render)
+   ]
+end

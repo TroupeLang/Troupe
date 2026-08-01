@@ -1,0 +1,56 @@
+(* CursorStyle — the shape of the terminal's cursor, chosen by where the cursor is.
+ *
+ * A plugin, and a pure function of the editor state: `shape (api, st)` is the escape that selects
+ * the cursor's shape for the frame drawn from `st`, and the renderer writes it with that frame.
+ * A bar between characters, an underscore at the end of a line — the position says which, not the
+ * mode, so the shape answers the question a cursor at the end of a line always raises: is this
+ * text or is this the edge?
+ *
+ * THE ESCAPES ARE DECSCUSR, `CSI Ps SP q` — that is ESC, `[`, the parameter, a space, and `q`.
+ * The parameter values are xterm's (xterm ctlseqs, "Set cursor style (DECSCUSR)", read 2026-08-01):
+ * 0 blinking block, 1 blinking block (the default), 2 steady block, 3 blinking underline,
+ * 4 steady underline, 5 blinking bar, 6 steady bar. This module uses 5 and 3, the blinking pair,
+ * so that the two shapes differ in shape alone. terminfo agrees on the form: `xterm-256color` has
+ * `Ss=\E[%p1%d q`.
+ *
+ * THE RESET IS `CSI 0 SP q`, written once on the way out beside the other teardown escapes.
+ * DECSCUSR 0 is blinking block in xterm's own table, while several terminals (VTE, iTerm2) read 0
+ * as "back to the shape this terminal is configured with", which is the closer thing to giving the
+ * user their cursor back. terminfo's reset capability for `xterm-256color` is `Se=\E[2 q`, steady
+ * block — a shape chosen for the user rather than restored to them, which is why it is not what
+ * this module writes.
+ *
+ * THE CURSOR IS HIDDEN FOR THE WHOLE SESSION as the mvp stands: the supervisor writes `\x1b[?25l`
+ * at startup and `\x1b[?25h` on the way out, because a full-frame redraw would otherwise trail the
+ * cursor across the screen (Screen.trp's header). A shape selects how a *shown* cursor is drawn,
+ * so what this plugin writes is not visible until the redraw path shows the cursor again — hiding
+ * it only for the duration of each frame rather than for the session. That change belongs to the
+ * renderer, not here, and it is not part of the extraction stage.
+ *)
+
+import "./Api"
+
+let (** Blinking bar: DECSCUSR 5. *)
+    val bar = "\x1b[5 q"
+
+    (** Blinking underline: DECSCUSR 3. *)
+    val underline = "\x1b[3 q"
+
+    (** DECSCUSR 0, written on the way out. *)
+    val reset = "\x1b[0 q"
+
+    (** Whether the cursor sits past the last character of its line. In command mode the cursor is
+     *  not in the buffer at all — it is at the end of the command being typed, which is the end of
+     *  a line by the same reading. *)
+    fun atEnd (api, st) =
+        case st.mode of
+             COMMAND => true
+           | _       => st.col >= api.lineLength (st, st.line)
+
+    (** The escape that shapes the cursor for this state. *)
+    fun shape (api, st) = if atEnd (api, st) then underline else bar
+
+in [ ("shape", shape)
+   , ("reset", reset)
+   ]
+end

@@ -1,13 +1,14 @@
 {
   "deps": [
-    {"path": "Api", "hash": "07qnf2lqqqi3vvuc2b619hsog77sci4b7tj3qvvaei9fct0j3f9g", "name": "Api"},
+    {"path": "Api", "hash": "5qgtvb4r9pcf588hv9p2b43golo8ffm9qfa4eev169a13n71lggg", "name": "Api"},
     {"path": "CursorStyle", "hash": "q9opdofp92s1ig6mndvn47cg10gj1pfvbsbt0em9p6fatmfacvn0", "name": "CursorStyle"},
-    {"path": "Editor", "hash": "bnfcipph8daukaprpd3r68ili1rhs7fl9cbnm3i8vh8bntivfjtg", "name": "Editor"},
-    {"path": "FileOps", "hash": "jhr9b0u5eulebl1fqaalhrtga3gnp7h9266ck5u0ef832lst600g", "name": "FileOps"},
+    {"path": "Editor", "hash": "pcco0s32j97cmankpmmu24vbuurrmr5a3ls97n123cin5pv89stg", "name": "Editor"},
+    {"path": "FileOps", "hash": "ah8flo58p8kqjob8jls55mjcnv8ei8utnjqi6kkdckksvr59vr90", "name": "FileOps"},
+    {"path": "Help", "hash": "k7ajt7v06qa2lhgjhfhmqpj0f8qq9c939285duiam7al0gf6eeu0", "name": "Help"},
     {"path": "Key", "hash": "7tlonfjpr39d35nh1f6kfaipgivoaeondg939fnl47p8ii66li80", "name": "Key"},
     {"path": "Screen", "hash": "u3he00s9fm83n7q0cv4blehomqnse7arutmukg4do2lsdlct9tng", "name": "Screen"},
-    {"path": "Session", "hash": "tft0h92g6okfkvlav06185shk15aouo8mum8obo3ciitfq67v3c0", "name": "Session"},
-    {"path": "StatusLine", "hash": "cerjn5ap49cpkeehmkrndvmvucvpfmj6i2h43l3udril807erd2g", "name": "StatusLine"},
-    {"path": "VimMotions", "hash": "8hfvn8eocvg9555rjp2th6u2h1ap5k0mke8tam52joatqh15poo0", "name": "VimMotions"}
+    {"path": "Session", "hash": "c2n3ius41sf802e3lj4b0hpennk84go5i05jm7049p2nrecrtmqg", "name": "Session"},
+    {"path": "StatusLine", "hash": "m9qubbjaecpsobotb5nfqmb23lt8q9825n3e9hrffdjh1oi02uv0", "name": "StatusLine"},
+    {"path": "VimMotions", "hash": "okr0ii427a6dk6552iqd1qvf2lhnjrc1jm6huvnn16uo9fjun5fg", "name": "VimMotions"}
   ]
 }

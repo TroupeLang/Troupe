@@ -1,4 +1,4 @@
-(* VimMotions — battallion's keymap: modes, motions and the editing keys.
+(* VimMotions — battallion's keymap: modes, motions, search and the editing keys.
  *
  * A plugin. It imports `Api` for the state operations and `Key` for the key values, holds no
  * authority, no pid and no descriptor, and its whole effect on the editor is the state it returns.
@@ -16,12 +16,15 @@
  * go through the same function as the word "q", which is what makes them refuse a modified buffer
  * exactly as `:q` does.
  *
- * NORMAL MODE. `h j k l` and the arrows move by one; `0` and Home go to the line's start, `$` and
- * End to its end; PageUp/PageDown and CTRL-b/CTRL-f move by one screen. `i` enters insert mode,
- * `o` opens a line below and enters it, `x` deletes the character under the cursor, `u` undoes,
- * `:` starts a command line. `q` and CTRL-c quit, refusing on a modified buffer exactly as `:q`
- * does. CTRL-c quits because in raw mode it arrives as the byte 0x03 with no signal raised, so
- * without a binding the habit of pressing it would do nothing at all. Every other key is ignored.
+ * NORMAL MODE. `h j k l` and the arrows move by one; `0` and Home go to the line's start, `^` to
+ * its first non-blank, `$` and End to its end; `w` and `b` move by a word; `gg` and `G` go to the
+ * first and last line; PageUp/PageDown and CTRL-b/CTRL-f move by one screen. `i` enters insert
+ * mode, `o` opens a line below and enters it, `x` deletes the character under the cursor, `dd`
+ * deletes the line, `yy` yanks it, `p` and `P` put it back below and above, `u` undoes, `/` starts
+ * a search and `n` and `N` repeat it, `:` starts a command line. `q` and CTRL-c quit, refusing on a
+ * modified buffer exactly as `:q` does. CTRL-c quits because in raw mode it arrives as the byte
+ * 0x03 with no signal raised, so without a binding the habit of pressing it would do nothing at
+ * all. Every other key is ignored.
  *
  * INSERT MODE. A printable key inserts itself, whatever it is: the payload of `KEY_PRINT` is one
  * code point as a string and it goes into the buffer as it stands, so a multibyte character typed
@@ -29,53 +32,298 @@
  * character to the left and joins with the line above when there is none, Delete removes the
  * character under the cursor, Esc returns to normal mode. Motions work in insert mode too.
  *
- * COMMAND MODE. `:` opens it. Printable keys extend the command, Backspace shortens it and
- * leaves the mode when the command is empty — as backspacing over the colon does in vi — Esc
- * cancels, Enter runs it.
+ * COMMAND MODE IS ONE MODE FOR TWO PROMPTS. `:` opens it with a colon and `/` with a slash, and
+ * `st.prompt` is which. The editing is the same either way — printable keys extend the line,
+ * Backspace shortens it and leaves the mode when the line is empty, as backspacing over the colon
+ * does in vi, Esc cancels — and only Enter looks at the prompt, handing a colon line to the
+ * command interpreter and a slash line to the search below. One mode rather than two because the
+ * status line has one row for both and because a second mode would be the same nine keys again.
  *
- * WHAT A VI USER WILL MISS, and why it is not here. There is no goal column: moving down from
- * column 40 onto a short line and down again stays at that line's end rather than returning to 40
- * (Api.trp's header says where the column lives). Leaving insert mode does not pull the cursor
- * left. Undo is per keystroke, so a typed word takes as many `u`s as it had letters. All three are
- * this plugin's to fix, and none of them is in the mvp key set.
+ * A TWO-KEY SEQUENCE IS A PREFIX IN THE STATE. `gg`, `dd` and `yy` are the pairs, and `st.pending`
+ * holds the first key of one until the next key arrives. The rule is the whole mechanism: in
+ * normal mode, a key that arrives with a prefix waiting is looked up as a *pair* and the prefix is
+ * cleared, whether or not the pair is bound. So `d` then `x` does nothing and leaves normal mode
+ * where it was, Esc after a prefix is a way to abandon it, and no key can be left half-pressed.
+ * The prefix is shown at the end of the status line, so a `g` pressed by accident is visible
+ * rather than silent. A prefix does not survive into insert or command mode, there being no pair
+ * to complete it there, and it is not in an undo snapshot (Api.trp).
+ *
+ * SEARCH IS PLAIN TEXT, CASE-SENSITIVE, AND WRAPS. `/text` searches forward from just after the
+ * cursor; `n` repeats it and `N` runs it backwards, both from wherever the cursor is now. The
+ * pattern is a substring, not a regular expression: what is typed is what is looked for, and `.`
+ * and `*` match themselves. Case is not folded — `/the` does not find `The` — because a search
+ * that ignored case would need a way to say when it should not, and the editor has no options to
+ * say it in. A search that reaches the end of the buffer continues from the top and says so in
+ * the status line; one that finds nothing says that instead and leaves the cursor where it was. A
+ * pattern is matched within one line: the buffer is scanned line by line, so a pattern cannot span
+ * a line break — which nothing typed at the prompt can contain anyway.
+ *
+ * A WORD IS A RUN OF ONE CHARACTER CLASS. `w` and `b` divide the text into three classes — spaces
+ * and tabs, word characters (letters, digits, underscore, and everything above ASCII), and
+ * everything else — and move to the start of the next or the previous run that is not spaces,
+ * crossing line breaks as vi does. An empty line is a word of its own and both keys stop on it.
+ * Treating every character above ASCII as a word character is what keeps a word of accented
+ * letters one word; it also makes a run of box-drawing characters one, which is the price.
+ *
+ * THE LINEWISE KEYS LAND AT COLUMN ZERO. `gg`, `G`, `dd` and `:N` put the cursor at the start of
+ * the line rather than at its first non-blank, which is where vi puts it. `^` is the key that
+ * finds the first non-blank, and it is one keystroke away from any of them.
+ *
+ * THE YANK REGISTER IS ONE LINE. `yy` takes the cursor's line, `dd` takes the line it deletes, and
+ * `p` and `P` put whichever was taken last below or above the cursor's line. There is no charwise
+ * yank and there are no named registers: a delete that is not linewise (`x`) does not touch the
+ * register, so what `p` puts back is always a whole line.
+ *
+ * WHAT A VI USER WILL STILL MISS. There is no count prefix, so `5j` is five presses of `j`. Undo is
+ * per keystroke, so a typed word takes as many `u`s as it had letters. `x` at the end of a line
+ * does nothing where vi steps left onto the last character first, and leaving insert mode does not
+ * pull the cursor left (Api.trp's header says where that choice lives).
  *)
 
 import String
+import List
+import Option
 import "./Api"
 import "./Key"
 
-let (*----------------------------------  Motions  -----------------------------------*)
+let (*-----------------------------------  Messages  ----------------------------------*)
 
-    (** The motions, shared by normal and insert mode. Any other key leaves the state alone. *)
+    val noPatternMessage     = "no previous search pattern"
+    val wrapDownMessage      = "search hit the bottom, continuing at the top"
+    val wrapUpMessage        = "search hit the top, continuing at the bottom"
+    val nothingYankedMessage = "nothing has been yanked"
+    val yankedMessage        = "line yanked"
+
+    fun notFoundMessage p = "pattern not found: " ^ p
+
+    (*-------------------------------  Character classes  -----------------------------*)
+
+    (* The classes `w` and `b` move between: 0 is a space, 1 is a word character, 2 is anything
+     * else. Everything above ASCII is class 1, so an accented word is one word. *)
+    val classSpace = 0
+    val classWord  = 1
+    val classOther = 2
+
+    fun classOf c =
+        if c = " " orelse c = "\t" then classSpace
+        else let val u = String.subCode (c, 0)
+             in if (u >= 48 andalso u <= 57)
+                   orelse (u >= 65 andalso u <= 90)
+                   orelse (u >= 97 andalso u <= 122)
+                   orelse u = 95
+                   orelse u >= 128
+                then classWord else classOther
+             end
+
+    fun classIn (line, i) = classOf (String.sub (line, i))
+
+    (*---------------------------------  Word motions  --------------------------------*)
+
+    (** The column on `line` where the next word begins, at or after `c`, or -1 when the line has
+     *  no word start left in it: the run under the cursor is skipped, then the spaces after it. *)
+    fun nextWordIn (line, n, c) =
+        let fun skip (i, k) = if i < n andalso classIn (line, i) = k then skip (i + 1, k) else i
+            val here  = if c < n then classIn (line, c) else classSpace
+            val after = if here = classSpace then c else skip (c, here)
+            val start = skip (after, classSpace)
+        in if start < n then start else -1
+        end
+
+    (** The column on `line` where the word before `c` begins, or -1 when there is none: the spaces
+     *  before `c` are stepped over, then the run they end. *)
+    fun prevWordIn (line, n, c) =
+        let val from = if c > n then n else c
+            fun skipSpace i = if i >= 0 andalso classIn (line, i) = classSpace
+                              then skipSpace (i - 1) else i
+            val i = skipSpace (from - 1)
+        in if i < 0 then -1
+           else let val k = classIn (line, i)
+                    fun back j = if j >= 0 andalso classIn (line, j) = k
+                                 then back (j - 1) else j + 1
+                in back i
+                end
+        end
+
+    (** The cursor at the start of the next word, crossing line breaks; the end of the buffer stops
+     *  it. `fresh` says the line was reached by crossing a break, in which case a word starting at
+     *  its first column is the answer and an empty line is one too. *)
+    fun wordForward (api, st) =
+        let val last = api.lastLine st
+            fun seek (l, c, fresh) =
+                let val line = api.lineAt (st, l)
+                    val n    = String.size line
+                in if fresh andalso (n = 0 orelse classIn (line, 0) <> classSpace)
+                   then api.moveTo (st, l, 0)
+                   else let val hit = nextWordIn (line, n, c)
+                        in if hit >= 0 then api.moveTo (st, l, hit)
+                           else if l < last then seek (l + 1, 0, true)
+                           else api.moveTo (st, l, n)
+                        end
+                end
+        in seek (st.line, st.col, false)
+        end
+
+    (** The cursor at the start of the previous word, crossing line breaks; the start of the buffer
+     *  stops it. An empty line reached by crossing a break is a word. *)
+    fun wordBackward (api, st) =
+        let fun seek (l, c, fresh) =
+                let val line = api.lineAt (st, l)
+                    val n    = String.size line
+                in if fresh andalso n = 0
+                   then api.moveTo (st, l, 0)
+                   else let val hit = prevWordIn (line, n, c)
+                        in if hit >= 0 then api.moveTo (st, l, hit)
+                           else if l > 0 then seek (l - 1, Api.goalEnd, true)
+                           else api.moveTo (st, l, 0)
+                        end
+                end
+        in seek (st.line, st.col, false)
+        end
+
+    (** The column of the line's first character that is not a space, or its end when it has
+     *  none. *)
+    fun firstNonBlank (api, st, l) =
+        let val line = api.lineAt (st, l)
+            val n    = String.size line
+            fun go i = if i < n andalso classIn (line, i) = classSpace then go (i + 1) else i
+        in go 0
+        end
+
+    (*------------------------------------  Search  -----------------------------------*)
+
+    (** The first hit at or after `(l0, c0)`, scanning to the last line: `SOME (line, col)` or
+     *  `NONE`. One `strIndexOf` per line, so a miss costs a scan of the text below the cursor. *)
+    fun hitFrom (api, st, pat, l0, c0) =
+        let val last = api.lastLine st
+            fun go (l, from) =
+                if l > last then NONE
+                else let val i = strIndexOf (api.lineAt (st, l), pat, from)
+                     in if i >= 0 then SOME (l, i) else go (l + 1, 0)
+                     end
+        in go (l0, c0)
+        end
+
+    (** The last hit on `line` that begins before column `limit`, or -1. *)
+    fun lastHitIn (line, pat, limit) =
+        let fun go (i, best) =
+                let val j = strIndexOf (line, pat, i)
+                in if j < 0 orelse j >= limit then best else go (j + 1, j)
+                end
+        in go (0, -1)
+        end
+
+    (** The last hit before `(l0, c0)`, scanning upwards to the first line. *)
+    fun hitBefore (api, st, pat, l0, c0) =
+        let fun go (l, limit) =
+                if l < 0 then NONE
+                else let val i = lastHitIn (api.lineAt (st, l), pat, limit)
+                     in if i >= 0 then SOME (l, i) else go (l - 1, Api.goalEnd)
+                     end
+        in go (l0, c0)
+        end
+
+    (** The state at the next hit of `pat`, or where it was with a message. `down` is the
+     *  direction. A search that runs off the end continues from the other one, which is what makes
+     *  `n` on the last hit come back to the first; the wrap is reported, a miss is reported, and a
+     *  hit that needed neither says nothing. *)
+    fun searchFor (api, st, pat, down) =
+        let val (hit, wrapped) =
+                if down
+                then case hitFrom (api, st, pat, st.line, st.col + 1) of
+                          SOME p => (SOME p, false)
+                        | NONE   => (hitFrom (api, st, pat, 0, 0), true)
+                else case hitBefore (api, st, pat, st.line, st.col) of
+                          SOME p => (SOME p, false)
+                        | NONE   => (hitBefore (api, st, pat, api.lastLine st, Api.goalEnd), true)
+            val note = if down then wrapDownMessage else wrapUpMessage
+        in case hit of
+                NONE        => api.setStatus (st, notFoundMessage pat)
+              | SOME (l, c) =>
+                  let val st' = api.moveTo (st, l, c)
+                  in if wrapped then api.setStatus (st', note) else st'
+                  end
+        end
+
+    (** The pattern typed at the `/` prompt, remembered and run. An empty pattern repeats the last
+     *  one, as vi's does. *)
+    fun runSearch (api, st, pat) =
+        if pat = ""
+        then if st.find = "" then api.setStatus (st, noPatternMessage)
+             else searchFor (api, st, st.find, true)
+        else searchFor (api, api.setFind (st, pat), pat, true)
+
+    (** `n` and `N`: the last pattern again, forward or backward. *)
+    fun repeatSearch (api, st, down) =
+        if st.find = "" then api.setStatus (st, noPatternMessage)
+        else searchFor (api, st, st.find, down)
+
+    (*------------------------------  Yanking and putting  ----------------------------*)
+
+    fun yankLine (api, st) =
+        api.setStatus (api.setYank (st, SOME (api.lineAt (st, st.line))), yankedMessage)
+
+    fun putLine (api, st, below) =
+        case st.yank of
+             NONE   => api.setStatus (st, nothingYankedMessage)
+           | SOME s => if below then api.putBelow (st, s) else api.putAbove (st, s)
+
+    (*-----------------------------------  Motions  -----------------------------------*)
+
+    (** The motions, shared by normal and insert mode. The vertical ones go through `moveLine`,
+     *  which keeps the goal column, and the horizontal ones through `moveTo` and `moveEnd`, which
+     *  set it (Api.trp). Any other key leaves the state alone. *)
     fun motion (api, st, KEY_LEFT)     = api.moveTo (st, st.line, st.col - 1)
       | motion (api, st, KEY_RIGHT)    = api.moveTo (st, st.line, st.col + 1)
-      | motion (api, st, KEY_DOWN)     = api.moveTo (st, st.line + 1, st.col)
-      | motion (api, st, KEY_UP)       = api.moveTo (st, st.line - 1, st.col)
+      | motion (api, st, KEY_DOWN)     = api.moveLine (st, st.line + 1)
+      | motion (api, st, KEY_UP)       = api.moveLine (st, st.line - 1)
       | motion (api, st, KEY_HOME)     = api.moveTo (st, st.line, 0)
-      | motion (api, st, KEY_END)      = api.moveTo (st, st.line, api.lineLength (st, st.line))
-      | motion (api, st, KEY_PAGEDOWN) = api.moveTo (st, st.line + api.textRows st, st.col)
-      | motion (api, st, KEY_PAGEUP)   = api.moveTo (st, st.line - api.textRows st, st.col)
+      | motion (api, st, KEY_END)      = api.moveEnd (st, st.line)
+      | motion (api, st, KEY_PAGEDOWN) = api.moveLine (st, st.line + api.textRows st)
+      | motion (api, st, KEY_PAGEUP)   = api.moveLine (st, st.line - api.textRows st)
       | motion (api, st, _)            = st
+
+    (*-------------------------------  Two-key sequences  -----------------------------*)
+
+    (** The key that completes a prefix. The prefix is already cleared from `st`: a pair that is
+     *  not bound leaves the state as it stands, so no key can be left half-pressed. *)
+    fun pendingKey (api, st, prefix, KEY_PRINT c) =
+             if prefix = "g" andalso c = "g" then (api.moveTo (st, 0, 0), false)
+        else if prefix = "d" andalso c = "d" then (api.deleteLine (yankLine (api, st)), false)
+        else if prefix = "y" andalso c = "y" then (yankLine (api, st), false)
+        else (st, false)
+      | pendingKey (api, st, prefix, k) = (st, false)
 
     (*--------------------------------  Normal mode  ---------------------------------*)
 
-    fun normalKey (api, commands, st, KEY_PRINT c) =
-             if c = "h"      then (api.moveTo (st, st.line, st.col - 1), false)
-        else if c = "l"      then (api.moveTo (st, st.line, st.col + 1), false)
-        else if c = "j"      then (api.moveTo (st, st.line + 1, st.col), false)
-        else if c = "k"      then (api.moveTo (st, st.line - 1, st.col), false)
-        else if c = "0"      then (api.moveTo (st, st.line, 0), false)
-        else if c = "$"      then (api.moveTo (st, st.line, api.lineLength (st, st.line)), false)
-        else if c = "i"      then (api.setMode (st, INSERT), false)
-        else if c = "o"      then (api.openBelow st, false)
-        else if c = "x"      then (api.deleteChar st, false)
-        else if c = "u"      then (api.undo st, false)
-        else if c = ":"      then (api.setCmd (api.setMode (st, COMMAND), ""), false)
-        else if c = "q"      then commands (st, "q")
+    fun normalPrint (api, commands, st, c) =
+             if c = "h" then (api.moveTo (st, st.line, st.col - 1), false)
+        else if c = "l" then (api.moveTo (st, st.line, st.col + 1), false)
+        else if c = "j" then (api.moveLine (st, st.line + 1), false)
+        else if c = "k" then (api.moveLine (st, st.line - 1), false)
+        else if c = "0" then (api.moveTo (st, st.line, 0), false)
+        else if c = "^" then (api.moveTo (st, st.line, firstNonBlank (api, st, st.line)), false)
+        else if c = "$" then (api.moveEnd (st, st.line), false)
+        else if c = "w" then (wordForward (api, st), false)
+        else if c = "b" then (wordBackward (api, st), false)
+        else if c = "G" then (api.moveTo (st, api.lastLine st, 0), false)
+        else if c = "i" then (api.setMode (st, INSERT), false)
+        else if c = "o" then (api.openBelow st, false)
+        else if c = "x" then (api.deleteChar st, false)
+        else if c = "p" then (putLine (api, st, true), false)
+        else if c = "P" then (putLine (api, st, false), false)
+        else if c = "u" then (api.undo st, false)
+        else if c = "n" then (repeatSearch (api, st, true), false)
+        else if c = "N" then (repeatSearch (api, st, false), false)
+        else if c = "/" then (api.openPrompt (st, "/"), false)
+        else if c = ":" then (api.openPrompt (st, ":"), false)
+        else if c = "g" orelse c = "d" orelse c = "y" then (api.setPending (st, c), false)
+        else if c = "q" then commands (st, "q")
         else (st, false)
+
+    fun normalKey (api, commands, st, KEY_PRINT c) = normalPrint (api, commands, st, c)
       | normalKey (api, commands, st, KEY_CTRL c) =
-             if c = "f" then (api.moveTo (st, st.line + api.textRows st, st.col), false)
-        else if c = "b" then (api.moveTo (st, st.line - api.textRows st, st.col), false)
+             if c = "f" then (api.moveLine (st, st.line + api.textRows st), false)
+        else if c = "b" then (api.moveLine (st, st.line - api.textRows st), false)
         else if c = "c" then commands (st, "q")
         else (st, false)
       | normalKey (api, commands, st, KEY_DELETE) = (api.deleteChar st, false)
@@ -93,33 +341,81 @@ let (*----------------------------------  Motions  -----------------------------
 
     (*--------------------------------  Command mode  --------------------------------*)
 
-    (** The command line back to normal mode and empty, which is the state a command runs
-     *  against. *)
-    fun closeCommand (api, st) = api.setCmd (api.setMode (st, NORMAL), "")
+    (** What Enter does with the line is what the prompt says: a command word goes to the command
+     *  interpreter, a search pattern to the search above. *)
+    fun runPrompt (api, commands, st, prompt, line) =
+        if prompt = "/" then (runSearch (api, st, line), false) else commands (st, line)
 
     fun commandKey (api, commands, st, KEY_PRINT c) = (api.setCmd (st, st.cmd ^ c), false)
-      | commandKey (api, commands, st, KEY_ENTER)   = commands (closeCommand (api, st), st.cmd)
-      | commandKey (api, commands, st, KEY_ESC)     = (closeCommand (api, st), false)
+      | commandKey (api, commands, st, KEY_ENTER)   =
+          runPrompt (api, commands, api.closePrompt st, st.prompt, st.cmd)
+      | commandKey (api, commands, st, KEY_ESC)     = (api.closePrompt st, false)
       | commandKey (api, commands, st, KEY_BACKSPACE) =
-          if st.cmd = "" then (api.setMode (st, NORMAL), false)
+          if st.cmd = "" then (api.closePrompt st, false)
           else (api.setCmd (st, String.substring (st.cmd, 0, String.size st.cmd - 1)), false)
       | commandKey (api, commands, st, KEY_CTRL c) =
-          if c = "c" then (closeCommand (api, st), false) else (st, false)
+          if c = "c" then (api.closePrompt st, false) else (st, false)
       | commandKey (api, commands, st, _) = (st, false)
+
+    (*----------------------------------  Help mode  ---------------------------------*)
+
+    (** Any key at all puts the help page away and the buffer back. Nothing else in the state is
+     *  touched, so the key that dismissed the page is spent on dismissing it. *)
+    fun helpKey (api, st, k) = (api.setMode (st, NORMAL), false)
 
     (*-----------------------------------  The map  ----------------------------------*)
 
     (** `(state', quit)` for one key.
      *
      *  A transient status message is cleared here rather than where it is set, so every message
-     *  is shown for exactly as long as it takes the user to press the next key. *)
+     *  is shown for exactly as long as it takes the user to press the next key.
+     *
+     *  A prefix waiting in the state is spent here too, and only in normal mode: the key is looked
+     *  up as a pair and the prefix is cleared whether or not the pair is bound. *)
     fun onKey (api, commands, st0, k) =
         let val st = if st0.status = "" then st0 else api.setStatus (st0, "")
-        in case st.mode of INSERT  => insertKey (api, st, k)
-                         | COMMAND => commandKey (api, commands, st, k)
-                         | _       => normalKey (api, commands, st, k)
+        in case st.mode of
+                INSERT  => insertKey (api, st, k)
+              | COMMAND => commandKey (api, commands, st, k)
+              | HELP    => helpKey (api, st, k)
+              | _       => if st.pending = ""
+                           then normalKey (api, commands, st, k)
+                           else pendingKey (api, api.setPending (st, ""), st.pending, k)
         end
 
+    (*----------------------------------  The help  ----------------------------------*)
+
+    (** What `:help` says about this keymap: the sections the plugin set assembles the help page
+     *  from (Help.trp). A key added above belongs in the section it belongs to here. *)
+    val help =
+        [ ("MOTION",
+           [ ("h j k l",   "move by one")
+           , ("arrows",    "move by one")
+           , ("0 Home",    "start of the line")
+           , ("^",         "first non-blank")
+           , ("$ End",     "end of the line")
+           , ("w b",       "next, previous word")
+           , ("gg G",      "first, last line")
+           , ("^B ^F",     "up, down a screen")
+           , ("PgUp PgDn", "up, down a screen") ])
+        , ("EDIT",
+           [ ("i",         "insert before the cursor")
+           , ("o",         "open a line below")
+           , ("x Del",     "delete a character")
+           , ("dd",        "delete the line")
+           , ("yy",        "yank the line")
+           , ("p P",       "put it below, above")
+           , ("u",         "undo one change")
+           , ("Esc",       "leave insert mode") ])
+        , ("SEARCH",
+           [ ("/text",     "search forward")
+           , ("n N",       "next, previous match") ])
+        , ("SESSION",
+           [ (":",         "start a command")
+           , ("q ^C",      "quit like :q") ])
+        ]
+
 in [ ("onKey", onKey)
+   , ("help", help)
    ]
 end

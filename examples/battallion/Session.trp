@@ -41,13 +41,19 @@
  * WHO WRITES THE FILE. The plugins are pure and the kernel holds a null-attenuated authority, while
  * `SimpleFileIO.writeFile` requires the root one — which never leaves the supervisor. So `:w`
  * does not write: it leaves a request in the state, the kernel sends the supervisor
- * ("WRITE", contents), the supervisor writes to the path the session was opened with, and answers
- * ("WROTE", ok, message), which the kernel folds back into the state before redrawing. The path
- * is the supervisor's own, not the kernel's: nothing the terminal said can redirect the write.
- * The contents carry the channel level and the write takes them unchanged — no confidentiality
- * check stands between them and the file, `--io-root` being what bounds where the write can land
- * — and the pc is unmoved by it, so the receive region still closes afterwards
- * (probe-write-level.trp measures all three).
+ * ("WRITE", path, contents), the supervisor writes and answers ("WROTE", ok, message), which the
+ * kernel folds back into the state before redrawing. The contents carry the channel level and the
+ * write takes them unchanged — no confidentiality check stands between them and the file — and the
+ * pc is unmoved by it, so the receive region still closes afterwards (probe-write-level.trp
+ * measures all three).
+ *
+ * THE TARGET TRAVELS IN THE REQUEST, WHICH IS WHAT `:w PATH` NEEDS, and the authority does not
+ * travel at all. A path the kernel asks for is a path the terminal could have named, and the bound
+ * on it is `--io-root`: `SimpleFileIO.writeFile` resolves every path inside that subtree and
+ * refuses one that leaves it, whether lexically or through a symlink, so the worst a keystroke can
+ * do is name another file the session was already able to write. What stays with the supervisor is
+ * the capability rather than the destination — the write happens in this frame, with the root
+ * authority, and the kernel never holds one that could perform it.
  *
  * LABELS. Terminal events carry the channel level (ROOT by default), so everything the kernel
  * computes from a keystroke does too, and so does every frame and every byte written to the file.
@@ -173,7 +179,7 @@ let (** How long the supervisor waits for the kernel before calling it wedged. T
     fun runKeys (sup, lev, plugins, st, keys) =
         let val (st1, quit, rest) = applyKeys (plugins, st, keys)
         in if Editor.hasRequest st1
-           then let val _ = send (sup, ("WRITE", Editor.contents st1))
+           then let val _ = send (sup, ("WRITE", Editor.writePath st1, Editor.contents st1))
                     val (ok, message) = rcv ( IfcUtil.bot, lev
                                             , [ hn ("WROTE", o, m) => (o, m) ])
                     val (st2, quitAfter) = plugins.onWritten (st1, ok, message)
@@ -250,8 +256,9 @@ let (** How long the supervisor waits for the kernel before calling it wedged. T
 
     (*============================  The supervisor process  ============================*)
 
-    (** Wait for the kernel's next word, under the watchdog and the monitor. Returns a tagged pair:
-     *  ("ready" | "ack" | "quit" | "sigterm" | "hung" | "dead", "") or ("write", contents).
+    (** Wait for the kernel's next word, under the watchdog and the monitor. Returns a tagged
+     *  triple: ("ready" | "ack" | "quit" | "sigterm" | "hung" | "dead", "", "") or
+     *  ("write", path, contents).
      *
      *  SIGTERM is answered here as well as in the event loop so that a signal arriving while a
      *  frame is being drawn is acted on at once rather than after the frame.
@@ -263,17 +270,17 @@ let (** How long the supervisor waits for the kernel before calling it wedged. T
         let val nonce = mkuuid ()
             val _ = timeout.timeout me ("WATCHDOG", nonce) watchdogMs
         in rcv ( IfcUtil.bot, lev
-               , [ hn "READY"          => ("ready", "")
-                 , hn "ACK"            => ("ack", "")
-                 , hn "QUIT"           => ("quit", "")
-                 , hn ("WRITE", text)  => ("write", text)
-                 , hn "SIGTERM"        => ("sigterm", "")
-                 , hn ("DONE", r, p, reason) when r = kref => ("dead", "")
-                 , hn ("WATCHDOG", n) when n = nonce       => ("hung", "") ])
+               , [ hn "READY"                => ("ready", "", "")
+                 , hn "ACK"                  => ("ack", "", "")
+                 , hn "QUIT"                 => ("quit", "", "")
+                 , hn ("WRITE", path, text)  => ("write", path, text)
+                 , hn "SIGTERM"              => ("sigterm", "", "")
+                 , hn ("DONE", r, p, reason) when r = kref => ("dead", "", "")
+                 , hn ("WATCHDOG", n) when n = nonce       => ("hung", "", "") ])
         end
 
-    (** Write the buffer to the session's file. `(true, "written")`, or `(false, reason)` for a
-     *  write the runtime refused — a path outside `--io-root`, a read-only file — which the
+    (** Write the buffer to the file the request named. `(true, "written")`, or `(false, reason)`
+     *  for a write the runtime refused — a path outside `--io-root`, a read-only file — which the
      *  status line reports and the session survives. *)
     fun writeBuffer (auth, path, text) =
         case SimpleFileIO.writeFile (auth, path, text) of
@@ -282,12 +289,12 @@ let (** How long the supervisor waits for the kernel before calling it wedged. T
 
     (** Wait for the kernel's answer, carrying out the writes it asks for on the way. Returns the
      *  first answer that is not a request. *)
-    fun serve (auth, me, kern, lev, kref, path) =
-        let val (tag, text) = awaitKernel (me, lev, kref)
+    fun serve (auth, me, kern, lev, kref) =
+        let val (tag, path, text) = awaitKernel (me, lev, kref)
         in if tag = "write"
            then let val (ok, message) = writeBuffer (auth, path, text)
                     val _ = send (kern, ("WROTE", ok, message))
-                in serve (auth, me, kern, lev, kref, path)
+                in serve (auth, me, kern, lev, kref)
                 end
            else tag
         end
@@ -299,7 +306,7 @@ let (** How long the supervisor waits for the kernel before calling it wedged. T
      *  the spent watchdog timers of events the kernel answered in time: a timer whose nonce no
      *  `awaitKernel` is waiting for any more would otherwise sit in the mailbox for the rest of
      *  the session. *)
-    fun eventLoop (auth, me, kern, lev, kref, path) =
+    fun eventLoop (auth, me, kern, lev, kref) =
         let val ev = Tty.nextEventWith ( lev
                                        , [ hn "SIGTERM"       => "sigterm"
                                          , hn ("WATCHDOG", _) => "stale"
@@ -311,11 +318,11 @@ let (** How long the supervisor waits for the kernel before calling it wedged. T
                              | other                    => (false, other)
             val answer = if forward
                          then let val _ = send (kern, msg)
-                              in serve (auth, me, kern, lev, kref, path)
+                              in serve (auth, me, kern, lev, kref)
                               end
                          else if msg = "sigterm" then "quit" else msg
-        in      if answer = "ack"   then eventLoop (auth, me, kern, lev, kref, path)
-           else if answer = "stale" then eventLoop (auth, me, kern, lev, kref, path)
+        in      if answer = "ack"   then eventLoop (auth, me, kern, lev, kref)
+           else if answer = "stale" then eventLoop (auth, me, kern, lev, kref)
            else if answer = "dead"  then exitKernelLost
            else if answer = "hung"  then exitKernelHung
            else exitOk
@@ -329,8 +336,8 @@ let (** How long the supervisor waits for the kernel before calling it wedged. T
     (** The session's exit code, given the kernel's first word. Named so that `run`'s own body
      *  stays a flat sequence with the region's open and close in it and nothing else between
      *  them but this one call. *)
-    fun sessionCode (auth, me, kern, lev, kref, path, first) =
-             if first = "ready" then eventLoop (auth, me, kern, lev, kref, path)
+    fun sessionCode (auth, me, kern, lev, kref, first) =
+             if first = "ready" then eventLoop (auth, me, kern, lev, kref)
         else if first = "dead"  then exitKernelLost
         else if first = "hung"  then exitKernelHung
         else exitOk
@@ -366,8 +373,8 @@ let (** How long the supervisor waits for the kernel before calling it wedged. T
 
             (*--- The region, opened and closed in straight-line code. ---*)
             val (ok, cap) = Tty.listen (i, auth)
-            val (first, _) = awaitKernel (me, lev, kref)
-            val code = sessionCode (auth, me, kern, lev, kref, path, first)
+            val (first, _, _) = awaitKernel (me, lev, kref)
+            val code = sessionCode (auth, me, kern, lev, kref, first)
             val _ = Tty.unlisten cap
 
             (*--- Give the terminal back. Cooked mode first: it is the state a terminal is

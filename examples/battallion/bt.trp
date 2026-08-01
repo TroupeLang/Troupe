@@ -9,14 +9,18 @@
  *
  * WHAT IT DOES. Opens the file full-screen on the alternate screen buffer and draws the viewport
  * with a status line on the bottom row. Normal mode navigates — `h j k l` and the arrows, `0` and
- * Home, `$` and End, PageUp/PageDown and CTRL-b/CTRL-f, with the viewport scrolling to follow the
- * cursor — and edits: `i` enters insert mode, `o` opens a line below, `x` deletes a character,
- * `u` undoes, `:` opens a command line. Insert mode types text, including multibyte characters,
- * with Enter splitting a line, Backspace joining one, and Esc returning to normal mode. The
- * commands are `:w`, `:q`, `:q!` and `:wq`; `q` and CTRL-c quit like `:q`, refusing while the
- * buffer is modified. A window resize redraws at the new size. The terminal is given back —
- * cooked mode, normal screen, cursor shown, subscription and signal trap released — on every way
- * out, including a kernel that dies or stops answering.
+ * Home, `^`, `$` and End, `w` and `b` by word, `gg` and `G` to the ends of the buffer,
+ * PageUp/PageDown and CTRL-b/CTRL-f by a screen, with the viewport scrolling to follow the cursor
+ * and a vertical motion aiming for the column the last horizontal one set — and it searches:
+ * `/text` forward from the cursor, `n` and `N` to repeat, wrapping and saying so. It edits: `i`
+ * enters insert mode, `o` opens a line below, `x` deletes a character, `dd` a line, `yy` yanks
+ * one and `p` and `P` put it back, `u` undoes, `:` opens a command line. Insert mode types text,
+ * including multibyte characters, with Enter splitting a line, Backspace joining one, and Esc
+ * returning to normal mode. The commands are `:w`, `:w PATH`, `:q`, `:q!`, `:wq`, a line number,
+ * `:$` and `:help`; `q` and CTRL-c quit like `:q`, refusing while the buffer is modified, and
+ * `:help` lists the keys over the buffer until any key is pressed. A window resize redraws at the
+ * new size. The terminal is given back — cooked mode, normal screen, cursor shown, subscription
+ * and signal trap released — on every way out, including a kernel that dies or stops answering.
  *
  * WHAT IT REFUSES, BEFORE THE TERMINAL HAS BEEN TOUCHED. Every startup failure is one line on
  * stderr and exit 1, written while the terminal is still the shell's: no argument after `--`, more

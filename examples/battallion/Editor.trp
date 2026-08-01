@@ -16,6 +16,7 @@
  *   onKey (st, key)              -> (state', quit)   the keymap
  *   onWritten (st, ok, message)  -> (state', quit)   the answer to a write request
  *   status st                    -> string           the frame's bottom row
+ *   help (st, rows)              -> string list      the rows the help page draws over the buffer
  *   cursor st                    -> string           the escape shaping the cursor
  *   cursorReset                  :  string           the escape written on the way out
  *
@@ -60,6 +61,7 @@ import "./VimMotions"
 import "./StatusLine"
 import "./CursorStyle"
 import "./FileOps"
+import "./Help"
 
 let (*--------------------  What the session needs from the state  ---------------------*)
 
@@ -69,8 +71,12 @@ let (*--------------------  What the session needs from the state  -------------
 
     fun onResize (st, cols, rows) = Api.onResize (st, cols, rows)
 
-    (** Whether a plugin has asked the kernel for something — a write, in the mvp. *)
+    (** Whether a plugin has asked the kernel for something — a write, as the editor stands. *)
     fun hasRequest st = Api.hasRequest st
+
+    (** Where the pending write is to go. The kernel reads it out of the state and puts it in the
+     *  request it sends the supervisor, which is the process that performs the write. *)
+    fun writePath st = Api.writePath st
 
     (*-----------------------------------  Frames  -----------------------------------*)
 
@@ -83,10 +89,17 @@ let (*--------------------  What the session needs from the state  -------------
      *
      *  THE CURSOR IS PUT WHERE THE USER IS LOOKING, and it is visible there (Screen.trp), so a
      *  position off the screen would be seen. Two clamps keep it on: a column past the terminal's
-     *  width is drawn at the last column, there being no horizontal scrolling, and a command line
-     *  is only followed onto the status row when there *is* a status row — a terminal of one row
-     *  keeps that row for the text (`Api.hasStatus`), so a command typed on such a terminal is not
-     *  drawn and the cursor stays where the buffer's cursor is. *)
+     *  width is drawn at the last column, there being no horizontal scrolling, and a line being
+     *  typed is only followed onto the status row when there *is* a status row — a terminal of one
+     *  row keeps that row for the text (`Api.hasStatus`), so a command typed on such a terminal is
+     *  not drawn and the cursor stays where the buffer's cursor is.
+     *
+     *  THE HELP PAGE IS A FRAME, NOT A PROCESS. In HELP mode the rows above the status line come
+     *  from the plugin set's `help` rather than from the buffer, and everything else about the
+     *  state is untouched — which is what lets any key put the page away and leave the session
+     *  exactly where it was. The cursor goes to the page's first cell: it has nothing to point at
+     *  there, and it is on the screen between frames, so it is put somewhere harmless rather than
+     *  left wherever the buffer's cursor was. *)
     fun frameOf (plugins, st) =
         let val h    = Api.textRows st
             val last = Api.lastLine st
@@ -95,7 +108,8 @@ let (*--------------------  What the session needs from the state  -------------
                 else let val l = st.top + i
                      in rowsFrom (i + 1, (if l > last then "~" else Api.lineAt (st, l)) :: acc)
                      end
-            val body  = rowsFrom (0, [])
+            val body  = case st.mode of HELP => plugins.help (st, h)
+                                      | _    => rowsFrom (0, [])
             val lines = if Api.hasStatus st then List.append body [plugins.status st] else body
 
             (** `c` brought onto the screen: a column at or past the width is drawn at the last
@@ -107,8 +121,9 @@ let (*--------------------  What the session needs from the state  -------------
             val (curRow, curCol) =
                     case st.mode of
                          COMMAND => if Api.hasStatus st
-                                    then (h, onScreen (String.size st.cmd + 1))
+                                    then (h, onScreen (String.size st.prompt + String.size st.cmd))
                                     else inBuffer
+                       | HELP    => (0, 0)
                        | _       => inBuffer
         in (lines, curRow, curCol, plugins.cursor st)
         end
@@ -118,11 +133,20 @@ let (*--------------------  What the session needs from the state  -------------
     (** The command interpreter the keymap reaches for on Enter, and for `q` and CTRL-c. *)
     val commands = fn (st, c) => FileOps.run (Api.api, st, c)
 
-    (** The mvp's plugin set. *)
+    (** The help page's content, assembled from the sections the plugins in this set export: what
+     *  `:help` lists is what these plugins bind, so a set built from other plugins gets their
+     *  help. The concatenation is inside the function rather than beside it because a module's top
+     *  level constructs values and does not call — the export table of a library that called one
+     *  would not be built at all (docs/MODULES.md). *)
+    val helpPage = fn (st, rows) =>
+        Help.page (List.append VimMotions.help FileOps.help, st.cols, rows)
+
+    (** The plugin set the editor ships. *)
     val plugins =
         { onKey       = fn (st, k)           => VimMotions.onKey (Api.api, commands, st, k)
         , onWritten   = fn (st, ok, message) => FileOps.onWritten (Api.api, st, ok, message)
         , status      = fn st                => StatusLine.render (Api.api, st)
+        , help        = helpPage
         , cursor      = fn st                => CursorStyle.shape (Api.api, st)
         , cursorReset = CursorStyle.reset }
 
@@ -130,6 +154,7 @@ in [ ("init", init)
    , ("contents", contents)
    , ("onResize", onResize)
    , ("hasRequest", hasRequest)
+   , ("writePath", writePath)
    , ("frameOf", frameOf)
    , ("plugins", plugins)
    ]

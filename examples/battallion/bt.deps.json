@@ -5,8 +5,8 @@
     {"path": "Editor", "hash": "bnfcipph8daukaprpd3r68ili1rhs7fl9cbnm3i8vh8bntivfjtg", "name": "Editor"},
     {"path": "FileOps", "hash": "jhr9b0u5eulebl1fqaalhrtga3gnp7h9266ck5u0ef832lst600g", "name": "FileOps"},
     {"path": "Key", "hash": "7tlonfjpr39d35nh1f6kfaipgivoaeondg939fnl47p8ii66li80", "name": "Key"},
-    {"path": "Screen", "hash": "8387rj7i3l65n7ooaefij92nrqdflomgvklnraov900hfl3mb04g", "name": "Screen"},
-    {"path": "Session", "hash": "h0032jhnm10c2hil6u44f0dvlmq5piegu3n32put50ckjl8lso50", "name": "Session"},
+    {"path": "Screen", "hash": "u3he00s9fm83n7q0cv4blehomqnse7arutmukg4do2lsdlct9tng", "name": "Screen"},
+    {"path": "Session", "hash": "tft0h92g6okfkvlav06185shk15aouo8mum8obo3ciitfq67v3c0", "name": "Session"},
     {"path": "StatusLine", "hash": "cerjn5ap49cpkeehmkrndvmvucvpfmj6i2h43l3udril807erd2g", "name": "StatusLine"},
     {"path": "VimMotions", "hash": "8hfvn8eocvg9555rjp2th6u2h1ap5k0mke8tam52joatqh15poo0", "name": "VimMotions"}
   ]

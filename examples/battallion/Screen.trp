@@ -10,8 +10,8 @@
  *
  * ESCAPES. `\x1b[?1049h` / `\x1b[?1049l` are the xterm private mode that switches to the
  * alternate screen buffer and back, so the shell's scrollback is untouched by the session.
- * `\x1b[?25l` / `\x1b[?25h` hide and show the cursor. `\x1b[H` homes the cursor, `\x1b[K` erases
- * from the cursor to the end of the line, and `\x1b[<row>;<col>H` positions the cursor, rows and
+ * `\x1b[?25l` / `\x1b[?25h` hide and show the cursor. `\x1b[H` homes the cursor, `\x1b[2K` erases
+ * the whole line the cursor is on, and `\x1b[<row>;<col>H` positions the cursor, rows and
  * columns counting from one.
  *
  * THE CURSOR IS HIDDEN FOR THE LENGTH OF ONE FRAME, not for the length of the session. A frame
@@ -22,9 +22,16 @@
  * user's terminal draws by default. Nothing here selects a shape: `CursorStyle.trp` is the seam
  * that would, and it is inert (its header says why).
  *
- * WHY `\x1b[K` PER LINE AND NOT `\x1b[2J`. Both give a correct frame. Erasing each line as it is
- * rewritten means the screen is never blank between the clear and the draw, which a clear-then-
- * draw frame shows as a flicker on a slow connection.
+ * WHY `\x1b[2K` PER LINE AND NOT `\x1b[2J`. Erasing each line as it is rewritten means the
+ * screen is never blank between the clear and the draw, which a clear-then-draw frame shows as
+ * a flicker on a slow connection.
+ *
+ * WHY THE ERASE COMES BEFORE THE TEXT AND COVERS THE WHOLE LINE. A tab in the text moves the
+ * terminal's cursor to the next tab stop without erasing the cells it passes over. Writing the
+ * text first and erasing to end of line afterwards therefore leaves the previous frame's
+ * characters standing in every cell a tab jumped across — stale text that survives every
+ * subsequent redraw (found by the simulated-session harness on a tab-indented file). Erasing
+ * the whole line first means a tab jumps over cells that are already blank.
  *
  * LINE ENDINGS ARE CRLF, written out rather than left to the driver. Whether a lone LF returns
  * the cursor to column one depends on the terminal's output post-processing, which raw mode may
@@ -69,9 +76,9 @@ let val esc = "\x1b"
     fun truncate (line, width) =
         if String.size line <= width then line else String.substring (line, 0, width)
 
-    (** The whole visible screen: the cursor hidden, `lines` laid out from the top, each erased to
-     *  the end of the line as it is written, the cursor left at `(curRow, curCol)`, `tail` written
-     *  after it, and the cursor shown again.
+    (** The whole visible screen: the cursor hidden, `lines` laid out from the top, each line
+     *  erased whole before its text is written, the cursor left at `(curRow, curCol)`, `tail`
+     *  written after it, and the cursor shown again.
      *
      *  `lines` is expected to hold exactly `rows` entries; a shorter list draws fewer rows and
      *  leaves the rest of the screen as it was, which is what a caller wants when the buffer has
@@ -85,8 +92,8 @@ let val esc = "\x1b"
      *  force by the time the cursor is on the screen. *)
     fun frame (lines, width, curRow, curCol, tail) =
         let fun go ([], acc)      = acc
-              | go ([l], acc)     = acc ^ truncate (l, width) ^ esc ^ "[K"
-              | go (l :: ls, acc) = go (ls, acc ^ truncate (l, width) ^ esc ^ "[K" ^ "\r\n")
+              | go ([l], acc)     = acc ^ esc ^ "[2K" ^ truncate (l, width)
+              | go (l :: ls, acc) = go (ls, acc ^ esc ^ "[2K" ^ truncate (l, width) ^ "\r\n")
         in hideCursor ^ go (lines, esc ^ "[H") ^ cursorTo (curRow, curCol) ^ tail ^ showCursor
         end
 

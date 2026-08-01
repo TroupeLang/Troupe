@@ -7,7 +7,8 @@
  *
  *   supervisor  the process that calls `run`. Holds the root authority and the terminal: it
  *               subscribes to terminal events, traps SIGTERM, enters raw mode and the alternate
- *               screen, and undoes all of that on the way out, whatever ended the session.
+ *               screen, monitors the kernel, writes the buffer out when the kernel asks, and
+ *               undoes all of that on the way out, whatever ended the session.
  *      kernel   the editor state machine. Receives forwarded events, folds the keymap over the
  *               decoded keys, asks the renderer for a frame, and answers the supervisor.
  *      renderer holds the stdout descriptor and writes frames. Nothing else writes a frame.
@@ -19,30 +20,42 @@
  *
  * WHY EVERY EVENT IS ACKNOWLEDGED. The supervisor forwards one event and waits for the kernel's
  * answer before receiving the next, so a keystroke's frame is on the screen before the following
- * keystroke is read. The wait is what makes a dead kernel observable — see the next paragraph —
- * and the serialisation costs nothing at a human typing rate.
+ * keystroke is read. The serialisation costs nothing at a human typing rate, and it is also the
+ * frame in which the kernel can ask for something — see the write protocol below.
  *
- * A DEAD KERNEL IS FOUND BY A TIMER, NOT BY `monitorlocal`.
- * The architecture calls for the supervisor to monitor the kernel and act on
- * ("DONE", ref, pid, reason). That message cannot be delivered by the runtime as it stands: any
- * monitored thread's termination — orderly or by error — brings the whole node down with a host
- * TypeError raised inside `Scheduler.notifyMonitors`. The probe, the repro on the repository's
- * own tests/_old_tests/monitors/mon01.trp, and the cause are recorded in
- * tests/_unautomated/claude/battallion-viewer/probe-monitor-defect.trp. Until that is fixed,
- * every wait for the kernel carries a timer (the `lib/timeout.trp` idiom, whose message is
- * matched inside the same ranged-receive region — probe-timer-level.trp), and a wait that the
- * timer wins is read as a lost kernel: the supervisor restores the terminal and exits
- * `exitKernelLost`. This is a substitute for supervision, not supervision: it detects a kernel
- * that stopped answering, and it cannot tell a crash from a hang.
+ * A DEAD KERNEL IS FOUND BY `monitorlocal`; A WEDGED ONE BY A TIMER. The supervisor monitors the
+ * kernel at spawn and reads the ("DONE", ref, pid, reason) that the runtime then delivers as a
+ * lost kernel: it restores the terminal and exits `exitKernelLost`. The notification is matched
+ * inside the same receives as everything else, needing no declassification and no helper process
+ * — its presence level is the dying kernel's pc, which is bot, and every receive here runs at
+ * [bot, channel level]; the measurement, for both an orderly and an error termination, is in
+ * tests/_unautomated/claude/battallion-editor/probe-done-level.trp. What monitoring cannot see is
+ * a kernel that is alive and no longer answering — one blocked on a renderer that died, say — so
+ * every wait for the kernel still carries a watchdog timer (the `lib/timeout.trp` idiom, whose
+ * message is matched inside the same ranged-receive region — probe-timer-level.trp), and a wait
+ * the timer wins exits `exitKernelHung`. The two codes are kept apart because they say different
+ * things about what went wrong.
+ *
+ * WHO WRITES THE FILE. The keymap is pure and the kernel holds a null-attenuated authority, while
+ * `SimpleFileIO.writeFile` requires the root one — which never leaves the supervisor. So `:w`
+ * does not write: it leaves a request in the state, the kernel sends the supervisor
+ * ("WRITE", contents), the supervisor writes to the path the session was opened with, and answers
+ * ("WROTE", ok, message), which the kernel folds back into the state before redrawing. The path
+ * is the supervisor's own, not the kernel's: nothing the terminal said can redirect the write.
+ * The contents carry the channel level and the write takes them unchanged — no confidentiality
+ * check stands between them and the file, `--io-root` being what bounds where the write can land
+ * — and the pc is unmoved by it, so the receive region still closes afterwards
+ * (probe-write-level.trp measures all three).
  *
  * LABELS. Terminal events carry the channel level (ROOT by default), so everything the kernel
- * computes from a keystroke does too, and so does every frame. Rather than declassify at the
- * decoder, each of the three processes receives at the interval [bot, channel level]: the
- * supervisor in a certified region opened with the root authority, the kernel and the renderer
- * in confined regions opened with a null-attenuated authority, which they never close because
- * they receive for their whole lives (lib/Tty.trp's `listen`, and probe-render-path.trp). The
- * kernel therefore runs permanently tainted by the terminal, which is what it is: a process
- * whose entire state is what the terminal said. No value is declassified anywhere in battallion.
+ * computes from a keystroke does too, and so does every frame and every byte written to the file.
+ * Rather than declassify at the decoder, each of the three processes receives at the interval
+ * [bot, channel level]: the supervisor in a certified region opened with the root authority, the
+ * kernel and the renderer in confined regions opened with a null-attenuated authority, which they
+ * never close because they receive for their whole lives (lib/Tty.trp's `listen`, and
+ * probe-render-path.trp). The kernel therefore runs permanently tainted by the terminal, which is
+ * what it is: a process whose entire state is what the terminal said. No value is declassified
+ * anywhere in battallion.
  *
  * HANDLERS PROJECT; EFFECTS HAPPEN AFTER THE RECEIVE RETURNS. An effect inside an `hn` body is
  * refused while a ranged-receive region is open, with a diagnostic about a branch that the
@@ -59,23 +72,35 @@
 
 import IfcUtil
 import Outcome
+import SimpleFileIO
 import Tty
 import timeout
 import "./Screen"
 import "./Editor"
 import "./Key"
 
-let (** How long the supervisor waits for the kernel before calling it lost. Two seconds is far
-     *  above any frame the viewer draws — a megabyte buffer's line read is measured in
+let (** How long the supervisor waits for the kernel before calling it wedged. Two seconds is far
+     *  above any frame the editor draws — a megabyte buffer's line read is measured in
      *  microseconds (_dev_planning/text-editor/rope-benchmarks.md) — and far below a person's
      *  patience with a wedged terminal. *)
     val watchdogMs = 2000
 
-    (** The session ended the way it was asked to: `q`, CTRL-c, end of input, or SIGTERM. *)
+    (** How long a pending escape sequence waits before the kernel reads it as final. A lone ESC
+     *  is either the Esc key or the first byte of a sequence and only elapsed time separates them
+     *  (Key.trp), so pressing Esc costs this much latency and nothing else does. Fifty
+     *  milliseconds is the range terminal emulators and their clients have long settled on: long
+     *  enough that a sequence arriving in pieces over a slow link is not torn apart, short enough
+     *  that leaving insert mode feels immediate. *)
+    val escapeMs = 50
+
+    (** The session ended the way it was asked to: `q`, `:q`, CTRL-c, end of input, or SIGTERM. *)
     val exitOk = 0
 
-    (** The kernel stopped answering. *)
+    (** The kernel is gone: it crashed, or it terminated when it had no business terminating. *)
     val exitKernelLost = 3
+
+    (** The kernel is alive and stopped answering. *)
+    val exitKernelHung = 4
 
     (** The terminal size to assume when stdout is not a terminal, so that a session started over
      *  a pipe still runs rather than failing at startup. *)
@@ -122,41 +147,88 @@ let (** How long the supervisor waits for the kernel before calling it lost. Two
         in ()
         end
 
-    (** The keymap folded over a list of keys, stopping at the first key that quits. *)
-    fun applyKeys (onKey, st, [])        = (st, false)
+    (** The keymap folded over a list of keys. Stops at the first key that quits and at the first
+     *  key that asks the kernel for something, handing back the keys it has not reached: a `:w`
+     *  in the middle of a chunk must be carried out before the keys after it are folded, or the
+     *  file would be written from a state the user has already typed past. *)
+    fun applyKeys (onKey, st, [])        = (st, false, [])
       | applyKeys (onKey, st, k :: rest) =
           let val (st', quit) = onKey (st, k)
-          in if quit then (st', true) else applyKeys (onKey, st', rest)
+          in if quit then (st', true, rest)
+             else case st'.req of REQ_NONE => applyKeys (onKey, st', rest)
+                                | _        => (st', false, rest)
           end
 
-    (** One forwarded event: decode, fold, redraw, answer. `carry` is the decoder's remainder,
-     *  the bytes of an escape sequence that has not finished arriving.
+    (** Fold the keys, carrying out any request they raise. A write is a round trip through the
+     *  supervisor — the authority is there, not here — and the outcome goes back into the state
+     *  before the remaining keys are folded. *)
+    fun runKeys (sup, lev, onKey, st, keys) =
+        let val (st1, quit, rest) = applyKeys (onKey, st, keys)
+        in case st1.req of
+                REQ_NONE => (st1, quit)
+              | _ =>
+                  let val _ = send (sup, ("WRITE", Editor.contents st1))
+                      val (ok, message) = rcv ( IfcUtil.bot, lev
+                                              , [ hn ("WROTE", o, m) => (o, m) ])
+                      val (st2, quitAfter) = Editor.onWritten (st1, ok, message)
+                  in if quit orelse quitAfter then (st2, true)
+                     else runKeys (sup, lev, onKey, st2, rest)
+                  end
+        end
+
+    (** Arm the escape timer and return the nonce that identifies it. Timers are never cancelled
+     *  — a spent one is told from a live one by its nonce, and consumed and dropped either way. *)
+    fun armEscape () =
+        let val nonce = mkuuid ()
+            val _ = timeout.timeout (self ()) ("ESCWAIT", nonce) escapeMs
+        in nonce
+        end
+
+    (** One message: decode, fold, redraw, answer. `carry` is the decoder's remainder, the bytes
+     *  of an escape sequence that has not finished arriving, and `nonce` identifies the timer
+     *  armed for it.
      *
-     *  A lone ESC stays in `carry` rather than being resolved by a timer. The viewer binds no
-     *  key to Esc, and the decoder's carry is transparent: pressing Esc and then a command
-     *  produces the same keys whether the bytes arrive together or apart (Key.trp, invariant 3).
-     *  Stage 5's insert mode, where Esc *is* a binding, is where the timer has to appear; the
-     *  arrangement it needs is the one this module already uses for the watchdog — a
-     *  `lib/timeout.trp` message matched by an extra handler in the same ranged receive. *)
-    fun kernelLoop (sup, rend, lev, onKey, st, carry) =
+     *  A message is one of three things. A forwarded terminal event is folded and answered, so
+     *  that the supervisor takes the next event only once this one's frame is on the screen. An
+     *  escape timer that is still current means the carry will not grow: `Key.flush` reads it as
+     *  final — a lone ESC becomes the Esc key — and the result is drawn but *not* answered,
+     *  because no forwarded event is outstanding and an answer would release a supervisor that is
+     *  not waiting. Anything else — a timer whose nonce has been superseded — is dropped.
+     *
+     *  A timer is armed only where the carry was set, i.e. on a forwarded event, and never on the
+     *  strength of a carry that is merely still there. Re-arming on a superseded timer would give
+     *  a carry that never completes two outstanding timers that supersede each other in turn: each
+     *  would arrive stale, arm its successor, and invalidate the one due to fire, so the flush
+     *  that clears the carry would never come and the kernel would spin for the rest of the
+     *  session. Arming at the one place the carry changes leaves exactly one live timer. *)
+    fun kernelLoop (sup, rend, lev, onKey, st, carry, nonce) =
         let val m = rcv ( IfcUtil.bot, lev
-                        , [ hn ("KEY", bytes)       => ("KEY", bytes)
-                          , hn ("RESIZE", cols, rows) => ("RESIZE", cols, rows) ])
-            val (st', carry', quit) =
+                        , [ hn ("KEY", bytes)        => ("KEY", bytes)
+                          , hn ("RESIZE", cols, rows) => ("RESIZE", cols, rows)
+                          , hn ("ESCWAIT", n)         => ("ESCWAIT", n) ])
+            val (st0, keys, carry0, answer, act, rearm) =
                     case m of
                          ("KEY", bytes) =>
-                             let val (keys, rest) = Key.decode (carry ^ bytes)
-                                 val (s, q) = applyKeys (onKey, st, keys)
-                             in (s, rest, q)
+                             let val (ks, rest) = Key.decode (carry ^ bytes)
+                             in (st, ks, rest, true, true, rest <> "")
                              end
-                       | ("RESIZE", cols, rows) => (Editor.onResize (st, cols, rows), carry, false)
-                       | _                      => (st, carry, false)
+                       | ("RESIZE", cols, rows) =>
+                             (Editor.onResize (st, cols, rows), [], carry, true, true, false)
+                       | ("ESCWAIT", n) =>
+                             if n = nonce andalso carry <> ""
+                             then (st, Key.flush carry, "", false, true, false)
+                             else (st, [], carry, false, false, false)
+                       | _ => (st, [], carry, false, false, false)
+            val (st', quit) = runKeys (sup, lev, onKey, st0, keys)
+            val nonce' = if rearm then armEscape () else nonce
             val _ = if quit
                     then send (sup, "QUIT")
-                    else let val _ = draw (rend, lev, st')
-                         in send (sup, "ACK")
+                    else if act
+                    then let val _ = draw (rend, lev, st')
+                         in if answer then send (sup, "ACK") else ()
                          end
-        in if quit then () else kernelLoop (sup, rend, lev, onKey, st', carry')
+                    else ()
+        in if quit then () else kernelLoop (sup, rend, lev, onKey, st', carry0, nonce')
         end
 
     (** Draw the first frame, tell the supervisor the session is on the screen, then loop. The
@@ -165,49 +237,80 @@ let (** How long the supervisor waits for the kernel before calling it lost. Two
         let val (ok, cap) = enableRangedReceive (IfcUtil.bot, lev, weak)
             val _ = draw (rend, lev, st)
             val _ = send (sup, "READY")
-            val _ = kernelLoop (sup, rend, lev, onKey, st, "")
+            val _ = kernelLoop (sup, rend, lev, onKey, st, "", mkuuid ())
         in ()
         end
 
     (*============================  The supervisor process  ============================*)
 
-    (** Wait for the kernel's next word, under the watchdog. Returns one of "ready", "ack",
-     *  "quit", "sigterm" or "lost".
+    (** Wait for the kernel's next word, under the watchdog and the monitor. Returns a tagged pair:
+     *  ("ready" | "ack" | "quit" | "sigterm" | "hung" | "dead", "") or ("write", contents).
      *
      *  SIGTERM is answered here as well as in the event loop so that a signal arriving while a
-     *  frame is being drawn is acted on at once rather than after the frame. *)
-    fun awaitKernel (me, lev) =
+     *  frame is being drawn is acted on at once rather than after the frame.
+     *
+     *  A kernel that quits sends "QUIT" and only then terminates, so its own ("DONE", …) is
+     *  behind "QUIT" in the mailbox and a receive that scans in arrival order takes "QUIT" first
+     *  (rt/src/MailboxProcessor.mts:100-131). The notification is left where it lies. *)
+    fun awaitKernel (me, lev, kref) =
         let val nonce = mkuuid ()
             val _ = timeout.timeout me ("WATCHDOG", nonce) watchdogMs
         in rcv ( IfcUtil.bot, lev
-               , [ hn "READY"   => "ready"
-                 , hn "ACK"     => "ack"
-                 , hn "QUIT"    => "quit"
-                 , hn "SIGTERM" => "sigterm"
-                 , hn ("WATCHDOG", n) when n = nonce => "lost" ])
+               , [ hn "READY"          => ("ready", "")
+                 , hn "ACK"            => ("ack", "")
+                 , hn "QUIT"           => ("quit", "")
+                 , hn ("WRITE", text)  => ("write", text)
+                 , hn "SIGTERM"        => ("sigterm", "")
+                 , hn ("DONE", r, p, reason) when r = kref => ("dead", "")
+                 , hn ("WATCHDOG", n) when n = nonce       => ("hung", "") ])
+        end
+
+    (** Write the buffer to the session's file. `(true, "written")`, or `(false, reason)` for a
+     *  write the runtime refused — a path outside `--io-root`, a read-only file — which the
+     *  status line reports and the session survives. *)
+    fun writeBuffer (auth, path, text) =
+        case SimpleFileIO.writeFile (auth, path, text) of
+             OK _  => (true, "written")
+           | ERR e => (false, e.reason)
+
+    (** Wait for the kernel's answer, carrying out the writes it asks for on the way. Returns the
+     *  first answer that is not a request. *)
+    fun serve (auth, me, kern, lev, kref, path) =
+        let val (tag, text) = awaitKernel (me, lev, kref)
+        in if tag = "write"
+           then let val (ok, message) = writeBuffer (auth, path, text)
+                    val _ = send (kern, ("WROTE", ok, message))
+                in serve (auth, me, kern, lev, kref, path)
+                end
+           else tag
         end
 
     (** The event loop. One terminal event at a time is forwarded to the kernel and answered
      *  before the next is taken.
      *
-     *  The extra handlers pick up SIGTERM and the spent watchdog timers of events the kernel
-     *  answered in time: a timer whose nonce no `awaitKernel` is waiting for any more would
-     *  otherwise sit in the mailbox for the rest of the session. *)
-    fun eventLoop (me, kern, lev) =
+     *  The extra handlers pick up SIGTERM, the kernel's death while no answer is outstanding, and
+     *  the spent watchdog timers of events the kernel answered in time: a timer whose nonce no
+     *  `awaitKernel` is waiting for any more would otherwise sit in the mailbox for the rest of
+     *  the session. *)
+    fun eventLoop (auth, me, kern, lev, kref, path) =
         let val ev = Tty.nextEventWith ( lev
-                                       , [ hn "SIGTERM"        => "sigterm"
-                                         , hn ("WATCHDOG", _)  => "stale" ])
+                                       , [ hn "SIGTERM"       => "sigterm"
+                                         , hn ("WATCHDOG", _) => "stale"
+                                         , hn ("DONE", r, p, reason) => "dead" ])
             val (forward, msg) =
                     case ev of TTY_DATA b               => (true, ("KEY", b))
                              | TTY_RESIZE {cols, rows}  => (true, ("RESIZE", cols, rows))
                              | TTY_EOF                  => (false, "quit")
                              | other                    => (false, other)
             val answer = if forward
-                         then let val _ = send (kern, msg) in awaitKernel (me, lev) end
+                         then let val _ = send (kern, msg)
+                              in serve (auth, me, kern, lev, kref, path)
+                              end
                          else if msg = "sigterm" then "quit" else msg
-        in      if answer = "ack"   then eventLoop (me, kern, lev)
-           else if answer = "stale" then eventLoop (me, kern, lev)
-           else if answer = "lost"  then exitKernelLost
+        in      if answer = "ack"   then eventLoop (auth, me, kern, lev, kref, path)
+           else if answer = "stale" then eventLoop (auth, me, kern, lev, kref, path)
+           else if answer = "dead"  then exitKernelLost
+           else if answer = "hung"  then exitKernelHung
            else exitOk
         end
 
@@ -219,16 +322,18 @@ let (** How long the supervisor waits for the kernel before calling it lost. Two
     (** The session's exit code, given the kernel's first word. Named so that `run`'s own body
      *  stays a flat sequence with the region's open and close in it and nothing else between
      *  them but this one call. *)
-    fun sessionCode (me, kern, lev, first) =
-             if first = "ready" then eventLoop (me, kern, lev)
-        else if first = "lost"  then exitKernelLost
+    fun sessionCode (auth, me, kern, lev, kref, path, first) =
+             if first = "ready" then eventLoop (auth, me, kern, lev, kref, path)
+        else if first = "dead"  then exitKernelLost
+        else if first = "hung"  then exitKernelHung
         else exitOk
 
     (** Run a session over `buffer`, with `onKey` as the keymap, and return an exit code.
      *
-     *  `auth` must be the root authority: subscribing, raw mode, the SIGTERM trap and the
-     *  certified receive region all need it. It is not passed to the kernel or the renderer,
-     *  which get a null-attenuated authority sufficient only to open a confined region. *)
+     *  `auth` must be the root authority: subscribing, raw mode, the SIGTERM trap, the certified
+     *  receive region and the file write all need it. It is not passed to the kernel or the
+     *  renderer, which get a null-attenuated authority sufficient only to open a confined
+     *  region. *)
     fun run (auth, buffer, path, onKey) =
         let val i = stdin auth
             val out = stdout auth
@@ -244,15 +349,17 @@ let (** How long the supervisor waits for the kernel before calling it lost. Two
             val _ = Tty.rawMode (i, true)
             val _ = fwrite (out, Screen.enterAlt ^ Screen.hideCursor)
 
-            (*--- The constellation. ---*)
+            (*--- The constellation. `demonitorlocal` is a stub in this runtime, so the kernel is
+                  monitored exactly once and the reference is never released. ---*)
             val rend = spawn (fn () => renderer (out, lev, weak))
             val st0  = Editor.init (buffer, path, cols, rows)
             val kern = spawn (fn () => kernel (me, rend, lev, weak, onKey, st0))
+            val kref = monitorlocal kern
 
             (*--- The region, opened and closed in straight-line code. ---*)
             val (ok, cap) = Tty.listen (i, auth)
-            val first = awaitKernel (me, lev)
-            val code = sessionCode (me, kern, lev, first)
+            val (first, _) = awaitKernel (me, lev, kref)
+            val code = sessionCode (auth, me, kern, lev, kref, path, first)
             val _ = Tty.unlisten cap
 
             (*--- Give the terminal back. Cooked mode first: it is the state a terminal is
@@ -267,8 +374,10 @@ let (** How long the supervisor waits for the kernel before calling it lost. Two
         end
 
 in [ ("watchdogMs", watchdogMs)
+   , ("escapeMs", escapeMs)
    , ("exitOk", exitOk)
    , ("exitKernelLost", exitKernelLost)
+   , ("exitKernelHung", exitKernelHung)
    , ("run", run)
    ]
 end

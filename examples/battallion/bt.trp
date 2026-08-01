@@ -1,21 +1,25 @@
-(* bt — battallion, a terminal text editor written in Troupe. At this stage it is a viewer.
+(* bt — battallion, a terminal text editor written in Troupe.
  *
  *   ./local.sh examples/battallion/bt.trp --io-root <dir> -- <file>
  *
  * `--io-root` names the subtree file access is confined to, and the argument after `--` is the
  * file to open, resolved inside it. Both belong to the runtime, not to this program:
  * `SimpleFileIO.readFile` refuses a path outside the subtree, and `getCliArgs` returns exactly
- * the arguments after `--`.
+ * the arguments after `--`. The same subtree bounds where `:w` can write.
  *
- * WHAT IT DOES. Opens the file full-screen on the alternate screen buffer, draws the viewport,
- * and navigates: `h j k l` and the arrows, `0` and Home, `$` and End, PageUp/PageDown and
- * CTRL-b/CTRL-f, with the viewport scrolling to follow the cursor. `q` and CTRL-c quit. A window
- * resize redraws at the new size. The terminal is given back — cooked mode, normal screen,
- * cursor shown, subscription and signal trap released — on every way out, including a kernel
- * that stops answering.
+ * WHAT IT DOES. Opens the file full-screen on the alternate screen buffer and draws the viewport
+ * with a status line on the bottom row. Normal mode navigates — `h j k l` and the arrows, `0` and
+ * Home, `$` and End, PageUp/PageDown and CTRL-b/CTRL-f, with the viewport scrolling to follow the
+ * cursor — and edits: `i` enters insert mode, `o` opens a line below, `x` deletes a character,
+ * `u` undoes, `:` opens a command line. Insert mode types text, including multibyte characters,
+ * with Enter splitting a line, Backspace joining one, and Esc returning to normal mode. The
+ * commands are `:w`, `:q`, `:q!` and `:wq`; `q` and CTRL-c quit like `:q`, refusing while the
+ * buffer is modified. A window resize redraws at the new size. The terminal is given back —
+ * cooked mode, normal screen, cursor shown, subscription and signal trap released — on every way
+ * out, including a kernel that dies or stops answering.
  *
- * WHAT IT DOES NOT DO YET. No editing, no modes, no status line, no saving: those are stage 5 of
- * _dev_planning/text-editor/mvp-plan.md.
+ * WHAT IT DOES NOT DO YET. The four mvp plugins of stage 6 in
+ * _dev_planning/text-editor/mvp-plan.md are still inlined here rather than extracted.
  *
  * WHERE THE PARTS ARE. `Session.trp` is the process constellation and holds every design note
  * about it; `Editor.trp` is the state and the keymap; `Screen.trp` is the escapes and the frame;
@@ -24,8 +28,8 @@
  *
  * THE KEYMAP IS A PARAMETER. `Session.run` takes the function it folds over decoded keys, so a
  * session can be run with a different keymap without touching the constellation. Stage 6's
- * `VimMotions` plugin is that parameter; the crash probe in
- * tests/_unautomated/claude/battallion-viewer/ is another consumer of the same seam.
+ * `VimMotions` plugin is that parameter; `crashprobe.trp` beside this file is another consumer of
+ * the same seam.
  *
  * THE SESSION IS STARTED FROM STRAIGHT-LINE CODE. The argument list and the file-read outcome
  * both carry the channel level, and code inside a branch on such a value runs at a pc raised to

@@ -22,10 +22,19 @@
  * tests/_unautomated/claude/battallion-viewer/probe-parent-relative-pins.trp. Sitting beside the
  * modules it imports keeps every pin single-spelled.
  *
- * WHAT THE SUPERVISOR SHOULD DO. It cannot be told that the kernel died: `monitorlocal`
- * notification is broken in the runtime (probe-monitor-defect.trp). It finds out because the
- * kernel stops answering, and its watchdog — `Session.watchdogMs` — fires. It then restores the
- * terminal and exits `Session.exitKernelLost` (3). harness.py case 4 asserts exactly that.
+ * WHAT THE SUPERVISOR SHOULD DO. It monitors the kernel, so the runtime tells it the moment the
+ * kernel dies: the ("DONE", ref, pid, reason) arrives in the receive the supervisor is already
+ * sitting in, waiting for the answer to the "!" it forwarded. It restores the terminal and exits
+ * `Session.exitKernelLost` (3), and it does so at once rather than after `Session.watchdogMs` —
+ * which is what separates this path from the watchdog's, whose code is `exitKernelHung` (4).
+ * battallion-viewer/harness.py case 4 asserts the restoration and the code;
+ * battallion-editor/harness.py case 5 additionally asserts that it happens well inside the
+ * watchdog interval.
+ *
+ * The notification used to be undeliverable — a monitored thread's termination brought the node
+ * down with a host TypeError, recorded in battallion-viewer/probe-monitor-defect.trp — and the
+ * watchdog stood in for supervision. That was fixed in the runtime (dd2b88eb); the levels the
+ * notification arrives at are measured in battallion-editor/probe-done-level.trp.
  *)
 
 import Rope

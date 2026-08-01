@@ -371,11 +371,23 @@ let (** How long the supervisor waits for the kernel before calling it wedged. T
             val kern = spawn (fn () => kernel (me, rend, lev, weak, plugins, st0))
             val kref = monitorlocal kern
 
-            (*--- The region, opened and closed in straight-line code. ---*)
+            (*--- The region, opened and closed in straight-line code. The certification bit
+                  decides the close: at a channel level the certification refuses — a
+                  null-integrity ceiling under NMIFC refuses even the root authority — the
+                  enable still succeeds but yields a confined region with no close, and an
+                  unconditional unlisten would be a thread error HERE, before every line that
+                  gives the terminal back (the downgrading analysis's finding F1,
+                  _dev_planning/text-editor/downgrading-principles.md). A confined region is
+                  merely left open: the session runs identically inside it, and the process
+                  exits by `exit`, never by returning through this frame. The close cannot sit
+                  inside a branch (the clearance record must match the branch-entry snapshot),
+                  so the branch selects a closure and the call is straight-line — the shape
+                  probe-conditional-close*.trp pins. ---*)
             val (ok, cap) = Tty.listen (i, auth)
+            val unlisten = if ok then (fn () => Tty.unlisten cap) else (fn () => ())
             val (first, _, _) = awaitKernel (me, lev, kref)
             val code = sessionCode (auth, me, kern, lev, kref, first)
-            val _ = Tty.unlisten cap
+            val _ = unlisten ()
 
             (*--- Give the terminal back. Cooked mode first: it is the state a terminal is
                   least usable in, so it is the one to leave earliest, and it makes the last

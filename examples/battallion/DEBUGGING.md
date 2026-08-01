@@ -5,6 +5,13 @@ reading its stdout: the tool layers, when to use which, and the traps. Commands 
 this checkout's root; the test tooling lives in `tests/_unautomated/claude/` (git-ignored — local
 tooling, not part of the corpus).
 
+None of it needs a human at the keyboard. Every layer is a programmatic interface, so the whole
+loop — reproduce, minimise, fix, pin — runs from a symptom described in words. A human enters
+where perception is the instrument (does it *feel* right, does a real emulator render it right),
+or to watch any tmux session live (`tmux attach`) while the automation drives it;
+`tests/_unautomated/claude/battallion-drive/bt-tmux.sh` wraps a session into
+start / type / keys / snap / attach / stop for that kind of poking.
+
 ## The layers
 
 | Layer                | Use it for                                                        | Where |

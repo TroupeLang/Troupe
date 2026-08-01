@@ -43,6 +43,7 @@ gives is reported as it comes:
 | A symlink pointing out of the root| `path escapes the io-root sandbox via a symlink`         |
 | A directory                       | `path is a directory`                                    |
 | Anything not there                | `file not found`                                         |
+| A file whose bytes are not UTF-8  | `file is not valid UTF-8`                                |
 
 The absolute-path row has a wrinkle worth knowing on macOS: the runtime resolves `--io-root`
 through its symlinks once at startup and compares against the result, so `--io-root /tmp/x` with
@@ -60,9 +61,12 @@ whose last line has no newline keeps it that way, and a file ending in a newline
 line, which the editor draws and the cursor can reach — where vi draws filler from that row on. A
 file of no bytes is one empty line.
 
-The one thing a round trip does not preserve is a byte that is not valid UTF-8. The runtime's
-`SimpleFileIO.readFile` decodes as UTF-8, so such a byte arrives as U+FFFD and `:w` writes the
-replacement back. A NUL and the other control bytes are valid UTF-8 and survive unchanged.
+The file has to be text. `SimpleFileIO.readFile` decodes as UTF-8 and refuses a file whose bytes
+are not, so a binary file is a startup refusal — `file is not valid UTF-8`, on stderr with the
+terminal untouched — rather than a buffer the editor would write back with each undecodable byte
+replaced. A NUL and the other control bytes are valid UTF-8 and survive a round trip unchanged.
+Editing arbitrary bytes is out of scope: the runtime has a byte-level read and write
+(`readFileBytes`, `writeFileBytes`), but the buffer, the screen and the key decoder are all text.
 
 | Key                                | What it does                                     |
 |------------------------------------|--------------------------------------------------|

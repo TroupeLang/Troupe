@@ -21,8 +21,9 @@
  * WHAT IT REFUSES, BEFORE THE TERMINAL HAS BEEN TOUCHED. Every startup failure is one line on
  * stderr and exit 1, written while the terminal is still the shell's: no argument after `--`, more
  * than one, an empty one, and a file that cannot be read — which covers a path that does not
- * exist, a path that names a directory, and a path the runtime refuses because it leaves the
- * `--io-root` subtree, whether lexically or through a symlink. The reason comes from the runtime
+ * exist, a path that names a directory, a file whose bytes are not valid UTF-8, and a path the
+ * runtime refuses because it leaves the `--io-root` subtree, whether lexically or through a
+ * symlink. The reason comes from the runtime
  * and is reported as given, so what refused the path and why is what the user is told.
  *
  * THE PATH IS RESOLVED INSIDE `--io-root`, AND SAYING SO IS PART OF THE FAILURE. `--io-root` is
@@ -32,14 +33,15 @@
  * the user will not find. A message naming only the file would be true and useless, so the note on
  * the second line names the subtree the resolution happened in.
  *
- * THE FILE IS READ AS UTF-8, AND A BYTE THAT IS NOT UTF-8 DOES NOT SURVIVE A ROUND TRIP.
- * `SimpleFileIO.readFile` decodes (rt/src/builtins/simplefileio.mts), so such a byte arrives as
- * U+FFFD and `:w` writes the replacement back where the original was: opening a binary file and
- * writing it destroys it. Nothing here can detect that — the decoded string is all the program is
- * given, and the runtime offers no byte-level read — so it is documented rather than guarded
- * against. Control bytes that *are* valid UTF-8, NUL included, arrive and are written back
- * unchanged. The buffer is otherwise the file's bytes: no last newline is added, and a file ending
- * in one has an empty last line that the editor draws and the cursor can reach.
+ * THE FILE HAS TO BE TEXT, AND ONE THAT IS NOT IS REFUSED BEFORE THE SESSION BEGINS.
+ * `SimpleFileIO.readFile` decodes with a fatal decoder (rt/src/builtins/simplefileio.mts), so a
+ * file whose bytes are not valid UTF-8 fails to open with "file is not valid UTF-8" — the same
+ * one-line startup refusal as a missing file, and nothing on disk is touched. Editing arbitrary
+ * bytes is out of scope rather than unavailable: `readFileBytes` and `writeFileBytes` are there,
+ * but the buffer, the screen and the key decoder are all text, so a byte-exact binary editor is
+ * a different program. Control bytes that *are* valid UTF-8, NUL included, arrive and are written
+ * back unchanged. The buffer is otherwise the file's bytes: no last newline is added, and a file
+ * ending in one has an empty last line that the editor draws and the cursor can reach.
  *
  * WHERE THE PARTS ARE. `Session.trp` is the process constellation and holds every design note
  * about it; `Api.trp` is the state and the operations a plugin is handed; `Editor.trp` is the

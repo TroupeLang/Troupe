@@ -79,7 +79,14 @@ let (*--------------------  What the session needs from the state  -------------
      *
      *  Rows past the end of the buffer are drawn as "~", the filler vi has used since the
      *  seventies to say "this row is not part of the file". The last row is the status plugin's,
-     *  and in command mode the cursor sits on it, after the command typed so far. *)
+     *  and in command mode the cursor sits on it, after the command typed so far.
+     *
+     *  THE CURSOR IS PUT WHERE THE USER IS LOOKING, and it is visible there (Screen.trp), so a
+     *  position off the screen would be seen. Two clamps keep it on: a column past the terminal's
+     *  width is drawn at the last column, there being no horizontal scrolling, and a command line
+     *  is only followed onto the status row when there *is* a status row — a terminal of one row
+     *  keeps that row for the text (`Api.hasStatus`), so a command typed on such a terminal is not
+     *  drawn and the cursor stays where the buffer's cursor is. *)
     fun frameOf (plugins, st) =
         let val h    = Api.textRows st
             val last = Api.lastLine st
@@ -90,11 +97,19 @@ let (*--------------------  What the session needs from the state  -------------
                      end
             val body  = rowsFrom (0, [])
             val lines = if Api.hasStatus st then List.append body [plugins.status st] else body
+
+            (** `c` brought onto the screen: a column at or past the width is drawn at the last
+             *  one, and a terminal of no width leaves nothing to clamp to. *)
+            fun onScreen c = if c < st.cols then c
+                             else if st.cols > 0 then st.cols - 1 else 0
+
+            val inBuffer = (st.line - st.top, onScreen st.col)
             val (curRow, curCol) =
                     case st.mode of
-                         COMMAND => (h, String.size st.cmd + 1)
-                       | _       => ( st.line - st.top
-                                    , if st.col >= st.cols then st.cols - 1 else st.col )
+                         COMMAND => if Api.hasStatus st
+                                    then (h, onScreen (String.size st.cmd + 1))
+                                    else inBuffer
+                       | _       => inBuffer
         in (lines, curRow, curCol, plugins.cursor st)
         end
 

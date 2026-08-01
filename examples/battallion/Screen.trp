@@ -3,17 +3,24 @@
  * A program-relative module of examples/battallion. Pure: every function returns a string; no
  * descriptor, no process, no effect. Two consumers write those strings:
  *
- *   - the supervisor writes the terminal-*mode* escapes (`enterAlt`, `leaveAlt`, `hideCursor`,
- *     `showCursor`), because entering and leaving the alternate screen is terminal setup and
- *     teardown, which the supervisor owns;
+ *   - the supervisor writes the terminal-*mode* escapes (`enterAlt`, `leaveAlt`, `showCursor`),
+ *     because entering and leaving the alternate screen is terminal setup and teardown, which the
+ *     supervisor owns;
  *   - the renderer writes `frame`, the whole visible screen, on every redraw.
  *
  * ESCAPES. `\x1b[?1049h` / `\x1b[?1049l` are the xterm private mode that switches to the
  * alternate screen buffer and back, so the shell's scrollback is untouched by the session.
- * `\x1b[?25l` / `\x1b[?25h` hide and show the cursor: a full-frame redraw would otherwise trail
- * the cursor across the screen. `\x1b[H` homes the cursor, `\x1b[K` erases from the cursor to
- * the end of the line, and `\x1b[<row>;<col>H` positions the cursor, rows and columns counting
- * from one.
+ * `\x1b[?25l` / `\x1b[?25h` hide and show the cursor. `\x1b[H` homes the cursor, `\x1b[K` erases
+ * from the cursor to the end of the line, and `\x1b[<row>;<col>H` positions the cursor, rows and
+ * columns counting from one.
+ *
+ * THE CURSOR IS HIDDEN FOR THE LENGTH OF ONE FRAME, not for the length of the session. A frame
+ * rewrites every row from the top, so a cursor left shown would be dragged across the screen row
+ * by row as the rows are written; a frame therefore begins with `\x1b[?25l` and ends, after the
+ * cursor has been put where it belongs, with `\x1b[?25h`. Between frames — which is where an
+ * editor spends nearly all of its time — the cursor is on the screen and is whatever cursor the
+ * user's terminal draws by default. Nothing here selects a shape: `CursorStyle.trp` is the seam
+ * that would, and it is inert (its header says why).
  *
  * WHY `\x1b[K` PER LINE AND NOT `\x1b[2J`. Both give a correct frame. Erasing each line as it is
  * rewritten means the screen is never blank between the clear and the draw, which a clear-then-
@@ -62,22 +69,25 @@ let val esc = "\x1b"
     fun truncate (line, width) =
         if String.size line <= width then line else String.substring (line, 0, width)
 
-    (** The whole visible screen: `lines` laid out from the top, each erased to the end of the
-     *  line as it is written, the cursor left at `(curRow, curCol)`, and `tail` written after it.
+    (** The whole visible screen: the cursor hidden, `lines` laid out from the top, each erased to
+     *  the end of the line as it is written, the cursor left at `(curRow, curCol)`, `tail` written
+     *  after it, and the cursor shown again.
      *
      *  `lines` is expected to hold exactly `rows` entries; a shorter list draws fewer rows and
      *  leaves the rest of the screen as it was, which is what a caller wants when the buffer has
      *  fewer lines than the terminal has rows only if it padded the list itself. `Editor.frameOf`
      *  pads.
      *
-     *  `tail` is escapes that belong to the frame but not to any row — the cursor's shape, which
-     *  CursorStyle.trp picks per frame. It goes last, after the cursor has been positioned, so
-     *  that a frame's rows are exactly the text between the home and the position escapes. *)
+     *  `tail` is escapes that belong to the frame but not to any row — the cursor's appearance,
+     *  which CursorStyle.trp is the seam for and which is empty as the editor stands. It goes
+     *  after the cursor has been positioned, so that a frame's rows are exactly the text between
+     *  the home and the position escapes, and before the show, so that whatever it selects is in
+     *  force by the time the cursor is on the screen. *)
     fun frame (lines, width, curRow, curCol, tail) =
         let fun go ([], acc)      = acc
               | go ([l], acc)     = acc ^ truncate (l, width) ^ esc ^ "[K"
               | go (l :: ls, acc) = go (ls, acc ^ truncate (l, width) ^ esc ^ "[K" ^ "\r\n")
-        in go (lines, esc ^ "[H") ^ cursorTo (curRow, curCol) ^ tail
+        in hideCursor ^ go (lines, esc ^ "[H") ^ cursorTo (curRow, curCol) ^ tail ^ showCursor
         end
 
 in [ ("enterAlt", enterAlt)

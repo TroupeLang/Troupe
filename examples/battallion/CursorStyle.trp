@@ -1,54 +1,41 @@
-(* CursorStyle — the shape of the terminal's cursor, chosen by where the cursor is.
+(* CursorStyle — the plugin seam for the cursor's appearance, presently inert.
  *
- * A plugin, and a pure function of the editor state: `shape (api, st)` is the escape that selects
- * the cursor's shape for the frame drawn from `st`, and the renderer writes it with that frame.
- * A bar between characters, an underscore at the end of a line — the position says which, not the
- * mode, so the shape answers the question a cursor at the end of a line always raises: is this
- * text or is this the edge?
+ * A plugin, and a pure function of the editor state: `shape (api, st)` is the escape written with
+ * the frame drawn from `st`, and `reset` is the escape written once on the way out. Both are the
+ * empty string as this module stands, so battallion draws whatever cursor the user's terminal is
+ * configured with, in every mode.
  *
- * THE ESCAPES ARE DECSCUSR, `CSI Ps SP q` — that is ESC, `[`, the parameter, a space, and `q`.
- * The parameter values are xterm's (xterm ctlseqs, "Set cursor style (DECSCUSR)", read 2026-08-01):
- * 0 blinking block, 1 blinking block (the default), 2 steady block, 3 blinking underline,
- * 4 steady underline, 5 blinking bar, 6 steady bar. This module uses 5 and 3, the blinking pair,
- * so that the two shapes differ in shape alone. terminfo agrees on the form: `xterm-256color` has
- * `Ss=\E[%p1%d q`.
+ * SHAPE SELECTION IS PARKED. It is a decision the editor's owner has taken and may revisit
+ * (2026-08-01): the cursor is to be visible at rest as the terminal's default, and no shape is to
+ * be chosen for the user until there is a reason to. The seam is kept — `Editor.plugins` still has
+ * a `cursor` field and a `cursorReset` field, and the renderer still writes what they hold, so
+ * reviving shape selection is a change to this module alone.
  *
- * THE RESET IS `CSI 0 SP q`, written once on the way out beside the other teardown escapes.
- * DECSCUSR 0 is blinking block in xterm's own table, while several terminals (VTE, iTerm2) read 0
- * as "back to the shape this terminal is configured with", which is the closer thing to giving the
- * user their cursor back. terminfo's reset capability for `xterm-256color` is `Se=\E[2 q`, steady
- * block — a shape chosen for the user rather than restored to them, which is why it is not what
- * this module writes.
+ * WHAT WAS HERE, AND WHAT IT WOULD COST TO BRING BACK. The escapes are DECSCUSR, `CSI Ps SP q` —
+ * ESC, `[`, the parameter, a space, `q`. xterm's parameter values (xterm ctlseqs, "Set cursor style
+ * (DECSCUSR)", read 2026-08-01) are 0 blinking block, 1 blinking block (the default), 2 steady
+ * block, 3 blinking underline, 4 steady underline, 5 blinking bar, 6 steady bar; terminfo agrees on
+ * the form, `xterm-256color` having `Ss=\E[%p1%d q`. The version parked here selected 5 between
+ * characters and 3 past the end of a line, so that the two shapes differed in shape alone, and
+ * reset with `CSI 0 SP q` — 0 being blinking block in xterm's table but "the shape this terminal is
+ * configured with" in VTE and iTerm2, which is the closer thing to giving the user their cursor
+ * back than terminfo's `Se=\E[2 q`, a shape chosen for the user rather than restored to them.
  *
- * THE CURSOR IS HIDDEN FOR THE WHOLE SESSION as the mvp stands: the supervisor writes `\x1b[?25l`
- * at startup and `\x1b[?25h` on the way out, because a full-frame redraw would otherwise trail the
- * cursor across the screen (Screen.trp's header). A shape selects how a *shown* cursor is drawn,
- * so what this plugin writes is not visible until the redraw path shows the cursor again — hiding
- * it only for the duration of each frame rather than for the session. That change belongs to the
- * renderer, not here, and it is not part of the extraction stage.
+ * THE CURSOR IS VISIBLE WHENEVER THE EDITOR IS IDLE. Screen.trp's `frame` hides the cursor for the
+ * duration of one frame's write and shows it again at the end, so a full-frame redraw does not
+ * trail the cursor across the screen and the cursor is nonetheless there between frames — which is
+ * almost always. The session no longer hides the cursor for its whole length; teardown still writes
+ * a show, which is idempotent.
  *)
 
 import "./Api"
 
-let (** Blinking bar: DECSCUSR 5. *)
-    val bar = "\x1b[5 q"
+let (** The escape shaping the cursor for this state. Empty: the terminal's default cursor stands.
+     *  The parameters are the plugin interface's and are unread while shape selection is parked. *)
+    fun shape (api, st) = ""
 
-    (** Blinking underline: DECSCUSR 3. *)
-    val underline = "\x1b[3 q"
-
-    (** DECSCUSR 0, written on the way out. *)
-    val reset = "\x1b[0 q"
-
-    (** Whether the cursor sits past the last character of its line. In command mode the cursor is
-     *  not in the buffer at all — it is at the end of the command being typed, which is the end of
-     *  a line by the same reading. *)
-    fun atEnd (api, st) =
-        case st.mode of
-             COMMAND => true
-           | _       => st.col >= api.lineLength (st, st.line)
-
-    (** The escape that shapes the cursor for this state. *)
-    fun shape (api, st) = if atEnd (api, st) then underline else bar
+    (** The escape written on the way out. Empty, there being no shape to undo. *)
+    val reset = ""
 
 in [ ("shape", shape)
    , ("reset", reset)

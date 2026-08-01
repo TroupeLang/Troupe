@@ -355,7 +355,7 @@ let (** How long the supervisor waits for the kernel before calling it wedged. T
             val _ = trapSigterm (auth, me)
             val _ = Tty.subscribe (i, me)
             val _ = Tty.rawMode (i, true)
-            val _ = fwrite (out, Screen.enterAlt ^ Screen.hideCursor)
+            val _ = fwrite (out, Screen.enterAlt)
 
             (*--- The constellation. `demonitorlocal` is a stub in this runtime, so the kernel is
                   monitored exactly once and the reference is never released. ---*)
@@ -372,9 +372,12 @@ let (** How long the supervisor waits for the kernel before calling it wedged. T
 
             (*--- Give the terminal back. Cooked mode first: it is the state a terminal is
                   least usable in, so it is the one to leave earliest, and it makes the last
-                  escapes written the observable proof that the mode is already back. The cursor's
-                  shape is the plugin set's to undo, and it is undone here rather than by the
-                  kernel because the kernel may be the reason the session is ending. ---*)
+                  escapes written the observable proof that the mode is already back. The show is
+                  idempotent — a frame leaves the cursor shown and only a session cut short between
+                  a frame's hide and its show leaves it hidden — and it is written unconditionally
+                  because the state of a session ending on a dead kernel is not knowable here. The
+                  cursor's appearance is the plugin set's to undo, and it is undone here rather
+                  than by the kernel because the kernel may be the reason the session is ending. ---*)
             val _ = Tty.rawMode (i, false)
             val _ = fwrite (out, Screen.showCursor ^ plugins.cursorReset ^ Screen.leaveAlt)
             val _ = Tty.unsubscribe i

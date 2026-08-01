@@ -25,7 +25,9 @@
  *   cols     the terminal's width, in code units
  *   rows     the terminal's height, in rows, status line included
  *   mode     NORMAL, INSERT or COMMAND
- *   dirty    whether the buffer differs from what was last read or written
+ *   rev      the identity of the buffer's present contents (see below)
+ *   revNext  the next identity to hand out
+ *   savedRev the identity the file on disk holds
  *   undo     the states `u` walks back through, newest first
  *   cmd      the command line being typed, without its leading colon
  *   status   a transient message for the status line; "" when there is none
@@ -58,15 +60,31 @@
  * past the last one's high half, and the column shown in the status line counts units too.
  *
  * UNDO IS PER KEYSTROKE and unlimited. Every operation that changes the buffer first pushes the
- * whole previous state — rope, cursor, dirty flag — onto `undo`, and `undo` pops one. Two
+ * whole previous state — rope, cursor, revision — onto `undo`, and `undo` pops one. Two
  * consequences are deliberate. Typing a word and undoing it takes as many undos as there were
  * letters, where vi would undo the whole insertion; grouping keystrokes into changes is a keymap
  * feature and belongs with the plugins. And the history costs almost nothing: a rope shares every
  * node the edit did not touch with its predecessor, so a snapshot is a handful of nodes rather
  * than a copy of the text — which is the reason the buffer is a persistent structure in the first
- * place. The dirty flag is part of the snapshot, so undoing every change back to the file's
- * contents also clears it, and an undo on an empty history is a status message rather than an
- * error.
+ * place. An undo on an empty history is a status message rather than an error.
+ *
+ * THE BUFFER IS MODIFIED WHEN ITS REVISION IS NOT THE FILE'S. There is no modified *flag*: every
+ * distinct contents the buffer has ever held carries an identity, `rev`, handed out from `revNext`
+ * — which only ever counts up and which undo does not restore — and `savedRev` is the identity the
+ * file holds, set when the file is read and again when a write is acknowledged. `isDirty` compares
+ * the two, in constant time and without looking at the text.
+ *
+ * A FLAG WOULD BE WRONG, AND WAS. Carried in the state and pushed onto the undo history, a flag is
+ * correct only while no write interleaves: edit, `:w`, then undo past the point that was written
+ * restores the flag the snapshot was taken with — false — and the editor calls a buffer clean that
+ * differs from the file, quitting on `:q` without a word. Comparing revisions gets that right,
+ * because the snapshot restores the *identity of the contents it holds* and that identity is not
+ * `savedRev`. Two properties follow from the identity being restored rather than reallocated:
+ * undoing every change back to what was read shows clean again, and undoing past a write shows
+ * modified. Reallocating would lose the first; not restoring `revNext` is what keeps the second,
+ * since an edit made after an undo can never be handed an identity a write has already claimed.
+ * The comparison is conservative in the one direction it can err: retyping by hand exactly what
+ * was written is a new identity and reads as modified, which is what vi does with it too.
  *
  * A PLUGIN CANNOT WRITE A FILE — it is pure, and the ROOT authority a write needs never leaves the
  * supervisor's frame (Session.trp). So `requestWrite` leaves a request in the state instead, the
@@ -88,10 +106,12 @@ datatype request = REQ_NONE | REQ_WRITE of bool
 
 let (*--------------------------------  Construction  --------------------------------*)
 
-    (** The state a session starts in: the whole buffer, cursor at the start, nothing modified. *)
+    (** The state a session starts in: the whole buffer, cursor at the start, nothing modified —
+     *  the revision the buffer was read at being the revision the file holds. *)
     fun init (buffer, path, cols, rows) =
         { buffer = buffer, path = path, top = 0, line = 0, col = 0, cols = cols, rows = rows
-        , mode = NORMAL, dirty = false, undo = [], cmd = "", status = "", req = REQ_NONE }
+        , mode = NORMAL, rev = 0, revNext = 1, savedRev = 0
+        , undo = [], cmd = "", status = "", req = REQ_NONE }
 
     (*----------------------------------  Messages  ----------------------------------*)
 
@@ -111,6 +131,10 @@ let (*--------------------------------  Construction  --------------------------
     fun lineAt (st, l) = Rope.lineAt (st.buffer, l)
 
     fun lineLength (st, l) = String.size (lineAt (st, l))
+
+    (** Whether the buffer differs from what the file holds. Constant time: the identity of the
+     *  present contents against the identity the file was last read or written at. *)
+    fun isDirty st = st.rev <> st.savedRev
 
     (** The whole buffer as one string, for the kernel to hand the supervisor to write. *)
     fun contents st = Rope.text st.buffer
@@ -172,19 +196,23 @@ let (*--------------------------------  Construction  --------------------------
         in if hi >= surHighLow andalso hi <= surHighHigh then 2 else 1
         end
 
-    (** The state with `buffer` as its text, the cursor at code-unit offset `off`, marked
-     *  modified and the viewport following the cursor. The cursor is derived from the offset
+    (** The state with `buffer` as its text, the cursor at code-unit offset `off`, a fresh
+     *  revision and the viewport following the cursor. The cursor is derived from the offset
      *  rather than adjusted line by line, so a newline inserted or a line join lands it in the
-     *  right place without a case for each. *)
+     *  right place without a case for each. This is the one place a buffer changes, and so the
+     *  one place a revision is handed out. *)
     fun atOffset (st, buffer, off) =
         let val (l, c) = Rope.offsetToPosition (buffer, off)
-            val st' = { st with buffer = buffer, line = l, col = c, dirty = true }
+            val st' = { st with buffer = buffer, line = l, col = c
+                              , rev = st.revNext, revNext = st.revNext + 1 }
         in { st' with top = scrollTo (st', l) }
         end
 
-    (** The state with its present buffer and cursor pushed onto the undo history. *)
+    (** The state with its present buffer, cursor and revision pushed onto the undo history.
+     *  `revNext` is not in the snapshot: it counts identities handed out, which undoing does not
+     *  give back. *)
     fun remember st =
-        { st with undo = { buffer = st.buffer, line = st.line, col = st.col, dirty = st.dirty }
+        { st with undo = { buffer = st.buffer, line = st.line, col = st.col, rev = st.rev }
                          :: st.undo }
 
     (** `s` inserted at the cursor, which ends up after it. *)
@@ -233,7 +261,7 @@ let (*--------------------------------  Construction  --------------------------
         case st.undo of
              []        => { st with status = oldestMessage }
            | s :: rest =>
-               let val st1 = { st with buffer = s.buffer, undo = rest, dirty = s.dirty }
+               let val st1 = { st with buffer = s.buffer, undo = rest, rev = s.rev }
                in moveTo (st1, s.line, s.col)
                end
 
@@ -247,9 +275,9 @@ let (*--------------------------------  Construction  --------------------------
     (** A transient message for the status line. It lives until the next keystroke. *)
     fun setStatus (st, s) = { st with status = s }
 
-    (** Whether the buffer differs from what was last read or written. The edits set it; what
-     *  clears it is a write, which is a plugin's to report. *)
-    fun setDirty (st, d) = { st with dirty = d }
+    (** The file now holds the buffer's present contents. Called by the plugin that hears a write
+     *  succeed; nothing else in the editor moves `savedRev`. *)
+    fun markSaved st = { st with savedRev = st.rev }
 
     (*---------------------------------  Requests  -----------------------------------*)
 
@@ -279,14 +307,21 @@ let (*--------------------------------  Construction  --------------------------
 
     (** What every plugin entry point is handed. The fields are the operations the four mvp
      *  plugins use and no more: queries and motions for the keymap, the four edits, the mode and
-     *  command-line and status writers, and the write request. A plugin holds no authority, no
-     *  pid and no descriptor, so this record is the whole of what it can do to the editor.
+     *  command-line and status writers, the write request, and the two operations over the
+     *  modified state — `isDirty`, which the status line and the quit commands read, and
+     *  `markSaved`, which the plugin that hears a write succeed is the only caller of. A plugin
+     *  holds no authority, no pid and no descriptor, so this record is the whole of what it can do
+     *  to the editor.
      *
      *  Reading the state is not in here: a plugin reads the fields listed at the top of this file
-     *  directly. `lineAt` and the rest of the exports below are the kernel's, and a plugin that
-     *  needs one of them is a reason to widen this record rather than to reach past it. *)
+     *  directly. Whether the buffer is modified is the exception and is a function rather than a
+     *  field, because it is a comparison of two fields and open-coding it in every plugin would
+     *  publish an invariant instead of an answer. `lineAt` and the rest of the exports below are
+     *  the kernel's, and a plugin that needs one of them is a reason to widen this record rather
+     *  than to reach past it. *)
     val api = { textRows     = textRows
               , lineLength   = lineLength
+              , isDirty      = isDirty
               , moveTo       = moveTo
               , insertText   = insertText
               , deleteChar   = deleteChar
@@ -296,7 +331,7 @@ let (*--------------------------------  Construction  --------------------------
               , setMode      = setMode
               , setCmd       = setCmd
               , setStatus    = setStatus
-              , setDirty     = setDirty
+              , markSaved    = markSaved
               , requestWrite = requestWrite
               , clearRequest = clearRequest
               , writeQuits   = writeQuits }

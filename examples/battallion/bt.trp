@@ -18,6 +18,29 @@
  * cooked mode, normal screen, cursor shown, subscription and signal trap released — on every way
  * out, including a kernel that dies or stops answering.
  *
+ * WHAT IT REFUSES, BEFORE THE TERMINAL HAS BEEN TOUCHED. Every startup failure is one line on
+ * stderr and exit 1, written while the terminal is still the shell's: no argument after `--`, more
+ * than one, an empty one, and a file that cannot be read — which covers a path that does not
+ * exist, a path that names a directory, and a path the runtime refuses because it leaves the
+ * `--io-root` subtree, whether lexically or through a symlink. The reason comes from the runtime
+ * and is reported as given, so what refused the path and why is what the user is told.
+ *
+ * THE PATH IS RESOLVED INSIDE `--io-root`, AND SAYING SO IS PART OF THE FAILURE. `--io-root` is
+ * the runtime's flag, not this program's: `SimpleFileIO` resolves every path against it and there
+ * is no way to ask what it is. Left off, the runtime makes a fresh empty scratch directory for the
+ * invocation, so every relative path is a file that does not exist and every write lands somewhere
+ * the user will not find. A message naming only the file would be true and useless, so the note on
+ * the second line names the subtree the resolution happened in.
+ *
+ * THE FILE IS READ AS UTF-8, AND A BYTE THAT IS NOT UTF-8 DOES NOT SURVIVE A ROUND TRIP.
+ * `SimpleFileIO.readFile` decodes (rt/src/builtins/simplefileio.mts), so such a byte arrives as
+ * U+FFFD and `:w` writes the replacement back where the original was: opening a binary file and
+ * writing it destroys it. Nothing here can detect that — the decoded string is all the program is
+ * given, and the runtime offers no byte-level read — so it is documented rather than guarded
+ * against. Control bytes that *are* valid UTF-8, NUL included, arrive and are written back
+ * unchanged. The buffer is otherwise the file's bytes: no last newline is added, and a file ending
+ * in one has an empty last line that the editor draws and the cursor can reach.
+ *
  * WHERE THE PARTS ARE. `Session.trp` is the process constellation and holds every design note
  * about it; `Api.trp` is the state and the operations a plugin is handed; `Editor.trp` is the
  * kernel and the plugin set — `VimMotions.trp`, `StatusLine.trp`, `CursorStyle.trp` and
@@ -49,21 +72,41 @@ let val a = authority
 
     val usage = "usage: bt.trp --io-root <dir> -- <file>"
 
-    fun fail (message, code) =
+    (** Where a path was resolved, said on every failure to open one: the subtree is the runtime's
+     *  and a message that named only the file would leave the user nowhere to look. *)
+    val rootNote =
+        "paths resolve inside --io-root; without the flag the runtime uses a fresh empty directory"
+
+    (** The exit code of a startup failure, whatever the failure was: the session did not begin. *)
+    val exitStartup = 1
+
+    fun fail message =
         let val _ = fwrite (err, "battallion: " ^ message ^ "\n")
-        in exit (a, code)
+        in exit (a, exitStartup)
         end
 
-    (** The file named after `--`, or a usage message and exit 2. *)
-    fun argPath () = case getCliArgs a of []     => fail (usage, 2)
-                                        | p :: _ => p
+    (** A usage message and the failure exit. *)
+    fun refuse reason = fail (reason ^ "\n" ^ usage)
 
-    (** The contents of `path` as a rope, or a message and exit 1. A file that cannot be read is
-     *  a startup failure, reported on stderr with the terminal untouched. *)
+    (** The one file named after `--`. No argument, more than one, and an empty one are each a
+     *  usage failure rather than something to guess at: opening the first of several would leave
+     *  a mistyped command line looking as though it had worked, and an empty path is a directory
+     *  as far as the runtime is concerned, which is a confusing thing to be told. *)
+    fun argPath () = case getCliArgs a of
+                          []      => refuse "no file to open"
+                        | [""]    => refuse "the file to open is an empty path"
+                        | [p]     => p
+                        | p :: _  => refuse "more than one file to open"
+
+    (** The contents of `path` as a rope, or a message and the failure exit. A file that cannot be
+     *  read is a startup failure, reported on stderr with the terminal untouched. The reason is
+     *  the runtime's own — "file not found", "path is a directory", "path escapes the io-root
+     *  sandbox", "path escapes the io-root sandbox via a symlink" — and is passed through as it
+     *  came. *)
     fun openBuffer path =
         case SimpleFileIO.readFile (a, path) of
              OK text => Rope.fromString text
-           | ERR e   => fail ("cannot open " ^ e.path ^ ": " ^ e.reason, 1)
+           | ERR e   => fail ("cannot open " ^ e.path ^ ": " ^ e.reason ^ "\n" ^ rootNote)
 
     val path = argPath ()
     val buffer = openBuffer path

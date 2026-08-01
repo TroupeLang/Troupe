@@ -12,6 +12,10 @@
  * transient message when there is one — a message set by whatever key produced it, and cleared by
  * the next key.
  *
+ * MODIFIED IS ASKED FOR, NOT READ OFF. `api.isDirty` compares the buffer's revision against the
+ * file's rather than reading a flag, so `[+]` is right after an undo that walks back past a write
+ * — where a flag carried in the undo history says the opposite (Api.trp's header).
+ *
  * THE ROW IS NOT PADDED and not styled. It is drawn like any other row: cut to the terminal's
  * width and erased to the end of the line (Screen.trp), so it ends where its text ends rather
  * than in a bar across the screen. Reverse video would be one escape around the string, and it is
@@ -30,7 +34,7 @@ let (** The bottom row: the command line while one is being typed, and otherwise
         case st.mode of
              COMMAND => ":" ^ st.cmd
            | m       =>
-               let val flag = if st.dirty then " [+]" else ""
+               let val flag = if api.isDirty st then " [+]" else ""
                    val name = case m of INSERT => "INSERT" | _ => "NORMAL"
                    val pos  = toString (st.line + 1) ^ "," ^ toString (st.col + 1)
                    val base = st.path ^ flag ^ "  " ^ name ^ "  " ^ pos

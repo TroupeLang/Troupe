@@ -22,7 +22,12 @@
  * A WRITE THAT QUITS IS ONE REQUEST, not two: `REQ_WRITE`'s payload carries whether to quit, and
  * `onWritten` reads it back with `api.writeQuits`. A refused write spends the request, leaves the
  * buffer modified, and puts the reason in the status line — the session survives a full disk or a
- * read-only file.
+ * read-only file, and `:wq` on one does not quit, the quit being conditional on the write.
+ *
+ * WHAT A SUCCESSFUL WRITE CHANGES is `api.markSaved`: the file now holds the buffer's revision.
+ * Nothing sets or clears a modified flag, there being none — `api.isDirty` compares the buffer's
+ * revision with the file's, which is what makes `:q` refuse after an undo that walks back past a
+ * write (Api.trp's header carries the reasoning).
  *)
 
 import "./Api"
@@ -33,7 +38,7 @@ let (** The refusal a modified buffer earns. The wording is vi's, which is what 
 
     (** Quitting: refused while the buffer is modified. *)
     fun quit (api, st) =
-        if st.dirty then (api.setStatus (st, modifiedMessage), false) else (st, true)
+        if api.isDirty st then (api.setStatus (st, modifiedMessage), false) else (st, true)
 
     (** The command word, run against a state the keymap has already returned to normal mode.
      *  Returns `(state', quit)` like a key does; a command that writes quits through `onWritten`
@@ -52,7 +57,7 @@ let (** The refusal a modified buffer earns. The wording is vi's, which is what 
     fun onWritten (api, st, ok, message) =
         let val quitAfter = api.writeQuits st
             val st' = api.setStatus (api.clearRequest st, message)
-            val st'' = if ok then api.setDirty (st', false) else st'
+            val st'' = if ok then api.markSaved st' else st'
         in (st'', ok andalso quitAfter)
         end
 

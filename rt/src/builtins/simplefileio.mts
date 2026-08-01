@@ -81,7 +81,10 @@ function resolveInSandbox(p: string): Resolved {
                 probe = parent;
                 continue;
             }
-            return { ok: false, resolved: '', reason: e instanceof Error ? e.message : String(e) };
+            // Through errMessage, as the operation bodies report: a raw e.message here
+            // carries the resolved absolute path, which the module's error contract
+            // (machine-independent, caller-relative paths only) forbids.
+            return { ok: false, resolved: '', reason: errMessage(e) };
         }
     }
 }

@@ -13,8 +13,24 @@ import * as os from 'node:os';
 /**
  * SimpleFileIO — placeholder whole-file I/O runtime primitive.
  *
- * Operations: readFile, writeFile, appendFile, fileExists, readDir, makeDir, fileStat,
- * removeFile. Directory removal, rename, copy and streaming reads are deliberately absent.
+ * Operations: readFile, writeFile, readFileBytes, writeFileBytes, appendFile, fileExists,
+ * readDir, makeDir, fileStat, removeFile. Directory removal, rename, copy and streaming reads
+ * are deliberately absent.
+ *
+ * Text and bytes:
+ *  - readFile/writeFile/appendFile are UTF-8. `readFile` decodes with a fatal decoder: a file
+ *    that is not valid UTF-8 is an `Err`, not a string with U+FFFD in it, because the
+ *    substitution is invisible to the program and a later write puts the replacement on disk
+ *    where the original byte was.
+ *  - readFileBytes/writeFileBytes carry the file's bytes as a string with one code unit per
+ *    byte (`latin1`), the byte-string convention of the codec built-ins
+ *    (rt/src/builtins/codec.mts) and of the tty reader (rt/src/builtins/tty.mts). A string
+ *    holding a code unit above 255 is not a byte string, and `writeFileBytes` refuses one as a
+ *    thread error rather than truncating it — as base64Encode and gunzip do, and for the same
+ *    reason: the convention is only safe if breaking it is loud.
+ *  - `appendFile` has no byte-level counterpart. Appending bytes is an open item, not a
+ *    decision: the pair above covers the read-modify-write use, and a third operation would be
+ *    added when something needs it.
  *
  * Security design (see _dev_planning/_archive/tier2-libraries/spec-simple-file-io.md):
  *  - Every operation requires FULL (ROOT) authority, mirroring `persist`. Untrusted code
@@ -44,6 +60,21 @@ const ioRoot: string = (() => {
     }
     return fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'troupe-io-')));
 })();
+
+/**
+ * `ignoreBOM: true` keeps a leading U+FEFF in the decoded string instead of dropping it, which
+ * is what Node's own `buf.toString('utf8')` does: the decoder is here to reject invalid bytes,
+ * not to change what a valid file reads as.
+ */
+const utf8Decoder = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
+
+/** Index of the first character outside 0..255, or -1 if the string is bytes (codec.mts). */
+function firstNonByte(s: string): number {
+    for (let i = 0; i < s.length; i++) {
+        if (s.charCodeAt(i) > 0xff) return i;
+    }
+    return -1;
+}
 
 function withinRoot(p: string): boolean {
     return p === ioRoot || p.startsWith(ioRoot + path.sep);
@@ -175,14 +206,46 @@ export function BuiltinSimpleFileIO<TBase extends Constructor<UserRuntimeZero>>(
                 return this.runtime.ret(this.mkErr(r.reason, origPath));
             }
             this.suspendWithResult(async () => {
+                let raw: Buffer;
                 try {
-                    const content = await fs.promises.readFile(r.resolved, 'utf8');
-                    return this.mkOk(new LVal(content, ROOT));
+                    raw = await fs.promises.readFile(r.resolved);
+                } catch (e) {
+                    return this.mkErr(errMessage(e), origPath);
+                }
+                // The decode is separate from the read so a decoding failure cannot be reported
+                // as a filesystem error, and vice versa.
+                try {
+                    return this.mkOk(new LVal(utf8Decoder.decode(raw), ROOT));
+                } catch {
+                    return this.mkErr('file is not valid UTF-8', origPath);
+                }
+            });
+        }, 'readFile');
+
+        // The file's bytes, one code unit each. Same authority, sandbox, labeling and error
+        // dispositions as readFile; the difference is that nothing is decoded, so every file
+        // reads and no content is altered.
+        readFileBytes = mkBase((larg) => {
+            assertIsNTuple(larg, 2);
+            this.runtime.$t.raiseCurrentThreadPC(larg.lev);
+            const arg = larg.val;
+            assertIsRootAuthority(arg[0]);
+            assertIsString(arg[1]);
+            const origPath = arg[1].val;
+
+            const r = resolveInSandbox(origPath);
+            if (!r.ok) {
+                return this.runtime.ret(this.mkErr(r.reason, origPath));
+            }
+            this.suspendWithResult(async () => {
+                try {
+                    const raw = await fs.promises.readFile(r.resolved);
+                    return this.mkOk(new LVal(raw.toString('latin1'), ROOT));
                 } catch (e) {
                     return this.mkErr(errMessage(e), origPath);
                 }
             });
-        }, 'readFile');
+        }, 'readFileBytes');
 
         writeFile = mkBase((larg) => {
             assertIsNTuple(larg, 3);
@@ -207,6 +270,42 @@ export function BuiltinSimpleFileIO<TBase extends Constructor<UserRuntimeZero>>(
                 }
             });
         }, 'writeFile');
+
+        // One byte per code unit. A string that is not a byte string is a defect in the calling
+        // program rather than a bad environment, so it is a thread error and not an Err — the
+        // disposition base64Encode and gunzip take for the same argument (codec.mts). It is
+        // checked before the path is resolved: the argument is wrong whatever the path is.
+        writeFileBytes = mkBase((larg) => {
+            assertIsNTuple(larg, 3);
+            this.runtime.$t.raiseCurrentThreadPC(larg.lev);
+            const arg = larg.val;
+            assertIsRootAuthority(arg[0]);
+            assertIsString(arg[1]);
+            assertIsString(arg[2]);
+            const origPath = arg[1].val;
+            const contents = arg[2].val as string;
+
+            const bad = firstNonByte(contents);
+            if (bad >= 0) {
+                this.runtime.$t.threadError(
+                    `writeFileBytes: argument is not a byte string: character ${bad} is ` +
+                    `code unit ${contents.charCodeAt(bad)}, above 255`);
+                return;
+            }
+
+            const r = resolveInSandbox(origPath);
+            if (!r.ok) {
+                return this.runtime.ret(this.mkErr(r.reason, origPath));
+            }
+            this.suspendWithResult(async () => {
+                try {
+                    await fs.promises.writeFile(r.resolved, Buffer.from(contents, 'latin1'));
+                    return this.mkOk(new LVal(__unitbase, ROOT));
+                } catch (e) {
+                    return this.mkErr(errMessage(e), origPath);
+                }
+            });
+        }, 'writeFileBytes');
 
         appendFile = mkBase((larg) => {
             assertIsNTuple(larg, 3);

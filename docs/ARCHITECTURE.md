@@ -129,18 +129,27 @@ an external SIGTERM leaves a raw terminal raw.
 ### File I/O (`SimpleFileIO`)
 
 Whole-file read/write lives in `rt/src/builtins/simplefileio.mts`. It is a **placeholder** — a
-deliberately small surface (`readFile`, `writeFile`, `appendFile`, `fileExists`) that exists to
-support document-processing programs and is expected to be superseded by a labelled-path model.
+deliberately small surface (`readFile`, `writeFile`, `readFileBytes`, `writeFileBytes`,
+`appendFile`, `fileExists`) that exists to support document-processing programs and is expected to
+be superseded by a labelled-path model.
 
 - **Authority.** Every operation requires ROOT authority (mirrors `persist`). Untrusted code cannot
   reach the filesystem at all, so per-write confidentiality checks and per-path levels are deferred
   rather than half-answered.
 - **Labeling.** Read content is labeled at ROOT ("we trust our own files"), exactly as `persist`
   labels restored data. Each primitive returns a tagged record
-  (`{tag="Ok", value=…}` / `{tag="Err", error={reason, path}}`), so a missing file or rejected path
-  never crashes the thread. The standard library reports failure with `Option` and `Outcome`; the
-  runtime still builds tagged records here, in the bigint conversion built-ins, and in the two
-  decoding codec built-ins (below), and those three are the only places the encoding survives.
+  (`{tag="Ok", value=…}` / `{tag="Err", error={reason, path}}`), so a missing file, a rejected path
+  or a file `readFile` cannot decode never crashes the thread. The standard library reports failure
+  with `Option` and `Outcome`; the runtime still builds tagged records here, in the bigint
+  conversion built-ins, and in the two decoding codec built-ins (below), and those three are the
+  only places the encoding survives.
+- **Text or bytes.** `readFile`, `writeFile` and `appendFile` are UTF-8, and `readFile` decodes
+  with a fatal decoder: a file whose bytes are not UTF-8 is `{reason="file is not valid UTF-8"}`
+  rather than a string with U+FFFD where those bytes were, a substitution the program cannot see
+  and a later write would put on disk. `readFileBytes` and `writeFileBytes` carry the bytes
+  themselves, one code unit per byte, the byte-string convention of the codec built-ins (below)
+  and of the tty reader; `writeFileBytes` refuses a code unit above 255 as a thread error, as
+  `base64Encode` does. Appending is UTF-8 only.
 - **Sandbox.** `--io-root <dir>` (`rt/src/TroupeCliArgs.mts`) bounds path reachability, orthogonal
   to authority: `..`, absolute-outside, and symlink escapes are rejected before any filesystem
   access, so even a bug in ROOT code cannot write outside the subtree. When unset, a per-invocation

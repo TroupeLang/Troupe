@@ -66,12 +66,19 @@ reviewed rigorously rather than depend on the monitor.
                     Import it selectively -- `import { readFile, writeFile } SimpleFileIO`
                     shadows the builtins of those names, leaving call sites unchanged. A name
                     left out of that list still resolves, to the raw builtin, whose tagged
-                    record does not match `OK`.
+                    record does not match `OK`. The text operations are UTF-8: `readFile`
+                    refuses a file whose bytes are not valid UTF-8 with
+                    `ERR {reason = "file is not valid UTF-8", path}` rather than substituting
+                    U+FFFD, and `readFileBytes` / `writeFileBytes` carry the bytes themselves
+                    as a string of one code unit per byte -- the byte-string convention of
+                    `BytesAndZips`. Appending is UTF-8 only.
 
   | Operation                        | `OK` payload                                              |
   |----------------------------------|-----------------------------------------------------------|
-  | `readFile (auth, path)`          | the contents                                              |
+  | `readFile (auth, path)`          | the contents, decoded as UTF-8                            |
   | `writeFile (auth, path, s)`      | `()`                                                      |
+  | `readFileBytes (auth, path)`     | the bytes, one code unit each                             |
+  | `writeFileBytes (auth, path, s)` | `()`, one byte written per code unit                      |
   | `appendFile (auth, path, s)`     | `()`, creating the file if absent                         |
   | `fileExists (auth, path)`        | `true` / `false`; never `ERR`                             |
   | `readDir (auth, path)`           | `{name, kind}` list, kind `"file"` / `"dir"` / `"other"`  |

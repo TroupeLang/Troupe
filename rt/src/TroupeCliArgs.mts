@@ -120,7 +120,12 @@ export function getCliArgs(): ParsedArgs {
                 type: 'string',
                 choices: ['capability', 'ifc'],
                 default: 'capability',
-                describe: 'Stdio enforcement model: capability (acquisition is checked against the authority, operations are unchecked) or ifc (acquisition is unchecked, operations are checked against the stdio level)'
+                describe: 'Stdio enforcement model: capability (acquisition is checked against the authority, operations are unchecked) or ifc (acquisition is unchecked, operations are checked against the stdio level)',
+                // Repeating the option gives yargs an array. The compiler reads
+                // the same flag and takes the last occurrence, so this does too:
+                // otherwise a doubled flag leaves the two tools on different
+                // models with nothing said about it.
+                coerce: (v) => Array.isArray(v) ? v[v.length - 1] : v
             })
             .option(TroupeCliArg.Port, { type: 'number', describe: 'Network port for P2P communication' })
             .option(TroupeCliArg.File, { alias: 'f', type: 'string', describe: 'Path to the main troupe program file to execute' })

@@ -1,0 +1,9 @@
+(* Trapping SIGTERM requires ROOT authority: it is the power to make the node
+   ignore the operator's kill request, a process-lifecycle capability in the
+   same family as `exit`. An authority attenuated below ROOT is refused, so
+   delivered mobile code holding quarantined or attenuated authority cannot
+   register itself and swallow kills. *)
+let val botAuth = attenuate (authority, `{}`)
+    val _ = trapSigterm (botAuth, self ())
+in print "unreachable"
+end

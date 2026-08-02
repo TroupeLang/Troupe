@@ -1,0 +1,8 @@
+(* IFC stdio model: entering raw mode changes the echo and the line discipline
+   of the channel visibly, so it is an effect and carries the same sink check as
+   a write. From a pc raised above the channel level it is refused. *)
+let val fd = stdin authority
+    val secret = 42 raisedTo `{alice}`
+    val _ = if secret > 0 then ttyRawMode (fd, true) else ttyRawMode (fd, false)
+in ()
+end

@@ -1,0 +1,6 @@
+import String
+
+(* writeFileBytes takes a byte string, as the codec's byte primitives do: a code unit above 255
+ * is a defect in the calling program, not a bad environment, so it is a thread error rather than
+ * an Err. The check happens before the path is resolved and before anything is written. *)
+print (writeFileBytes (authority, "oops.bin", "ok so far " ^ String.strCode 9731))

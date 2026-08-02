@@ -1,0 +1,61 @@
+(* StatusLine — the bottom row of the frame.
+ *
+ * A plugin, and a pure function of the editor state: `render (api, st)` is the row's text. The
+ * kernel asks for it once per frame and puts it where the row goes; how many rows are left for
+ * the text, and whether there is room for this one at all, stay the kernel's arithmetic
+ * (`Api.textRows`, `Api.hasStatus`), so a terminal of one row keeps that row for the text and this
+ * plugin is not asked.
+ *
+ * ONE ROW, THREE THINGS TO SAY, AND A RULE FOR WHICH. While a line is being typed the row is that
+ * line, prompt and all, because that is where the cursor sits: `:` for a command and `/` for a
+ * search pattern, the prompt being the state's (`st.prompt`) rather than this module's guess.
+ * While the help page is up the row says how to put it away, the page having taken the rest of the
+ * screen. Otherwise the row is the buffer's: the file, `[+]` for a modified buffer, the mode, the
+ * cursor's one-based line and column, the keymap's pending prefix if a two-key sequence is half
+ * pressed, and a transient message when there is one — a message set by whatever key produced it,
+ * and cleared by the next key.
+ *
+ * A HALF-PRESSED SEQUENCE IS VISIBLE. `g`, `d` and `y` begin a pair (VimMotions.trp) and the row
+ * shows the one that is waiting in parentheses, so a prefix pressed by accident is something the
+ * user can see rather than a key that appears to have done nothing. A message and a prefix never
+ * share the row: the keystroke that sets a prefix is the one that clears the message before it.
+ *
+ * MODIFIED IS ASKED FOR, NOT READ OFF. `api.isDirty` compares the buffer's revision against the
+ * file's rather than reading a flag, so `[+]` is right after an undo that walks back past a write
+ * — where a flag carried in the undo history says the opposite (Api.trp's header). It stays right
+ * after a `:w PATH` too, that being a write of a copy and not of the buffer's own file.
+ *
+ * THE ROW IS NOT PADDED and not styled. It is drawn like any other row: cut to the terminal's
+ * width and erased to the end of the line (Screen.trp), so it ends where its text ends rather
+ * than in a bar across the screen. Reverse video would be one escape around the string, and it is
+ * left out because the truncation question it raises — an escape is not a column — is the same one
+ * wide characters raise and the editor does not measure display width.
+ *
+ * COLUMNS COUNT CODE UNITS, as everything else in the editor does (Api.trp), so the column shown
+ * for a cursor past an astral character counts that character as two.
+ *)
+
+import "./Api"
+
+let (** What the row says while the help page is up. *)
+    val helpMessage = "press any key to return"
+
+    (** The bottom row: the line being typed while one is being typed, the way out of the help
+     *  page while it is up, and otherwise the file, the modified flag, the mode, the cursor's
+     *  one-based position, any half-pressed key sequence and any transient message. *)
+    fun render (api, st) =
+        case st.mode of
+             COMMAND => st.prompt ^ st.cmd
+           | HELP    => helpMessage
+           | m       =>
+               let val flag = if api.isDirty st then " [+]" else ""
+                   val name = case m of INSERT => "INSERT" | _ => "NORMAL"
+                   val pos  = toString (st.line + 1) ^ "," ^ toString (st.col + 1)
+                   val base = st.path ^ flag ^ "  " ^ name ^ "  " ^ pos
+                   val held = if st.pending = "" then base else base ^ "  (" ^ st.pending ^ ")"
+               in if st.status = "" then held else held ^ "  " ^ st.status
+               end
+
+in [ ("render", render)
+   ]
+end

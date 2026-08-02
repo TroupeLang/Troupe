@@ -1,0 +1,7 @@
+2026-07-31T17:21:43.441Z [RTM] info: Skipping network creation. Observe that all network operations will yield a runtime error.
+{tag="Ok", value=()}
+true
+{#ROOT}
+{tag="Ok", value=()}
+"hello troupe"
+>>> Main thread finished with value: ()@{#ROOT}%{#ROOT}

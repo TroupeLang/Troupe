@@ -1,0 +1,40 @@
+(* helpdemo — draw the `:help` page at several terminal sizes and print it.
+ *
+ *   ./local.sh examples/battallion/helpdemo.trp --localonly
+ *
+ * No terminal is involved. The page is a pure function of the sections the plugins export and of
+ * the size it is given (Help.trp), so the layout can be read here rather than inferred from a
+ * screen capture: the two columns a wide terminal gets, the one a narrow one falls back to, and
+ * the cut a terminal too small for the list gets. The sizes are the *text* rows, one fewer than
+ * the terminal's, the last row being the status line's.
+ *
+ * Each row is printed between bars, so trailing spaces — of which the page writes none — would be
+ * visible.
+ *)
+
+import List
+import String
+import "./Help"
+import "./VimMotions"
+import "./FileOps"
+
+let val a = authority
+    val out = stdout a
+
+    (** The sections the editor's plugin set assembles the page from. Built inside a function
+     *  because a module's top level does not call one (docs/MODULES.md). *)
+    fun sections () = List.append VimMotions.help FileOps.help
+
+    fun show (cols, rows) =
+        let val _  = fwrite (out, "=== " ^ toString cols ^ " columns, " ^ toString rows
+                                  ^ " rows of text\n")
+            val ls = Help.page (sections (), cols, rows)
+            val _  = List.map (fn l => fwrite (out, "|" ^ l ^ "|\n")) ls
+        in fwrite (out, "rows drawn: " ^ toString (List.length ls) ^ "\n\n")
+        end
+
+    val _ = show (80, 23)
+    val _ = show (40, 23)
+    val _ = show (80, 10)
+in ()
+end

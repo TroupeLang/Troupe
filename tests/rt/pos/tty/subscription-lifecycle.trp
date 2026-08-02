@@ -1,0 +1,17 @@
+(* The subscription operations' return values.
+
+   `ttyUnsubscribe` is idempotent: it answers `Ok` whether or not anything was
+   subscribed, so that a supervisor's teardown path can call it
+   unconditionally. `ttySubscribe` on an already-subscribed channel replaces
+   the subscriber and also answers `Ok`; which process the replacement routes
+   events to is the subject of resubscribe-replaces.trp. *)
+let val a = authority
+    val i = stdin a
+    val me = self ()
+    val _ = print (ttyUnsubscribe i)
+    val _ = print (ttySubscribe (i, me))
+    val _ = print (ttySubscribe (i, me))
+    val _ = print (ttyUnsubscribe i)
+    val _ = print (ttyUnsubscribe i)
+in ()
+end

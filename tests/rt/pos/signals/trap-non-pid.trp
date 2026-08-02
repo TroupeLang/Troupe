@@ -1,0 +1,7 @@
+(* A second argument that is not a process id is a programming error and kills
+   the thread, in the same class as `ttySubscribe`'s. A signal delivered to
+   something that is not a local process would vanish without a word, and a
+   node whose kill signal goes nowhere is what the trap must never create. *)
+let val _ = trapSigterm (authority, 42)
+in print "unreachable"
+end

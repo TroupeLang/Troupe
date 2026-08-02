@@ -1,0 +1,43 @@
+(* CursorStyle — the plugin seam for the cursor's appearance, presently inert.
+ *
+ * A plugin, and a pure function of the editor state: `shape (api, st)` is the escape written with
+ * the frame drawn from `st`, and `reset` is the escape written once on the way out. Both are the
+ * empty string as this module stands, so battallion draws whatever cursor the user's terminal is
+ * configured with, in every mode.
+ *
+ * SHAPE SELECTION IS PARKED. It is a decision the editor's owner has taken and may revisit
+ * (2026-08-01): the cursor is to be visible at rest as the terminal's default, and no shape is to
+ * be chosen for the user until there is a reason to. The seam is kept — `Editor.plugins` still has
+ * a `cursor` field and a `cursorReset` field, and the renderer still writes what they hold, so
+ * reviving shape selection is a change to this module alone.
+ *
+ * WHAT WAS HERE, AND WHAT IT WOULD COST TO BRING BACK. The escapes are DECSCUSR, `CSI Ps SP q` —
+ * ESC, `[`, the parameter, a space, `q`. xterm's parameter values (xterm ctlseqs, "Set cursor style
+ * (DECSCUSR)", read 2026-08-01) are 0 blinking block, 1 blinking block (the default), 2 steady
+ * block, 3 blinking underline, 4 steady underline, 5 blinking bar, 6 steady bar; terminfo agrees on
+ * the form, `xterm-256color` having `Ss=\E[%p1%d q`. The version parked here selected 5 between
+ * characters and 3 past the end of a line, so that the two shapes differed in shape alone, and
+ * reset with `CSI 0 SP q` — 0 being blinking block in xterm's table but "the shape this terminal is
+ * configured with" in VTE and iTerm2, which is the closer thing to giving the user their cursor
+ * back than terminfo's `Se=\E[2 q`, a shape chosen for the user rather than restored to them.
+ *
+ * THE CURSOR IS VISIBLE WHENEVER THE EDITOR IS IDLE. Screen.trp's `frame` hides the cursor for the
+ * duration of one frame's write and shows it again at the end, so a full-frame redraw does not
+ * trail the cursor across the screen and the cursor is nonetheless there between frames — which is
+ * almost always. The session no longer hides the cursor for its whole length; teardown still writes
+ * a show, which is idempotent.
+ *)
+
+import "./Api"
+
+let (** The escape shaping the cursor for this state. Empty: the terminal's default cursor stands.
+     *  The parameters are the plugin interface's and are unread while shape selection is parked. *)
+    fun shape (api, st) = ""
+
+    (** The escape written on the way out. Empty, there being no shape to undo. *)
+    val reset = ""
+
+in [ ("shape", shape)
+   , ("reset", reset)
+   ]
+end

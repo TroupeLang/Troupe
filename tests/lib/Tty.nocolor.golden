@@ -1,0 +1,33 @@
+2026-07-31T17:47:46.330Z [RTM] info: Skipping network creation. Observe that all network operations will yield a runtime error.
+[34mbegin [0mTty
+  [34mbegin [0mqueries on a pipe
+      [33m[ TEST ][0m it stdin is not a terminal      [32m[ PASS ][0m it stdin is not a terminal
+      [33m[ TEST ][0m it stdout is not a terminal      [32m[ PASS ][0m it stdout is not a terminal
+      [33m[ TEST ][0m it size reports ERR rather than failing      [32m[ PASS ][0m it size reports ERR rather than failing
+      [33m[ TEST ][0m it raw mode reports ERR rather than failing      [32m[ PASS ][0m it raw mode reports ERR rather than failing
+      [33m[ TEST ][0m it the channel level defaults to ROOT      [32m[ PASS ][0m it the channel level defaults to ROOT
+  [34mend [0m
+  [34mbegin [0msubscription
+      [33m[ TEST ][0m it subscribe reports OK      [32m[ PASS ][0m it subscribe reports OK
+      [33m[ TEST ][0m it unsubscribe reports OK      [32m[ PASS ][0m it unsubscribe reports OK
+      [33m[ TEST ][0m it unsubscribe is idempotent      [32m[ PASS ][0m it unsubscribe is idempotent
+  [34mend [0m
+  [34mbegin [0mthe receive region
+      [33m[ TEST ][0m it an authority covering the channel level certifies the region      [32m[ PASS ][0m it an authority covering the channel level certifies the region
+      [33m[ TEST ][0m it the injected region is certified too      [32m[ PASS ][0m it the injected region is certified too
+  [34mend [0m
+  [34mbegin [0mdelivery
+      [33m[ TEST ][0m it the piped bytes arrive as TTY_DATA and end with TTY_EOF      [32m[ PASS ][0m it the piped bytes arrive as TTY_DATA and end with TTY_EOF
+      [33m[ TEST ][0m it an event payload is labeled at the channel level      [32m[ PASS ][0m it an event payload is labeled at the channel level
+  [34mend [0m
+  [34mbegin [0mthe downgrade helper
+      [33m[ TEST ][0m it nextEventAtLevel keeps the payload      [32m[ PASS ][0m it nextEventAtLevel keeps the payload
+      [33m[ TEST ][0m it the payload is declassified to the target level      [32m[ PASS ][0m it the payload is declassified to the target level
+      [33m[ TEST ][0m it the event value itself is declassified too      [32m[ PASS ][0m it the event value itself is declassified too
+      [33m[ TEST ][0m it the blocking label is left down      [32m[ PASS ][0m it the blocking label is left down
+  [34mend [0m
+[34mend [0m
+
+Total:  16
+Passes: 16
+>>> Main thread finished with value: true@{#ROOT}%{#ROOT}

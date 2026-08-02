@@ -1,0 +1,8 @@
+2026-07-31T16:56:55.261Z [RTM] info: Skipping network creation. Observe that all network operations will yield a runtime error.
+Runtime error in thread 079d9ec8-3edf-42bc-ab9e-46b92b1800c1@{}%{}
+
+  6 | in print (ttyRawMode (o, true))
+    |           ^
+
+>> value LocalObject is not an input descriptor
+>> at tests/rt/pos/tty/rawmode-on-output-descriptor.trp:6:11

@@ -1,0 +1,136 @@
+(* Help — the page `:help` draws over the buffer.
+ *
+ * A plugin, and a pure function of what the other plugins say about themselves: `page (sections,
+ * cols, rows)` is the whole screen above the status line, laid out to fit the terminal it is given.
+ * It holds no authority, no pid and no descriptor, and it never touches the editor state — the
+ * kernel asks for the lines and draws them instead of the buffer while the mode is HELP
+ * (Editor.trp's `frameOf`), so the buffer, the cursor and the undo history are exactly what they
+ * were when the page went up.
+ *
+ * THE CONTENT COMES FROM THE PLUGINS THAT IMPLEMENT THE KEYS. A `section` is a title and a list of
+ * (keys, what they do) pairs, and each plugin exports the sections for its own bindings:
+ * VimMotions.trp the motions, the editing keys, the search and the session keys, FileOps.trp the
+ * command words. The plugin set concatenates them, so a key added to a keymap is documented in the
+ * module that added it and a plugin set assembled from other plugins gets their help rather than
+ * this one's. What is not derived is the wording: a description is written beside the binding, not
+ * inferred from the code that implements it.
+ *
+ * THE LAYOUT IS COLUMNS, BECAUSE THE LIST IS TALLER THAN A TERMINAL. Sections are packed into
+ * columns of at most the available height, in the order they are given, and the columns are laid
+ * out side by side at a width computed from the widest key and the widest description in the whole
+ * list. How many columns fit is the terminal's width divided by that; a terminal too narrow for
+ * two gets one. A list that does not fit even so is cut, and the last row says how much was left
+ * out rather than leaving the reader to wonder.
+ *
+ * ROWS ARE NOT PADDED TO THE WIDTH. A cell is padded only when a cell to its right has something
+ * in it, so a row ends where its text ends — which is what the renderer wants, every row being
+ * erased before it is written (Screen.trp).
+ *)
+
+import String
+import List
+import Number
+
+let (** The page's first row. *)
+    val title = "battallion: keys and commands"
+
+    (** The space between a column's text and the next column's. *)
+    val gutter = 2
+
+    (** How far a section's entries are indented under its title. *)
+    val indent = "  "
+
+    (** The space between a key and what it does. *)
+    val keyGap = "  "
+
+    (*---------------------------------  Measurement  ---------------------------------*)
+
+    fun longest (f, xs) = List.foldl (fn (x, acc) => let val n = String.size (f x)
+                                                     in if n > acc then n else acc
+                                                     end) 0 xs
+
+    fun entriesOf sections = List.concat (List.map (fn (t, es) => es) sections)
+
+    (*----------------------------------  Sections  -----------------------------------*)
+
+    (** A section as the rows it occupies: its title, then one row per entry. *)
+    fun sectionRows (keyw, (t, entries)) =
+        t :: List.map (fn (k, d) => indent ^ String.padRight keyw " " k ^ keyGap ^ d) entries
+
+    (*-----------------------------------  Packing  -----------------------------------*)
+
+    (** The blocks packed into columns of at most `h` rows each, in order, with a blank row
+     *  between two sections that share a column. A block taller than `h` gets a column of its own
+     *  and overflows it, which the caller's cut then trims. *)
+    fun pack (blocks, h) =
+        let fun go ([], cur, cols)      = List.reverse (if cur = [] then cols
+                                                        else List.reverse cur :: cols)
+              | go (b :: bs, cur, cols) =
+                  if cur = []
+                  then go (bs, List.reverse b, cols)
+                  else if List.length cur + 1 + List.length b <= h
+                  then go (bs, List.revAppend b ("" :: cur), cols)
+                  else go (bs, List.reverse b, List.reverse cur :: cols)
+        in go (blocks, [], [])
+        end
+
+    (*-----------------------------------  Merging  -----------------------------------*)
+
+    (** Row `i` of a column, or "" where the column has run out. *)
+    fun cellAt ([], i)        = ""
+      | cellAt (x :: xs, i)   = if i <= 0 then x else cellAt (xs, i - 1)
+
+    (** The cells of one row joined, each padded to `w` only when something follows it. *)
+    fun rowText ([], w)      = ""
+      | rowText ([c], w)     = c
+      | rowText (c :: cs, w) =
+          let val rest = rowText (cs, w)
+          in if rest = "" then c else String.padRight w " " c ^ rest
+          end
+
+    (*------------------------------------  Cutting  ----------------------------------*)
+
+    (** `xs` at exactly `n` rows: cut, or filled out with empty rows. *)
+    fun exactly (xs, n) =
+        let fun go (_, 0)       = []
+              | go ([], k)      = "" :: go ([], k - 1)
+              | go (x :: r, k)  = x :: go (r, k - 1)
+        in if n <= 0 then [] else go (xs, n)
+        end
+
+    (*-------------------------------------  Page  ------------------------------------*)
+
+    (** The help page as exactly `rows` rows, laid out for a terminal `cols` wide.
+     *
+     *  A terminal of fewer than five rows has no room for the title and the blank row under it,
+     *  and gets the entries alone: the page is a reminder, and on a screen that small the rows it
+     *  can show are worth more than a heading. *)
+    fun page (sections, cols, rows) =
+        let val entries = entriesOf sections
+            val keyw    = longest (fn (k, d) => k, entries)
+            val descw   = longest (fn (k, d) => d, entries)
+            val colw    = String.size indent + keyw + String.size keyGap + descw + gutter
+            val wide    = if colw <= 0 then 1 else Number.intDiv cols colw
+            val nc      = if wide < 1 then 1 else wide
+
+            val header  = if rows >= 5 then [title, ""] else []
+            val avail   = rows - List.length header
+
+            val columns = pack (List.map (fn s => sectionRows (keyw, s)) sections, avail)
+            val shown   = List.take nc columns
+            val left    = List.length columns - nc
+
+            fun bodyRow i = rowText (List.map (fn c => cellAt (c, i)) shown, colw)
+            val body    = List.tabulate avail bodyRow
+            val more    = if left = 1 then "(1 more column not shown)"
+                          else "(" ^ toString left ^ " more columns not shown)"
+            val cut     = if left > 0
+                          then List.append (List.take (avail - 1) body) [more]
+                          else body
+        in exactly (List.append header cut, rows)
+        end
+
+in [ ("title", title)
+   , ("page", page)
+   ]
+end

@@ -1,4 +1,4 @@
-2026-07-26T08:12:31.785Z [RTM] [32minfo[39m: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+2026-08-01T11:17:26.812Z [RTM] [32minfo[39m: Skipping network creation. Observe that all network operations will yield a runtime error.
 [34mbegin [0mSimpleFileIO
   [34mbegin [0mdirectories
       [33m[ TEST ][0m it makeDir creates a nested path      [32m[ PASS ][0m it makeDir creates a nested path
@@ -12,6 +12,20 @@
       [33m[ TEST ][0m it the append is visible      [32m[ PASS ][0m it the append is visible
       [33m[ TEST ][0m it appendFile creates a missing file      [32m[ PASS ][0m it appendFile creates a missing file
       [33m[ TEST ][0m it the created file has the appended contents      [32m[ PASS ][0m it the created file has the appended contents
+  [34mend [0m
+  [34mbegin [0mbytes
+      [33m[ TEST ][0m it writeFileBytes reports OK      [32m[ PASS ][0m it writeFileBytes reports OK
+      [33m[ TEST ][0m it readFileBytes returns every byte as one code unit      [32m[ PASS ][0m it readFileBytes returns every byte as one code unit
+      [33m[ TEST ][0m it one byte was written per code unit      [32m[ PASS ][0m it one byte was written per code unit
+      [33m[ TEST ][0m it readFileBytes on a missing file      [32m[ PASS ][0m it readFileBytes on a missing file
+      [33m[ TEST ][0m it readFileBytes cannot escape the io-root      [32m[ PASS ][0m it readFileBytes cannot escape the io-root
+  [34mend [0m
+  [34mbegin [0mutf-8 validation
+      [33m[ TEST ][0m it readFile refuses a file that is not valid UTF-8      [32m[ PASS ][0m it readFile refuses a file that is not valid UTF-8
+      [33m[ TEST ][0m it the refusal echoes the caller's path      [32m[ PASS ][0m it the refusal echoes the caller's path
+      [33m[ TEST ][0m it valid UTF-8 round-trips through writeFile and readFile      [32m[ PASS ][0m it valid UTF-8 round-trips through writeFile and readFile
+      [33m[ TEST ][0m it the byte read of that file is its UTF-8 encoding      [32m[ PASS ][0m it the byte read of that file is its UTF-8 encoding
+      [33m[ TEST ][0m it those bytes written back read as the same text      [32m[ PASS ][0m it those bytes written back read as the same text
   [34mend [0m
   [34mbegin [0mreadDir
       [33m[ TEST ][0m it lists files and subdirectories with their kinds      [32m[ PASS ][0m it lists files and subdirectories with their kinds
@@ -46,6 +60,6 @@
   [34mend [0m
 [34mend [0m
 
-Total:  28
-Passes: 28
+Total:  38
+Passes: 38
 >>> Main thread finished with value: true@{#ROOT}%{#ROOT}

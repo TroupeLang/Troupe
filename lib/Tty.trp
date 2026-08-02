@@ -1,0 +1,161 @@
+import Outcome
+import IfcUtil
+import List
+
+(** Tty - terminal queries, raw mode, and keystroke delivery as mailbox events.
+ *
+ *  The runtime ships bytes, not decoded keys: `ttySubscribe` attaches listeners to the stdin
+ *  descriptor and pushes one message per chunk into the subscriber's mailbox. This module names
+ *  those messages, converts the tagged records the query builtins return, and packages the
+ *  receive ceremony a subscriber must perform.
+ *
+ *  THE RAW BUILTINS STAY IN SCOPE. `ttySize`, `ttyRawMode`, `ttySubscribe` and `ttyUnsubscribe`
+ *  are ambient names that no import shadows: a program that calls them directly gets the runtime's
+ *  `{tag = "Ok", value}` / `{tag = "Err", error = {reason}}` record, whose shape never matches
+ *  `OK` or `ERR`, and the mismatch surfaces as a failed match rather than as a missing import.
+ *  Call the wrappers below — `Tty.size`, `Tty.rawMode`, `Tty.subscribe`, `Tty.unsubscribe` — and
+ *  import `Outcome` to match on the result.
+ *
+ *  EVENTS ARE LABELLED. An event's presence and payload are both at the channel level
+ *  (`level fd`, set by `--stdiolev`), so a plain `receive` — whose interval is `[pc, pc]` — never
+ *  sees one and blocks forever. A subscriber opens a ranged-receive region up to the channel
+ *  level with `listen` and receives at that interval with `nextEvent`:
+ *
+ *    val i = stdin authority
+ *    val _ = case Tty.subscribe (i, self ()) of OK _  => ()
+ *                                             | ERR e => print e.reason
+ *    val (ok, cap) = Tty.listen (i, authority)
+ *    ... case Tty.nextEvent (Tty.level i) of TTY_DATA b => ... | TTY_EOF => ... ...
+ *    val _ = Tty.unlisten cap
+ *    val _ = Tty.unsubscribe i
+ *
+ *  A received payload carries the channel level, and forwarding it to a process that does a plain
+ *  `receive` leaves that process blocked: binding a labelled payload in a handler exceeds the
+ *  taint limit of the guard `rcv` runs the handler under, so the handler is skipped without a
+ *  diagnostic. Either every downstream process receives at the interval, or one process
+ *  declassifies at the boundary with `nextEventAtLevel` — the `IfcUtil.freadlnAtLevel` idiom.
+ *)
+
+datatype ttyEvent = TTY_DATA of string
+                  | TTY_RESIZE of {cols : int, rows : int}
+                  | TTY_EOF
+
+let (* Outcome conversion at the boundary, as in lib/SimpleFileIO.trp: a datatype value is a
+       tuple tagged with a hash of its declaration, so the runtime cannot build one without
+       embedding a library's source hash. *)
+    fun toOutcome {tag = "Ok",  value = v} = OK v
+      | toOutcome {tag = "Err", error = e} = ERR e
+
+    (*------------------------------  Queries  ------------------------------*)
+
+    (** Whether `fd` is a terminal. Result at the channel level. *)
+    fun isTty fd = ttyIsTTY fd
+
+    (** The channel level, i.e. the level `--stdiolev` was set to. Result at the caller's pc: it
+     *  reports run configuration, not anything observed through the channel. *)
+    fun level fd = ttyLevel fd
+
+    (** `OK {cols, rows}` for the terminal `fd` writes to; `ERR {reason}` when it is not a
+     *  terminal. Result at the channel level. *)
+    fun size fd = toOutcome (ttySize fd)
+
+    (*------------------------------  Effects  ------------------------------*)
+
+    (** Put the terminal `fd` reads from into raw mode (`on = true`) or back into cooked mode.
+     *  `ERR {reason}` when `fd` is not a terminal. Entering raw mode closes the readline
+     *  interface; a later `freadln` re-creates it. *)
+    fun rawMode (fd, on) = toOutcome (ttyRawMode (fd, on))
+
+    (** Deliver terminal events on `fd` to the local process `pid`, replacing any earlier
+     *  subscriber. A terminal is not required: on a pipe the same listeners deliver the same
+     *  messages. *)
+    fun subscribe (fd, pid) = toOutcome (ttySubscribe (fd, pid))
+
+    (** Stop delivering events on `fd`. Idempotent: `OK ()` with nothing subscribed. *)
+    fun unsubscribe fd = toOutcome (ttyUnsubscribe fd)
+
+    (*------------------------------  Events  -------------------------------*)
+
+    (** The handlers that turn the runtime's wire messages into `ttyEvent` values, so the string
+     *  tags never appear in consumer code. A value rather than a function, so a consumer can
+     *  append its own handlers and wait on terminal events and its own protocol in one receive
+     *  (`nextEventWith`).
+     *
+     *  `TTYDATA` and `TTYRESIZE` arrive as tuples; `TTYEOF` arrives as the bare string, there
+     *  being no one-element tuple in Troupe. *)
+    val handlers = [ hn ("TTYDATA", b)      => TTY_DATA b
+                   , hn ("TTYRESIZE", c, r) => TTY_RESIZE {cols = c, rows = r}
+                   , hn "TTYEOF"            => TTY_EOF ]
+
+    (** Open the ranged-receive region the event loop needs, once, before the loop. Returns
+     *  `(ok, cap)`.
+     *
+     *  With an authority covering the channel level the region is certified (`ok = true`) and
+     *  `unlisten` can close it. With a null or insufficient authority the enable still succeeds
+     *  but the region is confined (`ok = false`): receiving works identically, the taint is
+     *  permanent, and the region can never be closed — enough for a process that receives for its
+     *  whole life, and it also blocks any enclosing region from closing.
+     *
+     *  A region opened outside a branch cannot be closed inside one: keep `listen` in
+     *  straight-line startup code and `unlisten` in straight-line teardown code. *)
+    fun listen (fd, auth) = enableRangedReceive (IfcUtil.bot, ttyLevel fd, auth)
+
+    (** Close a certified region. *)
+    fun unlisten cap = disableRangedReceive cap
+
+    (** Receive one terminal event at the interval `[bot, lev]`. Blocks until one arrives. *)
+    fun nextEvent lev = rcv (IfcUtil.bot, lev, handlers)
+
+    (** Receive one terminal event or one message matched by `extra`, at the same interval. *)
+    fun nextEventWith (lev, extra) = rcv (IfcUtil.bot, lev, List.append handlers extra)
+
+    (** Receive one terminal event, declassify its payload to `target` and lower the blocking
+     *  label under `auth` — `IfcUtil.freadlnAtLevel` for terminal events.
+     *
+     *  Declassifying the event value alone would not do: that lowers the constructor node and
+     *  leaves the payload inside it at the channel level, so a consumer matching the event is
+     *  tainted by the payload it binds. The event is rebuilt around declassified payloads
+     *  instead.
+     *
+     *  The rebuild cannot happen inside the match, either: matching an event raises the pc to
+     *  the level of what it matched on, and a value declassified under a raised pc comes back
+     *  out at the pc. So the match only projects, the constructor is chosen by a declassified
+     *  discriminator, and the rebuild runs at the restored pc — the two-step shape
+     *  `IfcUtil.declassifyDeep` uses for the same reason. `blockdecl` comes last, because the
+     *  match raises the blocking label back to the payload's level.
+     *
+     *  `TTY_EOF` carries no payload; it is rebuilt as itself, at `target`. *)
+    fun nextEventAtLevel (auth, lev, target) =
+        let val ev = nextEvent lev
+            val (kind, bytes, cols, rows) =
+                    case ev of TTY_DATA b              => ("D", b, 0, 0)
+                             | TTY_RESIZE {cols, rows} => ("R", "", cols, rows)
+                             | TTY_EOF                 => ("E", "", 0, 0)
+            val ev' = case declassify (kind, auth, target) of
+                           "D" => TTY_DATA (declassify (bytes, auth, target))
+                         | "R" => TTY_RESIZE {cols = declassify (cols, auth, target),
+                                              rows = declassify (rows, auth, target)}
+                         | _   => TTY_EOF
+            val _ = blockdecl auth
+        in ev'
+        end
+
+in [ (*-- Queries --*)
+     ("isTty", isTty)
+   , ("size", size)
+   , ("level", level)
+
+     (*-- Effects --*)
+   , ("rawMode", rawMode)
+   , ("subscribe", subscribe)
+   , ("unsubscribe", unsubscribe)
+
+     (*-- Events --*)
+   , ("listen", listen)
+   , ("unlisten", unlisten)
+   , ("handlers", handlers)
+   , ("nextEvent", nextEvent)
+   , ("nextEventWith", nextEventWith)
+   , ("nextEventAtLevel", nextEventAtLevel)
+   ]
+end

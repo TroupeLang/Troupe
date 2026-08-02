@@ -1,0 +1,8 @@
+2026-07-31T17:21:15.838Z [RTM] [32minfo[39m: Skipping network creation. Observe that all network operations will yield a runtime error.
+Runtime error in thread 9babb188-a7a5-4da8-8a21-cf20bf647b39@{}%{}
+
+  7 |     val _ = ttySubscribe (o, me)
+    |             ^
+
+>> value LocalObject is not an input descriptor
+>> at tests/rt/pos/tty/subscribe-on-output-descriptor.trp:7:13

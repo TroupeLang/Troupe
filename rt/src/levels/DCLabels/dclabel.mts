@@ -459,6 +459,79 @@ export class DCLabel extends AbstractLevel<DCLabel> {
 /// for the intuition about trust
 
 
+/**
+ * Parse one component of a V2 surface label into a CNF.
+ *
+ * `literals` names the two dimension constants this component accepts, so the
+ * confidentiality and integrity spellings stay distinct exactly as in the
+ * compiler's ConfLabelExp / IntLabelExp productions (Parser.y). An empty
+ * component and the dimension's null constant both denote CNF_TRUE; the root
+ * constant denotes CNF_FALSE.
+ */
+function parseLabelComponent(text: string, literals: { trueLit: string; falseLit: string }): CNF {
+    const s = text.trim()
+    if (s === "" || s === literals.trueLit) {
+        return CNF_TRUE
+    }
+    if (s === literals.falseLit) {
+        return CNF_FALSE
+    }
+
+    // Tokens: the operators, the parentheses, and principal names — anything
+    // that is not an operator, a parenthesis or whitespace.
+    const tokens = s.match(/[()&|]|[^()&|\s]+/g) ?? []
+    let pos = 0
+    const peek = () => pos < tokens.length ? tokens[pos] : null
+
+    // atom := '(' disjunction ')' | PRINCIPAL
+    const atom = (): CNF => {
+        const t = peek()
+        if (t === null) {
+            throw new Error(`unexpected end of label component \`${s}\``)
+        }
+        pos++
+        if (t === "(") {
+            const inner = disjunctionExp()
+            if (peek() !== ")") {
+                throw new Error(`unbalanced parentheses in label component \`${s}\``)
+            }
+            pos++
+            return inner
+        }
+        if (t === ")" || t === "&" || t === "|") {
+            throw new Error(`unexpected \`${t}\` in label component \`${s}\``)
+        }
+        // RegularLabel validates and normalizes the principal name.
+        return new CNF(new Set([new Category([new RegularLabel(t)])]))
+    }
+
+    // conjunction := atom ('&' atom)*   -- '&' binds tighter than '|'
+    const conjunctionExp = (): CNF => {
+        let acc = atom()
+        while (peek() === "&") {
+            pos++
+            acc = conjunction(acc, atom())
+        }
+        return acc
+    }
+
+    // disjunction := conjunction ('|' conjunction)*
+    const disjunctionExp = (): CNF => {
+        let acc = conjunctionExp()
+        while (peek() === "|") {
+            pos++
+            acc = disjunction(acc, conjunctionExp())
+        }
+        return acc
+    }
+
+    const result = disjunctionExp()
+    if (pos !== tokens.length) {
+        throw new Error(`unexpected \`${tokens[pos]}\` in label component \`${s}\``)
+    }
+    return result
+}
+
 export const IFC_BOT = new DCLabel(CNF_TRUE, CNF_FALSE)
 export const IFC_TOP = new DCLabel(CNF_FALSE, CNF_TRUE)
 export const TRUST_NULL = new DCLabel(CNF_TRUE, CNF_TRUE)
@@ -536,7 +609,48 @@ export class DCLevelSystem extends AbstractLevelSystem<DCLabel> {
         return this.lub (...dcs)
     }
 
-    
+    /**
+     * Parse a V2 surface label `<conf;integ>`.
+     *
+     * This mirrors the compiler's label grammar (Parser.y, productions
+     * `LabelExp`, `ConfLabelExp`, `IntLabelExp`, `DCLabelExp`) and the
+     * dimension constant spellings of DCLabels.hs (`ppDCLabelExp`), keeping
+     * the two parsers in agreement — the same pairing fromV1String has with
+     * normalizeV1Label. As in the grammar:
+     *
+     *   - a component is either empty (the null constant), one of that
+     *     dimension's two constants, or an expression over principals;
+     *   - `&` (conjunction) binds tighter than `|` (disjunction), and
+     *     parentheses group;
+     *   - the constants are whole-component alternatives, not operands of
+     *     `&`/`|`.
+     *
+     * Throws on malformed input; callers report the error.
+     */
+    fromV2String (input: string): DCLabel {
+        const str = input.trim()
+        if (!(str.startsWith(DC_DELIM_LEFT) && str.endsWith(DC_DELIM_RIGHT))) {
+            throw new Error(`a V2 label must be enclosed in ${DC_DELIM_LEFT}...${DC_DELIM_RIGHT}`)
+        }
+        const body = str.substring(1, str.length - 1)
+        const parts = body.split(DC_DELIM_SEP)
+        if (parts.length !== 2) {
+            throw new Error(`a V2 label has exactly one '${DC_DELIM_SEP}' separating `
+                          + `confidentiality from integrity, found ${parts.length - 1}`)
+        }
+        return new DCLabel( parseLabelComponent(parts[0], DC_CONF_LITERALS)
+                          , parseLabelComponent(parts[1], DC_INTG_LITERALS) )
+    }
+
+    /**
+     * Parse a surface label in either syntax: V1 `{alice, bob}` or V2
+     * `<conf;integ>`. Throws on malformed input.
+     */
+    fromString (input: string): DCLabel {
+        const str = input.trim()
+        return str.startsWith(DC_DELIM_LEFT) ? this.fromV2String(str) : this.fromV1String(str)
+    }
+
     okToDowngradeGeneric (kind: DowngradeKind, dimension: DowngradeDimension) {
         return (( l_from : DCLabel
                 , l_to   : DCLabel

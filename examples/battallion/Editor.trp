@@ -1,0 +1,167 @@
+(* Editor — the kernel: what the editor knows without any plugin, and how the mvp's plugins are
+ * wired into it.
+ *
+ * A program-relative module of examples/battallion. Pure: no process, no receive, no descriptor,
+ * no file. The state and every operation over it are Api.trp's — the module a plugin programs
+ * against — and this one adds the two things a plugin cannot supply: the frame's geometry, and the
+ * composition that says which plugin answers what.
+ *
+ * WHAT THE KERNEL KNOWS. The buffer and the edits over it, the viewport, key *delivery* rather
+ * than key meaning, frame *submission* rather than layout policy, and the plugin set. What it does
+ * not know: what a key means (VimMotions), what a command word means (FileOps), what the bottom
+ * row says (StatusLine), or what shape the cursor takes (CursorStyle).
+ *
+ * THE PLUGIN SET is a record, and it is what `Session.run` takes and folds into the session:
+ *
+ *   onKey (st, key)              -> (state', quit)   the keymap
+ *   onWritten (st, ok, message)  -> (state', quit)   the answer to a write request
+ *   status st                    -> string           the frame's bottom row
+ *   help (st, rows)              -> string list      the rows the help page draws over the buffer
+ *   cursor st                    -> string           the escape shaping the cursor
+ *   cursorReset                  :  string           the escape written on the way out
+ *
+ * `plugins` below is the mvp's set. Substituting one field is how a program varies the editor
+ * without touching the constellation — crashprobe.trp beside this file replaces `onKey` and
+ * keeps the rest.
+ *
+ * PLUGINS ARE STATIC IMPORTS AT THIS STAGE, and the interface is the one a delivered plugin will
+ * use: an entry point takes `Api.api` and the state, returns state, and closes over no authority,
+ * no pid and no descriptor. What delivery adds is a plugin manager that `restore`s a closure and
+ * builds this same record from it (docs/MODULES.md's hash-pinned linking is what makes that safe;
+ * Api.trp's header says what the pinning means for recompilation).
+ *
+ * THE HOOKS ARE NOT WRAPPED IN `guard`, and the reason is measured rather than assumed
+ * (tests/_unautomated/claude/battallion-plugins/probe-guard-hook.trp, run where the kernel runs:
+ * a confined ranged-receive region at [bot, channel level] with state that came out of it).
+ *
+ *   - `guard`'s taint ceiling is vacuous here. The limit it enforces is the *join* of the
+ *     argument and the thread's blocking label at entry, and the kernel's blocking label is
+ *     already the channel level, so a hook called with a limit of bot behaved exactly like one
+ *     called with the channel level: the tainted result came back untouched either way.
+ *   - What `guard` does enforce is the handler state: `send`, `fwrite`, `rcv` and `spawn` inside a
+ *     hook were each refused and the default returned instead. That is real confinement, and it is
+ *     the property a *delivered* plugin closure needs.
+ *   - It also traps a hook's runtime error and returns the default. For a keymap that is the wrong
+ *     trade at this stage: crashprobe.trp exists to kill the kernel from inside a keymap, and the
+ *     supervisor exists to restore the terminal when that happens. A wrapped keymap would swallow
+ *     the crash instead, and a bundled plugin's bug would show as a key that quietly does nothing.
+ *
+ * So the mvp confines its plugins by construction rather than by ceiling — a plugin module is
+ * compiled in library mode, where `authority` is not bound and the ambient wrappers are not
+ * injected, so it cannot reach stdout, stdin, the filesystem or `exit` at all (docs/MODULES.md).
+ * `guard` goes on the one call site that folds a keymap over keys (Session.trp's `applyKeys`) when
+ * the code being folded is delivered rather than compiled in, and it needs a visible failure
+ * channel then — a status message — so that a trapped hook is not a silent one.
+ *)
+
+import String
+import List
+import "./Api"
+import "./Screen"
+import "./VimMotions"
+import "./StatusLine"
+import "./CursorStyle"
+import "./FileOps"
+import "./Help"
+
+let (*--------------------  What the session needs from the state  ---------------------*)
+
+    fun init (buffer, path, cols, rows) = Api.init (buffer, path, cols, rows)
+
+    fun contents st = Api.contents st
+
+    fun onResize (st, cols, rows) = Api.onResize (st, cols, rows)
+
+    (** Whether a plugin has asked the kernel for something — a write, as the editor stands. *)
+    fun hasRequest st = Api.hasRequest st
+
+    (** Where the pending write is to go. The kernel reads it out of the state and puts it in the
+     *  request it sends the supervisor, which is the process that performs the write. *)
+    fun writePath st = Api.writePath st
+
+    (*-----------------------------------  Frames  -----------------------------------*)
+
+    (** The visible lines, one per terminal row, the cursor's position on the screen, and the
+     *  escape that shapes the cursor there.
+     *
+     *  Rows past the end of the buffer are drawn as "~", the filler vi has used since the
+     *  seventies to say "this row is not part of the file". The last row is the status plugin's,
+     *  and in command mode the cursor sits on it, after the command typed so far.
+     *
+     *  THE CURSOR IS PUT WHERE THE USER IS LOOKING, and it is visible there (Screen.trp), so a
+     *  position off the screen would be seen. A buffer column is not a screen column: the cursor's
+     *  column is an index into the line's code units, and `Screen.column` maps it to the column
+     *  the terminal draws that index at, over the same tab stops the renderer truncates by. A
+     *  column past the terminal's width comes back as the last one, there being no horizontal
+     *  scrolling. The second clamp is on the row: a line being typed is only followed onto the
+     *  status row when there *is* a status row — a terminal of one row keeps that row for the text
+     *  (`Api.hasStatus`), so a command typed on such a terminal is not drawn and the cursor stays
+     *  where the buffer's cursor is.
+     *
+     *  THE HELP PAGE IS A FRAME, NOT A PROCESS. In HELP mode the rows above the status line come
+     *  from the plugin set's `help` rather than from the buffer, and everything else about the
+     *  state is untouched — which is what lets any key put the page away and leave the session
+     *  exactly where it was. The cursor goes to the page's first cell: it has nothing to point at
+     *  there, and it is on the screen between frames, so it is put somewhere harmless rather than
+     *  left wherever the buffer's cursor was. *)
+    fun frameOf (plugins, st) =
+        let val h    = Api.textRows st
+            val last = Api.lastLine st
+            fun rowsFrom (i, acc) =
+                if i >= h then List.reverse acc
+                else let val l = st.top + i
+                     in rowsFrom (i + 1, (if l > last then "~" else Api.lineAt (st, l)) :: acc)
+                     end
+            val body  = case st.mode of HELP => plugins.help (st, h)
+                                      | _    => rowsFrom (0, [])
+            val lines = if Api.hasStatus st then List.append body [plugins.status st] else body
+
+            (** Where column `c` of `text` is drawn: `Screen.column` maps it through the tab stops
+             *  the renderer truncates by, so the cursor is on the character the user is at rather
+             *  than left of it by seven columns per tab, and a column at or past the width comes
+             *  back as the last one. *)
+            fun onScreen (text, c) = Screen.column (text, c, st.cols)
+
+            val inBuffer = (st.line - st.top, onScreen (Api.lineAt (st, st.line), st.col))
+            val typed    = st.prompt ^ st.cmd
+            val (curRow, curCol) =
+                    case st.mode of
+                         COMMAND => if Api.hasStatus st
+                                    then (h, onScreen (typed, String.size typed))
+                                    else inBuffer
+                       | HELP    => (0, 0)
+                       | _       => inBuffer
+        in (lines, curRow, curCol, plugins.cursor st)
+        end
+
+    (*-------------------------------  The mvp plugins  ------------------------------*)
+
+    (** The command interpreter the keymap reaches for on Enter, and for `q` and CTRL-c. *)
+    val commands = fn (st, c) => FileOps.run (Api.api, st, c)
+
+    (** The help page's content, assembled from the sections the plugins in this set export: what
+     *  `:help` lists is what these plugins bind, so a set built from other plugins gets their
+     *  help. The concatenation is inside the function rather than beside it because a module's top
+     *  level constructs values and does not call — the export table of a library that called one
+     *  would not be built at all (docs/MODULES.md). *)
+    val helpPage = fn (st, rows) =>
+        Help.page (List.append VimMotions.help FileOps.help, st.cols, rows)
+
+    (** The plugin set the editor ships. *)
+    val plugins =
+        { onKey       = fn (st, k)           => VimMotions.onKey (Api.api, commands, st, k)
+        , onWritten   = fn (st, ok, message) => FileOps.onWritten (Api.api, st, ok, message)
+        , status      = fn st                => StatusLine.render (Api.api, st)
+        , help        = helpPage
+        , cursor      = fn st                => CursorStyle.shape (Api.api, st)
+        , cursorReset = CursorStyle.reset }
+
+in [ ("init", init)
+   , ("contents", contents)
+   , ("onResize", onResize)
+   , ("hasRequest", hasRequest)
+   , ("writePath", writePath)
+   , ("frameOf", frameOf)
+   , ("plugins", plugins)
+   ]
+end

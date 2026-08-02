@@ -1,0 +1,8 @@
+2026-07-31T16:48:02.944Z [RTM] [32minfo[39m: Skipping network creation. Observe that all network operations will yield a runtime error.
+Runtime error in thread ed18cc06-a1d3-46d9-af07-f7ecbc7698d1@{}%{}
+
+  1 | let val _ = freadln (stdout authority)
+    |             ^
+
+>> value LocalObject is not an input descriptor
+>> at tests/rt/neg/stdio-errors/wrong-descriptor-freadln.trp:1:13

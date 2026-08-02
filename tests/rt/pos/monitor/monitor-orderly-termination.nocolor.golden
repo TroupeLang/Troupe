@@ -1,0 +1,3 @@
+2026-07-31T23:36:47.533Z [RTM] info: Skipping network creation. Observe that all network operations will yield a runtime error.
+0
+>>> Main thread finished with value: ()@{}%{}

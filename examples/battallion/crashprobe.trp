@@ -1,0 +1,85 @@
+(* crashprobe — battallion with a keymap that dies, for the supervisor's crash-restore check.
+ *
+ *   ./local.sh examples/battallion/crashprobe.trp --io-root <dir> -- <file>
+ *
+ * Identical to examples/battallion/bt.trp except for one field of the plugin set it hands
+ * `Session.run`: a keymap whose "!" key evaluates a dynamic type error, which stops the kernel
+ * thread. Everything else — the supervisor, the renderer, the terminal handling, the other three
+ * plugins — is the same compiled modules, imported from examples/battallion, so what this program
+ * exercises is the shipped constellation and not a copy of it.
+ *
+ * WHY A SEPARATE PROGRAM. The crash has to come from inside the kernel process, and bt.trp must
+ * not carry a key that crashes it. `Session.run` takes the plugin set as a parameter, so replacing
+ * its keymap is all a crash probe needs, and no test-only branch enters the shipped program.
+ *
+ * WHY THE KEYMAP IS NOT RUN UNDER `guard`. It would trap exactly this crash and return the
+ * unchanged state, and the supervision path this program exists to exercise would never be taken.
+ * The measurement behind that statement is
+ * tests/_unautomated/claude/battallion-plugins/probe-guard-hook.trp; Editor.trp's header states
+ * the decision.
+ *
+ * WHY IT LIVES HERE AND NOT BESIDE THE HARNESS. It was written in
+ * tests/_unautomated/claude/battallion-viewer/, importing these modules as `../../../../…`, and
+ * could not be loaded: a module reached through a parent-relative import has its *own*
+ * program-relative imports pinned under a key relative to the working directory rather than to
+ * the main program, and the runtime then resolves that key against the main program's directory
+ * and reads a path that does not exist. The measurement and the exact paths are in
+ * tests/_unautomated/claude/battallion-viewer/probe-parent-relative-pins.trp. Sitting beside the
+ * modules it imports keeps every pin single-spelled.
+ *
+ * WHAT THE SUPERVISOR SHOULD DO. It monitors the kernel, so the runtime tells it the moment the
+ * kernel dies: the ("DONE", ref, pid, reason) arrives in the receive the supervisor is already
+ * sitting in, waiting for the answer to the "!" it forwarded. It restores the terminal and exits
+ * `Session.exitKernelLost` (3), and it does so at once rather than after `Session.watchdogMs` —
+ * which is what separates this path from the watchdog's, whose code is `exitKernelHung` (4).
+ * battallion-viewer/harness.py case 4 asserts the restoration and the code;
+ * battallion-editor/harness.py case 5 additionally asserts that it happens well inside the
+ * watchdog interval.
+ *
+ * The notification used to be undeliverable — a monitored thread's termination brought the node
+ * down with a host TypeError, recorded in battallion-viewer/probe-monitor-defect.trp — and the
+ * watchdog stood in for supervision. That was fixed in the runtime (dd2b88eb); the levels the
+ * notification arrives at are measured in battallion-editor/probe-done-level.trp.
+ *)
+
+import Rope
+import SimpleFileIO
+import Outcome
+import "./Session"
+import "./Editor"
+import "./Key"
+
+let val a = authority
+    val err = stderr a
+
+    fun fail (message, code) =
+        let val _ = fwrite (err, "crashprobe: " ^ message ^ "\n")
+        in exit (a, code)
+        end
+
+    (** A dynamic type error: adding a string to a number stops the thread that evaluates it.
+     *  Written as a function so the expression is evaluated when the key arrives rather than
+     *  when the module is built. *)
+    fun boom () = "crash" + 1
+
+    (** The editor's plugin set, and its keymap, which every key but "!" is handed to. *)
+    val base = Editor.plugins
+
+    fun onKey (st, KEY_PRINT c) = if c = "!" then (st, boom ()) else base.onKey (st, KEY_PRINT c)
+      | onKey (st, k)           = base.onKey (st, k)
+
+    val plugins = { base with onKey = onKey }
+
+    fun argPath () = case getCliArgs a of []     => fail ("no file given", 2)
+                                        | p :: _ => p
+
+    fun openBuffer path =
+        case SimpleFileIO.readFile (a, path) of
+             OK text => Rope.fromString text
+           | ERR e   => fail ("cannot open " ^ e.path ^ ": " ^ e.reason, 1)
+
+    val path = argPath ()
+    val buffer = openBuffer path
+    val code = Session.run (a, buffer, path, plugins)
+in exit (a, code)
+end

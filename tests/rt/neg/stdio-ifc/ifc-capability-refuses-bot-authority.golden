@@ -1,0 +1,10 @@
+2026-07-31T16:08:54.969Z [RTM] [32minfo[39m: Skipping network creation. Observe that all network operations will yield a runtime error.
+Runtime error in thread d6946e70-139b-424c-b093-684446ebe9b6@{}%{}
+
+  5 | in stdout botAuth
+    |    ^
+
+>> Not sufficient authority for stdOut
+ | Provided authority level {}
+ | Required authority level {#ROOT}
+>> at tests/rt/neg/stdio-ifc/ifc-capability-refuses-bot-authority.trp:5:4

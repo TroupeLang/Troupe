@@ -84,6 +84,25 @@ collapseDotDot p = joinPath (go [] (splitDirectories p))
     go acc (".." : rest)         = go (".." : acc) rest -- leading ".." stays
     go acc (seg : rest)          = go (seg : acc) rest
 
+-- | Express @target@ relative to @base@, lexically: collapse both, drop their
+-- common prefix, and step up out of whatever remains of @base@. Unlike
+-- 'System.FilePath.makeRelative', which hands back @target@ unchanged whenever
+-- @base@ is not a literal prefix of it, this yields a genuinely relative path
+-- with leading ".." segments for a target outside @base@.
+--
+-- Both arguments must be written against the same directory (both relative to
+-- the same working directory, or both absolute) — every call here derives them
+-- from one main-program path, so they are. Matching leading ".." segments are
+-- common prefix under that precondition: they name the same directory.
+relativeToBase :: FilePath -> FilePath -> FilePath
+relativeToBase base target =
+  joinPath (map (const "..") baseRest ++ targetRest)
+  where
+    (baseRest, targetRest) = dropCommon (segs base) (segs target)
+    segs = splitDirectories . collapseDotDot
+    dropCommon (b : bs) (t : ts) | b == t = dropCommon bs ts
+    dropCommon bs ts                      = (bs, ts)
+
 -- | Resolve a module import literal against the importing file's directory.
 -- Returns (source file path, root-relative key without extension). Only a "./"
 -- prefix is stripped; a "../" is kept so resolution walks up from the importing
@@ -92,10 +111,11 @@ collapseDotDot p = joinPath (go [] (splitDirectories p))
 --   * the source file path is 'collapseDotDot'-canonicalized, so different
 --     spellings of one file dedup to a single module in 'discoverModules' and
 --     one compiled artifact;
---   * the key is @makeRelative@ against the *uncollapsed* target (so it comes
---     out relative to the program root, keeping any leading "..") and then
---     'collapseDotDot'-cleaned of interior "seg/.." — the runtime joins it onto
---     the root, so it must stay root-relative.
+--   * the key is the target expressed relative to the program root by
+--     'relativeToBase', so it keeps or gains leading ".." for a module outside
+--     the root and never carries the spelling (absolute, or relative to the
+--     working directory) the main-program argument happened to have — the
+--     runtime joins the key onto the root, so it must stay root-relative.
 --
 -- The key is a resolution/display path (it may begin with "..") — never the
 -- identity, which is the content hash.
@@ -104,7 +124,7 @@ resolveModule root importingFile lit =
   let rel       = if startswith "./" lit then drop 2 lit else lit
       rawTarget = normalise (takeDirectory importingFile </> rel)
       target    = collapseDotDot rawTarget
-      key       = collapseDotDot (makeRelative root rawTarget)
+      key       = relativeToBase root rawTarget
   in (target ++ ".trp", key)
 
 -- | Root-relative display name of a file, for diagnostics.

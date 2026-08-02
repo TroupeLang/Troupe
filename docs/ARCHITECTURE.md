@@ -91,26 +91,65 @@ Key components:
 ## External resource access
 
 Every runtime operation that reaches outside the program — standard streams, persistence, the
-network registry, and file I/O — is gated on authority rather than on ordinary label flow. With the
-exception of `send` (governed by wire label/trust checks), these operations require **full (ROOT)
-authority**: `stdio` defaults its level to ROOT, and `persist`, `cliargs`, `exit`, `register`, and
-the `SimpleFileIO` primitives call `assertIsRootAuthority`.
+network registry, and file I/O — requires authority rather than ordinary label flow, with one
+exception besides `send` (governed by wire label/trust checks): under the IFC stdio model
+(below), stdio is checked by label flow at the operations. The rest require **full (ROOT)
+authority**: `persist`, `cliargs`, `exit`, `register`, and the `SimpleFileIO` primitives call
+`assertIsRootAuthority`.
+
+### Standard streams (stdio)
+
+`rt/src/builtins/stdio.mts` and `rt/src/builtins/tty.mts`. Two enforcement models, selected by
+`--stdio-model` (default `capability`); `--stdiolev` sets the channel level `L` (default ROOT),
+in either V1 (`'{alice}'`) or V2 (`'<alice;#root-integrity>'`) syntax.
+
+- **`capability`** — acquiring a descriptor via `stdin`/`stdout`/`stderr` is checked
+  `actsFor(authorityLevel, L)`; the operations themselves are unchecked.
+- **`ifc`** — stdio is a pair of channels at `L`. Acquisition is unchecked (a descriptor names a
+  stream and grants nothing). Observations drawn through the channel — a line from `freadln`, a
+  pushed event, `ttyIsTTY`, `ttySize` — are labelled at `L`. Effects on the channel — `fwrite`,
+  consuming a line, a raw-mode change, arming or disarming event delivery — are checked
+  `flowsTo(lub(pc, operand levels), L)` after raising the pc to the blocking label, in both
+  label dimensions: what comes from the channel is `L`-data, what goes to the channel must flow
+  to `L`.
+
+Terminal support beyond the streams: `ttyIsTTY`/`ttySize`/`ttyLevel` (queries), `ttyRawMode`
+(line-discipline switch; entering raw mode closes the lazily-created readline interface, which a
+later `freadln` re-creates), and `ttySubscribe`/`ttyUnsubscribe` (event delivery). Events are
+runtime-built mailbox messages with string tags — `("TTYDATA", bytes)` one per chunk,
+latin1-decoded; `("TTYRESIZE", cols, rows)`; the bare string `"TTYEOF"` — delivered on the
+network's mailbox ingress path with presence and payload at `L`. There is exactly one
+subscriber, module-private, replaced on re-subscribe; if it has died, the next event tears the
+subscription down and leaves raw mode. `lib/Tty.trp` names the events as a datatype and
+packages the receive ceremony (a ranged-receive region up to `L`). `ttyRestore`, run from
+`cleanupAsync` for every program, detaches the listeners, resets raw mode if the runtime set it,
+and pauses stdin; it restores termios, not screen state, and no signal handlers are installed —
+an external SIGTERM leaves a raw terminal raw.
 
 ### File I/O (`SimpleFileIO`)
 
 Whole-file read/write lives in `rt/src/builtins/simplefileio.mts`. It is a **placeholder** — a
-deliberately small surface (`readFile`, `writeFile`, `appendFile`, `fileExists`) that exists to
-support document-processing programs and is expected to be superseded by a labelled-path model.
+deliberately small surface (`readFile`, `writeFile`, `readFileBytes`, `writeFileBytes`,
+`appendFile`, `fileExists`) that exists to support document-processing programs and is expected to
+be superseded by a labelled-path model.
 
 - **Authority.** Every operation requires ROOT authority (mirrors `persist`). Untrusted code cannot
   reach the filesystem at all, so per-write confidentiality checks and per-path levels are deferred
   rather than half-answered.
 - **Labeling.** Read content is labeled at ROOT ("we trust our own files"), exactly as `persist`
   labels restored data. Each primitive returns a tagged record
-  (`{tag="Ok", value=…}` / `{tag="Err", error={reason, path}}`), so a missing file or rejected path
-  never crashes the thread. The standard library reports failure with `Option` and `Outcome`; the
-  runtime still builds tagged records here, in the bigint conversion built-ins, and in the two
-  decoding codec built-ins (below), and those three are the only places the encoding survives.
+  (`{tag="Ok", value=…}` / `{tag="Err", error={reason, path}}`), so a missing file, a rejected path
+  or a file `readFile` cannot decode never crashes the thread. The standard library reports failure
+  with `Option` and `Outcome`; the runtime still builds tagged records here, in the bigint
+  conversion built-ins, and in the two decoding codec built-ins (below), and those three are the
+  only places the encoding survives.
+- **Text or bytes.** `readFile`, `writeFile` and `appendFile` are UTF-8, and `readFile` decodes
+  with a fatal decoder: a file whose bytes are not UTF-8 is `{reason="file is not valid UTF-8"}`
+  rather than a string with U+FFFD where those bytes were, a substitution the program cannot see
+  and a later write would put on disk. `readFileBytes` and `writeFileBytes` carry the bytes
+  themselves, one code unit per byte, the byte-string convention of the codec built-ins (below)
+  and of the tty reader; `writeFileBytes` refuses a code unit above 255 as a thread error, as
+  `base64Encode` does. Appending is UTF-8 only.
 - **Sandbox.** `--io-root <dir>` (`rt/src/TroupeCliArgs.mts`) bounds path reachability, orthogonal
   to authority: `..`, absolute-outside, and symlink escapes are rejected before any filesystem
   access, so even a bug in ROOT code cannot write outside the subtree. When unset, a per-invocation

@@ -1,0 +1,3 @@
+let val _ = freadln (stdout authority)
+in print "unreachable"
+end

@@ -14,11 +14,28 @@ import Outcome
  *                                     | ERR e  => report (e.reason, e.path)
  *
  *  Every operation takes ROOT `authority` and resolves its path inside the `--io-root` subtree.
+ *
+ *  **Text or bytes.** `readFile`, `writeFile` and `appendFile` are UTF-8. `readFile` refuses a
+ *  file that is not valid UTF-8 with `ERR {reason = "file is not valid UTF-8", path}` rather
+ *  than substituting U+FFFD for the bytes it cannot decode: the substitution is invisible in
+ *  the string, and writing that string back replaces the original bytes on disk.
+ *
+ *  `readFileBytes` and `writeFileBytes` read and write the bytes themselves, carried as a
+ *  string with one code unit per byte -- the byte-string convention of `BytesAndZips` and of
+ *  the terminal reader in `Tty`. Use them for a file whose contents are not text, or whose
+ *  encoding the program decides for itself; use the text operations otherwise, since a byte
+ *  string is not what `String` operations, comparisons or output expect for non-ASCII text.
+ *  Passing `writeFileBytes` a string with a code unit above 255 is a defect in the calling
+ *  program and fails as a thread error.
+ *
+ *  There is no `appendFileBytes`; appending is UTF-8 only.
  *)
 
 let (* The builtins, captured before the definitions below shadow their names. *)
     val rawReadFile   = readFile
     val rawWriteFile  = writeFile
+    val rawReadFileBytes  = readFileBytes
+    val rawWriteFileBytes = writeFileBytes
     val rawAppendFile = appendFile
     val rawFileExists = fileExists
     val rawReadDir    = readDir
@@ -29,11 +46,20 @@ let (* The builtins, captured before the definitions below shadow their names. *
     fun toOutcome {tag = "Ok",  value = v} = OK v
       | toOutcome {tag = "Err", error = e} = ERR e
 
-    (** Contents of `path`; `ERR {reason, path}` if it cannot be read. *)
+    (** Contents of `path` decoded as UTF-8; `ERR {reason, path}` if it cannot be read, and
+     *  `ERR {reason = "file is not valid UTF-8", path}` if its bytes are not UTF-8. *)
     fun readFile (auth, path) = toOutcome (rawReadFile (auth, path))
 
-    (** Write `contents` to `path`; `ERR {reason, path}` if it cannot be written. *)
+    (** Write `contents` to `path` as UTF-8; `ERR {reason, path}` if it cannot be written. *)
     fun writeFile (auth, path, contents) = toOutcome (rawWriteFile (auth, path, contents))
+
+    (** Bytes of `path` as a string of one code unit per byte; `ERR {reason, path}` if it cannot
+     *  be read. Nothing is decoded, so every file reads. *)
+    fun readFileBytes (auth, path) = toOutcome (rawReadFileBytes (auth, path))
+
+    (** Write the byte string `contents` to `path`, one byte per code unit. Fails as a thread
+     *  error if a code unit is above 255. *)
+    fun writeFileBytes (auth, path, contents) = toOutcome (rawWriteFileBytes (auth, path, contents))
 
     (** Append `contents` to `path`, creating it if absent. *)
     fun appendFile (auth, path, contents) = toOutcome (rawAppendFile (auth, path, contents))
@@ -60,6 +86,8 @@ let (* The builtins, captured before the definitions below shadow their names. *
 
 in [ ("readFile", readFile)
    , ("writeFile", writeFile)
+   , ("readFileBytes", readFileBytes)
+   , ("writeFileBytes", writeFileBytes)
    , ("appendFile", appendFile)
    , ("fileExists", fileExists)
    , ("readDir", readDir)

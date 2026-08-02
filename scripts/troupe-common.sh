@@ -49,11 +49,11 @@ troupe_parse_args() {
                     TROUPE_RUNTIME_ARGS="$TROUPE_RUNTIME_ARGS $arg"
                     ;;
                 # Runtime options with embedded value (--option=value)
-                --trustmap=*|--id=*|--aliases=*|--stdiolev=*|--io-root=*|--port=*|--relay=*|--label-format=*|--relay-fault-tolerance=*|--timeout=*|--timeout-exit-code=*)
+                --trustmap=*|--id=*|--aliases=*|--stdiolev=*|--stdio-model=*|--io-root=*|--port=*|--relay=*|--label-format=*|--relay-fault-tolerance=*|--timeout=*|--timeout-exit-code=*)
                     TROUPE_RUNTIME_ARGS="$TROUPE_RUNTIME_ARGS $arg"
                     ;;
                 # Runtime options expecting a separate value
-                --trustmap|-tm|--id|-i|--aliases|-a|--stdiolev|--io-root|--port|--relay|--label-format|--relay-fault-tolerance|--timeout|--timeout-exit-code)
+                --trustmap|-tm|--id|-i|--aliases|-a|--stdiolev|--stdio-model|--io-root|--port|--relay|--label-format|--relay-fault-tolerance|--timeout|--timeout-exit-code)
                     TROUPE_RUNTIME_ARGS="$TROUPE_RUNTIME_ARGS $arg"
                     _expect_runtime_value=true
                     ;;

@@ -44,6 +44,18 @@ reviewed rigorously rather than depend on the monitor.
                     width, with groups that occupy one line when they fit and stack when they do
                     not. Exports the operators `<.>` (beside), `<+>` (beside with a space), and
                     `$$` (above); see [docs/OPERATORS.md](../docs/OPERATORS.md).
+- `Rope`          : Persistent text buffer held as a binary tree of string leaves. Nodes cache
+                    length, newline count and depth, so `length`, `lineCount` and `depth` are
+                    O(1), and `charAt`, `insert`, `delete`, `concat`, `splitAt`, `offsetOfLine`,
+                    `lineAt`, `offsetToPosition` and `positionToOffset` are O(depth), where the
+                    tree is rebuilt whenever its depth would pass `depthLimit`. Leaves carry the
+                    offsets of their own newlines, so `fromString` is the only operation that
+                    scans the text; it finds newlines with `strIndexOf`, about 50ms for a
+                    megabyte. `text` is the buffer as a string -- not `toString`, which a
+                    library cannot export without shadowing the builtin `print` is built from.
+                    Offsets, lengths and columns are UTF-16 code units, lines are separated by
+                    `"\n"` and counted from zero, and every operation clamps an out-of-range
+                    argument rather than failing.
 - `Set`           : Set of elements via a comparator function.
 - `Sexp`          : Reader and printer for Lisp-style s-expressions: `ATOM` / `STR` / `LST`,
                     `parse` returning an `Outcome`, and both a single-line and a `Pretty`-based
@@ -54,12 +66,19 @@ reviewed rigorously rather than depend on the monitor.
                     Import it selectively -- `import { readFile, writeFile } SimpleFileIO`
                     shadows the builtins of those names, leaving call sites unchanged. A name
                     left out of that list still resolves, to the raw builtin, whose tagged
-                    record does not match `OK`.
+                    record does not match `OK`. The text operations are UTF-8: `readFile`
+                    refuses a file whose bytes are not valid UTF-8 with
+                    `ERR {reason = "file is not valid UTF-8", path}` rather than substituting
+                    U+FFFD, and `readFileBytes` / `writeFileBytes` carry the bytes themselves
+                    as a string of one code unit per byte -- the byte-string convention of
+                    `BytesAndZips`. Appending is UTF-8 only.
 
   | Operation                        | `OK` payload                                              |
   |----------------------------------|-----------------------------------------------------------|
-  | `readFile (auth, path)`          | the contents                                              |
+  | `readFile (auth, path)`          | the contents, decoded as UTF-8                            |
   | `writeFile (auth, path, s)`      | `()`                                                      |
+  | `readFileBytes (auth, path)`     | the bytes, one code unit each                             |
+  | `writeFileBytes (auth, path, s)` | `()`, one byte written per code unit                      |
   | `appendFile (auth, path, s)`     | `()`, creating the file if absent                         |
   | `fileExists (auth, path)`        | `true` / `false`; never `ERR`                             |
   | `readDir (auth, path)`           | `{name, kind}` list, kind `"file"` / `"dir"` / `"other"`  |
@@ -84,6 +103,18 @@ reviewed rigorously rather than depend on the monitor.
                     it, not the empty string.
 - `ThreadUtil`    : Additional functions for thread management.
 - `Time`          : Date and time manipulation.
+- `Tty`           : Terminal queries, raw mode, and keystroke delivery as mailbox events. The
+                    runtime ships bytes, not decoded keys: `subscribe (fd, pid)` delivers one
+                    `ttyEvent` per input chunk (`TTY_DATA` of the latin1-decoded bytes,
+                    `TTY_RESIZE` of the new size, `TTY_EOF`), with presence and payload at the
+                    stdio channel level. A plain `receive` never sees them: `listen (fd, auth)`
+                    opens the ranged-receive region up to the channel level and `nextEvent`
+                    receives at that interval; `nextEventWith` appends the caller's own handlers
+                    so one receive waits on terminal events and its own protocol together.
+                    `nextEventAtLevel` receives and declassifies an event's payload, the
+                    `IfcUtil.freadlnAtLevel` idiom. Query and effect results are `Outcome`
+                    values; the raw builtins (`ttySize`, `ttyRawMode`, ...) stay ambient and
+                    return tagged records that never match `OK`, so call the wrappers.
 - `timeout`       : Timers that send a message or exit the program after a duration.
 - `Unit`          : Unit testing.
 - `VariantsDemo`  : Datatype groups (`color`, `'a box`, `shape`) and functions over them, exported

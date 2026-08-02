@@ -320,8 +320,10 @@ instance WellFormedIRCheck IRExpr where
                      , "makeDir"
                      , "readDir"
                      , "readFile"
+                     , "readFileBytes"
                      , "removeFile"
                      , "writeFile"
+                     , "writeFileBytes"
                      , "endorseType"
                      , "exit"
                      , "floor"
@@ -383,6 +385,16 @@ instance WellFormedIRCheck IRExpr where
                      , "restore"
                      , "toStringL"
                      , "toString"
+                     -- Signal disposition (see builtins/signals.mts)
+                     , "trapSigterm"
+                     -- Terminal primitives (see builtins/tty.mts)
+                     , "ttyIsTTY"
+                     , "ttyLevel"
+                     , "ttyRawMode"
+                     , "ttySize"
+                     , "ttySubscribe"
+                     , "ttyUnsubscribe"
+                     , "untrapSigterm"
                      , "whereis"
                                       
                      ]

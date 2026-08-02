@@ -3,7 +3,8 @@ import List
 import String
 import Outcome
 import IfcUtil
-import { readFile, writeFile, appendFile, fileExists, readDir, makeDir, fileStat, removeFile }
+import { readFile, writeFile, readFileBytes, writeFileBytes, appendFile, fileExists, readDir,
+         makeDir, fileStat, removeFile }
        SimpleFileIO
 
 (* Hermetic by construction: with no --io-root flag the runtime allocates a fresh scratch
@@ -39,6 +40,32 @@ let (* --- Sequenced effects ---------------------------------------------------
 
     val removedA   = removeFile (authority, "sub/nested/a.txt")
     val existsA    = fileExists (authority, "sub/nested/a.txt")
+
+    (* Bytes. The byte files live in their own directory so the readDir expectation above keeps
+     * naming what it was written for. *)
+    val mkBytes    = makeDir (authority, "bytes")
+
+    (** Every byte value once, as a byte string: 256 code units, 0..255. Read back as text this
+     *  is not valid UTF-8 -- 0x80 alone is a continuation byte with nothing to continue. *)
+    val allBytes   = String.implodeCode (List.tabulate 256 (fn i => i))
+
+    val wroteBytes = writeFileBytes (authority, "bytes/all.bin", allBytes)
+    val readBytes  = readFileBytes (authority, "bytes/all.bin")
+    val statBytes  = fileStat (authority, "bytes/all.bin")
+    val bytesAsTxt = readFile (authority, "bytes/all.bin")
+
+    (* Text that is valid UTF-8 is unaffected by that validation, multibyte and astral characters
+     * included; the byte read of the same file sees the encoding. *)
+    val utf8Text   = "café ☃ 𝔘"
+    val wroteUtf8  = writeFile (authority, "bytes/u.txt", utf8Text)
+    val readUtf8   = readFile (authority, "bytes/u.txt")
+    val utf8Bytes  = readFileBytes (authority, "bytes/u.txt")
+    val reWrote    = case utf8Bytes of OK b => writeFileBytes (authority, "bytes/v.txt", b)
+                                     | ERR e => ERR e
+    val reReadUtf8 = readFile (authority, "bytes/v.txt")
+
+    val missingBy  = readFileBytes (authority, "bytes/nope.bin")
+    val escapeBy   = readFileBytes (authority, "../escape.bin")
 
     (* Failures. *)
     val missingRd  = readFile (authority, "nope.txt")
@@ -89,6 +116,32 @@ let (* --- Sequenced effects ---------------------------------------------------
                     (Unit.isTrueValue (Outcome.isOk appendedB))
           , Unit.it "the created file has the appended contents"
                     (Unit.isEq (atRoot "created by append") (Outcome.unwrap readB))
+        ],
+
+        Unit.group "bytes" [
+            Unit.it "writeFileBytes reports OK"
+                    (Unit.isTrueValue (Outcome.isOk wroteBytes))
+          , Unit.it "readFileBytes returns every byte as one code unit"
+                    (Unit.isEq (atRoot allBytes) (Outcome.unwrap readBytes))
+          , Unit.it "one byte was written per code unit"
+                    (Unit.isEq (atRoot 256) (Outcome.unwrap statBytes).size)
+          , Unit.it "readFileBytes on a missing file"
+                    (Unit.isEq (atRoot "file not found") (reasonOf missingBy))
+          , Unit.it "readFileBytes cannot escape the io-root"
+                    (Unit.isEq (atRoot "path escapes the io-root sandbox") (reasonOf escapeBy))
+        ],
+
+        Unit.group "utf-8 validation" [
+            Unit.it "readFile refuses a file that is not valid UTF-8"
+                    (Unit.isEq (atRoot "file is not valid UTF-8") (reasonOf bytesAsTxt))
+          , Unit.it "the refusal echoes the caller's path"
+                    (Unit.isEq (atRoot "bytes/all.bin") (pathOf bytesAsTxt))
+          , Unit.it "valid UTF-8 round-trips through writeFile and readFile"
+                    (Unit.isEq (atRoot utf8Text) (Outcome.unwrap readUtf8))
+          , Unit.it "the byte read of that file is its UTF-8 encoding"
+                    (Unit.isEq (atRoot 14) (size (Outcome.unwrap utf8Bytes)))
+          , Unit.it "those bytes written back read as the same text"
+                    (Unit.isEq (atRoot utf8Text) (Outcome.unwrap reReadUtf8))
         ],
 
         Unit.group "readDir" [

@@ -1,0 +1,8 @@
+2026-07-31T16:48:03.607Z [RTM] info: Skipping network creation. Observe that all network operations will yield a runtime error.
+Runtime error in thread 370ae9f8-b8b0-4157-9bcd-94e520db6e1d@{}%{}
+
+  1 | let val _ = fwrite (stdin authority, "x")
+    |             ^
+
+>> value LocalObject is not an output descriptor
+>> at tests/rt/neg/stdio-errors/wrong-descriptor-fwrite.trp:1:13

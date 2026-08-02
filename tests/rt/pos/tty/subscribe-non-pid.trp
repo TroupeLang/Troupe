@@ -1,0 +1,9 @@
+(* A second argument that is not a process id is a programming error and kills
+   the thread, in the same class as handing an operation the wrong descriptor.
+   Delivery to something that is not a local process would vanish without a
+   word, so it is refused at the call rather than at the first keystroke. *)
+let val a = authority
+    val i = stdin a
+    val _ = ttySubscribe (i, 42)
+in ()
+end

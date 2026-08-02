@@ -30,9 +30,13 @@ build:
 	$(COMPILER) ./ListPair.trp -l
 	$(COMPILER) ./Unit.trp -l
 	$(COMPILER) ./Map.trp -l
+	$(COMPILER) ./Rope.trp -l
 	$(COMPILER) ./Set.trp -l
 	$(COMPILER) ./IfcUtil.trp -l
 	$(COMPILER) ./StencilVector.trp -l
+
+  # Dependency on `List`, `Outcome`, and `IfcUtil`
+	$(COMPILER) ./Tty.trp -l
 
   # Dependency on `List` and `Number`
 	$(COMPILER) ./String.trp -l

@@ -1,0 +1,11 @@
+(* The program sits in a subdirectory, so both modules live above its program
+ * root: the direct import crosses "../", and the module it names imports its
+ * own neighbour with "./". Every recorded path in the dependencies file is
+ * relative to the program root, so both come out as "../modsrc/..." — the
+ * chained one no more absolute or working-directory-relative than the direct
+ * one. The runtime joins each path onto the program root to find the artifact,
+ * so a path that escaped the root would not load. *)
+import "../modsrc/ParentRelativeGreeter"
+
+let val _ = fwrite (stdout authority, ParentRelativeGreeter.greet "x" ^ "\n")
+in () end

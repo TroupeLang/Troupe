@@ -14,6 +14,7 @@ import * as levels from './Level.mjs'
 import * as DS from './deserialize.mjs'
 import { p2p, P2pUserError } from './p2p/p2p.mjs'
 import { closeReadline } from './builtins/stdio.mjs';
+import { ttyRestore } from './builtins/tty.mjs';
 import { __theRegister } from './builtins/whereis.mjs';
 import { assertIsFunction } from './Asserts.mjs'
 import runId from './runId.mjs'
@@ -479,6 +480,7 @@ setRuntimeObject(__rtObj)
 
 async function cleanupAsync() {
   await sendSocketMessageAndClose({ type: 'process-exit', exitCode: 0 });
+  ttyRestore()
   closeReadline()
   DS.stopCompiler();
   if (__p2pRunning) {
@@ -516,6 +518,31 @@ function bulletProofSigint() {
 }
 bulletProofSigint();
 
+
+/*****************************************************************************\
+
+  SIGTERM has no runtime-wide listener, and must not acquire one.
+
+  A JS listener overrides Node's default disposition for the whole process, so
+  the signal is no longer handled by the OS: it is queued and dispatched on the
+  event loop. The scheduler reaches the event loop only when `loop` returns,
+  and `loop` runs up to $$LOOPBOUND (500,000) outer iterations of up to 1,000
+  CPS steps each before yielding (Scheduler.mts). For a compute- or write-bound
+  program that is minutes: measured on tests/rt/timeout/diverging/loop2.trp,
+  a listener that cleans up and exits 143 turned `gtimeout 8` from 8.0s into
+  195-215s, and a direct `kill -TERM` was serviced 207s after it was sent.
+  Every harness that bounds a run with shell `timeout` — the golden suite's
+  timeout and diverging groups (compiler/test/Golden.hs), the multinode runner,
+  tests/ci-network-test.sh — would stop bounding anything.
+
+  So the listener is attached only while a program has asked for one with
+  `trapSigterm`, and removed with `untrapSigterm` (builtins/signals.mts). A
+  program that never traps keeps the OS default: immediate death, no
+  `cleanupAsync`, and therefore no `ttyRestore` — the terminal-state gap that
+  a runtime default was meant to close stays open, and closing it needs the
+  scheduler to yield on a bound that is wall-clock rather than step-count.
+
+\*****************************************************************************/
 
 
 async function loadServiceCode() {

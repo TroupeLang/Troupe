@@ -1,0 +1,12 @@
+(* ttyRawMode under the golden runner, where stdin is a pipe rather than a
+   terminal. Both directions return an Err value rather than throwing: on a pipe
+   process.stdin.setRawMode is undefined, and a missing terminal is an
+   environment condition, not a programming error. The result is an
+   acknowledgement drawn through the channel, so it carries the channel level. *)
+let val a = authority
+    val i = stdin a
+    val _ = print (ttyRawMode (i, true))
+    val _ = print (ttyRawMode (i, false))
+    val _ = print (levelOf (ttyRawMode (i, true)))
+in ()
+end

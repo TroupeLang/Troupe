@@ -1,6 +1,6 @@
 {
   "deps": [
-    {"path": "../awfy/Awfy", "hash": "bd9qk9j6pl2mviqqlqrhtptc2eu4pp68ic6gptqa78aaqpc6jep0", "name": "../awfy/Awfy"},
-    {"path": "Crosslang", "hash": "dfe0klc6qjoopog58avbkkaeoftjdqsndrqoddq18bpr1m0cc1c0", "name": "Crosslang"}
+    {"path": "../awfy/Awfy", "hash": "9mokke2aqudkskqp6ulmr96g5dh4k8c72d9lmek29l531lfafm90", "name": "../awfy/Awfy"},
+    {"path": "Crosslang", "hash": "rita89mmmkkg5bftf80i8g9v2bof6n1hee1n4mlgmrlkirr4h8p0", "name": "Crosslang"}
   ]
 }

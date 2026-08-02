@@ -1,0 +1,6 @@
+2026-07-31T21:07:12.573Z [RTM] info: Skipping network creation. Observe that all network operations will yield a runtime error.
+untrap with nothing trapped: ok
+trap: ok
+untrap: ok
+untrap again: ok
+>>> Main thread finished with value: ()@{}%{}

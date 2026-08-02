@@ -1,0 +1,53 @@
+(* keydemo — decode a recorded byte stream with examples/battallion/Key and print the keys.
+ *
+ *   ./local.sh examples/battallion/keydemo.trp --localonly
+ *
+ * No terminal is involved: the bytes below are the ones a terminal would have sent, written as
+ * literals, so the program shows the decoder's output without raw mode or a subscription. The
+ * stream is fed twice, once whole and once one byte at a time with the remainder carried, which
+ * is the shape a `Tty.nextEventWith` loop has.
+ *)
+
+import String
+import List
+import "./Key"
+
+let (* "hi", left arrow, delete, ctrl-a, an unfinished CSI, then Enter and a lone ESC. *)
+    val stream = "hi" ^ "\x1b[D" ^ "\x1b[3~" ^ "\x01" ^ "\xc3\xa9" ^ "\x0d" ^ "\x1b"
+
+    fun name (KEY_PRINT c)     = "print " ^ c
+      | name KEY_ENTER         = "enter"
+      | name KEY_TAB           = "tab"
+      | name KEY_BACKSPACE     = "backspace"
+      | name KEY_DELETE        = "delete"
+      | name KEY_ESC           = "esc"
+      | name KEY_UP            = "up"
+      | name KEY_DOWN          = "down"
+      | name KEY_LEFT          = "left"
+      | name KEY_RIGHT         = "right"
+      | name KEY_HOME          = "home"
+      | name KEY_END           = "end"
+      | name KEY_PAGEUP        = "pageup"
+      | name KEY_PAGEDOWN      = "pagedown"
+      | name (KEY_CTRL c)      = "ctrl-" ^ c
+      | name (KEY_UNKNOWN b)   = "unknown(" ^ toString (String.size b) ^ " bytes)"
+
+    fun names ks = String.concatWith ", " (List.map name ks)
+
+    (* Whole stream at once. *)
+    val (keys, rest) = Key.decode stream
+    val _ = print ("whole:    " ^ names keys)
+    val _ = print ("remainder: " ^ toString (String.size rest) ^ " byte(s)")
+    val _ = print ("flushed:  " ^ names (Key.flush rest))
+
+    (* One byte per chunk, carrying the remainder — the loop a decoder process would run. *)
+    fun perByte (i, carry, acc) =
+        if i >= String.size stream then (acc, carry)
+        else let val (ks, carry') = Key.decode (carry ^ String.sub (stream, i))
+             in perByte (i + 1, carry', List.append acc ks)
+             end
+    val (keys', rest') = perByte (0, "", [])
+    val _ = print ("per byte: " ^ names keys')
+    val _ = print ("same as whole: " ^ toString (keys' = keys andalso rest' = rest))
+in ()
+end

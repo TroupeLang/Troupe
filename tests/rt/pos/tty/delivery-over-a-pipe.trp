@@ -1,0 +1,42 @@
+(* Terminal event delivery, end to end, over a pipe.
+
+   `ttySubscribe` does not require a terminal: on a pipe it attaches the same
+   listeners and delivers the same messages, so the whole delivery path — the
+   message shapes, the labels, and the receive ceremony a subscriber must
+   perform — is testable without a pseudo-terminal.
+
+   Events arrive with presence at the channel level, which a plain `receive`,
+   whose interval is [pc, pc], never sees. The subscriber therefore opens a
+   ranged-receive region up to the channel level and receives at that interval.
+
+   The accumulation to TTYEOF is what makes the result independent of how the
+   pipe chunks the input: one chunk becomes one message, and how many chunks
+   there are is the operating system's business, not the program's. *)
+import IfcUtil
+
+let val a = authority
+    val i = stdin a
+    val me = self ()
+    val _ = print (ttySubscribe (i, me))
+
+    val (ok, cap) = enableRangedReceive (IfcUtil.bot, ttyLevel i, a)
+    val _ = print ok
+
+    (* The handlers return a step result and the loop recurses outside them;
+       recursing inside a handler body works too (the body runs after the
+       match's guard exits), this shape just keeps one exit point. *)
+    fun loop acc =
+        let val (more, bytes) =
+                rcv (IfcUtil.bot, ttyLevel i,
+                     [ hn ("TTYDATA", b) => (true, b)
+                     , hn ("TTYEOF") => (false, "") ])
+        in if more then loop (acc ^ bytes) else acc
+        end
+
+    val acc = loop ""
+    val _ = print (levelOf acc)
+    val _ = print (ttyUnsubscribe i)
+    val _ = disableRangedReceive cap
+    val _ = print acc
+in ()
+end

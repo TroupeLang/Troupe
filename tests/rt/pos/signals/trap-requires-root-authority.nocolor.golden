@@ -1,0 +1,9 @@
+2026-07-31T21:07:12.582Z [RTM] info: Skipping network creation. Observe that all network operations will yield a runtime error.
+Runtime error in thread d47db610-18bf-4fcc-bde6-fcbeebacd5d7@{}%{}
+
+  7 |     val _ = trapSigterm (botAuth, self ())
+    |             ^
+
+>> Provided authority is not ROOT
+ | level of the provided authority: {}
+>> at tests/rt/pos/signals/trap-requires-root-authority.trp:7:13

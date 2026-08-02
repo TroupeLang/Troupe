@@ -1,0 +1,515 @@
+(* Api — the editor state and the operations a plugin is handed.
+ *
+ * A program-relative module of examples/battallion, and the module a plugin programs against:
+ * `api` is the record of functions the kernel passes to every plugin entry point, and the
+ * `state` record described below is the value those functions take and return. Pure throughout —
+ * no process, no receive, no descriptor, no file. A plugin that imports this module and nothing
+ * else can do exactly what is listed here and nothing more.
+ *
+ * THIS MODULE IS THE PLUGIN ABI. A compiled module is identified by a SHA-256 over its
+ * position-erased IR, covering its dependencies (docs/MODULES.md), and a delivered plugin closure
+ * links only against hashes already in the receiver's dependency set. So a plugin compiled against
+ * these sources links into a kernel that pins this same module, and one compiled against any other
+ * version of it does not link at all. That is why the operations live *here* rather than being
+ * re-exported from the kernel: a module that re-exported them would carry the kernel's hash, and
+ * every edit to the kernel would invalidate every plugin ever compiled.
+ *
+ * STATE IS A RECORD, NOT A DATATYPE, so that later stages can add fields without breaking the
+ * matches written against it (open record patterns, `{a = p, ..}`). The fields:
+ *
+ *   buffer   the text, a lib/Rope.trp rope
+ *   path     the file the text came from and `:w` writes back to
+ *   top      the buffer line drawn on the terminal's first row
+ *   line     the cursor's buffer line, counting from zero
+ *   col      the cursor's column within that line, counting from zero
+ *   cols     the terminal's width, in code units
+ *   rows     the terminal's height, in rows, status line included
+ *   mode     NORMAL, INSERT, COMMAND or HELP
+ *   rev      the identity of the buffer's present contents (see below)
+ *   revNext  the next identity to hand out
+ *   savedRev the identity the file on disk holds
+ *   undo     the states `u` walks back through, newest first
+ *   prompt   what the typed row means: ":" a command, "/" a search, "" not prompting
+ *   cmd      the line being typed after that prompt
+ *   status   a transient message for the status line; "" when there is none
+ *   goalCol  the column a vertical motion aims for (see below)
+ *   pending  the keymap's prefix key, waiting for the key that completes it; "" when none
+ *   find     the last search pattern, which `n` and `N` repeat; "" when there has been none
+ *   yank     the last yanked line, SOME text or NONE
+ *   req      what a plugin is asking the kernel to do, REQ_NONE when nothing
+ *
+ * A plugin reads those fields directly and writes them only through the operations below: the
+ * state's shape is published, its transitions are not open-coded.
+ *
+ * FOUR OF THE FIELDS ARE THE KEYMAP'S BOOKKEEPING and not the buffer's: `prompt`, `pending`,
+ * `find` and `yank` are what a plugin needs to carry from one keystroke to the next, and they are
+ * here because the state is the only thing a pure plugin gets back. They hold no invariant the
+ * kernel checks, and none of them is in an undo snapshot.
+ *
+ * THE CURSOR MAY SIT ONE PAST THE LAST CHARACTER of its line, i.e. `col` ranges over
+ * `0..length`, not `0..length-1`, in every mode. Insert mode needs the position, and a vi-style
+ * normal mode that stops one earlier is a keymap decision — the keymap being a plugin. One
+ * consequence is visible: leaving insert mode does not pull the cursor left the way vi does, so
+ * `i`, some text, Esc leaves the cursor after the text rather than on its last character.
+ *
+ * THE COLUMN IS REMEMBERED ACROSS VERTICAL MOTIONS, in `goalCol`. Moving down from column 40 onto
+ * a short line puts the cursor at that line's end, and moving down again onto a long one returns
+ * it to 40. Two operations divide the responsibility: `moveTo` goes to an exact position and makes
+ * that position's column the goal, and `moveLine` goes to a line and puts the cursor at the goal,
+ * clamped to that line. So a keymap gets the behaviour by choosing the operation — `moveTo` for
+ * `h`, `l`, `0` and a search hit, `moveLine` for `j`, `k` and the paging keys — rather than by
+ * carrying a column of its own. `moveEnd` is the third: it goes to the end of a line and sets the
+ * goal to `goalEnd`, a column past any line, so that `$` followed by `j` walks down the ends of
+ * the lines the way vi's does.
+ *
+ * THE GOAL COLUMN IS DERIVED FROM THE CURSOR, NEVER RESTORED. Every operation that places the
+ * cursor at a definite position — the motions above, every edit, and the cursor an undo restores —
+ * sets the goal to the column it landed on. Only `moveLine` reads it and leaves it alone. That is
+ * what keeps the field from needing to be in an undo snapshot: after `u` the goal is wherever the
+ * cursor now is, which is where a vertical motion should aim from.
+ *
+ * A TAB IS ONE CODE UNIT HERE AND SEVERAL COLUMNS ON THE SCREEN. Every column in this module is
+ * an index into a line's code units: `col`, the goal column, the clamps, and the position the
+ * status line reports. The tab stops live where the screen does — `Screen.column` maps an index
+ * to the column the terminal draws it at, and `Screen.truncate` cuts a line by the columns it
+ * renders in — so the cursor is drawn on the character after an indent rather than left of it,
+ * and none of the arithmetic below has to know how wide a tab is.
+ *
+ * OFFSETS ARE CODE UNITS, as lib/Rope.trp's are, and a character outside the basic multilingual
+ * plane is two of them. The two places where that would show — `deleteChar` and `backspace` —
+ * read the surrogate pair and remove both halves, so no edit can leave half a character in the
+ * buffer. Everything else counts units: a motion to the end of a line of astral characters stops
+ * past the last one's high half, and the column shown in the status line counts units too. The
+ * screen does not measure those widths either: a double-width character is drawn in two columns
+ * and counted as one, so a cursor past one is drawn to its left, and a line of them is clipped at
+ * the terminal's right edge rather than cut (Screen.trp's header).
+ *
+ * UNDO IS PER KEYSTROKE and unlimited. Every operation that changes the buffer first pushes the
+ * whole previous state — rope, cursor, revision — onto `undo`, and `undo` pops one. Two
+ * consequences are deliberate. Typing a word and undoing it takes as many undos as there were
+ * letters, where vi would undo the whole insertion; grouping keystrokes into changes is a keymap
+ * feature and belongs with the plugins. And the history costs almost nothing: a rope shares every
+ * node the edit did not touch with its predecessor, so a snapshot is a handful of nodes rather
+ * than a copy of the text — which is the reason the buffer is a persistent structure in the first
+ * place. An undo on an empty history is a status message rather than an error.
+ *
+ * A SNAPSHOT IS THE BUFFER, THE CURSOR AND THE REVISION, AND NOTHING ELSE. What `u` puts back is
+ * what an edit took away; the keymap's bookkeeping is not part of an edit and does not travel with
+ * it. So an undo leaves the search pattern, the yank register and the pending prefix where they
+ * were — undoing a `dd` does not un-yank the line it yanked, and `n` after an undo repeats the
+ * search the user last asked for. The goal column is the one the restored cursor sits at, which is
+ * the rule stated above and not an exception to it.
+ *
+ * THE BUFFER IS MODIFIED WHEN ITS REVISION IS NOT THE FILE'S. There is no modified *flag*: every
+ * distinct contents the buffer has ever held carries an identity, `rev`, handed out from `revNext`
+ * — which only ever counts up and which undo does not restore — and `savedRev` is the identity the
+ * file holds, set when the file is read and again when a write is acknowledged. `isDirty` compares
+ * the two, in constant time and without looking at the text.
+ *
+ * A FLAG WOULD BE WRONG, AND WAS. Carried in the state and pushed onto the undo history, a flag is
+ * correct only while no write interleaves: edit, `:w`, then undo past the point that was written
+ * restores the flag the snapshot was taken with — false — and the editor calls a buffer clean that
+ * differs from the file, quitting on `:q` without a word. Comparing revisions gets that right,
+ * because the snapshot restores the *identity of the contents it holds* and that identity is not
+ * `savedRev`. Two properties follow from the identity being restored rather than reallocated:
+ * undoing every change back to what was read shows clean again, and undoing past a write shows
+ * modified. Reallocating would lose the first; not restoring `revNext` is what keeps the second,
+ * since an edit made after an undo can never be handed an identity a write has already claimed.
+ * The comparison is conservative in the one direction it can err: retyping by hand exactly what
+ * was written is a new identity and reads as modified, which is what vi does with it too.
+ *
+ * A PLUGIN CANNOT WRITE A FILE — it is pure, and the ROOT authority a write needs never leaves the
+ * supervisor's frame (Session.trp). So `requestWrite` leaves a request in the state instead, the
+ * kernel sees it in the state it gets back, asks the supervisor to write, and feeds the outcome
+ * back through the plugin that asked. `REQ_WRITE`'s payload is where the bytes are to go and
+ * whether to quit once they are there — the quit being what makes `:wq` one request rather than
+ * two. `writePath` and `writeQuits` read the payload back and `clearRequest` spends it.
+ *
+ * THE TARGET IS ALWAYS IN THE REQUEST, EVEN WHEN IT IS THE BUFFER'S OWN PATH. `:w` asks for a
+ * write to `st.path` and `:w other` asks for one to `other`; the state carries no notion of a
+ * default target, so there is one code path and the plugin that asked can compare what it asked
+ * for against `st.path`. Requesting a path is not authority over it: the supervisor performs
+ * every write with the root authority in its own frame, and `--io-root` bounds where any of them
+ * can land (Session.trp's header).
+ *
+ * A WRITE TO ANOTHER PATH DOES NOT MOVE `savedRev`, because the file the buffer came from still
+ * does not hold what the buffer holds. `markSaved` is the plugin's call to make and FileOps.trp
+ * makes it only for a write to `st.path`; the comparison is by the string, so the same file named
+ * two ways counts as another path and leaves the buffer modified — the conservative direction.
+ *)
+
+import String
+import List
+import Option
+import Rope
+
+(* HELP is a mode because it is what the next key means: in it, every key returns to the buffer.
+ * What it draws instead of the buffer is the kernel's business (Editor.trp's `frameOf`). *)
+datatype mode = NORMAL | INSERT | COMMAND | HELP
+
+(* What a plugin asks the kernel to do. `REQ_WRITE`'s payload is the path the bytes are to go to
+ * and whether a successful write ends the session. *)
+datatype request = REQ_NONE | REQ_WRITE of {path : string, quit : bool}
+
+let (*--------------------------------  Construction  --------------------------------*)
+
+    (** What the status line says before the first key is pressed. A transient message is cleared
+     *  by the next keystroke, so a hint set here is shown exactly until the user starts working
+     *  and never again. *)
+    val openingMessage = "type :help for the key list"
+
+    (** The state a session starts in: the whole buffer, cursor at the start, nothing modified —
+     *  the revision the buffer was read at being the revision the file holds. *)
+    fun init (buffer, path, cols, rows) =
+        { buffer = buffer, path = path, top = 0, line = 0, col = 0, cols = cols, rows = rows
+        , mode = NORMAL, rev = 0, revNext = 1, savedRev = 0
+        , undo = [], prompt = "", cmd = "", status = openingMessage
+        , goalCol = 0, pending = "", find = "", yank = NONE, req = REQ_NONE }
+
+    (*----------------------------------  Messages  ----------------------------------*)
+
+    val oldestMessage = "already at the oldest change"
+
+    (*----------------------------------  Queries  -----------------------------------*)
+
+    (** The number of terminal rows that show text: every row but the status line's. A terminal
+     *  of one row keeps that row for the text and has no status line — the frame agrees. *)
+    fun textRows st = if st.rows > 1 then st.rows - 1 else st.rows
+
+    (** Whether the terminal is tall enough for a status line. *)
+    fun hasStatus st = st.rows > 1
+
+    fun lastLine st = Rope.lineCount st.buffer - 1
+
+    fun lineAt (st, l) = Rope.lineAt (st.buffer, l)
+
+    fun lineLength (st, l) = String.size (lineAt (st, l))
+
+    (** Whether the buffer differs from what the file holds. Constant time: the identity of the
+     *  present contents against the identity the file was last read or written at. *)
+    fun isDirty st = st.rev <> st.savedRev
+
+    (** The whole buffer as one string, for the kernel to hand the supervisor to write. *)
+    fun contents st = Rope.text st.buffer
+
+    (*----------------------------------  Motions  -----------------------------------*)
+
+    fun clampLine (st, l) =
+        let val last = lastLine st
+        in if l < 0 then 0 else if l > last then last else l
+        end
+
+    fun clampCol (st, l, c) =
+        let val n = lineLength (st, l)
+        in if c < 0 then 0 else if c > n then n else c
+        end
+
+    (** The top line that keeps `line` on the screen, moving the viewport by the least it can. *)
+    fun scrollTo (st, line) =
+        let val h = textRows st
+        in      if line < st.top          then line
+           else if line >= st.top + h     then line - h + 1
+           else st.top
+        end
+
+    (** A column past the end of any line. `moveEnd` leaves it as the goal, and `clampCol` brings
+     *  it back to whatever line the cursor lands on, which is what makes `$` stick. *)
+    val goalEnd = 1073741823
+
+    (** The state with the cursor at `(l, c)`, both clamped, the viewport following it, and that
+     *  column as the goal a later vertical motion aims for. *)
+    fun moveTo (st, l, c) =
+        let val l' = clampLine (st, l)
+            val c' = clampCol (st, l', c)
+        in { st with line = l', col = c', goalCol = c', top = scrollTo (st, l') }
+        end
+
+    (** The state with the cursor on line `l` at the goal column, clamped to that line. The goal
+     *  is carried through unchanged: this is the operation that makes a walk down a short line
+     *  and back onto a long one return to the column it started at. *)
+    fun moveLine (st, l) =
+        let val l' = clampLine (st, l)
+            val c' = clampCol (st, l', st.goalCol)
+        in { st with line = l', col = c', top = scrollTo (st, l') }
+        end
+
+    (** The state with the cursor at the end of line `l`, and the *end* as the goal, so that the
+     *  vertical motions that follow walk down the ends of the lines. *)
+    fun moveEnd (st, l) =
+        let val l' = clampLine (st, l)
+        in { st with line = l', col = lineLength (st, l'), goalCol = goalEnd
+                   , top = scrollTo (st, l') }
+        end
+
+    (*----------------------------------  Editing  -----------------------------------*)
+
+    (* The surrogate ranges. A character outside the basic multilingual plane is stored as a high
+     * unit followed by a low one, and an edit that took only one of them would leave text that no
+     * longer decodes. *)
+    val surHighLow = 0xd800   val surHighHigh = 0xdbff
+    val surLowLow  = 0xdc00   val surLowHigh  = 0xdfff
+
+    (** The code unit at offset `i`, or 0 outside the rope. *)
+    fun unitAt (r, i) = String.subCode (Rope.charAt (r, i), 0)
+
+    (** The offset the cursor sits at. *)
+    fun offsetOf st = Rope.positionToOffset (st.buffer, st.line, st.col)
+
+    (** How many code units the character ending at `off` occupies. *)
+    fun unitsBefore (st, off) =
+        if off <= 1 then 1
+        else let val lo = unitAt (st.buffer, off - 1)
+                 val hi = unitAt (st.buffer, off - 2)
+             in if lo >= surLowLow  andalso lo <= surLowHigh
+                   andalso hi >= surHighLow andalso hi <= surHighHigh
+                then 2 else 1
+             end
+
+    (** How many code units the character starting at `off` occupies. *)
+    fun unitsAt (st, off) =
+        let val hi = unitAt (st.buffer, off)
+        in if hi >= surHighLow andalso hi <= surHighHigh then 2 else 1
+        end
+
+    (** The state with `buffer` as its text, the cursor at code-unit offset `off`, a fresh
+     *  revision and the viewport following the cursor. The cursor is derived from the offset
+     *  rather than adjusted line by line, so a newline inserted or a line join lands it in the
+     *  right place without a case for each. This is the one place a buffer changes, and so the
+     *  one place a revision is handed out. *)
+    fun atOffset (st, buffer, off) =
+        let val (l, c) = Rope.offsetToPosition (buffer, off)
+            val st' = { st with buffer = buffer, line = l, col = c, goalCol = c
+                              , rev = st.revNext, revNext = st.revNext + 1 }
+        in { st' with top = scrollTo (st', l) }
+        end
+
+    (** The state with its present buffer, cursor and revision pushed onto the undo history.
+     *  `revNext` is not in the snapshot: it counts identities handed out, which undoing does not
+     *  give back. *)
+    fun remember st =
+        { st with undo = { buffer = st.buffer, line = st.line, col = st.col, rev = st.rev }
+                         :: st.undo }
+
+    (** `s` inserted at the cursor, which ends up after it. *)
+    fun insertText (st, s) =
+        let val off = offsetOf st
+            val st1 = remember st
+        in atOffset (st1, Rope.insert (st1.buffer, off, s), off + String.size s)
+        end
+
+    (** `n` code units removed from `off`, with the cursor left there. *)
+    fun deleteAt (st, off, n) =
+        if n <= 0 then st
+        else let val st1 = remember st
+             in atOffset (st1, Rope.delete (st1.buffer, off, n), off)
+             end
+
+    (** The character under the cursor removed, if the cursor is on one. The newline ending the
+     *  line is not one — deleting past the end of a line would join it with the next, which `x`
+     *  does not do in vi either. *)
+    fun deleteChar st =
+        let val off = offsetOf st
+        in if st.col >= lineLength (st, st.line) then st
+           else deleteAt (st, off, unitsAt (st, off))
+        end
+
+    (** The character to the left removed, or the line break when there is none, so that
+     *  backspacing at the start of a line joins it to the one above. *)
+    fun backspace st =
+        let val off = offsetOf st
+        in if off <= 0 then st
+           else let val n = unitsBefore (st, off)
+                in deleteAt (st, off - n, n)
+                end
+        end
+
+    (** An empty line below the cursor's, the cursor on it, and insert mode. *)
+    fun openBelow st =
+        let val stop = Rope.positionToOffset (st.buffer, st.line, lineLength (st, st.line))
+            val st1 = remember st
+            val st2 = atOffset (st1, Rope.insert (st1.buffer, stop, "\n"), stop + 1)
+        in { st2 with mode = INSERT }
+        end
+
+    (** The cursor's line removed, with the line break that separates it from its neighbour, and
+     *  the cursor at the start of the line that takes its place.
+     *
+     *  Which break goes with the line is what keeps the line *count* right: a line that has one
+     *  below it is removed together with the break that follows it, and the last line together
+     *  with the break before it, so either way the buffer loses exactly one line. The only line of
+     *  a buffer has no break to take, and its text is emptied instead — a buffer always has at
+     *  least one line, as an empty file does (lib/Rope.trp). A line that is both the only one and
+     *  already empty leaves nothing to do, and nothing is pushed onto the undo history for it.
+     *
+     *  The cursor lands at column zero rather than at the first non-blank vi puts it on: what
+     *  "blank" means is the keymap's question, and `^` is where the keymap answers it. *)
+    fun deleteLine st =
+        let val l    = st.line
+            val last = lastLine st
+            val len  = lineLength (st, l)
+            val here = Rope.positionToOffset (st.buffer, l, 0)
+        in if l < last
+           then let val st1 = remember st
+                in atOffset (st1, Rope.delete (st1.buffer, here, len + 1), here)
+                end
+           else if l > 0
+           then let val above = Rope.positionToOffset (st.buffer, l - 1, 0)
+                    val st1 = remember st
+                in atOffset (st1, Rope.delete (st1.buffer, here - 1, len + 1), above)
+                end
+           else if len > 0
+           then let val st1 = remember st
+                in atOffset (st1, Rope.delete (st1.buffer, 0, len), 0)
+                end
+           else st
+        end
+
+    (** `s` as a new line below the cursor's, the cursor at its start. *)
+    fun putBelow (st, s) =
+        let val stop = Rope.positionToOffset (st.buffer, st.line, lineLength (st, st.line))
+            val st1 = remember st
+        in atOffset (st1, Rope.insert (st1.buffer, stop, "\n" ^ s), stop + 1)
+        end
+
+    (** `s` as a new line above the cursor's, the cursor at its start. *)
+    fun putAbove (st, s) =
+        let val here = Rope.positionToOffset (st.buffer, st.line, 0)
+            val st1 = remember st
+        in atOffset (st1, Rope.insert (st1.buffer, here, s ^ "\n"), here)
+        end
+
+    (** The state before the last change, or a message when there is none. *)
+    fun undo st =
+        case st.undo of
+             []        => { st with status = oldestMessage }
+           | s :: rest =>
+               let val st1 = { st with buffer = s.buffer, undo = rest, rev = s.rev }
+               in moveTo (st1, s.line, s.col)
+               end
+
+    (*-------------------------  Mode, command line, status  -------------------------*)
+
+    fun setMode (st, m) = { st with mode = m }
+
+    (** The line being typed after the prompt. *)
+    fun setCmd (st, c) = { st with cmd = c }
+
+    (** Command mode with `p` as its prompt and an empty line: `:` for a command word, `/` for a
+     *  search pattern. One mode edits both, and the prompt is what says which is being typed —
+     *  to the status line, which draws it, and to the keymap, which acts on Enter. *)
+    fun openPrompt (st, p) = { st with mode = COMMAND, prompt = p, cmd = "" }
+
+    (** Normal mode, with no prompt and no line: the state a command or a search runs against. *)
+    fun closePrompt st = { st with mode = NORMAL, prompt = "", cmd = "" }
+
+    (** A transient message for the status line. It lives until the next keystroke. *)
+    fun setStatus (st, s) = { st with status = s }
+
+    (** The keymap's prefix key, waiting for the key that completes it. *)
+    fun setPending (st, s) = { st with pending = s }
+
+    (** The pattern `n` and `N` repeat. *)
+    fun setFind (st, s) = { st with find = s }
+
+    (** The yank register: `SOME line`, or `NONE` for nothing yanked. *)
+    fun setYank (st, y) = { st with yank = y }
+
+    (** The file now holds the buffer's present contents. Called by the plugin that hears a write
+     *  succeed; nothing else in the editor moves `savedRev`. *)
+    fun markSaved st = { st with savedRev = st.rev }
+
+    (*---------------------------------  Requests  -----------------------------------*)
+
+    (** Ask the kernel to write the buffer to `path`; `quitAfter` ends the session once it has.
+     *  The path is always given, `:w` naming `st.path` itself: a request that meant "the usual
+     *  place" would leave the plugin unable to tell a write of its own file from a copy. *)
+    fun requestWrite (st, path, quitAfter) =
+        { st with req = REQ_WRITE {path = path, quit = quitAfter} }
+
+    (** Spend the pending request. *)
+    fun clearRequest st = { st with req = REQ_NONE }
+
+    (** Whether a request is waiting for the kernel to carry out. *)
+    fun hasRequest st = case st.req of REQ_NONE => false | _ => true
+
+    (** Where the pending write is to go. *)
+    fun writePath st = case st.req of REQ_WRITE r => r.path | _ => ""
+
+    (** Whether the pending write ends the session when it succeeds. *)
+    fun writeQuits st = case st.req of REQ_WRITE r => r.quit | _ => false
+
+    (*----------------------------------  Resizing  ----------------------------------*)
+
+    (** The state on a new terminal size. The cursor keeps its buffer position and the viewport
+     *  is recomputed around it, so a shrink that would have left the cursor off-screen scrolls
+     *  instead of losing it. The goal column is carried across unchanged: a window resize is not
+     *  a motion, and the vertical motion after one aims where the one before it did. *)
+    fun onResize (st, cols, rows) =
+        let val st' = { st with cols = cols, rows = rows }
+            val st'' = moveTo (st', st'.line, st'.col)
+        in { st'' with goalCol = st.goalCol }
+        end
+
+    (*-----------------------------  The plugin record  ------------------------------*)
+
+    (** What every plugin entry point is handed: the queries a keymap asks the buffer, the three
+     *  motions, the edits, the writers for the mode, the prompt, the status line and the keymap's
+     *  own bookkeeping, the write request, and the two operations over the modified state —
+     *  `isDirty`, which the status line and the quit commands read, and `markSaved`, which the
+     *  plugin that hears a write succeed is the only caller of. A plugin holds no authority, no
+     *  pid and no descriptor, so this record is the whole of what it can do to the editor.
+     *
+     *  Reading the state is not in here: a plugin reads the fields listed at the top of this file
+     *  directly. Whether the buffer is modified is the exception and is a function rather than a
+     *  field, because it is a comparison of two fields and open-coding it in every plugin would
+     *  publish an invariant instead of an answer.
+     *
+     *  `lastLine` and `lineAt` are in the record because a keymap that searches, that goes to the
+     *  last line, or that yanks one has to read the text rather than only move within it. They
+     *  are the whole of a plugin's read access to the buffer, and they are enough: the pattern
+     *  search behind `/`, `n` and `N` is a line-by-line scan written in the keymap plugin, so
+     *  what "matches" means is that plugin's to decide and no search policy is published here. *)
+    val api = { textRows     = textRows
+              , lastLine     = lastLine
+              , lineAt       = lineAt
+              , lineLength   = lineLength
+              , isDirty      = isDirty
+              , moveTo       = moveTo
+              , moveLine     = moveLine
+              , moveEnd      = moveEnd
+              , insertText   = insertText
+              , deleteChar   = deleteChar
+              , deleteLine   = deleteLine
+              , backspace    = backspace
+              , openBelow    = openBelow
+              , putBelow     = putBelow
+              , putAbove     = putAbove
+              , undo         = undo
+              , setMode      = setMode
+              , setCmd       = setCmd
+              , openPrompt   = openPrompt
+              , closePrompt  = closePrompt
+              , setStatus    = setStatus
+              , setPending   = setPending
+              , setFind      = setFind
+              , setYank      = setYank
+              , markSaved    = markSaved
+              , requestWrite = requestWrite
+              , clearRequest = clearRequest
+              , writePath    = writePath
+              , writeQuits   = writeQuits }
+
+in [ ("init", init)
+   , ("goalEnd", goalEnd)
+   , ("textRows", textRows)
+   , ("hasStatus", hasStatus)
+   , ("lastLine", lastLine)
+   , ("lineAt", lineAt)
+   , ("lineLength", lineLength)
+   , ("contents", contents)
+   , ("onResize", onResize)
+   , ("hasRequest", hasRequest)
+   , ("writePath", writePath)
+   , ("api", api)
+   ]
+end

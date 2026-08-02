@@ -27,6 +27,8 @@ export function okToCrossDimensionalDowngrade (from: Level, to:Level, auth: Leve
 }
 export function fromSingleTag(x:string) { return levels.fromV1String(x)}
 
+/** V1 label literals in generated code (`rt.mkV1Label`); reported on the
+ *  running thread, which exists by construction. */
 export function mkV1Level (x:string ) {
 	try {
 		return levels.fromV1String (x);
@@ -37,6 +39,28 @@ export function mkV1Level (x:string ) {
 			`V1 labels use commas to separate principals (e.g., \`{alice, bob}\`).\n` +
 			`For DC labels with separate confidentiality/integrity, use \`<...;...>\` syntax.`
 		);
+	}
+}
+
+/**
+ * Parse a level supplied on the command line, in either surface syntax:
+ * V1 `{alice, bob}` or V2 `<conf;integ>`.
+ *
+ * Flag levels are parsed at module load, before any thread exists, so a parse
+ * failure cannot be reported as a thread error: it is a startup error, printed
+ * and followed by a non-zero exit.
+ */
+export function levelFromFlag (flag: string, x: string): Level {
+	try {
+		return levels.fromString (x);
+	} catch (e) {
+		console.error(
+			`Error: invalid level for --${flag}: \`${x}\`\n` +
+			` | ${e.message}\n` +
+			` | V1 labels use braces and commas: '{alice, bob}'\n` +
+			` | V2 labels give both dimensions: '<alice;#root-integrity>'`
+		);
+		process.exit(1);
 	}
 }
 export const BOT  = levels.BOT

@@ -1,0 +1,121 @@
+(* bt — battallion, a terminal text editor written in Troupe.
+ *
+ *   ./local.sh examples/battallion/bt.trp --io-root <dir> -- <file>
+ *
+ * `--io-root` names the subtree file access is confined to, and the argument after `--` is the
+ * file to open, resolved inside it. Both belong to the runtime, not to this program:
+ * `SimpleFileIO.readFile` refuses a path outside the subtree, and `getCliArgs` returns exactly
+ * the arguments after `--`. The same subtree bounds where `:w` can write.
+ *
+ * WHAT IT DOES. Opens the file full-screen on the alternate screen buffer and draws the viewport
+ * with a status line on the bottom row. Normal mode navigates — `h j k l` and the arrows, `0` and
+ * Home, `^`, `$` and End, `w` and `b` by word, `gg` and `G` to the ends of the buffer,
+ * PageUp/PageDown and CTRL-b/CTRL-f by a screen, with the viewport scrolling to follow the cursor
+ * and a vertical motion aiming for the column the last horizontal one set — and it searches:
+ * `/text` forward from the cursor, `n` and `N` to repeat, wrapping and saying so. It edits: `i`
+ * enters insert mode, `o` opens a line below, `x` deletes a character, `dd` a line, `yy` yanks
+ * one and `p` and `P` put it back, `u` undoes, `:` opens a command line. Insert mode types text,
+ * including multibyte characters, with Enter splitting a line, Backspace joining one, and Esc
+ * returning to normal mode. The commands are `:w`, `:w PATH`, `:q`, `:q!`, `:wq`, a line number,
+ * `:$` and `:help`; `q` and CTRL-c quit like `:q`, refusing while the buffer is modified, and
+ * `:help` lists the keys over the buffer until any key is pressed. A window resize redraws at the
+ * new size. The terminal is given back — cooked mode, normal screen, cursor shown, subscription
+ * and signal trap released — on every way out, including a kernel that dies or stops answering.
+ *
+ * WHAT IT REFUSES, BEFORE THE TERMINAL HAS BEEN TOUCHED. Every startup failure is one line on
+ * stderr and exit 1, written while the terminal is still the shell's: no argument after `--`, more
+ * than one, an empty one, and a file that cannot be read — which covers a path that does not
+ * exist, a path that names a directory, a file whose bytes are not valid UTF-8, and a path the
+ * runtime refuses because it leaves the `--io-root` subtree, whether lexically or through a
+ * symlink. The reason comes from the runtime
+ * and is reported as given, so what refused the path and why is what the user is told.
+ *
+ * THE PATH IS RESOLVED INSIDE `--io-root`, AND SAYING SO IS PART OF THE FAILURE. `--io-root` is
+ * the runtime's flag, not this program's: `SimpleFileIO` resolves every path against it and there
+ * is no way to ask what it is. Left off, the runtime makes a fresh empty scratch directory for the
+ * invocation, so every relative path is a file that does not exist and every write lands somewhere
+ * the user will not find. A message naming only the file would be true and useless, so the note on
+ * the second line names the subtree the resolution happened in.
+ *
+ * THE FILE HAS TO BE TEXT, AND ONE THAT IS NOT IS REFUSED BEFORE THE SESSION BEGINS.
+ * `SimpleFileIO.readFile` decodes with a fatal decoder (rt/src/builtins/simplefileio.mts), so a
+ * file whose bytes are not valid UTF-8 fails to open with "file is not valid UTF-8" — the same
+ * one-line startup refusal as a missing file, and nothing on disk is touched. Editing arbitrary
+ * bytes is out of scope rather than unavailable: `readFileBytes` and `writeFileBytes` are there,
+ * but the buffer, the screen and the key decoder are all text, so a byte-exact binary editor is
+ * a different program. Control bytes that *are* valid UTF-8, NUL included, arrive and are written
+ * back unchanged. The buffer is otherwise the file's bytes: no last newline is added, and a file
+ * ending in one has an empty last line that the editor draws and the cursor can reach.
+ *
+ * WHERE THE PARTS ARE. `Session.trp` is the process constellation and holds every design note
+ * about it; `Api.trp` is the state and the operations a plugin is handed; `Editor.trp` is the
+ * kernel and the plugin set — `VimMotions.trp`, `StatusLine.trp`, `CursorStyle.trp` and
+ * `FileOps.trp` are the plugins in it; `Screen.trp` is the escapes and the frame; `Key.trp` is the
+ * decoder. This file is the argument handling and the file read — the part that must fail before
+ * the terminal has been touched.
+ *
+ * THE PLUGIN SET IS A PARAMETER. `Session.run` takes the record of hooks it folds into the
+ * session, so a session can be run with a different keymap, status line or cursor without touching
+ * the constellation. `Editor.plugins` is the mvp's set; `crashprobe.trp` beside this file replaces
+ * one field of it and keeps the rest.
+ *
+ * THE SESSION IS STARTED FROM STRAIGHT-LINE CODE. The argument list and the file-read outcome
+ * both carry the channel level, and code inside a branch on such a value runs at a pc raised to
+ * it — which the supervisor may not be at when it opens its receive region, because a region can
+ * only be closed from its floor. So the branches below produce values and nothing else, and the
+ * session is started after them. The measurements are in
+ * tests/_unautomated/claude/battallion-viewer/probe-pc-and-unlisten.trp.
+ *)
+
+import Rope
+import SimpleFileIO
+import Outcome
+import "./Session"
+import "./Editor"
+
+let val a = authority
+    val err = stderr a
+
+    val usage = "usage: bt.trp --io-root <dir> -- <file>"
+
+    (** Where a path was resolved, said on every failure to open one: the subtree is the runtime's
+     *  and a message that named only the file would leave the user nowhere to look. *)
+    val rootNote =
+        "paths resolve inside --io-root; without the flag the runtime uses a fresh empty directory"
+
+    (** The exit code of a startup failure, whatever the failure was: the session did not begin. *)
+    val exitStartup = 1
+
+    fun fail message =
+        let val _ = fwrite (err, "battallion: " ^ message ^ "\n")
+        in exit (a, exitStartup)
+        end
+
+    (** A usage message and the failure exit. *)
+    fun refuse reason = fail (reason ^ "\n" ^ usage)
+
+    (** The one file named after `--`. No argument, more than one, and an empty one are each a
+     *  usage failure rather than something to guess at: opening the first of several would leave
+     *  a mistyped command line looking as though it had worked, and an empty path is a directory
+     *  as far as the runtime is concerned, which is a confusing thing to be told. *)
+    fun argPath () = case getCliArgs a of
+                          []      => refuse "no file to open"
+                        | [""]    => refuse "the file to open is an empty path"
+                        | [p]     => p
+                        | p :: _  => refuse "more than one file to open"
+
+    (** The contents of `path` as a rope, or a message and the failure exit. A file that cannot be
+     *  read is a startup failure, reported on stderr with the terminal untouched. The reason is
+     *  the runtime's own — "file not found", "path is a directory", "path escapes the io-root
+     *  sandbox", "path escapes the io-root sandbox via a symlink" — and is passed through as it
+     *  came. *)
+    fun openBuffer path =
+        case SimpleFileIO.readFile (a, path) of
+             OK text => Rope.fromString text
+           | ERR e   => fail ("cannot open " ^ e.path ^ ": " ^ e.reason ^ "\n" ^ rootNote)
+
+    val path = argPath ()
+    val buffer = openBuffer path
+    val code = Session.run (a, buffer, path, Editor.plugins)
+in exit (a, code)
+end

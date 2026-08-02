@@ -1,0 +1,7 @@
+(* Imported from a program one directory below, via "../modsrc/...", and
+ * reaches its own neighbour with "./". *)
+import "./ParentRelativeWord"
+
+let fun greet s = "greeter(" ^ s ^ ") says " ^ ParentRelativeWord.word ()
+in [ ("greet", greet) ]
+end

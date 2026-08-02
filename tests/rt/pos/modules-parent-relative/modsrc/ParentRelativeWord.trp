@@ -1,0 +1,6 @@
+(* Reached only through ParentRelativeGreeter's "./" import, on a chain that
+ * already crossed above the program root. Its recorded path is therefore
+ * computed for an importing file that lies outside the root. *)
+let fun word () = "hello"
+in [ ("word", word) ]
+end

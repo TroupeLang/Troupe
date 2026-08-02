@@ -1,0 +1,6 @@
+{
+  "deps": [
+    {"path": "../modsrc/ParentRelativeGreeter", "hash": "hcs3ovtkh5h34ouij5i32269ocdu53cvepmm78j56hn22h1spm80", "name": "../modsrc/ParentRelativeGreeter"},
+    {"path": "../modsrc/ParentRelativeWord", "hash": "j5eebb18thmif38c8tsaeouu6fn64bj5i9heck8ghdpk13scgdqg", "name": "../modsrc/ParentRelativeWord"}
+  ]
+}

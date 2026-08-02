@@ -1,0 +1,11 @@
+(* The six ambient names under the IFC stdio model, where they are runtime
+   builtins rather than the wrappers the compiler injects for the capability
+   model. Nothing here names an authority to print with. *)
+let val _ = print "print"
+    val _ = printString "printString"
+    val _ = printWithLabels "printWithLabels"
+    val _ = fwriteln (stdout authority, "fwriteln")
+    val _ = fwritelnWithLabels (stdout authority, "fwritelnWithLabels")
+    val name = inputLine ()
+in print ("inputLine read: " ^ name)
+end

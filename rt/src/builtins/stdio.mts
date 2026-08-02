@@ -100,6 +100,60 @@ export function checkChannelEffect($t, operation: string, ...operandLevels: Leve
 
 export function BuiltinStdIo<TBase extends Constructor<UserRuntimeZero>>(Base: TBase) {
     return class extends Base {
+        /*
+         * The write path of the IFC model's ambient names.
+         *
+         * A program compiled with `--stdio-model=ifc` gets `print` and its
+         * neighbours from the builtins at the end of this class rather than
+         * from the compiler-injected wrappers
+         * (`compiler/src/AddAmbientMethods.hs`), which exist to thread the
+         * program's authority into an acquisition. Under this model a
+         * descriptor grants nothing, so they acquire without one and the
+         * channel check sits on the write, exactly as in `fwrite`. The helpers
+         * below are what they are built from.
+         */
+
+        /** Refuse a name that acquires implicitly when the model checks acquisition. */
+        refuseUnderCapabilityModel(name: string, alternative: string) {
+            if (!IFC_MODEL) {
+                this.runtime.$t.threadError(
+                    `${name} is unavailable under the capability stdio model\n` +
+                    ` | this model's ${name} is the wrapper the compiler injects into a program, and\n` +
+                    ` |   this call is outside one: module or library code, or a program\n` +
+                    ` |   compiled with --stdio-model=ifc\n` +
+                    ` | run with --stdio-model=ifc, or name a descriptor: ${alternative}`);
+            }
+        }
+
+        /** The descriptor an output operation names, or a thread error. */
+        outputDescriptor(descr) {
+            assertIsLocalObject(descr);
+            const fd = descr.val._value;
+            if (fd !== process.stdout && fd !== process.stderr) {
+                this.runtime.$t
+                    .threadError(`value ${descr.val.stringRep()} is not an output descriptor`);
+            }
+            return fd;
+        }
+
+        /** A value's printed form, and the level that printing it accumulated. */
+        printedForm(arg, omitLabels: boolean): { text: string, lev: Level } {
+            const taintRef = { lev: this.runtime.$t.pc };
+            const text = this.runtime.$t.mkCopy(arg).stringRep(omitLabels, taintRef);
+            return { text: text, lev: taintRef.lev };
+        }
+
+        /** One line onto an output descriptor, checked against the channel. */
+        writeLine(fd, text: string, ...operandLevels: Level[]) {
+            if (IFC_MODEL) {
+                checkChannelEffect(this.runtime.$t,
+                                   fd === process.stderr ? "write to stderr" : "write to stdout",
+                                   ...operandLevels)
+            }
+            fd.write(text + "\n");
+            return this.runtime.ret(__unit);
+        }
+
         /**
          * The capability model's acquisition check: the authority shown must
          * suffice for the channel level, which is `actsFor(authority, level)`
@@ -147,11 +201,16 @@ export function BuiltinStdIo<TBase extends Constructor<UserRuntimeZero>>(Base: T
                     .threadError(`value ${arg.val.stringRep()} is not an input descriptor`);
             }
 
+            return this.readChannelLine(arg.lev);
+        }, "freadln");
+
+        /** One line off stdin, at the channel level, blocking until it arrives. */
+        readChannelLine(...operandLevels: Level[]) {
             // Consuming a line is an observable effect on the channel: a later
             // reader no longer sees it. Under the IFC model it carries the same
             // sink check as a write.
             if (IFC_MODEL) {
-                checkChannelEffect(this.runtime.$t, "read from stdin", arg.lev)
+                checkChannelEffect(this.runtime.$t, "read from stdin", ...operandLevels)
             }
 
             getReadline()
@@ -172,7 +231,7 @@ export function BuiltinStdIo<TBase extends Constructor<UserRuntimeZero>>(Base: T
                 this.runtime.__sched.scheduleThread(this.runtime.$t);
                 this.runtime.__sched.resumeLoopAsync()
             });
-        }, "freadln");
+        }
 
         fwrite = mkBase((arg) => {
             assertNormalState("fwrite")
@@ -198,5 +257,56 @@ export function BuiltinStdIo<TBase extends Constructor<UserRuntimeZero>>(Base: T
             fd.write(arg.val[1].val);
             return this.runtime.ret(__unit);
         }, "fwrite");
+
+        // The ambient names. A program compiled with --stdio-model=capability
+        // shadows all six with the wrappers the compiler injects; these are
+        // what a program compiled with --stdio-model=ifc — and any library,
+        // which never had the wrappers — resolves them to.
+
+        fwriteln = mkBase((arg) => {
+            assertNormalState("fwriteln")
+            assertIsNTuple(arg, 2);
+            const fd = this.outputDescriptor(arg.val[0]);
+            assertIsString(arg.val[1]);
+            return this.writeLine(fd, arg.val[1].val,
+                                  arg.lev, arg.val[0].lev, arg.val[1].lev);
+        }, "fwriteln");
+
+        fwritelnWithLabels = mkBase((arg) => {
+            assertNormalState("fwritelnWithLabels")
+            assertIsNTuple(arg, 2);
+            const fd = this.outputDescriptor(arg.val[0]);
+            const printed = this.printedForm(arg.val[1], false);
+            return this.writeLine(fd, printed.text,
+                                  arg.lev, arg.val[0].lev, printed.lev);
+        }, "fwritelnWithLabels");
+
+        printString = mkBase((arg) => {
+            assertNormalState("printString")
+            this.refuseUnderCapabilityModel("printString", "fwrite (stdout authority, s)")
+            assertIsString(arg);
+            return this.writeLine(process.stdout, arg.val, arg.lev);
+        }, "printString");
+
+        print = mkBase((arg) => {
+            assertNormalState("print")
+            this.refuseUnderCapabilityModel("print", "fwrite (stdout authority, toString x)")
+            const printed = this.printedForm(arg, true);
+            return this.writeLine(process.stdout, printed.text, arg.lev, printed.lev);
+        }, "print");
+
+        printWithLabels = mkBase((arg) => {
+            assertNormalState("printWithLabels")
+            this.refuseUnderCapabilityModel("printWithLabels", "fwrite (stdout authority, toStringL x)")
+            const printed = this.printedForm(arg, false);
+            return this.writeLine(process.stdout, printed.text, arg.lev, printed.lev);
+        }, "printWithLabels");
+
+        inputLine = mkBase((arg) => {
+            assertNormalState("inputLine")
+            this.refuseUnderCapabilityModel("inputLine", "freadln (stdin authority)")
+            // The wrapper it replaces ignores its argument, so this does too.
+            return this.readChannelLine(arg.lev);
+        }, "inputLine");
     }
 }

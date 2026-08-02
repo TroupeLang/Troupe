@@ -25,6 +25,7 @@ troupe_parse_args() {
     TROUPE_PROGRAM_ARGS=""
     _seen_separator=false
     _expect_runtime_value=false
+    _expect_shared_value=false
 
     for arg in "$@"; do
         if [ "$_seen_separator" = true ]; then
@@ -32,12 +33,29 @@ troupe_parse_args() {
         elif [ "$arg" = "--" ]; then
             _seen_separator=true
             TROUPE_PROGRAM_ARGS="--"
+        elif [ "$_expect_shared_value" = true ]; then
+            # This arg is the value for an option both tools take
+            TROUPE_COMPILER_ARGS="$TROUPE_COMPILER_ARGS $arg"
+            TROUPE_RUNTIME_ARGS="$TROUPE_RUNTIME_ARGS \"$arg\""
+            _expect_shared_value=false
         elif [ "$_expect_runtime_value" = true ]; then
             # This arg is the value for a runtime option
             TROUPE_RUNTIME_ARGS="$TROUPE_RUNTIME_ARGS \"$arg\""
             _expect_runtime_value=false
         else
             case "$arg" in
+                # The stdio model is a property of the run that both tools
+                # read: it decides whether the compiler injects the ambient
+                # wrappers, and how the runtime enforces stdio.
+                --stdio-model=*)
+                    TROUPE_COMPILER_ARGS="$TROUPE_COMPILER_ARGS $arg"
+                    TROUPE_RUNTIME_ARGS="$TROUPE_RUNTIME_ARGS $arg"
+                    ;;
+                --stdio-model)
+                    TROUPE_COMPILER_ARGS="$TROUPE_COMPILER_ARGS $arg"
+                    TROUPE_RUNTIME_ARGS="$TROUPE_RUNTIME_ARGS $arg"
+                    _expect_shared_value=true
+                    ;;
                 # Runtime boolean options (no value expected)
                 --debug|-d|--debugsandbox|--debugmailbox|--debugp2p|--debugquarantine)
                     TROUPE_RUNTIME_ARGS="$TROUPE_RUNTIME_ARGS $arg"
@@ -49,11 +67,11 @@ troupe_parse_args() {
                     TROUPE_RUNTIME_ARGS="$TROUPE_RUNTIME_ARGS $arg"
                     ;;
                 # Runtime options with embedded value (--option=value)
-                --trustmap=*|--id=*|--aliases=*|--stdiolev=*|--stdio-model=*|--io-root=*|--port=*|--relay=*|--label-format=*|--relay-fault-tolerance=*|--timeout=*|--timeout-exit-code=*)
+                --trustmap=*|--id=*|--aliases=*|--stdiolev=*|--io-root=*|--port=*|--relay=*|--label-format=*|--relay-fault-tolerance=*|--timeout=*|--timeout-exit-code=*)
                     TROUPE_RUNTIME_ARGS="$TROUPE_RUNTIME_ARGS $arg"
                     ;;
                 # Runtime options expecting a separate value
-                --trustmap|-tm|--id|-i|--aliases|-a|--stdiolev|--stdio-model|--io-root|--port|--relay|--label-format|--relay-fault-tolerance|--timeout|--timeout-exit-code)
+                --trustmap|-tm|--id|-i|--aliases|-a|--stdiolev|--io-root|--port|--relay|--label-format|--relay-fault-tolerance|--timeout|--timeout-exit-code)
                     TROUPE_RUNTIME_ARGS="$TROUPE_RUNTIME_ARGS $arg"
                     _expect_runtime_value=true
                     ;;
@@ -63,5 +81,5 @@ troupe_parse_args() {
             esac
         fi
     done
-    unset _seen_separator _expect_runtime_value
+    unset _seen_separator _expect_runtime_value _expect_shared_value
 }

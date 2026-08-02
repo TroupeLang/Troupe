@@ -1,0 +1,12 @@
+2026-08-02T11:03:07.600Z [RTM] [32minfo[39m: Skipping network creation. Observe that all network operations will yield a runtime error.
+Runtime error in thread 4f11bf23-ba2c-41a5-8993-7b532fd39b0e@{}%{}
+
+  6 | Announce.announce "hello"
+    |         ^
+
+>> print is unavailable under the capability stdio model
+ | this model's print is the wrapper the compiler injects into a program, and
+ |   this call is outside one: module or library code, or a program
+ |   compiled with --stdio-model=ifc
+ | run with --stdio-model=ifc, or name a descriptor: fwrite (stdout authority, toString x)
+>> at tests/rt/neg/stdio-ambient/module-print-under-capability.trp:6:9

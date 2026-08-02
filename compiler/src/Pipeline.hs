@@ -39,6 +39,7 @@ import           AddAmbientMethods (addAmbientMethods)
 import qualified CaseElimination as C
 import qualified ClosureConv as CC
 import           CompileMode (CompileMode(..))
+import           StdioModel (StdioModel(..))
 import qualified Core
 import qualified Direct
 import qualified Surface
@@ -76,9 +77,10 @@ silentDump :: StageDump
 silentDump = StageDump (\_ -> return ()) (\_ _ -> return ()) (\_ -> return ())
 
 data CompileOpts = CompileOpts
-  { coMode     :: CompileMode
-  , coDump     :: StageDump
-  , coPPConfig :: PPConfig
+  { coMode        :: CompileMode
+  , coDump        :: StageDump
+  , coPPConfig    :: PPConfig
+  , coStdioModel  :: StdioModel
   }
 
 -- | What the folding stage produced, and what the rest of a compile needs from
@@ -132,9 +134,12 @@ frontEndFold pin root opts file input = do
   foldRes <- case runExcept (SVF.foldProg prog) of
                Right r -> return r
                Left s  -> die s
-  let folded = case coMode opts of
-                 Normal -> addAmbientMethods (SVF.frProg foldRes)
-                 _      -> SVF.frProg foldRes
+  -- The ambient wrappers belong to the capability stdio model, whose
+  -- acquisitions need the program's authority. Under the IFC model the same
+  -- names are runtime builtins that acquire nothing, so nothing is injected.
+  let folded = case (coMode opts, coStdioModel opts) of
+                 (Normal, Capability) -> addAmbientMethods (SVF.frProg foldRes)
+                 _                    -> SVF.frProg foldRes
 
   return Folded { fdSurface  = sprog
                 , fdProg     = prog

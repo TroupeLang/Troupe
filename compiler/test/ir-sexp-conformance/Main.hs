@@ -53,6 +53,7 @@ import           IRSexp (parseProg, parseUnit, printProgWithPos, printUnit)
 import qualified Pipeline
 import           PrettyPrint (mkPPConfig, parsePosFormat)
 import           ProcessImports (PinCheck(..))
+import           StdioModel (defaultStdioModel)
 import           TroupePositionInfo (unLoc)
 
 -- | The programs the reference artifacts are cut from, chosen to span the grammar:
@@ -120,9 +121,10 @@ referenceDir root = root </> "compiler" </> "test" </> "ir-sexp-conformance" </>
 -- and make it unreadable anywhere else.
 compileReference :: FilePath -> IO IRProgram
 compileReference rel = do
-  let opts = Pipeline.CompileOpts { Pipeline.coMode     = Normal
-                                  , Pipeline.coDump     = Pipeline.silentDump
-                                  , Pipeline.coPPConfig = mkPPConfig False (parsePosFormat "inline")
+  let opts = Pipeline.CompileOpts { Pipeline.coMode       = Normal
+                                  , Pipeline.coDump       = Pipeline.silentDump
+                                  , Pipeline.coPPConfig   = mkPPConfig False (parsePosFormat "inline")
+                                  , Pipeline.coStdioModel = defaultStdioModel
                                   }
   pins   <- maybe [] (either (const []) id) <$> readDepsFile (depsFilePath rel)
   input  <- readFile rel

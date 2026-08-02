@@ -1,0 +1,8 @@
+2026-08-02T11:03:07.576Z [RTM] [32minfo[39m: Skipping network creation. Observe that all network operations will yield a runtime error.
+"print"
+printString
+"printWithLabels"@{}%{}
+fwriteln
+"fwritelnWithLabels"@{}%{}
+"inputLine read: a line"
+>>> Main thread finished with value: ()@{#ROOT}%{#ROOT}

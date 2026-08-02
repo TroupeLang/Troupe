@@ -103,6 +103,10 @@ authority**: `persist`, `cliargs`, `exit`, `register`, and the `SimpleFileIO` pr
 `--stdio-model` (default `capability`); `--stdiolev` sets the channel level `L` (default ROOT),
 in either V1 (`'{alice}'`) or V2 (`'<alice;#root-integrity>'`) syntax.
 
+`--stdio-model` is read by **both** the compiler and the runtime — `local.sh` and `network.sh`
+pass it to each — because the model decides where the ambient names come from (below) as well as
+how stdio is enforced.
+
 - **`capability`** — acquiring a descriptor via `stdin`/`stdout`/`stderr` is checked
   `actsFor(authorityLevel, L)`; the operations themselves are unchecked.
 - **`ifc`** — stdio is a pair of channels at `L`. Acquisition is unchecked (a descriptor names a
@@ -112,6 +116,21 @@ in either V1 (`'{alice}'`) or V2 (`'<alice;#root-integrity>'`) syntax.
   `flowsTo(lub(pc, operand levels), L)` after raising the pc to the blocking label, in both
   label dimensions: what comes from the channel is `L`-data, what goes to the channel must flow
   to `L`.
+
+**The ambient names.** `print`, `printString`, `printWithLabels`, `fwriteln`,
+`fwritelnWithLabels` and `inputLine` come from one of two places, chosen by the model:
+
+- Under `capability` the compiler injects them as wrappers at the outermost scope of the program
+  (`compiler/src/AddAmbientMethods.hs`). Each acquires its descriptor with the program's own
+  `authority`, so the acquisition check above applies to them. They are program-only: a library
+  has no `authority` binding, which is why `lib/Unit.trp` threads an explicit `auth` parameter.
+- Under `ifc` they are runtime builtins that acquire nothing, so no authority is threaded and
+  they are available to libraries on the same terms as to programs. Nothing is injected, and a
+  program that never prints carries no stdio code at all.
+
+Calling one of the four that acquire implicitly (`print`, `printString`, `printWithLabels`,
+`inputLine`) in an artifact compiled for `ifc` but run under `capability` is a thread error
+naming both flags; `fwriteln` and `fwritelnWithLabels` take a descriptor and work under either.
 
 Terminal support beyond the streams: `ttyIsTTY`/`ttySize`/`ttyLevel` (queries), `ttyRawMode`
 (line-discipline switch; entering raw mode closes the lazily-created readline interface, which a

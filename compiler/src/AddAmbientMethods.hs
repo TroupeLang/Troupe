@@ -1,11 +1,17 @@
 -- 2020-05-17, AA
 
--- HACK
+-- The ambient wrappers of the capability stdio model: `print` and its neighbours, defined at the
+-- outermost scope of a program so that printing needs no descriptor at the call site.
 --
--- This module add a number of standard ambient methods such as `print` to the beginning of the
--- file. This provides some backward compatibility with prior test cases as well as minimizes some
--- clutter
--- If these methods are unused they are eliminated by the optimization passes in the further passes.
+-- Each wrapper acquires its descriptor with the program's own `authority` — the binding
+-- "CaseElimination" introduces for main's argument — and the runtime checks that authority
+-- against the channel level. That is what ties them to the capability model: "Pipeline" injects
+-- them only for it. A program compiled for the IFC model resolves the same six names to the
+-- runtime's builtins (@rt/src/builtins/stdio.mts@), which acquire nothing and carry the channel
+-- check on the write instead.
+--
+-- All six are injected whether or not the program names them, and no later pass drops the unused
+-- ones: they reach the emitted JavaScript of every capability-model program.
 
 -- TODO
 --

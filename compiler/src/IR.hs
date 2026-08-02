@@ -330,6 +330,17 @@ instance WellFormedIRCheck IRExpr where
                      , "flowsTo"                     
                      , "freadln"
                      , "fwrite"
+                     -- The ambient names of the IFC stdio model. Under the
+                     -- capability model the compiler injects wrappers that
+                     -- shadow them (see AddAmbientMethods); these are what a
+                     -- program compiled for the IFC model, and any library,
+                     -- resolves them to (builtins/stdio.mts).
+                     , "fwriteln"
+                     , "fwritelnWithLabels"
+                     , "inputLine"
+                     , "print"
+                     , "printString"
+                     , "printWithLabels"
                      , "getTime"
                      , "getCliArgs"
                      , "getType"

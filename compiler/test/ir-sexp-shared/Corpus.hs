@@ -26,6 +26,7 @@ import qualified IR
 import qualified Pipeline
 import           PrettyPrint (mkPPConfig, parsePosFormat)
 import           ProcessImports (PinCheck(..))
+import           StdioModel (defaultStdioModel)
 
 -- | The repository a suite was built from: the parent of the package directory
 -- it runs in (@compiler/@).
@@ -59,9 +60,10 @@ corpusFiles dir = do
 
 compileOpts :: CompileMode -> Pipeline.CompileOpts
 compileOpts mode =
-  Pipeline.CompileOpts { Pipeline.coMode     = mode
-                       , Pipeline.coDump     = Pipeline.silentDump
-                       , Pipeline.coPPConfig = mkPPConfig False (parsePosFormat "inline")
+  Pipeline.CompileOpts { Pipeline.coMode       = mode
+                       , Pipeline.coDump       = Pipeline.silentDump
+                       , Pipeline.coPPConfig   = mkPPConfig False (parsePosFormat "inline")
+                       , Pipeline.coStdioModel = defaultStdioModel
                        }
 
 -- | Compile one program to IR. 'Nothing' means the file is not a compilation

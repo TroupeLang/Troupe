@@ -3,16 +3,17 @@
  * A program-relative module of examples/battallion. Pure: every function returns a string; no
  * descriptor, no process, no effect. Two consumers write those strings:
  *
- *   - the supervisor writes the terminal-*mode* escapes (`enterAlt`, `leaveAlt`, `showCursor`),
- *     because entering and leaving the alternate screen is terminal setup and teardown, which the
- *     supervisor owns;
+ *   - the supervisor writes the terminal-*mode* escapes (`enterAlt`, `leaveAlt`, `disableWrap`,
+ *     `enableWrap`, `showCursor`), because entering and leaving the alternate screen is terminal
+ *     setup and teardown, which the supervisor owns;
  *   - the renderer writes `frame`, the whole visible screen, on every redraw.
  *
  * ESCAPES. `\x1b[?1049h` / `\x1b[?1049l` are the xterm private mode that switches to the
  * alternate screen buffer and back, so the shell's scrollback is untouched by the session.
- * `\x1b[?25l` / `\x1b[?25h` hide and show the cursor. `\x1b[H` homes the cursor, `\x1b[2K` erases
- * the whole line the cursor is on, and `\x1b[<row>;<col>H` positions the cursor, rows and
- * columns counting from one.
+ * `\x1b[?7l` / `\x1b[?7h` clear and set DECAWM, the terminal's automatic wrap. `\x1b[?25l` /
+ * `\x1b[?25h` hide and show the cursor. `\x1b[H` homes the cursor, `\x1b[2K` erases the whole
+ * line the cursor is on, and `\x1b[<row>;<col>H` positions the cursor, rows and columns counting
+ * from one.
  *
  * THE CURSOR IS HIDDEN FOR THE LENGTH OF ONE FRAME, not for the length of the session. A frame
  * rewrites every row from the top, so a cursor left shown would be dragged across the screen row
@@ -39,15 +40,34 @@
  * for each row of a frame — so a frame that relied on it would be correct on one terminal and a
  * staircase on the next.
  *
- * TRUNCATION IS BY CODE UNIT. A line is cut to the terminal's width with `String.substring`,
- * which counts UTF-16 code units, so a character outside the basic plane counts as two and a
- * line of wide (double-width) characters overflows the width it was cut to. The mvp viewer does
- * not measure display width; this is the same simplification `lib/Rope.trp` documents for its
- * offsets.
+ * AUTOMATIC WRAP IS OFF FOR THE LENGTH OF THE SESSION. A frame writes one row per terminal row
+ * and depends on each of them occupying exactly one physical row. With DECAWM set, a row wider
+ * than the terminal continues onto the next physical row: the frame then writes more physical
+ * rows than the terminal has, the alternate screen scrolls, the frame's top row goes with it,
+ * the wrapped tail lands over another row's cells, and the next frame — homing to a screen that
+ * has already scrolled — repeats all of it. So the supervisor writes `disableWrap` alongside
+ * `enterAlt` and `enableWrap` alongside `leaveAlt`, and the terminal clips an over-wide row at
+ * its right edge instead. The clip covers every character whose width this module does not
+ * measure, the double-width ones included.
  *
- * THE LAST CELL IS NOT WRITTEN. A frame ends its last line without a newline, and truncation
- * leaves the bottom-right cell alone, because writing the last cell of the last row scrolls the
- * alternate screen by one line on most terminals.
+ * TRUNCATION IS BY RENDERED COLUMN, AND THE ONE WIDTH IT MEASURES IS THE TAB'S. `truncate` walks
+ * the line carrying the column the terminal's cursor would be in: a tab moves to the next
+ * multiple of `tabStop` and never past the last column, every other code unit takes one column,
+ * and the line is cut before the first code unit with no column left. A tab-indented line is
+ * therefore cut where the terminal runs out of room rather than eight columns per tab later.
+ * `column` is the same arithmetic read the other way — the screen column a given index of a line
+ * is drawn at — and it is what puts the cursor on the character after a tab rather than left of
+ * it (`Editor.frameOf`).
+ *
+ * WHAT IS STILL NOT MEASURED IS THE WIDTH OF THE CHARACTERS THEMSELVES. A double-width character
+ * counts one column and a character outside the basic plane counts as the two UTF-16 code units
+ * it is stored as, so a line of either is cut later than it should be; the terminal clips what is
+ * left over, and the cursor drawn for a position past such a character sits left of it. This is
+ * the same simplification `lib/Rope.trp` documents for its offsets.
+ *
+ * A FRAME ENDS ITS LAST ROW WITHOUT A NEWLINE, so the last thing written to the screen is text
+ * rather than a line feed that would scroll it. With automatic wrap off, a row that fills the
+ * bottom row to its last cell leaves the cursor in that cell and scrolls nothing.
  *)
 
 import String
@@ -62,6 +82,13 @@ let val esc = "\x1b"
     (** Switch back to the normal screen buffer. *)
     val leaveAlt = esc ^ "[?1049l"
 
+    (** Clear DECAWM: a character written past the right edge is dropped rather than continued on
+     *  the next physical row. *)
+    val disableWrap = esc ^ "[?7l"
+
+    (** Set DECAWM again, which is how a terminal is normally found. *)
+    val enableWrap = esc ^ "[?7h"
+
     val hideCursor = esc ^ "[?25l"
     val showCursor = esc ^ "[?25h"
 
@@ -72,9 +99,54 @@ let val esc = "\x1b"
     fun cursorTo (row, col) =
         esc ^ "[" ^ toString (row + 1) ^ ";" ^ toString (col + 1) ^ "H"
 
-    (** `line` cut to `width` code units. *)
+    (*----------------------------  Columns and tab stops  ----------------------------*)
+
+    (** How far apart the terminal's tab stops are. *)
+    val tabStop = 8
+
+    (** The code of the tab character, which is the one character this module gives a width other
+     *  than one. *)
+    val tabCode = 9
+
+    (** The column a cursor in column `col` moves to when a tab is written on a terminal `width`
+     *  wide: the next tab stop, or the last column when that stop is past the right edge. A tab
+     *  neither wraps nor leaves the screen. *)
+    fun afterTab (col, width) =
+        let val stop = col + tabStop - (col mod tabStop)
+        in if stop > width - 1 then width - 1 else stop
+        end
+
+    (** The screen column the code unit at index `i` of `text` is drawn at, on a terminal `width`
+     *  wide. An `i` past the end of `text` gives the column the cursor comes to rest at after the
+     *  whole of it, which is where a cursor sitting one past the last character belongs, and a
+     *  column past the right edge is reported as the last one, there being nowhere further to
+     *  draw it. *)
+    fun column (text, i, width) =
+        if width <= 0 then 0
+        else let val n = String.size text
+                 fun go (j, col) =
+                     if j >= i orelse j >= n
+                     then (if col > width - 1 then width - 1 else col)
+                     else if String.subCode (text, j) = tabCode
+                     then go (j + 1, afterTab (col, width))
+                     else go (j + 1, col + 1)
+             in go (0, 0)
+             end
+
+    (** `line` cut to the columns it is drawn in on a terminal `width` wide: the cut falls before
+     *  the first code unit that has no column left, tabs having taken as many columns as the
+     *  terminal gives them. *)
     fun truncate (line, width) =
-        if String.size line <= width then line else String.substring (line, 0, width)
+        if width <= 0 then ""
+        else let val n = String.size line
+                 fun go (i, col) =
+                     if i >= n then line
+                     else if String.subCode (line, i) = tabCode
+                     then go (i + 1, afterTab (col, width))
+                     else if col >= width then String.substring (line, 0, i)
+                     else go (i + 1, col + 1)
+             in go (0, 0)
+             end
 
     (** The whole visible screen: the cursor hidden, `lines` laid out from the top, each line
      *  erased whole before its text is written, the cursor left at `(curRow, curCol)`, `tail`
@@ -99,9 +171,13 @@ let val esc = "\x1b"
 
 in [ ("enterAlt", enterAlt)
    , ("leaveAlt", leaveAlt)
+   , ("disableWrap", disableWrap)
+   , ("enableWrap", enableWrap)
    , ("hideCursor", hideCursor)
    , ("showCursor", showCursor)
    , ("cursorTo", cursorTo)
+   , ("tabStop", tabStop)
+   , ("column", column)
    , ("truncate", truncate)
    , ("frame", frame)
    ]

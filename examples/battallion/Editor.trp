@@ -57,6 +57,7 @@
 import String
 import List
 import "./Api"
+import "./Screen"
 import "./VimMotions"
 import "./StatusLine"
 import "./CursorStyle"
@@ -88,11 +89,14 @@ let (*--------------------  What the session needs from the state  -------------
      *  and in command mode the cursor sits on it, after the command typed so far.
      *
      *  THE CURSOR IS PUT WHERE THE USER IS LOOKING, and it is visible there (Screen.trp), so a
-     *  position off the screen would be seen. Two clamps keep it on: a column past the terminal's
-     *  width is drawn at the last column, there being no horizontal scrolling, and a line being
-     *  typed is only followed onto the status row when there *is* a status row — a terminal of one
-     *  row keeps that row for the text (`Api.hasStatus`), so a command typed on such a terminal is
-     *  not drawn and the cursor stays where the buffer's cursor is.
+     *  position off the screen would be seen. A buffer column is not a screen column: the cursor's
+     *  column is an index into the line's code units, and `Screen.column` maps it to the column
+     *  the terminal draws that index at, over the same tab stops the renderer truncates by. A
+     *  column past the terminal's width comes back as the last one, there being no horizontal
+     *  scrolling. The second clamp is on the row: a line being typed is only followed onto the
+     *  status row when there *is* a status row — a terminal of one row keeps that row for the text
+     *  (`Api.hasStatus`), so a command typed on such a terminal is not drawn and the cursor stays
+     *  where the buffer's cursor is.
      *
      *  THE HELP PAGE IS A FRAME, NOT A PROCESS. In HELP mode the rows above the status line come
      *  from the plugin set's `help` rather than from the buffer, and everything else about the
@@ -112,16 +116,18 @@ let (*--------------------  What the session needs from the state  -------------
                                       | _    => rowsFrom (0, [])
             val lines = if Api.hasStatus st then List.append body [plugins.status st] else body
 
-            (** `c` brought onto the screen: a column at or past the width is drawn at the last
-             *  one, and a terminal of no width leaves nothing to clamp to. *)
-            fun onScreen c = if c < st.cols then c
-                             else if st.cols > 0 then st.cols - 1 else 0
+            (** Where column `c` of `text` is drawn: `Screen.column` maps it through the tab stops
+             *  the renderer truncates by, so the cursor is on the character the user is at rather
+             *  than left of it by seven columns per tab, and a column at or past the width comes
+             *  back as the last one. *)
+            fun onScreen (text, c) = Screen.column (text, c, st.cols)
 
-            val inBuffer = (st.line - st.top, onScreen st.col)
+            val inBuffer = (st.line - st.top, onScreen (Api.lineAt (st, st.line), st.col))
+            val typed    = st.prompt ^ st.cmd
             val (curRow, curCol) =
                     case st.mode of
                          COMMAND => if Api.hasStatus st
-                                    then (h, onScreen (String.size st.prompt + String.size st.cmd))
+                                    then (h, onScreen (typed, String.size typed))
                                     else inBuffer
                        | HELP    => (0, 0)
                        | _       => inBuffer

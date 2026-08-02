@@ -362,7 +362,7 @@ let (** How long the supervisor waits for the kernel before calling it wedged. T
             val _ = trapSigterm (auth, me)
             val _ = Tty.subscribe (i, me)
             val _ = Tty.rawMode (i, true)
-            val _ = fwrite (out, Screen.enterAlt)
+            val _ = fwrite (out, Screen.enterAlt ^ Screen.disableWrap)
 
             (*--- The constellation. `demonitorlocal` is a stub in this runtime, so the kernel is
                   monitored exactly once and the reference is never released. ---*)
@@ -396,9 +396,14 @@ let (** How long the supervisor waits for the kernel before calling it wedged. T
                   a frame's hide and its show leaves it hidden — and it is written unconditionally
                   because the state of a session ending on a dead kernel is not knowable here. The
                   cursor's appearance is the plugin set's to undo, and it is undone here rather
-                  than by the kernel because the kernel may be the reason the session is ending. ---*)
+                  than by the kernel because the kernel may be the reason the session is ending.
+                  Automatic wrap is set again before the screen is switched back, so the shell the
+                  session returns to wraps its output the way it did before (Screen.trp's header
+                  says what clearing it buys). ---*)
             val _ = Tty.rawMode (i, false)
-            val _ = fwrite (out, Screen.showCursor ^ plugins.cursorReset ^ Screen.leaveAlt)
+            val _ = fwrite ( out
+                           , Screen.showCursor ^ plugins.cursorReset
+                             ^ Screen.enableWrap ^ Screen.leaveAlt )
             val _ = Tty.unsubscribe i
             val _ = untrapSigterm auth
             val _ = send (rend, "STOP")

@@ -93,7 +93,8 @@ printf 'quit\n'          >> /tmp/session/cmd.txt   # SIGTERM
 ```
 
 A snapshot is written automatically ~300 ms after the output goes quiet: the numbered grid, the
-cursor, alt-screen and cursor-visibility state, and any escape the model did not recognise.
+cursor, alt-screen, automatic-wrap and cursor-visibility state, and any escape the model did not
+recognise.
 `status.txt` reads `RUNNING` or `EXITED <code>`; `out.raw` is the raw byte log. The driver's
 screen model is simpler than tmux's — prefer tmux when the escapes in play might go beyond what
 `Screen.trp` emits.
@@ -127,6 +128,13 @@ python3 report.py                                                 # counts, late
 It also measures keystroke→stable-frame latency (first campaign: p50 22 ms, p95 59 ms). The model
 cites the source line for every rule it implements, so when the editor and the model disagree,
 the citation says which one is wrong.
+
+The simulator runs a `.js` it does not compile — `<scratch>/bt-current.js`, the path
+`tmuxdrv.py` and `campaign.sh` name. After an edit to an editor source, recompile it
+(`bin/troupec examples/battallion/bt.trp -m --output=<scratch>/bt-current.js`) or the run reports
+`DIVERGENCE at action 0 (startup): editor exited`; the reason is in the run's `stderr.log`, and
+for a stale build it is the module-pin refusal `cannot link module <hash>: it is not among this
+program's dependencies`.
 
 ## General traps
 

@@ -68,17 +68,21 @@
  * what keeps the field from needing to be in an undo snapshot: after `u` the goal is wherever the
  * cursor now is, which is where a vertical motion should aim from.
  *
- * TABS ARE NOT EXPANDED. A tab in the text is one code unit for both the column arithmetic and
- * the renderer's truncation, and the terminal draws it as a jump to the next tab stop, so the
- * cursor lands left of where the character appears. Expanding tabs is a rendering-width question
- * — the same one wide characters raise (Screen.trp's header) — and the mvp editor does not
- * measure display width.
+ * A TAB IS ONE CODE UNIT HERE AND SEVERAL COLUMNS ON THE SCREEN. Every column in this module is
+ * an index into a line's code units: `col`, the goal column, the clamps, and the position the
+ * status line reports. The tab stops live where the screen does — `Screen.column` maps an index
+ * to the column the terminal draws it at, and `Screen.truncate` cuts a line by the columns it
+ * renders in — so the cursor is drawn on the character after an indent rather than left of it,
+ * and none of the arithmetic below has to know how wide a tab is.
  *
  * OFFSETS ARE CODE UNITS, as lib/Rope.trp's are, and a character outside the basic multilingual
  * plane is two of them. The two places where that would show — `deleteChar` and `backspace` —
  * read the surrogate pair and remove both halves, so no edit can leave half a character in the
  * buffer. Everything else counts units: a motion to the end of a line of astral characters stops
- * past the last one's high half, and the column shown in the status line counts units too.
+ * past the last one's high half, and the column shown in the status line counts units too. The
+ * screen does not measure those widths either: a double-width character is drawn in two columns
+ * and counted as one, so a cursor past one is drawn to its left, and a line of them is clipped at
+ * the terminal's right edge rather than cut (Screen.trp's header).
  *
  * UNDO IS PER KEYSTROKE and unlimited. Every operation that changes the buffer first pushes the
  * whole previous state — rope, cursor, revision — onto `undo`, and `undo` pops one. Two

@@ -136,6 +136,14 @@ The cursor is the terminal's own, and it is on the screen whenever the editor is
 hides it while it redraws and shows it again as the last thing it writes. No shape is selected —
 `CursorStyle.trp` is the seam that would and its header says why it is parked.
 
+A row is cut to the columns it is drawn in rather than to its characters, with tab stops every
+eight, and the cursor is drawn at the column its buffer position falls at over those same stops —
+so a tab-indented line shows as much as fits and the cursor sits on the character after the
+indent. Characters wider than one column, such as CJK, are not measured: a line of them is drawn
+past the width it was cut to. The session clears the terminal's automatic wrap for its whole
+length, so such a line is clipped at the right edge instead of continuing onto the next row and
+scrolling the frame away; the cursor may be drawn to the left of where such a character appears.
+
 `[+]` in the status line means the buffer differs from the file, which is a comparison of
 revisions rather than a flag: it is right after an undo that walks back past a `:w`, where a flag
 carried in the undo history is not (`Api.trp`'s header).
@@ -190,9 +198,10 @@ python3 tests/_unautomated/claude/battallion-cli/harness.py "$PWD"
 ```
 
 The first opens a file taller than the terminal, injects motions and reads the cursor-position
-escapes back, walks the remembered column over lines of differing lengths, quits, kills the kernel
-with `crashprobe.trp`, resizes the pty, and sends SIGTERM, asserting on each path that the terminal
-was restored. The second types text, edits, searches, deletes and puts lines, goes to a line by
+escapes back, walks the remembered column over lines of differing lengths, cuts tab-indented rows
+at the tab stops on a terminal too narrow for them, quits, kills the kernel with `crashprobe.trp`,
+resizes the pty, and sends SIGTERM, asserting on each path that the terminal was restored — the
+automatic wrap the session clears among the rest. The second types text, edits, searches, deletes and puts lines, goes to a line by
 number, undoes, writes — to its own file and to another — and compares the saved file byte for
 byte, including an undo that walks back past a `:w`. The third checks the per-frame cursor
 discipline, that no shape escape is written, and the frame `:help` draws over the buffer. The

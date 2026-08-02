@@ -1,0 +1,6 @@
+# Stays on the capability stdio model. No channel level ports this test: its
+# probes print under blocking labels raised to {alice}, which a channel needs
+# integrity at or below alice to admit, while freadlnPini declassifies the
+# blocking label to root integrity, which needs input the channel supplies at
+# root integrity. One channel level cannot be both.
+--stdio-model capability

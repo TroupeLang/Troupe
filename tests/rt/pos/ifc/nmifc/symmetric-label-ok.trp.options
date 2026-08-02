@@ -1,1 +1,5 @@
 --nmifc
+# On the IFC stdio model. What this test writes sits above root integrity --
+# raised data, or a write under a raised pc -- so the channel level is the
+# pre-integrity label model, which is what the test was written against.
+--stdio-model ifc --stdiolev '<#root-confidentiality;#null-integrity>'

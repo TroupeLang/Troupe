@@ -1,6 +1,6 @@
-2025-06-24T21:28:25.674Z [RTM] info: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+2026-08-02T21:55:58.411Z [RTM] info: Skipping network creation. Observe that all network operations will yield a runtime error.
 "What is your name"@{}%{}
 ("Hello"@{}%{}, "Alice"@{#ROOT}%{})@{}%{}
 "What movie do you like?"@{}%{}
-("OK, we will remember that "@{}%{}, "Alice"@{#ROOT}%{}, " likes the movie"@{}%{}, "The godfather"@{#ROOT}%{})@{}%{}
+("OK, we will remember that "@{}%{}, "Alice"@{#ROOT}%{}, " likes the movie"@{}%{}, "The godfather"@{#ROOT}%{#ROOT})@{}%{}
 >>> Main thread finished with value: ()@{#ROOT}%{#ROOT}

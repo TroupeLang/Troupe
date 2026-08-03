@@ -19,7 +19,7 @@ import String
 
    Prints one line per document, and a count. Exits non-zero if any document failed to decode. *)
 
-let fun say line = fwrite (stdout authority, line ^ "\x0a")
+let fun say line = fwrite (stdout, line ^ "\x0a")
 
     fun isDocument name = String.endsWith ".sexp" name
 

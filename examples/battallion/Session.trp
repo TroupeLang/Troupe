@@ -350,8 +350,8 @@ let (** How long the supervisor waits for the kernel before calling it wedged. T
      *  and it is not passed to a plugin at all — a plugin's whole reach is the state it is handed
      *  back. *)
     fun run (auth, buffer, path, plugins) =
-        let val i = stdin auth
-            val out = stdout auth
+        let val i = stdin
+            val out = stdout
             val weak = attenuate (auth, IfcUtil.null)
             val me = self ()
             val lev = Tty.level i

@@ -16,7 +16,7 @@ import "./Progress"
 
 let val auth = authority
 
-    fun say s = fwrite (stdout auth, s ^ "\n")
+    fun say s = fwrite (stdout, s ^ "\n")
 
     (* Stand-in for a unit of real work. *)
     fun work pause x =

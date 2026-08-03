@@ -524,7 +524,7 @@ let (* =================== shared first-order helpers ==================== *)
         end
 
     (* =================== renderers ===================================== *)
-    fun say s = fwrite (stdout authority, s ^ "\n")
+    fun say s = fwrite (stdout, s ^ "\n")
 
     fun mdMacro rows =
         ( say ""

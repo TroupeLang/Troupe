@@ -1,6 +1,0 @@
-(* A module printing under the capability stdio model, which is the default.
- * The refusal names both ways out: run under the ifc model, or acquire a
- * descriptor and write through it. *)
-import "./modsrc/Announce"
-
-Announce.announce "hello"

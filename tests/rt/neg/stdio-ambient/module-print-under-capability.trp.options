@@ -1,3 +1,0 @@
-# Pinned to the capability model, which is this test's subject: it asserts the
-# refusal a name that acquires implicitly meets under that model.
---stdio-model capability

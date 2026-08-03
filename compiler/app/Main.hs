@@ -33,7 +33,6 @@ import Basics (Imports(..), importPath)
 import System.Directory (createDirectoryIfMissing)
 import Exports
 import CompileMode
-import StdioModel (StdioModel(..), parseStdioModel, stdioModelName, defaultStdioModel)
 import Control.Monad (when)
 import System.Console.GetOpt
 import Data.List as List
@@ -68,10 +67,6 @@ data Flag
   -- driver for module compiles; absent for stdlib library compiles.
   | ModuleArtifact
   | DatatypeHashes
-  -- | Which stdio model the program is compiled for. It decides whether the
-  -- ambient wrappers (`print` and its neighbours) are injected; see
-  -- "StdioModel". Pass the same value to the runtime.
-  | StdioModelFlag String
   deriving (Show, Eq)
 
 options :: [OptDescr Flag]
@@ -88,10 +83,9 @@ options =
   , Option []    ["debug-pp"]  (NoArg DebugPP)            "show positions in IR dumps"
   , Option []    ["pp-pos-format"] (ReqArg PPPosFormat "FMT") "position format: inline|comment|bracket|none"
   , Option []    ["emit-ir-sexp"]   (NoArg EmitIRSexp)   "compile a .trp and emit the IR as troupe-ir-sexp text (to -o FILE, else stdout)"
-  , Option []    ["ingest-ir-sexp"] (NoArg IngestIRSexp) "read a troupe-ir-sexp file and compile it to JS (program must be self-contained; no ambient methods are injected)"
+  , Option []    ["ingest-ir-sexp"] (NoArg IngestIRSexp) "read a troupe-ir-sexp file and compile it to JS (the program must be self-contained)"
   , Option []    ["update-deps"]    (NoArg UpdateDeps)   "establish/update the program's dependencies file (<main>.deps.json) with actual module hashes, instead of enforcing pins"
   , Option []    ["datatype-hashes"] (NoArg DatatypeHashes) "print the content hash and canonical form of each datatype group declared in the file, then stop"
-  , Option []    ["stdio-model"] (ReqArg StdioModelFlag "MODEL") "stdio model the program is compiled for: capability|ifc (default capability)"
   ]
 
 --------------------------------------------------------------------------------
@@ -151,8 +145,7 @@ compileOpts :: [Flag] -> Pipeline.CompileOpts
 compileOpts flags =
   Pipeline.CompileOpts { Pipeline.coMode       = if LibMode `elem` flags then Library else Normal
                        , Pipeline.coDump       = dump
-                       , Pipeline.coPPConfig   = ppConfig
-                       , Pipeline.coStdioModel = stdioModel flags }
+                       , Pipeline.coPPConfig   = ppConfig }
   where
     dump | Verbose `elem` flags = Pipeline.StageDump { Pipeline.dumpSep  = printSep
                                                      , Pipeline.dumpFile = writeFileD
@@ -164,29 +157,6 @@ compileOpts flags =
     ppPosFormatStr = case List.find isPPPosFormatFlag flags of
                        Just (PPPosFormat s) -> s
                        _                    -> "inline"
-
--- | The stdio model the flags select, defaulting to the runtime's default.
--- A repeated flag takes its last occurrence, as the runtime's parse does.
--- A malformed value is rejected by 'validateStdioModel' before this is reached.
-stdioModel :: [Flag] -> StdioModel
-stdioModel flags = case List.find isStdioModelFlag (reverse flags) of
-                     Just (StdioModelFlag s) -> maybe defaultStdioModel id (parseStdioModel s)
-                     _                       -> defaultStdioModel
-
-isStdioModelFlag :: Flag -> Bool
-isStdioModelFlag (StdioModelFlag _) = True
-isStdioModelFlag _                  = False
-
--- | Reject a @--stdio-model@ value the compiler does not know, rather than
--- silently compiling for the default model.
-validateStdioModel :: [Flag] -> IO ()
-validateStdioModel flags =
-  mapM_ check [ s | StdioModelFlag s <- flags ]
-  where
-    check s | parseStdioModel s == Nothing =
-                die $ "troupec: unknown stdio model '" ++ s ++ "'; expected "
-                      ++ stdioModelName Capability ++ " or " ++ stdioModelName Ifc
-            | otherwise = return ()
 
 -- | IR to JavaScript on disk: Raw, Raw optimization, stack layout, emission,
 -- source map. Used for the main compilation unit and for each module in a
@@ -274,8 +244,8 @@ isOutputFile _              = False
 --------------------------------------------------------------------------------
 ----- INGEST: troupe-ir-sexp file -> whole-program backend -> JS ---------------
 -- Reads an s-expression IR file, parses it to an IRProgram, and runs the normal
--- whole-program backend (prog2raw -> rawopt -> raw2Stack -> stack2JS). No
--- ambient methods are injected: the ingested program must be self-contained.
+-- whole-program backend (prog2raw -> rawopt -> raw2Stack -> stack2JS). The
+-- ingested program must be self-contained.
 ingestIRSexp :: [Flag] -> String -> String -> IO ExitCode
 ingestIRSexp flags file input =
   case IRSexp.parseProg input of
@@ -454,7 +424,6 @@ main = do
     ([JSONIRMode], [], []) -> fromStdinJsonIR
 
     (o, [file], []) | optionsOK o -> do
-      validateStdioModel o
       input <- readFile file
       if IngestIRSexp `elem` o
         then ingestIRSexp o file input

@@ -41,7 +41,6 @@ export enum TroupeCliArg {
     IoRoot = 'io-root',
     Aliases = 'aliases',
     Stdiolev = 'stdiolev',
-    StdioModel = 'stdio-model',
     Port = 'port',
     File = 'file',
     RSpawn = 'rspawn',
@@ -76,7 +75,6 @@ export interface ParsedArgs {
     [TroupeCliArg.IoRoot]?: string;
     [TroupeCliArg.Aliases]?: string;
     [TroupeCliArg.Stdiolev]?: string;
-    [TroupeCliArg.StdioModel]?: string;
     [TroupeCliArg.Port]?: number;
     [TroupeCliArg.File]?: string;
     [TroupeCliArg.RSpawn]?: boolean;
@@ -116,17 +114,6 @@ export function getCliArgs(): ParsedArgs {
             .option(TroupeCliArg.IoRoot, { type: 'string', describe: 'Directory subtree SimpleFileIO may access; paths resolve relative to it and cannot escape it. Defaults to a per-invocation scratch dir when unset.' })
             .option(TroupeCliArg.Aliases, { alias: 'a', type: 'string', describe: 'Path to the aliases JSON file' })
             .option(TroupeCliArg.Stdiolev, { type: 'string', describe: 'Security level for stdio operations' })
-            .option(TroupeCliArg.StdioModel, {
-                type: 'string',
-                choices: ['capability', 'ifc'],
-                default: 'capability',
-                describe: 'Stdio enforcement model: capability (acquisition is checked against the authority, operations are unchecked) or ifc (acquisition is unchecked, operations are checked against the stdio level)',
-                // Repeating the option gives yargs an array. The compiler reads
-                // the same flag and takes the last occurrence, so this does too:
-                // otherwise a doubled flag leaves the two tools on different
-                // models with nothing said about it.
-                coerce: (v) => Array.isArray(v) ? v[v.length - 1] : v
-            })
             .option(TroupeCliArg.Port, { type: 'number', describe: 'Network port for P2P communication' })
             .option(TroupeCliArg.File, { alias: 'f', type: 'string', describe: 'Path to the main troupe program file to execute' })
             .option(TroupeCliArg.RSpawn, { type: 'boolean', default: false, describe: 'Allow remote spawning of troupe processes' })

@@ -88,10 +88,9 @@ compile errors:
   `troupec: bad base function: authority`. A module that needs authority takes it as a function
   argument and the main-mode consumer applies it — the pattern used by
   `examples/benchmarks/labeled-savina/LabeledSavina.trp`.
-- The ambient wrappers injected by `AddAmbientMethods` — `print`, `printString`,
-  `printWithLabels`, `fwriteln`, `fwritelnWithLabels`, `inputLine` — are not injected in library
-  mode (they are defined in terms of `authority`). `print` inside a module fails with
-  `troupec: bad base function: print`.
+- The ambient names — `print`, `printString`, `printWithLabels`, `fwriteln`,
+  `fwritelnWithLabels`, `inputLine` — are runtime builtins and are available in library mode on
+  the same terms as in a program: they name a standard descriptor and need no `authority`.
 
 Base functions that do not go through `authority` (`spawn`, `send`, `self`, `receive`, arithmetic,
 string operations, …) are available.

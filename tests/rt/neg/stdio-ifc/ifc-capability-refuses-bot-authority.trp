@@ -1,6 +1,0 @@
-(* Capability stdio model: acquisition is the only check, and an authority
-   attenuated to BOT does not act for the ROOT channel level. The IFC contrast
-   is the positive test ifc-acquisition-unchecked. *)
-let val botAuth = attenuate (authority, `{}`)
-in stdout botAuth
-end

@@ -10,7 +10,7 @@
 -- Two stages, because the datatype-hash report is taken between them:
 --
 --   * 'frontEndFold' — parse, resolve imports, re-associate operators, extract
---     the export list, fold syntactic variants, inject ambient methods.
+--     the export list, fold syntactic variants.
 --   * 'frontEndIR' — pattern-match elimination through closure conversion and
 --     IR optimization.
 --
@@ -35,11 +35,9 @@ module Pipeline
 import           Control.Monad.Except (runExcept)
 import           System.Exit (die)
 
-import           AddAmbientMethods (addAmbientMethods)
 import qualified CaseElimination as C
 import qualified ClosureConv as CC
 import           CompileMode (CompileMode(..))
-import           StdioModel (StdioModel(..))
 import qualified Core
 import qualified Direct
 import qualified Surface
@@ -77,10 +75,9 @@ silentDump :: StageDump
 silentDump = StageDump (\_ -> return ()) (\_ _ -> return ()) (\_ -> return ())
 
 data CompileOpts = CompileOpts
-  { coMode        :: CompileMode
-  , coDump        :: StageDump
-  , coPPConfig    :: PPConfig
-  , coStdioModel  :: StdioModel
+  { coMode     :: CompileMode
+  , coDump     :: StageDump
+  , coPPConfig :: PPConfig
   }
 
 -- | What the folding stage produced, and what the rest of a compile needs from
@@ -88,14 +85,14 @@ data CompileOpts = CompileOpts
 data Folded = Folded
   { fdSurface  :: Surface.Prog          -- ^ post-import program; source of the fixity environment
   , fdProg     :: Direct.Prog           -- ^ after operator re-association; carries the import list
-  , fdFolded   :: Direct.Prog           -- ^ variants folded, ambient methods injected
+  , fdFolded   :: Direct.Prog           -- ^ variants folded
   , fdLocal    :: [(String, String)]    -- ^ (group hash, canonical form) declared here
   , fdConsumed :: [(String, [String])]  -- ^ (library, consumed group hashes)
   , fdExports  :: Maybe [String]        -- ^ export list, for a library compile
   , fdDeps     :: [DepEntry]            -- ^ module dependencies this file resolved
   }
 
--- | Parse through ambient-method injection. @root@ is the project root that
+-- | Parse through syntactic-variant folding. @root@ is the project root that
 -- module imports resolve and display against; @file@ is this compilation unit.
 frontEndFold :: PinCheck -> FilePath -> CompileOpts -> FilePath -> String -> IO Folded
 frontEndFold pin root opts file input = do
@@ -104,8 +101,6 @@ frontEndFold pin root opts file input = do
                    Left err -> die err
                    Right p  -> return p
 
-  -- Ambient-method injection is deferred to after syntactic-variant folding
-  -- (see below), so import processing runs on the raw parsed program.
   (sprog, resolvedDeps) <- processImports pin root file prog_parsed
 
   -- The parse-phase program (flat operator chains); this is what the SYNTAX
@@ -128,18 +123,12 @@ frontEndFold pin root opts file input = do
                             Left s   -> die s
                _       -> return Nothing
 
-  -- Syntactic-variant folding runs on the user program before the ambient
-  -- methods are injected, so the folder never inspects the generated
-  -- declarations and a datatype constructor may shadow an ambient builtin.
+  -- Syntactic-variant folding. A datatype constructor may shadow one of the
+  -- ambient builtin names; the folder works on the program's own declarations.
   foldRes <- case runExcept (SVF.foldProg prog) of
                Right r -> return r
                Left s  -> die s
-  -- The ambient wrappers belong to the capability stdio model, whose
-  -- acquisitions need the program's authority. Under the IFC model the same
-  -- names are runtime builtins that acquire nothing, so nothing is injected.
-  let folded = case (coMode opts, coStdioModel opts) of
-                 (Normal, Capability) -> addAmbientMethods (SVF.frProg foldRes)
-                 _                    -> SVF.frProg foldRes
+  let folded = SVF.frProg foldRes
 
   return Folded { fdSurface  = sprog
                 , fdProg     = prog

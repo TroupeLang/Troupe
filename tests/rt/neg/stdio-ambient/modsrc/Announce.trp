@@ -1,7 +1,0 @@
-(* Module code never receives the compiler-injected wrappers, so `print` here
- * is the runtime builtin. It acquires no descriptor, which the capability
- * model has nothing to check — the program this module belongs to runs under
- * that model, and the call is refused. *)
-let fun announce s = print ("module says: " ^ s)
-in [ ("announce", announce) ]
-end

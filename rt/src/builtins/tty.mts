@@ -8,7 +8,7 @@ import { mkTuple } from '../ValuesUtil.mjs';
 import { RuntimeInterface } from '../RuntimeInterface.mjs';
 import { __nodeManager } from '../NodeManager.mjs';
 import runId from '../runId.mjs';
-import { stdio_level, IFC_MODEL, checkChannelEffect, suspendReadline } from './stdio.mjs';
+import { stdio_level, checkChannelEffect, suspendReadline } from './stdio.mjs';
 
 /**
  * Terminal primitives.
@@ -335,10 +335,8 @@ export function BuiltinTty<TBase extends Constructor<UserRuntimeZero>>(Base: TBa
             assertIsBoolean(arg.val[1]);
             const on = arg.val[1].val === true;
 
-            if (IFC_MODEL) {
-                checkChannelEffect(this.runtime.$t, "terminal raw-mode change",
-                                   arg.lev, arg.val[0].lev, arg.val[1].lev)
-            }
+            checkChannelEffect(this.runtime.$t, "terminal raw-mode change",
+                               arg.lev, arg.val[0].lev, arg.val[1].lev)
 
             if (fd.isTTY !== true || typeof fd.setRawMode !== 'function') {
                 return this.runtime.ret(this.mkTtyErr("not a terminal"));
@@ -390,10 +388,8 @@ export function BuiltinTty<TBase extends Constructor<UserRuntimeZero>>(Base: TBa
             this.runtime.$t.raiseCurrentThreadPC(
                 lub(arg.lev, arg.val[0].lev, arg.val[1].lev));
 
-            if (IFC_MODEL) {
-                checkChannelEffect(this.runtime.$t, "terminal subscription",
-                                   arg.lev, arg.val[0].lev, arg.val[1].lev)
-            }
+            checkChannelEffect(this.runtime.$t, "terminal subscription",
+                               arg.lev, arg.val[0].lev, arg.val[1].lev)
 
             const pid = arg.val[1].val;
             if (pid.uuid == null || pid.uuid.toString() !== runId.toString()) {
@@ -424,10 +420,8 @@ export function BuiltinTty<TBase extends Constructor<UserRuntimeZero>>(Base: TBa
             assertNormalState("ttyUnsubscribe")
             this.ttyDescriptor(arg, [process.stdin], "an input descriptor");
 
-            if (IFC_MODEL) {
-                checkChannelEffect(this.runtime.$t, "terminal unsubscription",
-                                   arg.lev)
-            }
+            checkChannelEffect(this.runtime.$t, "terminal unsubscription",
+                               arg.lev)
 
             detachTtyListeners();
             subscriber = null;

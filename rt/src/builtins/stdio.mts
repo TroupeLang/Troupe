@@ -14,16 +14,6 @@ export const stdio_level = argv[TroupeCliArg.Stdiolev]
     ? levelFromFlag (TroupeCliArg.Stdiolev, argv[TroupeCliArg.Stdiolev])
     : ROOT
 
-/**
- * The stdio enforcement model (`--stdio-model`).
- *
- * Under `capability`, acquiring a descriptor is checked against the authority
- * shown and the operations are unchecked. Under `ifc`, stdio is a channel at
- * `stdio_level`: acquisition is unchecked, observations are labelled at the
- * channel level, and every effect on the channel is checked against it.
- */
-export const IFC_MODEL = argv[TroupeCliArg.StdioModel] === 'ifc'
-
 /** Buffer of input lines that have been provided but not consumed. */
 const lineBuffer = [];
 
@@ -101,29 +91,14 @@ export function checkChannelEffect($t, operation: string, ...operandLevels: Leve
 export function BuiltinStdIo<TBase extends Constructor<UserRuntimeZero>>(Base: TBase) {
     return class extends Base {
         /*
-         * The write path of the IFC model's ambient names.
+         * The write path of the ambient names.
          *
-         * A program compiled with `--stdio-model=ifc` gets `print` and its
-         * neighbours from the builtins at the end of this class rather than
-         * from the compiler-injected wrappers
-         * (`compiler/src/AddAmbientMethods.hs`), which exist to thread the
-         * program's authority into an acquisition. Under this model a
-         * descriptor grants nothing, so they acquire without one and the
-         * channel check sits on the write, exactly as in `fwrite`. The helpers
-         * below are what they are built from.
+         * `print` and its neighbours are builtins, available to a program, a
+         * module and a library alike. A descriptor names a stream and grants
+         * nothing, so they acquire without an authority and the channel check
+         * sits on the write, exactly as in `fwrite`. The helpers below are
+         * what they are built from.
          */
-
-        /** Refuse a name that acquires implicitly when the model checks acquisition. */
-        refuseUnderCapabilityModel(name: string, alternative: string) {
-            if (!IFC_MODEL) {
-                this.runtime.$t.threadError(
-                    `${name} is unavailable under the capability stdio model\n` +
-                    ` | this model's ${name} is the wrapper the compiler injects into a program, and\n` +
-                    ` |   this call is outside one: module or library code, or a program\n` +
-                    ` |   compiled with --stdio-model=ifc\n` +
-                    ` | run with --stdio-model=ifc, or name a descriptor: ${alternative}`);
-            }
-        }
 
         /** The descriptor an output operation names, or a thread error. */
         outputDescriptor(descr) {
@@ -145,51 +120,24 @@ export function BuiltinStdIo<TBase extends Constructor<UserRuntimeZero>>(Base: T
 
         /** One line onto an output descriptor, checked against the channel. */
         writeLine(fd, text: string, ...operandLevels: Level[]) {
-            if (IFC_MODEL) {
-                checkChannelEffect(this.runtime.$t,
-                                   fd === process.stderr ? "write to stderr" : "write to stdout",
-                                   ...operandLevels)
-            }
+            checkChannelEffect(this.runtime.$t,
+                               fd === process.stderr ? "write to stderr" : "write to stdout",
+                               ...operandLevels)
             fd.write(text + "\n");
             return this.runtime.ret(__unit);
         }
 
-        /**
-         * The capability model's acquisition check: the authority shown must
-         * suffice for the channel level, which is `actsFor(authority, level)`
-         * — the relation the downgrade checks use. Under the IFC model
-         * acquisition is unchecked: acquiring a descriptor observes nothing
-         * and effects nothing, and enforcement sits on the operations.
+        /*
+         * The three standard descriptors, as values rather than as something
+         * acquired. A descriptor names a stream and grants nothing: it is the
+         * operations on the stream that are checked against the channel level,
+         * so there is nothing for an acquisition to show and nothing to check.
+         * Generated code reaches a base name as a raw value, which is what
+         * lets these be written `fwrite (stdout, s)` with no call.
          */
-        checkAcquisition(arg, streamName: string) {
-            if (IFC_MODEL) {
-                return;
-            }
-            if (!actsFor(arg.val.authorityLevel, stdio_level)) {
-                this.runtime.$t.threadError
-                    (`Not sufficient authority for ${streamName}\n` +
-                     ` | Provided authority level ${arg.val.authorityLevel.stringRep()}\n` +
-                     ` | Required authority level ${stdio_level.stringRep()}`)
-            }
-        }
-
-        stdin = mkBase((arg) => {
-            assertIsAuthority(arg)
-            this.checkAcquisition(arg, "stdIn")
-            return this.runtime.ret(this.mkVal(new LocalObject(process.stdin)))
-        }, "stdin");
-
-        stdout = mkBase((arg) => {
-            assertIsAuthority(arg)
-            this.checkAcquisition(arg, "stdOut")
-            return this.runtime.ret(this.mkVal(new LocalObject(process.stdout)));
-        }, "stdout");
-
-        stderr = mkBase((arg) => {
-            assertIsAuthority(arg)
-            this.checkAcquisition(arg, "stdErr")
-            return this.runtime.ret(this.mkVal(new LocalObject(process.stderr)));
-        }, "stderr");
+        stdin = new LocalObject(process.stdin);
+        stdout = new LocalObject(process.stdout);
+        stderr = new LocalObject(process.stderr);
 
         freadln = mkBase((arg) => {
             assertNormalState("freadLine")
@@ -207,11 +155,9 @@ export function BuiltinStdIo<TBase extends Constructor<UserRuntimeZero>>(Base: T
         /** One line off stdin, at the channel level, blocking until it arrives. */
         readChannelLine(...operandLevels: Level[]) {
             // Consuming a line is an observable effect on the channel: a later
-            // reader no longer sees it. Under the IFC model it carries the same
-            // sink check as a write.
-            if (IFC_MODEL) {
-                checkChannelEffect(this.runtime.$t, "read from stdin", ...operandLevels)
-            }
+            // reader no longer sees it, so it carries the same sink check as a
+            // write.
+            checkChannelEffect(this.runtime.$t, "read from stdin", ...operandLevels)
 
             getReadline()
 
@@ -248,20 +194,16 @@ export function BuiltinStdIo<TBase extends Constructor<UserRuntimeZero>>(Base: T
             assertIsString(arg.val[1]);
 
             // Bytes appearing on the channel are an effect on it.
-            if (IFC_MODEL) {
-                checkChannelEffect(this.runtime.$t,
-                                   fd === process.stderr ? "write to stderr" : "write to stdout",
-                                   arg.lev, arg.val[0].lev, arg.val[1].lev)
-            }
+            checkChannelEffect(this.runtime.$t,
+                               fd === process.stderr ? "write to stderr" : "write to stdout",
+                               arg.lev, arg.val[0].lev, arg.val[1].lev)
 
             fd.write(arg.val[1].val);
             return this.runtime.ret(__unit);
         }, "fwrite");
 
-        // The ambient names. A program compiled with --stdio-model=capability
-        // shadows all six with the wrappers the compiler injects; these are
-        // what a program compiled with --stdio-model=ifc — and any library,
-        // which never had the wrappers — resolves them to.
+        // The ambient names: what `print` and its neighbours resolve to,
+        // wherever they are written.
 
         fwriteln = mkBase((arg) => {
             assertNormalState("fwriteln")
@@ -283,28 +225,24 @@ export function BuiltinStdIo<TBase extends Constructor<UserRuntimeZero>>(Base: T
 
         printString = mkBase((arg) => {
             assertNormalState("printString")
-            this.refuseUnderCapabilityModel("printString", "fwrite (stdout authority, s)")
             assertIsString(arg);
             return this.writeLine(process.stdout, arg.val, arg.lev);
         }, "printString");
 
         print = mkBase((arg) => {
             assertNormalState("print")
-            this.refuseUnderCapabilityModel("print", "fwrite (stdout authority, toString x)")
             const printed = this.printedForm(arg, true);
             return this.writeLine(process.stdout, printed.text, arg.lev, printed.lev);
         }, "print");
 
         printWithLabels = mkBase((arg) => {
             assertNormalState("printWithLabels")
-            this.refuseUnderCapabilityModel("printWithLabels", "fwrite (stdout authority, toStringL x)")
             const printed = this.printedForm(arg, false);
             return this.writeLine(process.stdout, printed.text, arg.lev, printed.lev);
         }, "printWithLabels");
 
         inputLine = mkBase((arg) => {
             assertNormalState("inputLine")
-            this.refuseUnderCapabilityModel("inputLine", "freadln (stdin authority)")
             // The wrapper it replaces ignores its argument, so this does too.
             return this.readChannelLine(arg.lev);
         }, "inputLine");

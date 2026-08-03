@@ -1,1 +1,1 @@
-fwrite (stdout authority, toString ())
+fwrite (stdout, toString ())

@@ -4,8 +4,8 @@
 let val _ = print "print"
     val _ = printString "printString"
     val _ = printWithLabels "printWithLabels"
-    val _ = fwriteln (stdout authority, "fwriteln")
-    val _ = fwritelnWithLabels (stdout authority, "fwritelnWithLabels")
+    val _ = fwriteln (stdout, "fwriteln")
+    val _ = fwritelnWithLabels (stdout, "fwritelnWithLabels")
     val name = inputLine ()
 in print ("inputLine read: " ^ name)
 end

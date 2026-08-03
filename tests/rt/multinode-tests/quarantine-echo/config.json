@@ -11,14 +11,16 @@
       "id": "server",
       "script": "qecho-server.trp",
       "port": 6789,
-      "expected_exit_code": 0
+      "expected_exit_code": 0,
+      "extra_argv": "--stdiolev='<#root-confidentiality;#null-integrity>'"
     },
     {
       "id": "client",
       "script": "qecho-client.trp",
       "port": 6790,
       "start_delay": 1,
-      "expected_exit_code": 0
+      "expected_exit_code": 0,
+      "extra_argv": "--stdiolev='<#root-confidentiality;#null-integrity>'"
     }
   ],
   "trust": [

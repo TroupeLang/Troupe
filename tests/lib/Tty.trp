@@ -22,8 +22,8 @@ import Tty
  * accordingly, which makes each assertion check the labeling contract too. *)
 
 let val a = authority
-    val i = stdin a
-    val o = stdout a
+    val i = stdin
+    val o = stdout
 
     fun atRoot v = v raisedTo IfcUtil.root
 

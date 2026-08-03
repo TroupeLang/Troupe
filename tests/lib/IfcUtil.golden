@@ -1,4 +1,4 @@
-2026-03-04T10:18:05.912Z [RTM] [32minfo[39m: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+2026-08-03T09:27:16.771Z [RTM] [32minfo[39m: Skipping network creation. Observe that all network operations will yield a runtime error.
 
 constants
 ============================================================
@@ -59,14 +59,4 @@ declassifyDeep, endorseDeep, downgradeDeep
 (1@{}%{}, (2@{}%{}, 3@{}%{})@{}%{})@{}%{}
 (1@{}%{}, 2@{}%{}, 3@{}%{})@{}%{}
 [1@{}%{}, 2@{}%{}, (3@{}%{}, 4@{}%{})@{}%{}, (5@{}%{}, [6@{}%{}]@{}%{})@{}%{}]@{}%{}
-
-freadlnPini
-============================================================
-"Hello, Troupe!"@{#ROOT}%{}
-("pc", {}, "bl", {})
-
-freadlnAtLevel
-============================================================
-"Can I be declassified to {}, please?"@{}%{}
-("pc", {}, "bl", {})
->>> Main thread finished with value: ()@{}%{}
+>>> Main thread finished with value: ()@{bob}%{bob}

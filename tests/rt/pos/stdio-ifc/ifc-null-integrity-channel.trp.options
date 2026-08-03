@@ -1,1 +1,1 @@
---stdio-model ifc --stdiolev '<#root-confidentiality;#null-integrity>'
+--stdiolev '<#root-confidentiality;#null-integrity>'

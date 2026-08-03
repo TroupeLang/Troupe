@@ -10,7 +10,7 @@ let fun timeout who nonce duration =
                 val this = self ()
                 val _ = timeout this nonce duration
             in receive [ hn x when x = nonce =>
-                            let val _ = if message <> "" then fwrite (stdout authority, "\n" ^ message ^ "\n") else ()
+                            let val _ = if message <> "" then fwrite (stdout, "\n" ^ message ^ "\n") else ()
                             in exit (authority, exitcode)
                             end
                        ]

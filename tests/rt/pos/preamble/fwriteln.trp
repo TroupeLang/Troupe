@@ -1,1 +1,1 @@
-fwriteln (stdout authority, "Hello, Troupe!")
+fwriteln (stdout, "Hello, Troupe!")

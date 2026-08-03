@@ -31,7 +31,7 @@ let (** Time a thunk. Returns `(result, elapsed)` with `elapsed` in
     (** Like `run` below, but also returns the measurements as a list of
      *  `(size, rep, ms, ok)` rows, oldest first. *)
     fun collectRows auth name sizes reps f check =
-        let fun say s = fwrite (stdout auth, s ^ "\n")
+        let fun say s = fwrite (stdout, s ^ "\n")
             fun oneRep size i =
                 let val (r, ms) = time (fn () => f size)
                     val ok = check size r

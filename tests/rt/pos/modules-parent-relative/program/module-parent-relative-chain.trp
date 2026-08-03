@@ -7,5 +7,5 @@
  * so a path that escaped the root would not load. *)
 import "../modsrc/ParentRelativeGreeter"
 
-let val _ = fwrite (stdout authority, ParentRelativeGreeter.greet "x" ^ "\n")
+let val _ = fwrite (stdout, ParentRelativeGreeter.greet "x" ^ "\n")
 in () end

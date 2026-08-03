@@ -1,5 +1,0 @@
-# On the IFC stdio model, at the default ROOT channel: this test's subject is
-# the labels input arrives with, and the model's consume check raises the pc to
-# the blocking label, so a line read after an earlier read carries the
-# channel's integrity as well as its confidentiality.
---stdio-model ifc

@@ -4,7 +4,7 @@
    environment condition, not a programming error. The result is an
    acknowledgement drawn through the channel, so it carries the channel level. *)
 let val a = authority
-    val i = stdin a
+    val i = stdin
     val _ = print (ttyRawMode (i, true))
     val _ = print (ttyRawMode (i, false))
     val _ = print (levelOf (ttyRawMode (i, true)))

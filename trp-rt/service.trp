@@ -6,8 +6,7 @@ datatype Atoms = STDOUT
 
 
 let fun service ({authority, options, ..}) = 
-    let val stdout = stdout authority
-        fun loop () = 
+    let fun loop () = 
               let val _ = receive 
                            [ hn (STDOUT, s) => fwrite (stdout, s); fwrite (stdout, "\n")
                             (*

@@ -21,7 +21,7 @@ import List
  *  sees one and blocks forever. A subscriber opens a ranged-receive region up to the channel
  *  level with `listen` and receives at that interval with `nextEvent`:
  *
- *    val i = stdin authority
+ *    val i = stdin
  *    val _ = case Tty.subscribe (i, self ()) of OK _  => ()
  *                                             | ERR e => print e.reason
  *    val (ok, cap) = Tty.listen (i, authority)

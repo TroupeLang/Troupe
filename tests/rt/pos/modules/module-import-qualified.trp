@@ -2,5 +2,5 @@
  * bound name, none are injected unqualified. *)
 import qualified "./modsrc/util/ModuleDiamondFmt" as Fmt
 
-let val _ = fwrite (stdout authority, Fmt.bang "qualified" ^ "\n")
+let val _ = fwrite (stdout, Fmt.bang "qualified" ^ "\n")
 in () end

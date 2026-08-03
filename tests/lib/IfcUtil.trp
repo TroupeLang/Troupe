@@ -121,27 +121,4 @@ let fun printpc () =
             ] raisedTo alice
     val _ = printWithLabels (IfcUtil.downgradeDeep (x, authority, IfcUtil.bot))
 
-
-    val _ = printString ""
-    val _ = printString "freadlnPini"
-    val _ = printString "============================================================"
-
-    val _ = blockdown authority
-
-    val x = IfcUtil.freadlnPini (stdin authority, authority)
-    val _ = printWithLabels x
-    val _ = printpc ()
-
-
-    val _ = printString ""
-    val _ = printString "freadlnAtLevel"
-    val _ = printString "============================================================"
-
-    val _ = blockdecl authority
-
-    val x = IfcUtil.freadlnAtLevel (stdin authority, authority, IfcUtil.bot)
-    val _ = printWithLabels x
-    val _ = blockdown authority
-    val _ = printpc ()
-
 in () end

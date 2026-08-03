@@ -192,19 +192,6 @@ let (*-------------------------- Lattice Constants  -------------------------*)
     fun pdowngrade args =
             ergo_downgrade downgrade blockdownto args
 
-    (*--------------------------------  I/O  --------------------------------*)
-
-    (** Similar to `freadln` but ensures the blocking label is not raised. *)
-    fun freadlnPini (fd, authority) =
-        let val ln = freadln fd
-            val _  = blockdecl authority
-        in ln end
-
-    (** Similar to `freadln` but does not raise the blocking label and
-     *  declassifies the content to the given level. *)
-    fun freadlnAtLevel (fd, authority, level) =
-        declassify (freadlnPini (fd, authority), authority, level)
-
 in [ (*-- Constants --*)
      ("root", root)
    , ("null", null)
@@ -228,9 +215,5 @@ in [ (*-- Constants --*)
    , ("pdeclassify", pdeclassify)
    , ("pendorse",    pendorse)
    , ("pdowngrade",  pdowngrade)
-
-     (*-- I/O --*)
-   , ("freadlnPini", freadlnPini)
-   , ("freadlnAtLevel", freadlnAtLevel)
    ]
 end

@@ -3,7 +3,7 @@
    is itself at the caller's pc: it discloses the run configuration, not
    anything observed through the channel. *)
 let val a = authority
-    val i = stdin a
+    val i = stdin
     val _ = print (ttyLevel i)
     val _ = print (levelOf (ttyLevel i))
     val _ = print (levelOf (ttyIsTTY i))

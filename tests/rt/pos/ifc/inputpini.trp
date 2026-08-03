@@ -1,6 +1,6 @@
 import IfcUtil
 let fun inputLineWithPini () =
-        let pini authority val s = freadln (stdin authority)
+        let pini authority val s = freadln (stdin)
         in s
         end
 
@@ -9,7 +9,7 @@ let fun inputLineWithPini () =
         in pdeclassify (s, authority, level)
         end
 
-    fun print x = fwrite (stdout authority, x)
+    fun print x = fwrite (stdout, x)
 
     val _ = print "Please input something: "
     val s = inputLineAtLevel authority `{}`

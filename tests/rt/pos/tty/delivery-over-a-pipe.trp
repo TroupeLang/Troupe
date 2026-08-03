@@ -15,7 +15,7 @@
 import IfcUtil
 
 let val a = authority
-    val i = stdin a
+    val i = stdin
     val me = self ()
     val _ = print (ttySubscribe (i, me))
 

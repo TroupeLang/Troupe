@@ -4,8 +4,8 @@
    results carry the channel level. ttyLevel is a configuration query, so its
    result stays at the caller's pc. *)
 let val a = authority
-    val i = stdin a
-    val o = stdout a
+    val i = stdin
+    val o = stdout
     val _ = print (levelOf (ttyIsTTY i))
     val _ = print (levelOf (ttySize o))
     val _ = print (levelOf (ttyLevel i))

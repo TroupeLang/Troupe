@@ -1,1 +1,1 @@
-fwrite (stdout authority, toString { x = 42 })
+fwrite (stdout, toString { x = 42 })

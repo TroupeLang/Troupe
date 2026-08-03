@@ -23,14 +23,13 @@ let (** Time a thunk. Returns `(result, elapsed)` with `elapsed` in
 
     (** Run benchmark `name` over `sizes`: per size, one untimed warmup run
      *  followed by `reps` timed runs of `f`. Each timed run is validated
-     *  with `check size result` and reported on its own line via `auth`
-     *  (needed for stdout access):
+     *  with `check size result` and reported on its own line:
      *
      *      <name> n=<size> rep=<i> ms=<elapsed> ok=<bool>
      *)
     (** Like `run` below, but also returns the measurements as a list of
      *  `(size, rep, ms, ok)` rows, oldest first. *)
-    fun collectRows auth name sizes reps f check =
+    fun collectRows name sizes reps f check =
         let fun say s = fwrite (stdout, s ^ "\n")
             fun oneRep size i =
                 let val (r, ms) = time (fn () => f size)
@@ -49,8 +48,8 @@ let (** Time a thunk. Returns `(result, elapsed)` with `elapsed` in
         in flatten (List.map oneSize sizes, [])
         end
 
-    fun run auth name sizes reps f check =
-        (collectRows auth name sizes reps f check; ())
+    fun run name sizes reps f check =
+        (collectRows name sizes reps f check; ())
 
 in [ ("time", time)
    , ("sizesFromArgs", sizesFromArgs)

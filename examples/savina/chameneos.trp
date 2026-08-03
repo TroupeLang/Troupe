@@ -23,5 +23,5 @@ import "./Savina"
 
 let val d = case List.filter (fn d => d.name = "chameneos") Savina.all of [d] => d
     val sizes = Bench.sizesFromArgs (getCliArgs authority) d.sizes
-in Bench.run authority d.name sizes 3 d.bench d.check
+in Bench.run d.name sizes 3 d.bench d.check
 end

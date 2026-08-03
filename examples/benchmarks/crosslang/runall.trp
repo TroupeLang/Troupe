@@ -82,7 +82,7 @@ let val args = getCliArgs authority
 
     val unknown = List.filter (fn a => List.length (named a) = 0) names
 
-    fun runOne d = Bench.collectRows authority d.name d.sizes reps d.bench d.check
+    fun runOne d = Bench.collectRows d.name d.sizes reps d.bench d.check
 
     (* `mode=list` prints the benchmark names, one per line, and measures
        nothing. run.sh asks both languages for their list and refuses to run if

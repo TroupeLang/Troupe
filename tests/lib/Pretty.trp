@@ -61,4 +61,4 @@ let val t = Pretty.text
                                                                    (Pretty.beside (t "c") (t "d")))))
             ]
         ]
-in Unit.run authority tests end
+in Unit.run tests end

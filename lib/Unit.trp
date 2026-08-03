@@ -3,14 +3,14 @@ import List
 let
     (*--- Pretty Printing ---*)
     (* TODO: Move to 'stdio.trp'? *)
-    fun print auth indent str =
+    fun print indent str =
         let fun makeIndent 0 = ""
               | makeIndent i = "  " ^ (makeIndent (i-1))
         in fwrite ((stdout), (makeIndent indent) ^ str)
         end
 
-    fun printCR auth = fwrite ((stdout), "\r")
-    fun printNL auth = fwrite ((stdout), "\n")
+    fun printCR () = fwrite ((stdout), "\r")
+    fun printNL () = fwrite ((stdout), "\n")
 
     (* TODO (Issue #55) Move colours into helper functions. *)
     val testStr = "\x1b[33m" ^ "[ TEST ]" ^ "\x1b[0m" ^ " it "
@@ -55,39 +55,39 @@ let
       | size _ = 0
 
     (** Run the given test suite, created with `group`, `it`, and `is*`. *)
-    fun run auth ts =
+    fun run ts =
         let (** Runs a 'Unit.isEq' and returns `true` if it fails. *)
             fun runIsEq indent { tag="Unit.isEq", exp=exp, act=act } =
                 if exp = act
                 then if levelOf exp = levelOf act
                      then false
                      else (* IFC Mismatch *)
-                          let val _ = printNL auth
-                              val _ = print auth indent ("Expected @ " ^ (toString (levelOf exp)) ^ "\n")
-                              val _ = print auth indent ("Actual   @ " ^ (toString (levelOf act)) ^ "\n")
+                          let val _ = printNL ()
+                              val _ = print indent ("Expected @ " ^ (toString (levelOf exp)) ^ "\n")
+                              val _ = print indent ("Actual   @ " ^ (toString (levelOf act)) ^ "\n")
                           in true
                           end
                 else (* Structual Mismatch *)
-                     let val _ = printNL auth
-                         val _ = print auth indent ("Expected: " ^ (toString exp) ^ "\n")
-                         val _ = print auth indent ("Actual:   " ^ (toString act) ^ "\n")
+                     let val _ = printNL ()
+                         val _ = print indent ("Expected: " ^ (toString exp) ^ "\n")
+                         val _ = print indent ("Actual:   " ^ (toString act) ^ "\n")
                      in true
                      end
               | runIsEq indent a =
-                print auth indent ("runIsEq ? " ^ (toString a) ^ "?\n"); false
+                print indent ("runIsEq ? " ^ (toString a) ^ "?\n"); false
 
             (** Runs a 'Unit.isTrueValue' and returns `true` if it fails. *)
             fun runIsTrueValue indent { tag="Unit.isTrueValue", act=act } =
                 if act = true
                 then false
                 else (* Value is not true *)
-                     let val _ = printNL auth
-                         val _ = print auth indent ("Expected: true\n")
-                         val _ = print auth indent ("Actual:   " ^ (toString act) ^ "\n")
+                     let val _ = printNL ()
+                         val _ = print indent ("Expected: true\n")
+                         val _ = print indent ("Actual:   " ^ (toString act) ^ "\n")
                      in true
                      end
               | runIsTrueValue indent a =
-                print auth indent ("runIsTrueValue ? " ^ (toString a) ^ "?\n"); false
+                print indent ("runIsTrueValue ? " ^ (toString a) ^ "?\n"); false
 
             (** Runs a 'Unit.isNeq' and returns `true` if it fails. *)
             fun runIsNeq indent { tag="Unit.isNeq", unexp=unexp, act=act } =
@@ -97,47 +97,47 @@ let
                 else if levelOf unexp <> levelOf act
                      then (* IFC Mismatch *)
                           false
-                      else let val _ = printNL auth
-                               val _ = print auth indent ("Undesired Match: " ^ (toString unexp) ^ "\n")
+                      else let val _ = printNL ()
+                               val _ = print indent ("Undesired Match: " ^ (toString unexp) ^ "\n")
                            in true
                            end
               | runIsNeq indent a =
-                print auth indent ("runIsNeq ? " ^ (toString a) ^ "?\n"); false
+                print indent ("runIsNeq ? " ^ (toString a) ^ "?\n"); false
 
             (** Runs a 'Unit.it' and returns `1` if it succeeds and `0` otherwise. *)
             fun runIt indent { tag="Unit.it", name=name, tests=tests } =
-                let val _ = print auth indent (testStr ^ name)
+                let val _ = print indent (testStr ^ name)
                     fun passFilter t = case t of { tag="Unit.isEq",  .. }       => runIsEq (indent+2) t
                                                | { tag="Unit.isTrueValue", .. } => runIsTrueValue (indent+2) t
                                                | { tag="Unit.isNeq", .. }       => runIsNeq (indent+2) t
-                                               | _ => print auth 0 ("runIt::filter ? " ^ (toString t) ^ "?\n"); false
+                                               | _ => print 0 ("runIt::filter ? " ^ (toString t) ^ "?\n"); false
                     val pass = List.null (List.filter passFilter tests)
-                    val _ = if pass then printCR auth else ()
-                    val _ = print auth indent ((if pass then passStr else failStr) ^ name ^ "\n")
+                    val _ = if pass then printCR () else ()
+                    val _ = print indent ((if pass then passStr else failStr) ^ name ^ "\n")
                     (* TODO: Print 'expected: ..., actual: ...' on failure *)
                 in if pass then 1 else 0 end
               | runIt indent a =
-                print auth 0 ("runIt ? " ^ (toString a) ^ "?\n"); 0
+                print 0 ("runIt ? " ^ (toString a) ^ "?\n"); 0
 
             (** Runs a 'Unit.group` and sums up the number of succeeding 'Unit.it'. *)
             fun runGroup indent ts =
                 case ts of { tag="Unit.group", name=name, tests=tests } =>
-                           let val _ = print auth indent (beginStr ^ name ^ "\n")
+                           let val _ = print indent (beginStr ^ name ^ "\n")
                                val passed = List.foldl (fn (t, acc) => acc + runGroup (indent+1) t)
                                                        0
                                                        tests
-                               val _ = print auth indent (endStr ^ "\n")
+                               val _ = print indent (endStr ^ "\n")
                            in passed end
                          | { tag="Unit.it", .. } =>
                            runIt (indent+1) ts
                          | _ =>
-                           print auth 0 ("runGroup ? " ^ (toString ts) ^ "?\n"); 0
+                           print 0 ("runGroup ? " ^ (toString ts) ^ "?\n"); 0
 
             val total  = size ts
             val passed = runGroup 0 ts
-            val _ = print auth 0 "\n"
-            val _ = print auth 0 ("Total:  " ^ (intToString total) ^ "\n")
-            val _ = print auth 0 ("Passes: " ^ (intToString passed) ^ "\n")
+            val _ = print 0 "\n"
+            val _ = print 0 ("Total:  " ^ (intToString total) ^ "\n")
+            val _ = print 0 ("Passes: " ^ (intToString passed) ^ "\n")
         in total = passed end
 
 in [ ("group", group)

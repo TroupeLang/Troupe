@@ -106,5 +106,5 @@ let val a = authority
         ]
     ]
 
-in Unit.run a tests
+in Unit.run tests
 end

@@ -32,7 +32,7 @@ let val args = getCliArgs authority
                     args
 
     fun runOne d =
-        let val rows = Bench.collectRows authority d.name d.sizes 3 d.bench d.check
+        let val rows = Bench.collectRows d.name d.sizes 3 d.bench d.check
         in List.map (fn (n, _, ms, ok) => (d.name, n, ms, ok)) rows end
 
     fun runAll ([], acc)      = List.reverse acc

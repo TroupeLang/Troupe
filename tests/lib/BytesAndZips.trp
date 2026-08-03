@@ -117,5 +117,5 @@ let val nul   = "\x00"
                         (Unit.isEq (levelOf "x") (levelOf (gzip "x")))
             ]
         ]
-in Unit.run authority tests
+in Unit.run tests
 end

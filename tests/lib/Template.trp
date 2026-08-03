@@ -159,4 +159,4 @@ let
         ]
     ]
 
-in Unit.run authority tests end
+in Unit.run tests end

@@ -62,7 +62,7 @@ let val args = getCliArgs authority
         in drain 0 end
 
     fun runOne d =
-        let val rows = Bench.collectRows authority d.name d.sizes 3 d.bench d.check
+        let val rows = Bench.collectRows d.name d.sizes 3 d.bench d.check
             val leaked = flushMailbox ()
             val _ = if leaked > 0
                     then print (d.name, "leaked messages into main mailbox:", leaked)

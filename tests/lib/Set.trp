@@ -258,4 +258,4 @@ let (* Simple less-than comparator. *)
                 end
             ]
         ]
-in Unit.run authority tests end
+in Unit.run tests end

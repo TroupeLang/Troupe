@@ -246,4 +246,4 @@ let (* Hash based on the lowest ten bits only. This way we can easily force vari
                 end
             ]
         ]
-in Unit.run authority tests end
+in Unit.run tests end

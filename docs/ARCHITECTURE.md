@@ -255,6 +255,39 @@ enumerations in `rt/src/DowngradeEnums.mts` and error/message formatting in
 Two related authority-based operators live under `rt/src/builtins/`: `attenuate` (`attenuate.mts`)
 and `raiseTrust` (`raiseTrust.mts`).
 
+### Non-malleable IFC
+
+Downgrading carries two further conditions beyond the authority check, enforced by default and
+disabled by `--no-nmifc`. Both are in `okToDowngradeGeneric`
+(`rt/src/levels/DCLabels/dclabel.mts`), which cites the security-model document for them:
+
+- **Robust declassification** — `(S_auth ∨ I_from ∨ I_pc) ∧ S_to ⟹ S_from`. A release must not be
+  influenced by whoever could have written the data.
+- **Transparent endorsement** — `I_from ⟹ I_to ∨ (S_from ∧ S_pc)`. A thread must not endorse what
+  it cannot see.
+
+A label `<S, I>` is **corrupt** when its integrity does not imply its confidentiality
+(`DCLabel.isCorrupt`) — more secret than it is trusted. Robust declassification refuses to
+downgrade from a corrupt label whatever authority is shown, so a corrupt label is one nothing can
+move. `{}`, `{#ROOT}` and any self-dual `{p}` are not corrupt;
+`<#root-confidentiality;#null-integrity>` is.
+
+This reaches stdio through the channel level. Writing to a channel is not a downgrade, so a corrupt
+channel level admits every write — but a thread that *reads* from such a channel takes the channel's
+level into its blocking label and can never put it back down, in either dimension.
+`enableRangedReceive` reports the same condition as its certification bit: an interval whose top is
+corrupt yields `ok = false`, and that region can be received in but never closed.
+
+Twenty-eight tests run at `<#root-confidentiality;#null-integrity>` because they print labelled
+values and only need the write to be admitted. Each says so in its `.trp.options`:
+
+```
+# Note: this test requires the corrupt stdio level.
+```
+
+A self-dual level naming each test's own principals would be non-corrupt and would leave those
+tests able to downgrade; the note is the thread to pull if that is wanted.
+
 ### The pini / blocking-label stack
 
 The blocking label bounds where a thread may downgrade. It is managed as a stack through operators

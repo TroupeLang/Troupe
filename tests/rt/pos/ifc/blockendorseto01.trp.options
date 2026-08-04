@@ -1,4 +1,2 @@
-# On the IFC stdio model. What this test writes sits above root integrity --
-# raised data, or a write under a raised pc -- so the channel level is the
-# pre-integrity label model, which is what the test was written against.
+# Note: this test requires the corrupt stdio level.
 --stdiolev '<#root-confidentiality;#null-integrity>'

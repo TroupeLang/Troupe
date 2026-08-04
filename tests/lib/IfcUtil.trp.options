@@ -1,5 +1,2 @@
-# What this test writes sits above root integrity -- probe values raised to
-# {alice}, and prints made while the blocking label is raised -- so the channel
-# level is the pre-integrity label model, which is what the test was written
-# against.
+# Note: this test requires the corrupt stdio level.
 --stdiolev '<#root-confidentiality;#null-integrity>'

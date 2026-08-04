@@ -76,8 +76,13 @@ for (const entry of readdirSync(dir).sort()) {
   const outPath = join(dir, `${name}.node.blob`);
   const outText = Buffer.concat([header, nodePayload]).toString('base64') + '\n';
   if (checkOnly) {
-    const existing = readFileSync(outPath, 'utf8');
-    if (existing.trim() !== outText.trim()) {
+    // What must hold is that the checked-in reference still carries this
+    // document. Comparing the base64 instead would compare gzip bytes, which
+    // differ between Node versions -- the very thing this file exists to show
+    // is unimportant -- so a reference written under one Node would read as
+    // stale under another while decoding perfectly well.
+    const { payload: existingPayload } = unpack(readFileSync(outPath, 'utf8'));
+    if (gunzipSync(existingPayload).toString('utf8') !== text) {
       throw new Error(`${outPath} is stale; re-run without --check`);
     }
   } else {

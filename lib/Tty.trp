@@ -33,7 +33,7 @@ import List
  *  `receive` leaves that process blocked: binding a labelled payload in a handler exceeds the
  *  taint limit of the guard `rcv` runs the handler under, so the handler is skipped without a
  *  diagnostic. Either every downstream process receives at the interval, or one process
- *  declassifies at the boundary with `nextEventAtLevel` — the `IfcUtil.freadlnAtLevel` idiom.
+ *  downgrades at the boundary with `nextEventAtLevel`.
  *)
 
 datatype ttyEvent = TTY_DATA of string
@@ -109,8 +109,14 @@ let (* Outcome conversion at the boundary, as in lib/SimpleFileIO.trp: a datatyp
     (** Receive one terminal event or one message matched by `extra`, at the same interval. *)
     fun nextEventWith (lev, extra) = rcv (IfcUtil.bot, lev, List.append handlers extra)
 
-    (** Receive one terminal event, declassify its payload to `target` and lower the blocking
-     *  label under `auth` — `IfcUtil.freadlnAtLevel` for terminal events.
+    (** Receive one terminal event, bring its payload to `target` and lower the blocking
+     *  label under `auth`.
+     *
+     *  Both movements are cross-dimensional (`downgrade`, `blockdown`) rather than
+     *  confidentiality-only (`declassify`, `blockdecl`). A single-dimension operation must leave
+     *  the other dimension equal, so it only applies when what it touches already sits at root
+     *  integrity — that is, only at a ROOT channel. An event drawn from a channel at a named
+     *  principal carries that principal's integrity, and reaching `target` moves both.
      *
      *  Declassifying the event value alone would not do: that lowers the constructor node and
      *  leaves the payload inside it at the channel level, so a consumer matching the event is
@@ -121,7 +127,7 @@ let (* Outcome conversion at the boundary, as in lib/SimpleFileIO.trp: a datatyp
      *  the level of what it matched on, and a value declassified under a raised pc comes back
      *  out at the pc. So the match only projects, the constructor is chosen by a declassified
      *  discriminator, and the rebuild runs at the restored pc — the two-step shape
-     *  `IfcUtil.declassifyDeep` uses for the same reason. `blockdecl` comes last, because the
+     *  `IfcUtil.declassifyDeep` uses for the same reason. `blockdown` comes last, because the
      *  match raises the blocking label back to the payload's level.
      *
      *  `TTY_EOF` carries no payload; it is rebuilt as itself, at `target`. *)
@@ -131,12 +137,12 @@ let (* Outcome conversion at the boundary, as in lib/SimpleFileIO.trp: a datatyp
                     case ev of TTY_DATA b              => ("D", b, 0, 0)
                              | TTY_RESIZE {cols, rows} => ("R", "", cols, rows)
                              | TTY_EOF                 => ("E", "", 0, 0)
-            val ev' = case declassify (kind, auth, target) of
-                           "D" => TTY_DATA (declassify (bytes, auth, target))
-                         | "R" => TTY_RESIZE {cols = declassify (cols, auth, target),
-                                              rows = declassify (rows, auth, target)}
+            val ev' = case downgrade (kind, auth, target) of
+                           "D" => TTY_DATA (downgrade (bytes, auth, target))
+                         | "R" => TTY_RESIZE {cols = downgrade (cols, auth, target),
+                                              rows = downgrade (rows, auth, target)}
                          | _   => TTY_EOF
-            val _ = blockdecl auth
+            val _ = blockdown auth
         in ev'
         end
 

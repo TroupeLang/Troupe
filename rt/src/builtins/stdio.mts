@@ -68,7 +68,7 @@ export function suspendReadline() {
 }
 
 /**
- * The sink check of the IFC stdio model: an effect on the stdio channel is
+ * The sink check on the stdio channel: an effect on it is
  * admitted only when everything it may reveal flows to the channel level.
  *
  * The shape is send's (send.mts): the pc is raised to the blocking label

@@ -1,6 +1,6 @@
 (* A module that prints. Modules never receive the compiler-injected wrappers,
  * so `print` here is the runtime builtin, which needs no authority: under the
- * IFC stdio model the ambient names are available to module code on the same
+ * stdio model the ambient names are available to module code on the same
  * terms as to a program. *)
 let fun announce s = print ("module says: " ^ s)
 in [ ("announce", announce) ]

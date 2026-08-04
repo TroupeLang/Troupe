@@ -1,4 +1,4 @@
-(* IFC stdio model with the channel at {alice}: the check runs in the integrity
+(* stdio model with the channel at {alice}: the check runs in the integrity
    dimension too, so bob-tainted data is refused at an alice terminal. *)
 let val tainted = 4 raisedTo `<;bob>`
 in print tainted

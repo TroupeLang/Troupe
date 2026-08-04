@@ -21,7 +21,7 @@ import { stdio_level, checkChannelEffect, suspendReadline } from './stdio.mjs';
  * interaction with readline, so they behave identically under both stdio
  * models, an observation being no effect and nothing for the sink check to
  * refuse. The three operations are effects on the channel and carry the sink
- * check under the IFC model, as `fwrite` does — a subscription resumes the
+ * check, as `fwrite` does — a subscription resumes the
  * stream and starts draining input from the OS buffer, which a later reader can
  * observe.
  *
@@ -318,9 +318,8 @@ export function BuiltinTty<TBase extends Constructor<UserRuntimeZero>>(Base: TBa
          * Put the terminal into or out of raw mode.
          *
          * Raw mode changes the echo and the line discipline of the channel
-         * visibly, so under the IFC model it carries the same sink check as
-         * `fwrite`; under the capability model it is unchecked, admission
-         * having been decided when the descriptor was acquired.
+         * visibly, so it is an effect and carries the same sink check as
+         * `fwrite`.
          *
          * Entering raw mode first releases readline: on a terminal the
          * interface owns stdin's mode and its own echo, so raw mode has to be
@@ -363,7 +362,7 @@ export function BuiltinTty<TBase extends Constructor<UserRuntimeZero>>(Base: TBa
          *
          * Arming delivery is an effect on the channel — the stream resumes and
          * input starts draining from the OS buffer, which a later `freadln` can
-         * observe — so it carries the sink check under the IFC model. It
+         * observe — so it carries the sink check. It
          * additionally raises the caller's pc by the argument levels, as
          * `spawn` does with the closure it spawns (spawn.mts): which process
          * receives keystrokes is a decision, and a decision must be visible in

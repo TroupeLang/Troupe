@@ -1,4 +1,4 @@
-(* A module printing under the IFC stdio model. *)
+(* A module printing under the stdio model. *)
 import "./modsrc/Announce"
 
 let val _ = Announce.announce "hello"

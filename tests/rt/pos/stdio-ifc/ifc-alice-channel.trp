@@ -1,4 +1,4 @@
-(* IFC stdio model with the channel at {alice}, which is self-dual: alice
+(* stdio model with the channel at {alice}, which is self-dual: alice
    confidentiality and alice integrity. Public data and alice-raised data both
    flow to it. *)
 let val public = 1

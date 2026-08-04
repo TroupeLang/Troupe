@@ -1,6 +1,5 @@
-(* The six ambient names under the IFC stdio model, where they are runtime
-   builtins rather than the wrappers the compiler injects for the capability
-   model. Nothing here names an authority to print with. *)
+(* The six ambient names. They are runtime builtins, so nothing here names an
+   authority to print with, and nothing is injected into the program. *)
 let val _ = print "print"
     val _ = printString "printString"
     val _ = printWithLabels "printWithLabels"

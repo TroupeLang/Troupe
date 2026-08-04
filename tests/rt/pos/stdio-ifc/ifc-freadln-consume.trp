@@ -1,4 +1,4 @@
-(* IFC stdio model: consuming a line is an effect on the channel and carries
+(* stdio model: consuming a line is an effect on the channel and carries
    the same check as a write. At a public pc the check passes; the line comes
    back labelled at the channel level, and echoing it is admitted because the
    channel level flows to itself. *)

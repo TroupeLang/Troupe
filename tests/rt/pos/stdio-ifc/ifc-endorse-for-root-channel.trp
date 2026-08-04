@@ -1,4 +1,4 @@
-(* IFC stdio model at the default ROOT channel level.
+(* stdio model at the default ROOT channel level.
 
    A write must flow to the channel level, and flowing to ROOT requires root
    integrity, so alice-raised data is refused (see the negative test

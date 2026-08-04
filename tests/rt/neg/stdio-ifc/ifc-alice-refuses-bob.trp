@@ -1,4 +1,4 @@
-(* IFC stdio model with the channel at {alice}: bob-confidential data does not
+(* stdio model with the channel at {alice}: bob-confidential data does not
    flow to it. *)
 let val bobData = 3 raisedTo `{bob}`
 in print bobData

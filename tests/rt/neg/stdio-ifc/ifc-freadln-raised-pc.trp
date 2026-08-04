@@ -1,4 +1,4 @@
-(* IFC stdio model: consuming a line is an effect on the channel, so a read
+(* stdio model: consuming a line is an effect on the channel, so a read
    from a pc raised above the channel level is refused — the fact that the line
    was consumed would otherwise be observable to a later reader. *)
 let val fd = stdin

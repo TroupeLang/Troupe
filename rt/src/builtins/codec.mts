@@ -85,6 +85,15 @@ export function BuiltinCodec<TBase extends Constructor<UserRuntimeZero>>(Base: T
                 return;
             }
             const out = gzipSync(Buffer.from(s, 'utf8'));
+            // The gzip header's OS field (offset 9) is whichever platform this
+            // Node's zlib was built for -- 19 on macOS, 3 on Linux. It is the
+            // only byte of the output not determined by the argument, so
+            // without this a program that gzips public data and sends it also
+            // tells the recipient what it is running on. 255 is RFC 1952's
+            // "unknown"; nothing reads the field, and DecompressionStream is
+            // required to ignore it. Same reasoning and the same value as the
+            // compiler's own producer, IRBlob.setGzipOS.
+            if (out.length > 9) out[9] = 255;
             return this.runtime.ret(new LVal(out.toString('latin1'), arg.lev));
         }, "gzip")
 

@@ -52,8 +52,39 @@ maxDecompressedBytes = 64 * 1024 * 1024
 encodeBlob :: SerializationUnit -> BS.ByteString
 encodeBlob su =
   let text = TE.encodeUtf8 (T.pack (printUnit su))
-      gz   = BSL.toStrict (compressGzip text)
+      gz   = setGzipOS (BSL.toStrict (compressGzip text))
   in irBlobFormatId `BS.append` BS.singleton irBlobVersion `BS.append` gz
+
+-- | RFC 1952's "unknown" value for the gzip header's OS field, and the value
+-- its compliance section names as the default for a compressor that fills
+-- nothing in ("255 for OS, 0 for all others").
+gzipOSUnknown :: Word8
+gzipOSUnknown = 255
+
+-- | Overwrite the gzip header's OS field (offset 9) with 'gzipOSUnknown'.
+--
+-- zlib writes there whichever platform it was compiled for: 19 from a macOS
+-- build, 3 from a Unix one, 10 from Windows. Every other field of the header we
+-- produce is already constant -- the modification time is zeroed, and no
+-- filename, comment or extra field is set -- so this byte is the only part of a
+-- blob that varies with where the compiler was built. Blobs are mobile code and
+-- travel to other nodes, which would otherwise learn that much about the sender
+-- for free.
+--
+-- Nothing reads the field. RFC 1952 says a decompressor "may ignore FTEXT and
+-- OS and always produce binary output, and still be compliant"; the WHATWG
+-- Compression Standard requires DecompressionStream to ignore it; GNU gzip's
+-- reader comments "Ignore OS type"; zlib surfaces it only through
+-- inflateGetHeader, which we never call. Go, Java, Rust and Python all write
+-- 255 for the same reason.
+--
+-- The zlib binding gives no way to set this at compression time: its
+-- CompressParams has no header record, and deflateSetHeader is not bound. The
+-- framing around the stream is ours, so it is set here instead.
+setGzipOS :: BS.ByteString -> BS.ByteString
+setGzipOS gz
+  | BS.length gz > 9 = BS.concat [BS.take 9 gz, BS.singleton gzipOSUnknown, BS.drop 10 gz]
+  | otherwise        = gz  -- not a well-formed gzip stream; leave it to the reader to reject
 
 serializeFunDef :: FunDef -> BS.ByteString
 serializeFunDef fdef = encodeBlob (FunSerialization fdef)

@@ -2,313 +2,174 @@
  2
  (program
   (fun
-   "fwriteln2"
-   (arg "fwriteln_arg18")
-   (consts
-    ("gensym16" (int 2))
-    ("gensym18" (bool false))
-    ("gensym13" (string "pattern match failure in function fwriteln"))
-    ("gensym4" (string "\\n")))
-   (bb
-    ()
-    (stack-expand
-     "gensym12"
-     (bb
-      ((assign "gensym19" (un IsTuple (local "fwriteln_arg18"))))
-      (if
-       (local "gensym19")
-       (bb
-        ((assign "gensym15" (un TupleLength (local "fwriteln_arg18")))
-         (assign
-          "gensym14"
-          (bin
-           Eq
-           (local "gensym15")
-           (@ (rt "CaseElimination") (local "gensym16")))))
-        (ret (local "gensym14")))
-       (bb () (ret (local "gensym18")))))
-     (bb
-      ()
-      (assert-else-error
-       (local "gensym12")
-       (bb
-        ((assign "gensym10" (proj-idx (local "fwriteln_arg18") 0))
-         (assign "gensym8" (proj-idx (local "fwriteln_arg18") 1)))
-        (stack-expand
-         "$decltemp$13"
-         (bb
-          ((assign "gensym6" (base "fwrite"))
-           (assign "gensym7" (tuple (local "gensym10") (local "gensym8"))))
-          (tail-call (local "gensym6") (local "gensym7")))
-         (bb
-          ((assign "gensym3" (base "fwrite"))
-           (assign "gensym5" (tuple (local "gensym10") (local "gensym4"))))
-          (tail-call (local "gensym3") (local "gensym5")))))
-       (local "gensym13"))))))
-  (fun
-   "fwritelnWithLabels3"
-   (arg "fwritelnWithLabels_arg115")
-   (consts
-    ("gensym41" (int 2))
-    ("gensym43" (bool false))
-    ("gensym38"
-     (string "pattern match failure in function fwritelnWithLabels")))
-   (bb
-    ()
-    (stack-expand
-     "gensym37"
-     (bb
-      ((assign
-        "gensym44"
-        (un IsTuple (local "fwritelnWithLabels_arg115"))))
-      (if
-       (local "gensym44")
-       (bb
-        ((assign
-          "gensym40"
-          (un TupleLength (local "fwritelnWithLabels_arg115")))
-         (assign
-          "gensym39"
-          (bin
-           Eq
-           (local "gensym40")
-           (@ (rt "CaseElimination") (local "gensym41")))))
-        (ret (local "gensym39")))
-       (bb () (ret (local "gensym43")))))
-     (bb
-      ()
-      (assert-else-error
-       (local "gensym37")
-       (bb
-        ((assign
-          "gensym35"
-          (proj-idx (local "fwritelnWithLabels_arg115") 0))
-         (assign
-          "gensym33"
-          (proj-idx (local "fwritelnWithLabels_arg115") 1))
-         (assign "gensym32" (base "toStringL")))
-        (stack-expand
-         "gensym30"
-         (bb () (tail-call (local "gensym32") (local "gensym33")))
-         (bb
-          ((assign "gensym31" (tuple (local "gensym35") (local "gensym30"))))
-          (tail-call (env "fwriteln2") (local "gensym31")))))
-       (local "gensym38"))))))
-  (fun
-   "printString4"
-   (arg "printString_arg120")
-   (consts)
-   (bb
-    ()
-    (stack-expand
-     "$decltemp$24"
-     (bb
-      ((assign "gensym56" (base "stdout")))
-      (tail-call (local "gensym56") (env "gensym113")))
-     (bb
-      ((assign
-        "gensym55"
-        (tuple (local "$decltemp$24") (local "printString_arg120"))))
-      (tail-call (env "fwriteln2") (local "gensym55"))))))
-  (fun
-   "print5"
-   (arg "print_arg126")
-   (consts)
-   (bb
-    ((assign "gensym68" (base "toString")))
-    (stack-expand
-     "gensym67"
-     (bb () (tail-call (local "gensym68") (local "print_arg126")))
-     (bb () (tail-call (env "printString4") (local "gensym67"))))))
-  (fun
-   "printWithLabels6"
-   (arg "printWithLabels_arg130")
-   (consts)
-   (bb
-    ((assign "gensym80" (base "toStringL")))
-    (stack-expand
-     "gensym79"
-     (bb
-      ()
-      (tail-call (local "gensym80") (local "printWithLabels_arg130")))
-     (bb () (tail-call (env "printString4") (local "gensym79"))))))
-  (fun
-   "inputLine7"
-   (arg "inputLine_arg134")
-   (consts)
-   (bb
-    ()
-    (stack-expand
-     "$decltemp$38"
-     (bb
-      ((assign "gensym94" (base "stdin")))
-      (tail-call (local "gensym94") (env "gensym113")))
-     (bb
-      ((assign "gensym91" (base "freadln"))
-       (assign "gensym93" (base "stdin")))
-      (stack-expand
-       "gensym92"
-       (bb () (tail-call (local "gensym93") (env "gensym113")))
-       (bb () (tail-call (local "gensym91") (local "gensym92"))))))))
-  (fun
    "main"
    (arg "$$authorityarg")
    (consts
-    ("gensym112" (dclabel #true (tag "attacker")))
-    ("gensym107" (bool true))
-    ("gensym106" (bool true))
-    ("gensym105" (bool true))
-    ("gensym104" (bool true)))
+    ("gensym19" (dclabel #true (tag "attacker")))
+    ("gensym9" (bool true))
+    ("gensym7" (bool true))
+    ("gensym5" (bool true))
+    ("gensym3" (bool true)))
    (bb
-    ((assign "gensym113" (base "$$authorityarg"))
-     (mkclos
-      (("gensym113" (local "gensym113")))
-      (("fwriteln2" "fwriteln2")
-       ("fwritelnWithLabels3" "fwritelnWithLabels3")
-       ("printString4" "printString4")
-       ("print5" "print5")
-       ("printWithLabels6" "printWithLabels6")
-       ("inputLine7" "inputLine7"))))
+    ((assign "gensym20" (base "$$authorityarg")))
     (@
      ("tests/rt/pos/ifc/dclabel-whitespace.trp" 3 18)
      (stack-expand
-      "$decltemp$50"
+      "$decltemp$12"
       (bb
-       ()
+       ((@
+         ("tests/rt/pos/ifc/dclabel-whitespace.trp" 9 5)
+         (assign "gensym14" (base "print"))))
        (@
         ("tests/rt/pos/ifc/dclabel-whitespace.trp" 9 5)
         (tail-call
          (@
           ("tests/rt/pos/ifc/dclabel-whitespace.trp" 9 5)
-          (local "print5"))
+          (local "gensym14"))
          (@
           ("tests/rt/pos/ifc/dclabel-whitespace.trp" 9 5)
-          (local "gensym112")))))
+          (local "gensym19")))))
       (bb
        ()
        (@
         (rt "CaseElimination")
         (stack-expand
-         "$decltemp$52"
+         "$decltemp$14"
          (bb
-          ()
+          ((@
+            ("tests/rt/pos/ifc/dclabel-whitespace.trp" 10 5)
+            (assign "gensym13" (base "print"))))
           (@
            ("tests/rt/pos/ifc/dclabel-whitespace.trp" 10 5)
            (tail-call
             (@
              ("tests/rt/pos/ifc/dclabel-whitespace.trp" 10 5)
-             (local "print5"))
+             (local "gensym13"))
             (@
              ("tests/rt/pos/ifc/dclabel-whitespace.trp" 10 5)
-             (local "gensym112")))))
+             (local "gensym19")))))
          (bb
           ()
           (@
            (rt "CaseElimination")
            (stack-expand
-            "$decltemp$54"
+            "$decltemp$16"
             (bb
-             ()
+             ((@
+               ("tests/rt/pos/ifc/dclabel-whitespace.trp" 11 5)
+               (assign "gensym12" (base "print"))))
              (@
               ("tests/rt/pos/ifc/dclabel-whitespace.trp" 11 5)
               (tail-call
                (@
                 ("tests/rt/pos/ifc/dclabel-whitespace.trp" 11 5)
-                (local "print5"))
+                (local "gensym12"))
                (@
                 ("tests/rt/pos/ifc/dclabel-whitespace.trp" 11 5)
-                (local "gensym112")))))
+                (local "gensym19")))))
             (bb
              ()
              (@
               (rt "CaseElimination")
               (stack-expand
-               "$decltemp$56"
+               "$decltemp$18"
                (bb
-                ()
+                ((@
+                  ("tests/rt/pos/ifc/dclabel-whitespace.trp" 12 5)
+                  (assign "gensym11" (base "print"))))
                 (@
                  ("tests/rt/pos/ifc/dclabel-whitespace.trp" 12 5)
                  (tail-call
                   (@
                    ("tests/rt/pos/ifc/dclabel-whitespace.trp" 12 5)
-                   (local "print5"))
+                   (local "gensym11"))
                   (@
                    ("tests/rt/pos/ifc/dclabel-whitespace.trp" 12 5)
-                   (local "gensym112")))))
+                   (local "gensym19")))))
                (bb
                 ()
                 (@
                  (rt "CaseElimination")
                  (stack-expand
-                  "$decltemp$58"
+                  "$decltemp$20"
                   (bb
-                   ()
+                   ((@
+                     ("tests/rt/pos/ifc/dclabel-whitespace.trp" 13 5)
+                     (assign "gensym10" (base "print"))))
                    (@
                     ("tests/rt/pos/ifc/dclabel-whitespace.trp" 13 5)
                     (tail-call
                      (@
                       ("tests/rt/pos/ifc/dclabel-whitespace.trp" 13 5)
-                      (local "print5"))
+                      (local "gensym10"))
                      (@
                       ("tests/rt/pos/ifc/dclabel-whitespace.trp" 13 5)
-                      (local "gensym112")))))
+                      (local "gensym19")))))
                   (bb
                    ()
                    (@
                     (rt "CaseElimination")
                     (stack-expand
-                     "$decltemp$60"
+                     "$decltemp$22"
                      (bb
-                      ()
+                      ((@
+                        ("tests/rt/pos/ifc/dclabel-whitespace.trp" 14 5)
+                        (assign "gensym8" (base "print"))))
                       (@
                        ("tests/rt/pos/ifc/dclabel-whitespace.trp" 14 5)
                        (tail-call
                         (@
                          ("tests/rt/pos/ifc/dclabel-whitespace.trp" 14 5)
-                         (local "print5"))
+                         (local "gensym8"))
                         (@
                          ("tests/rt/pos/ifc/dclabel-whitespace.trp" 14 5)
-                         (local "gensym107")))))
+                         (local "gensym9")))))
                      (bb
                       ()
                       (@
                        (rt "CaseElimination")
                        (stack-expand
-                        "$decltemp$62"
+                        "$decltemp$24"
                         (bb
-                         ()
+                         ((@
+                           ("tests/rt/pos/ifc/dclabel-whitespace.trp" 15 5)
+                           (assign "gensym6" (base "print"))))
                          (@
                           ("tests/rt/pos/ifc/dclabel-whitespace.trp" 15 5)
                           (tail-call
                            (@
                             ("tests/rt/pos/ifc/dclabel-whitespace.trp" 15 5)
-                            (local "print5"))
+                            (local "gensym6"))
                            (@
                             ("tests/rt/pos/ifc/dclabel-whitespace.trp" 15 5)
-                            (local "gensym106")))))
+                            (local "gensym7")))))
                         (bb
                          ()
                          (@
                           (rt "CaseElimination")
                           (stack-expand
-                           "$decltemp$64"
+                           "$decltemp$26"
                            (bb
-                            ()
+                            ((@
+                              ("tests/rt/pos/ifc/dclabel-whitespace.trp" 16 5)
+                              (assign "gensym4" (base "print"))))
                             (@
                              ("tests/rt/pos/ifc/dclabel-whitespace.trp" 16 5)
                              (tail-call
                               (@
                                ("tests/rt/pos/ifc/dclabel-whitespace.trp" 16 5)
-                               (local "print5"))
+                               (local "gensym4"))
                               (@
                                ("tests/rt/pos/ifc/dclabel-whitespace.trp" 16 5)
-                               (local "gensym105")))))
+                               (local "gensym5")))))
                            (bb
-                            ()
+                            ((@
+                              ("tests/rt/pos/ifc/dclabel-whitespace.trp" 17 5)
+                              (assign "gensym2" (base "print"))))
                             (@
                              ("tests/rt/pos/ifc/dclabel-whitespace.trp" 17 5)
                              (stack-expand
-                              "gensym103"
+                              "gensym1"
                               (bb
                                ()
                                (@
@@ -316,10 +177,10 @@
                                 (tail-call
                                  (@
                                   ("tests/rt/pos/ifc/dclabel-whitespace.trp" 17 5)
-                                  (local "print5"))
+                                  (local "gensym2"))
                                  (@
                                   ("tests/rt/pos/ifc/dclabel-whitespace.trp" 17 5)
-                                  (local "gensym104")))))
+                                  (local "gensym3")))))
                               (bb
                                ()
                                (@
@@ -327,4 +188,4 @@
                                 (ret
                                  (@
                                   (rt "CaseElimination")
-                                  (local "gensym103")))))))))))))))))))))))))))))))))))
+                                  (local "gensym1")))))))))))))))))))))))))))))))))))

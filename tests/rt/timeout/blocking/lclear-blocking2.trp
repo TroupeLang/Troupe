@@ -1,7 +1,7 @@
 (* blocking; there is sufficient clearance to 
    perform the receive *)
 
-let val c = raisembox (`{alice}`)   
+let val _ = enableRangedReceive (`{}`, `{alice}`, attenuate (authority, `<#null-confidentiality;#null-integrity>`))
 in rcv (`{}`, `{alice}`, [] )
 end
 

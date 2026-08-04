@@ -4,9 +4,11 @@
 let (* set secret to true or false *)
     val secret = false raisedTo `<secret;#root-integrity>`
     
-    fun wait () = let val c = raisembox ( `<secret;#root-integrity>`)
-                  in rcv (`{}`, `<secret;#root-integrity>`, [ hn x => () ]); 
-                     lowermbox (c, authority)
+    fun wait () = let val (_, c) = enableRangedReceive ( `<;#root-integrity>`
+                                                      , `<secret;#root-integrity>`
+                                                      , authority)
+                  in rcv (`{}`, `<secret;#root-integrity>`, [ hn x => () ]);
+                     disableRangedReceive c
                   end
     fun signal p = send (p, ())
 

@@ -1,5 +1,6 @@
-(* positive test; should be ok *)
-let val c = raisembox (`<alice;#root-integrity>`)    
-    val () = lowermbox (c, authority)
+(* positive test; should be ok. The successful close is itself the certification
+   check: an uncertified region (ok = false) has no close. *)
+let val (_, c) = enableRangedReceive (`<;#root-integrity>`, `<alice;#root-integrity>`, authority)
+    val () = disableRangedReceive c
 in c
-end 
+end

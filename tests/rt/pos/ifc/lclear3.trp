@@ -1,23 +1,23 @@
 
 (* positive; *)
 
-let val main = self () 
+let val main = self ()
     val _ = spawn ( fn () => if (true raisedTo `<alice & bob;#root-integrity>`) then send (main, 1) else ())
     val _ = spawn ( fn () => if (true raisedTo `<bob;#root-integrity>`) then send (main, 2) else ())
-                              
+
 
     val auth_alice = attenuate (authority, `<alice;#root-integrity>`)
 
-    val c = raisembox (`<alice;#root-integrity>`) 
+    val (_, c) = enableRangedReceive (`<;#root-integrity>`, `<alice;#root-integrity>`, auth_alice)
 
     (* observe that ranged receive takes place over a range that
-      is higher than our clearance; this is okay as long as 
-      we have enough authority to bridge the gap
+      is higher than the region's ceiling; this is okay as long as
+      the region was certified by enough authority to bridge the gap
     *)
 
     val r1 = rcv (`<bob;#root-integrity>`, `<alice & bob;#root-integrity>`, [hn x => x])
-    val _ = printWithLabels r1 
-    val _ = lowermbox (c, auth_alice)
+    val _ = printWithLabels r1
+    val _ = disableRangedReceive c
 
     (* the mailbox clearance at this point is restored to BOT *)
     (* the blocking label is as high as {alice, bob} beacuse of the receive *)

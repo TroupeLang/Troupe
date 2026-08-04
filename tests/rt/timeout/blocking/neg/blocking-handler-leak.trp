@@ -2,9 +2,9 @@ let
     (* set secret to either 0 or 1 *)
     val secret = 1 raisedTo `<secret;#root-integrity>`
     fun wait () = 
-        let val t = raisembox ( `<secret;#root-integrity>`)
+        let val (_, t) = enableRangedReceive (`<;#root-integrity>`, `<secret;#root-integrity>`, authority)
          in rcv (`{}`, `<secret;#root-integrity>`, [ hn x => () ]);
-            lowermbox (t, authority)
+            disableRangedReceive t
         end
     val mainPid = self ()
     val h1 = hn 1 => () 
@@ -15,15 +15,15 @@ let
                 if ( (secret > 0) andalso (i = 1))
                    orelse ( (secret <= 0 ) andalso (i = 2))
                    then (h1, h2) else (h2, h1)               
-              val t = raisembox `<secret;#root-integrity>`
+              val (_, t) = enableRangedReceive (`<;#root-integrity>`, `<secret;#root-integrity>`, authority)
               val _ = receive [g1]        
-              val _ = lowermbox (t, authority )      
+              val _ = disableRangedReceive t      
               val _ = adv i
               val _ = printWithLabels i                     
               val _ = send (mainPid, ())
-              val t = raisembox `<secret;#root-integrity>`
+              val (_, t) = enableRangedReceive (`<;#root-integrity>`, `<secret;#root-integrity>`, authority)
               val _ = receive [g2]
-              val _ = lowermbox (t, authority)
+              val _ = disableRangedReceive t
           in printWithLabels "DONE"
           end       
 

@@ -2,7 +2,7 @@
 
 Created: 2021-08-06; updated 2021-08-09; AA
 
-This test case demonstrates the need to add lclear label to the 
+This test case demonstrates the need to add the region ceiling to the 
 values obtained through the mailbox (which includes both `peek`
 and `consume` operations)
 
@@ -14,7 +14,7 @@ on the formalization of Troupe in Coq.
 (* I will need two processes *)
 
 let fun f () = 
-	let  val c = raisembox (`<bob;#root-integrity>`)
+	let  val _ = enableRangedReceive (`<;#root-integrity>`, `<bob;#root-integrity>`, attenuate (authority, `<#null-confidentiality;#null-integrity>`))
 	     val x = consume  (0, `<alice;#root-integrity>`, `<alice & bob;#root-integrity>`) 
 	     val _ = debugpc ()
 	     val _ = blockdeclto (authority , `<alice;#root-integrity>`)

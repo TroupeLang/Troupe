@@ -29,36 +29,7 @@ let fun printpc () =
 
 
     val _ = printString ""
-    val _ = printString "blockupto"
-    val _ = printString "============================================================"
-
-    val _ = printpc ()
-    val _ = IfcUtil.blockupto `{alice}`
-    val _ = printpc ()
-    val _ = printString ""
-
-    val _ = printpc ()
-    val _ = IfcUtil.blockupto `{}`
-    val _ = printpc ()
-
-    val _ = blockdown authority
-
-
-    val _ = printString ""
-    val _ = printString "blockprotect"
-    val _ = printString "============================================================"
-
-    val _ = IfcUtil.blockupto `{alice}`
-
-    val _ = printpc ()
-    val _ = IfcUtil.blockprotect (fn () => blockdown authority)
-    val _ = printpc ()
-
-    val _ = blockdown authority
-
-
-    val _ = printString ""
-    val _ = printString "invokeAtLevel, invokeAtLevel"
+    val _ = printString "invokeAtLevel"
     val _ = printString "============================================================"
 
 
@@ -68,11 +39,6 @@ let fun printpc () =
     val _ = blockdown authority
 
     val _ = printString ""
-
-    val _ = printpc ()
-    val _ = IfcUtil.invokeAtLevelPini (printpc, authority, `{alice}`)
-    val _ = printpc ()
-    val _ = blockdown authority
 
 
     val _ = printString ""

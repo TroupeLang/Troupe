@@ -15,23 +15,6 @@ let (*-------------------------- Lattice Constants  -------------------------*)
     val top = `<#root-confidentiality; #null-integrity>`
 
 
-    (*---------------------------  Blocking Label  --------------------------*)
-
-    (** Raises the blocking label up to `level`. *)
-    fun blockupto level = ((if (true raisedTo level) then () else ()); ())
-
-    (** Runs `f` while preserving the blocking label regardless of any
-     *  downgrades in `f`.
-     *
-     *  Any taints on the blocking label are also preserved.
-     *)
-    fun blockprotect f =
-        let val bl = _bl ()
-            val x = f ()
-            val _ = blockupto bl
-        in x
-        end
-
     (*--------------------------  Program Counter  --------------------------*)
 
     (** Returns the result of invoking function `f` with `()` while the program
@@ -40,14 +23,6 @@ let (*-------------------------- Lattice Constants  -------------------------*)
      *  Note, the blocking label will be tainted by `level`.
      *)
     fun invokeAtLevel (f, level) = if true raisedTo level then f() else ()
-
-    (** Returns the result of invoking function `f` with `()` while the program
-     *  counter and blocking label is raised to `level`.
-     *
-     *  Note, the blocking label is lowered back again afterwards.
-     *)
-    fun invokeAtLevelPini (f, authority, level) =
-        blockprotect (fn () => invokeAtLevel (f, level); blockdown authority)
 
     (*--------------------------  Deep Downgrades  --------------------------*)
 
@@ -198,13 +173,8 @@ in [ (*-- Constants --*)
    , ("bot",  bot)
    , ("top",  top)
 
-     (*-- Blocking Label --*)
-   , ("blockupto", blockupto)
-   , ("blockprotect", blockprotect)
-
      (*-- Program Counter --*)
    , ("invokeAtLevel", invokeAtLevel)
-   , ("invokeAtLevelPini", invokeAtLevelPini)
 
      (*-- Deep Downgrades --*)
    , ("declassifyDeep", declassifyDeep)

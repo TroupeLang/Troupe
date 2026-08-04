@@ -1,4 +1,4 @@
-2026-08-03T09:27:16.771Z [RTM] [32minfo[39m: Skipping network creation. Observe that all network operations will yield a runtime error.
+2026-08-04T09:10:54.977Z [RTM] [32minfo[39m: Skipping network creation. Observe that all network operations will yield a runtime error.
 
 constants
 ============================================================
@@ -19,28 +19,12 @@ false
 false
 true
 
-blockupto
-============================================================
-("pc", {}, "bl", {})
-("pc", {}, "bl", {alice})
-
-("pc", {}, "bl", {alice})
-("pc", {}, "bl", {alice})
-
-blockprotect
-============================================================
-("pc", {}, "bl", {alice})
-("pc", {}, "bl", {alice})
-
-invokeAtLevel, invokeAtLevel
+invokeAtLevel
 ============================================================
 ("pc", {}, "bl", {})
 ("pc", {alice}, "bl", {alice})
 ("pc", {}, "bl", {alice})
 
-("pc", {}, "bl", {})
-("pc", {alice}, "bl", {alice})
-("pc", {}, "bl", {})
 
 declassifyDeep, endorseDeep, downgradeDeep
 ============================================================

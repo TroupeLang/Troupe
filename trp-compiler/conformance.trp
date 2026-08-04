@@ -31,7 +31,7 @@ import String
 
 datatype result = PASSED | FAILED of string
 
-let fun say line = fwrite (stdout authority, line ^ "\x0a")
+let fun say line = fwrite (stdout, line ^ "\x0a")
 
     fun law (name, holds) = if holds then PASSED else FAILED name
 

@@ -48,12 +48,14 @@ troupe_parse_args() {
                 --no-color|--no-nmifc|--suppress-local-info-message|--suppress-main-thread-finished-message|--explain|-e|--relay-only|--disable-relay|--no-p2p-circuit)
                     TROUPE_RUNTIME_ARGS="$TROUPE_RUNTIME_ARGS $arg"
                     ;;
-                # Runtime options with embedded value (--option=value)
-                --trustmap=*|--id=*|--aliases=*|--stdiolev=*|--stdio-model=*|--io-root=*|--port=*|--relay=*|--label-format=*|--relay-fault-tolerance=*|--timeout=*|--timeout-exit-code=*)
-                    TROUPE_RUNTIME_ARGS="$TROUPE_RUNTIME_ARGS $arg"
+                # Runtime options with embedded value (--option=value). Quoted
+                # on the way out: the value reaches the runtime through an
+                # eval, and a label level spells `<`, `>` and `;`.
+                --trustmap=*|--id=*|--aliases=*|--stdiolev=*|--io-root=*|--port=*|--relay=*|--label-format=*|--relay-fault-tolerance=*|--timeout=*|--timeout-exit-code=*)
+                    TROUPE_RUNTIME_ARGS="$TROUPE_RUNTIME_ARGS \"$arg\""
                     ;;
                 # Runtime options expecting a separate value
-                --trustmap|-tm|--id|-i|--aliases|-a|--stdiolev|--stdio-model|--io-root|--port|--relay|--label-format|--relay-fault-tolerance|--timeout|--timeout-exit-code)
+                --trustmap|-tm|--id|-i|--aliases|-a|--stdiolev|--io-root|--port|--relay|--label-format|--relay-fault-tolerance|--timeout|--timeout-exit-code)
                     TROUPE_RUNTIME_ARGS="$TROUPE_RUNTIME_ARGS $arg"
                     _expect_runtime_value=true
                     ;;

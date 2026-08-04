@@ -1,1 +1,1 @@
-fwrite (stdout authority, "42\n")
+fwrite (stdout, "42\n")

@@ -95,4 +95,4 @@ let val e   = {reason = "unterminated string", offset = 42}
 
     ]
 
-in Unit.run authority tests end
+in Unit.run tests end

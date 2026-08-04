@@ -82,7 +82,7 @@ let val args = getCliArgs authority
 
     val unknown = List.filter (fn a => List.length (named a) = 0) names
 
-    fun runOne d = Bench.collectRows authority d.name d.sizes reps d.bench d.check
+    fun runOne d = Bench.collectRows d.name d.sizes reps d.bench d.check
 
     (* `mode=list` prints the benchmark names, one per line, and measures
        nothing. run.sh asks both languages for their list and refuses to run if
@@ -95,15 +95,15 @@ let val args = getCliArgs authority
                    | []     => false
 
 in if not knownSuite
-   then let val _ = fwrite (stderr authority,
+   then let val _ = fwrite (stderr,
                             "unknown suite: " ^ suite ^ " (have: awfy, kernels)\n")
         in exit (authority, 2) end
    else if listOnly
-   then let val _ = List.map (fn d => fwrite (stdout authority, d.name ^ "\n"))
+   then let val _ = List.map (fn d => fwrite (stdout, d.name ^ "\n"))
                              descriptors
         in () end
    else if List.length unknown > 0
-   then let val _ = fwrite (stderr authority,
+   then let val _ = fwrite (stderr,
                             "unknown benchmarks: "
                             ^ String.concatWith ", " unknown ^ "\n")
         in exit (authority, 2) end

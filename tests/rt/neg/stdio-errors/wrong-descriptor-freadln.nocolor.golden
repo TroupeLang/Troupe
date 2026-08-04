@@ -1,7 +1,7 @@
-2026-07-31T16:48:03.609Z [RTM] info: Skipping network creation. Observe that all network operations will yield a runtime error.
-Runtime error in thread 5460acea-dcfd-4070-a694-e6a55bd2bc27@{}%{}
+2026-08-03T09:01:31.770Z [RTM] info: Skipping network creation. Observe that all network operations will yield a runtime error.
+Runtime error in thread bfee4bea-b60e-4bb0-ad4b-51712be1c0d5@{}%{}
 
-  1 | let val _ = freadln (stdout authority)
+  1 | let val _ = freadln (stdout)
     |             ^
 
 >> value LocalObject is not an input descriptor

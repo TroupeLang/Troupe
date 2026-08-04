@@ -50,7 +50,7 @@ import "./Editor"
 import "./Key"
 
 let val a = authority
-    val err = stderr a
+    val err = stderr
 
     fun fail (message, code) =
         let val _ = fwrite (err, "crashprobe: " ^ message ^ "\n")

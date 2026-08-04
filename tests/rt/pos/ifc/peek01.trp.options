@@ -1,0 +1,2 @@
+# Note: this test requires the corrupt stdio level.
+--stdiolev '<#root-confidentiality;#null-integrity>'

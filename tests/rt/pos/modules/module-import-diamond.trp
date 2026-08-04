@@ -4,6 +4,6 @@
 import "./modsrc/ModuleDiamondGreet"
 import "./modsrc/util/ModuleDiamondFmt" as Fmt
 
-let val _ = fwrite (stdout authority, ModuleDiamondGreet.greet "world" ^ "\n")
-    val _ = fwrite (stdout authority, Fmt.shout "direct" ^ "\n")
+let val _ = fwrite (stdout, ModuleDiamondGreet.greet "world" ^ "\n")
+    val _ = fwrite (stdout, Fmt.shout "direct" ^ "\n")
 in () end

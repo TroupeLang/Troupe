@@ -169,4 +169,4 @@ let val tests = Unit.group "Number" [
               , Unit.it "returns 42/10 for '4.2'"  (Unit.isEq (42/10)      (Number.fromString "4.2"))
             ]
         ]
-in Unit.run authority tests end
+in Unit.run tests end

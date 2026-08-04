@@ -19,7 +19,7 @@ import "./VimMotions"
 import "./FileOps"
 
 let val a = authority
-    val out = stdout a
+    val out = stdout
 
     (** The sections the editor's plugin set assembles the page from. Built inside a function
      *  because a module's top level does not call one (docs/MODULES.md). *)

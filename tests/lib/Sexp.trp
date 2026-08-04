@@ -217,4 +217,4 @@ let val q   = "\x22"
                         (Unit.isEq "(a)" (Sexp.print (LST [ATOM "a"])))
             ]
         ]
-in Unit.run authority tests end
+in Unit.run tests end

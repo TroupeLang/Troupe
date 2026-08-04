@@ -6,7 +6,7 @@
    the subscriber and also answers `Ok`; which process the replacement routes
    events to is the subject of resubscribe-replaces.trp. *)
 let val a = authority
-    val i = stdin a
+    val i = stdin
     val me = self ()
     val _ = print (ttyUnsubscribe i)
     val _ = print (ttySubscribe (i, me))

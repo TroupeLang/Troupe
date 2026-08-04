@@ -1,3 +1,0 @@
-2026-07-31T16:08:54.970Z [RTM] [32minfo[39m: Skipping network creation. Observe that all network operations will yield a runtime error.
-acquired with an authority attenuated to BOT
->>> Main thread finished with value: ()@{}%{}

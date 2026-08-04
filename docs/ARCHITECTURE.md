@@ -29,9 +29,8 @@ authoritative sequence.
    - Export extraction (`Exports.hs`) when compiling a library or module (`-l`).
    - Syntactic-variant folding (`SynVarFolding.hs`, hashing in `SynVarHash.hs`) — process
      `datatype` groups, rewriting constructor occurrences and constructor patterns into tagged
-     tuples and tuple patterns. See [VARIANTS.md](VARIANTS.md). This runs before ambient-method
-     injection, so a constructor may shadow an ambient built-in.
-   - Ambient-method injection (`AddAmbientMethods.hs`, Normal compile mode only).
+     tuples and tuple patterns. See [VARIANTS.md](VARIANTS.md). A constructor may shadow an
+     ambient built-in.
 3. **Core transformations:**
    - Pattern-match / case elimination (`CaseElimination.hs`). `DirectWOPats.hs` is the
      pattern-free AST representation these produce, not a driver pass.
@@ -90,28 +89,39 @@ Key components:
 
 ## External resource access
 
-Every runtime operation that reaches outside the program — standard streams, persistence, the
-network registry, and file I/O — requires authority rather than ordinary label flow, with one
-exception besides `send` (governed by wire label/trust checks): under the IFC stdio model
-(below), stdio is checked by label flow at the operations. The rest require **full (ROOT)
-authority**: `persist`, `cliargs`, `exit`, `register`, and the `SimpleFileIO` primitives call
-`assertIsRootAuthority`.
+Every runtime operation that reaches outside the program — persistence, the network registry, and
+file I/O — requires authority rather than ordinary label flow. Two exceptions: `send`, governed by
+wire label/trust checks, and stdio (below), checked by label flow at the operations. The rest
+require **full (ROOT) authority**: `persist`, `cliargs`, `exit`, `register`, and the
+`SimpleFileIO` primitives call `assertIsRootAuthority`.
 
 ### Standard streams (stdio)
 
-`rt/src/builtins/stdio.mts` and `rt/src/builtins/tty.mts`. Two enforcement models, selected by
-`--stdio-model` (default `capability`); `--stdiolev` sets the channel level `L` (default ROOT),
-in either V1 (`'{alice}'`) or V2 (`'<alice;#root-integrity>'`) syntax.
+`rt/src/builtins/stdio.mts` and `rt/src/builtins/tty.mts`. stdio is a pair of channels at a level
+`L`, set by `--stdiolev` (default ROOT) in either V1 (`'{alice}'`) or V2
+(`'<alice;#root-integrity>'`) syntax.
 
-- **`capability`** — acquiring a descriptor via `stdin`/`stdout`/`stderr` is checked
-  `actsFor(authorityLevel, L)`; the operations themselves are unchecked.
-- **`ifc`** — stdio is a pair of channels at `L`. Acquisition is unchecked (a descriptor names a
-  stream and grants nothing). Observations drawn through the channel — a line from `freadln`, a
-  pushed event, `ttyIsTTY`, `ttySize` — are labelled at `L`. Effects on the channel — `fwrite`,
-  consuming a line, a raw-mode change, arming or disarming event delivery — are checked
-  `flowsTo(lub(pc, operand levels), L)` after raising the pc to the blocking label, in both
-  label dimensions: what comes from the channel is `L`-data, what goes to the channel must flow
-  to `L`.
+`stdin`, `stdout` and `stderr` are **values**, not something acquired: a descriptor names a stream
+and grants nothing, so there is nothing for it to show and nothing to check. Enforcement sits on
+the operations:
+
+- **Observations** drawn through a channel — a line from `freadln`, a pushed terminal event,
+  `ttyIsTTY`, `ttySize` — are labelled at `L`.
+- **Effects** on a channel — `fwrite`, consuming a line, a raw-mode change, arming or disarming
+  event delivery — are checked `flowsTo(lub(pc, operand levels), L)` after raising the pc to the
+  blocking label. The check runs in both label dimensions: what comes from the channel is
+  `L`-data, and what goes to the channel must flow to `L`.
+
+**The ambient names.** `print`, `printString`, `printWithLabels`, `fwriteln`, `fwritelnWithLabels`
+and `inputLine` are runtime builtins, available to a program, a module and a library on the same
+terms. `print` and its two neighbours write a line to stdout; `fwriteln` and `fwritelnWithLabels`
+take an explicit descriptor, which is the form to reach for when the destination is a parameter.
+
+**Receive-then-lower-the-blocking-label needs a channel whose integrity something can act for.**
+`lib/Tty.trp`'s `nextEventAtLevel` closes with `blockdecl auth`, and the blocking label it lowers
+was raised by the channel. ROOT is fine and a named principal is fine; a channel at
+`#null-integrity` leaves nothing to declassify from, and the receive path fails there even though
+the write path does not.
 
 Terminal support beyond the streams: `ttyIsTTY`/`ttySize`/`ttyLevel` (queries), `ttyRawMode`
 (line-discipline switch; entering raw mode closes the lazily-created readline interface, which a
@@ -244,6 +254,39 @@ enumerations in `rt/src/DowngradeEnums.mts` and error/message formatting in
 
 Two related authority-based operators live under `rt/src/builtins/`: `attenuate` (`attenuate.mts`)
 and `raiseTrust` (`raiseTrust.mts`).
+
+### Non-malleable IFC
+
+Downgrading carries two further conditions beyond the authority check, enforced by default and
+disabled by `--no-nmifc`. Both are in `okToDowngradeGeneric`
+(`rt/src/levels/DCLabels/dclabel.mts`), which cites the security-model document for them:
+
+- **Robust declassification** — `(S_auth ∨ I_from ∨ I_pc) ∧ S_to ⟹ S_from`. A release must not be
+  influenced by whoever could have written the data.
+- **Transparent endorsement** — `I_from ⟹ I_to ∨ (S_from ∧ S_pc)`. A thread must not endorse what
+  it cannot see.
+
+A label `<S, I>` is **corrupt** when its integrity does not imply its confidentiality
+(`DCLabel.isCorrupt`) — more secret than it is trusted. Robust declassification refuses to
+downgrade from a corrupt label whatever authority is shown, so a corrupt label is one nothing can
+move. `{}`, `{#ROOT}` and any self-dual `{p}` are not corrupt;
+`<#root-confidentiality;#null-integrity>` is.
+
+This reaches stdio through the channel level. Writing to a channel is not a downgrade, so a corrupt
+channel level admits every write — but a thread that *reads* from such a channel takes the channel's
+level into its blocking label and can never put it back down, in either dimension.
+`enableRangedReceive` reports the same condition as its certification bit: an interval whose top is
+corrupt yields `ok = false`, and that region can be received in but never closed.
+
+Twenty-eight tests run at `<#root-confidentiality;#null-integrity>` because they print labelled
+values and only need the write to be admitted. Each says so in its `.trp.options`:
+
+```
+# Note: this test requires the corrupt stdio level.
+```
+
+A self-dual level naming each test's own principals would be non-corrupt and would leave those
+tests able to downgrade; the note is the thread to pull if that is wanted.
 
 ### The pini / blocking-label stack
 

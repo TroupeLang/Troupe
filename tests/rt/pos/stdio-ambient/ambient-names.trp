@@ -1,0 +1,10 @@
+(* The six ambient names. They are runtime builtins, so nothing here names an
+   authority to print with, and nothing is injected into the program. *)
+let val _ = print "print"
+    val _ = printString "printString"
+    val _ = printWithLabels "printWithLabels"
+    val _ = fwriteln (stdout, "fwriteln")
+    val _ = fwritelnWithLabels (stdout, "fwritelnWithLabels")
+    val name = inputLine ()
+in print ("inputLine read: " ^ name)
+end

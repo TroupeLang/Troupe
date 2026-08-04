@@ -83,7 +83,7 @@ options =
   , Option []    ["debug-pp"]  (NoArg DebugPP)            "show positions in IR dumps"
   , Option []    ["pp-pos-format"] (ReqArg PPPosFormat "FMT") "position format: inline|comment|bracket|none"
   , Option []    ["emit-ir-sexp"]   (NoArg EmitIRSexp)   "compile a .trp and emit the IR as troupe-ir-sexp text (to -o FILE, else stdout)"
-  , Option []    ["ingest-ir-sexp"] (NoArg IngestIRSexp) "read a troupe-ir-sexp file and compile it to JS (program must be self-contained; no ambient methods are injected)"
+  , Option []    ["ingest-ir-sexp"] (NoArg IngestIRSexp) "read a troupe-ir-sexp file and compile it to JS (the program must be self-contained)"
   , Option []    ["update-deps"]    (NoArg UpdateDeps)   "establish/update the program's dependencies file (<main>.deps.json) with actual module hashes, instead of enforcing pins"
   , Option []    ["datatype-hashes"] (NoArg DatatypeHashes) "print the content hash and canonical form of each datatype group declared in the file, then stop"
   ]
@@ -143,9 +143,9 @@ process pin root flags fname input = do
 -- nothing at all unless -v).
 compileOpts :: [Flag] -> Pipeline.CompileOpts
 compileOpts flags =
-  Pipeline.CompileOpts { Pipeline.coMode     = if LibMode `elem` flags then Library else Normal
-                       , Pipeline.coDump     = dump
-                       , Pipeline.coPPConfig = ppConfig }
+  Pipeline.CompileOpts { Pipeline.coMode       = if LibMode `elem` flags then Library else Normal
+                       , Pipeline.coDump       = dump
+                       , Pipeline.coPPConfig   = ppConfig }
   where
     dump | Verbose `elem` flags = Pipeline.StageDump { Pipeline.dumpSep  = printSep
                                                      , Pipeline.dumpFile = writeFileD
@@ -244,8 +244,8 @@ isOutputFile _              = False
 --------------------------------------------------------------------------------
 ----- INGEST: troupe-ir-sexp file -> whole-program backend -> JS ---------------
 -- Reads an s-expression IR file, parses it to an IRProgram, and runs the normal
--- whole-program backend (prog2raw -> rawopt -> raw2Stack -> stack2JS). No
--- ambient methods are injected: the ingested program must be self-contained.
+-- whole-program backend (prog2raw -> rawopt -> raw2Stack -> stack2JS). The
+-- ingested program must be self-contained.
 ingestIRSexp :: [Flag] -> String -> String -> IO ExitCode
 ingestIRSexp flags file input =
   case IRSexp.parseProg input of

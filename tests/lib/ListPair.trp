@@ -88,4 +88,4 @@ let val tests = Unit.group "ListPair" [
                 ]
             end
         ]
-in Unit.run authority tests end
+in Unit.run tests end

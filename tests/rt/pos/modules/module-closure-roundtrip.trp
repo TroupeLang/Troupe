@@ -14,4 +14,4 @@ import "./modsrc/ModuleGuardHelper"
 let fun wrap s = ModuleGuardHelper.stamp s
     val _ = save (authority, "modclosure", wrap)
     val f = restore "modclosure"
-in fwrite (stdout authority, f "hi" ^ "\n") end
+in fwrite (stdout, f "hi" ^ "\n") end

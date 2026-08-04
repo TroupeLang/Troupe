@@ -472,12 +472,9 @@ The format faithfully represents any `IRProgram`; **running** one additionally r
 - **Entry:** the entry function is the `FunDef` named `"main"` (`HFN "main"`), and its argument is
   `"$$authorityarg"` (the ambient authority). (Cf. `ClosureConv.hs`: the top-level pair is
   `("$$authorityarg", "main")`.)
-- **Ambient methods:** in the normal pipeline `addAmbientMethods` (`compiler/src/AddAmbientMethods.hs`)
-  injects standard methods (`print`, …) into the *surface* program before lowering. A standalone IR
-  program does **not** get this for free. The implementer must decide whether (a) a runnable
-  `IRProgram` is expected to already contain the ambient-method `FunDef`s, or (b) the IR runner
-  injects an ambient/prelude set before backend codegen. **This is a running-concern, separate from
-  the format/round-trip, and is left to the implementation.**
+- **Ambient names:** `print` and its neighbours are base functions, resolved by the runtime like
+  any other builtin, so an `IRProgram` referring to them carries nothing extra and needs nothing
+  injected.
 - **Backend path:** from an `IRProgram`, the existing backend runs `IR2Raw.ir2raw → RawOpt.rawopt →
   Raw2Stack.raw2Stack → Stack2JS.stack2JSWithMappings` (the whole-program codegen used by the normal
   compile in `app/Main.hs`), producing a runnable `.mjs`. (The `--json-ir`/`--text-ir` stdin modes

@@ -59,9 +59,9 @@ corpusFiles dir = do
 
 compileOpts :: CompileMode -> Pipeline.CompileOpts
 compileOpts mode =
-  Pipeline.CompileOpts { Pipeline.coMode     = mode
-                       , Pipeline.coDump     = Pipeline.silentDump
-                       , Pipeline.coPPConfig = mkPPConfig False (parsePosFormat "inline")
+  Pipeline.CompileOpts { Pipeline.coMode       = mode
+                       , Pipeline.coDump       = Pipeline.silentDump
+                       , Pipeline.coPPConfig   = mkPPConfig False (parsePosFormat "inline")
                        }
 
 -- | Compile one program to IR. 'Nothing' means the file is not a compilation

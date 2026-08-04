@@ -330,6 +330,15 @@ instance WellFormedIRCheck IRExpr where
                      , "flowsTo"                     
                      , "freadln"
                      , "fwrite"
+                     -- The ambient names: what `print` and its neighbours
+                     -- resolve to, in a program, a module or a library alike
+                     -- (builtins/stdio.mts).
+                     , "fwriteln"
+                     , "fwritelnWithLabels"
+                     , "inputLine"
+                     , "print"
+                     , "printString"
+                     , "printWithLabels"
                      , "getTime"
                      , "getCliArgs"
                      , "getType"

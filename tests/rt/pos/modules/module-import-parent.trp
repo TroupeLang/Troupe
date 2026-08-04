@@ -4,5 +4,5 @@
  * is a pure resolution concern and never becomes identity. *)
 import "./modsrc/util/ModuleParentChild"
 
-let val _ = fwrite (stdout authority, ModuleParentChild.child "x" ^ "\n")
+let val _ = fwrite (stdout, ModuleParentChild.child "x" ^ "\n")
 in () end

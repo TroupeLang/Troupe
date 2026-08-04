@@ -3,7 +3,7 @@ let fun inputLineWithPini auth =
         in s
         end
 
-    val out = stdout authority
+    val out = stdout
     val _ = fwrite (out, "What's your name: ")
     val input = inputLineWithPini authority
 

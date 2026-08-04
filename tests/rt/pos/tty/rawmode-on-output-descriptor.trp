@@ -2,6 +2,6 @@
    programming error and kills the thread, the same disposition ttySize uses for
    the input descriptor. *)
 let val a = authority
-    val o = stdout a
+    val o = stdout
 in print (ttyRawMode (o, true))
 end

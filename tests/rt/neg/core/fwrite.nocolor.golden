@@ -1,7 +1,7 @@
-2026-03-09T22:33:04.456Z [RTM] info: Skipping network creation. Observe that all external IO operations will yield a runtime error.
-Runtime error in thread f6e35c9e-fed4-4611-807d-3859c7b40bca@{}%{}
+2026-08-03T09:01:31.769Z [RTM] info: Skipping network creation. Observe that all network operations will yield a runtime error.
+Runtime error in thread 936acef8-1761-4d14-9af8-9522f699dfd3@{}%{}
 
-  1 | fwrite (stdout authority) 42
+  1 | fwrite (stdout) 42
     | ^
 
 >> value LocalObject@{}%{} is not a 2-tuple

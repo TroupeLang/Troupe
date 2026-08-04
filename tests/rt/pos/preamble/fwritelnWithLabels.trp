@@ -1,2 +1,2 @@
-fwritelnWithLabels (stdout authority, "Hello, Troupe!" raisedTo `{alice}`)
+fwritelnWithLabels (stdout, "Hello, Troupe!" raisedTo `{alice}`)
 

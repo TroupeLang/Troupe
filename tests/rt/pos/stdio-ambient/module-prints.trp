@@ -1,0 +1,6 @@
+(* A module printing under the stdio model. *)
+import "./modsrc/Announce"
+
+let val _ = Announce.announce "hello"
+in print "program says: done"
+end

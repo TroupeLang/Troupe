@@ -1,8 +1,0 @@
-(* IFC stdio model: consuming a line is an effect on the channel, so a read
-   from a pc raised above the channel level is refused — the fact that the line
-   was consumed would otherwise be observable to a later reader. *)
-let val fd = stdin authority
-    val secret = 42 raisedTo `{alice}`
-    val line = if secret > 0 then freadln fd else ""
-in ()
-end

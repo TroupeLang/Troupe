@@ -1,1 +1,3 @@
+# Note: this test requires the corrupt stdio level.
 --nmifc
+--stdiolev '<#root-confidentiality;#null-integrity>'

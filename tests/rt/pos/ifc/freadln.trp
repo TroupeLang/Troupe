@@ -1,5 +1,5 @@
-let val _ = fwrite (stdout authority, (toString (_pc ())) ^ "\n")
-    val _ = freadln (stdin authority)
-    val _ = fwrite (stdout authority, (toString (_pc ())) ^ "\n")
+let val _ = fwrite (stdout, (toString (_pc ())) ^ "\n")
+    val _ = freadln (stdin)
+    val _ = fwrite (stdout, (toString (_pc ())) ^ "\n")
 in () end
 

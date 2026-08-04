@@ -1,11 +1,11 @@
-2026-07-31T17:47:46.330Z [RTM] info: Skipping network creation. Observe that all network operations will yield a runtime error.
+2026-08-04T08:55:13.496Z [RTM] info: Skipping network creation. Observe that all network operations will yield a runtime error.
 [34mbegin [0mTty
   [34mbegin [0mqueries on a pipe
       [33m[ TEST ][0m it stdin is not a terminal      [32m[ PASS ][0m it stdin is not a terminal
       [33m[ TEST ][0m it stdout is not a terminal      [32m[ PASS ][0m it stdout is not a terminal
       [33m[ TEST ][0m it size reports ERR rather than failing      [32m[ PASS ][0m it size reports ERR rather than failing
       [33m[ TEST ][0m it raw mode reports ERR rather than failing      [32m[ PASS ][0m it raw mode reports ERR rather than failing
-      [33m[ TEST ][0m it the channel level defaults to ROOT      [32m[ PASS ][0m it the channel level defaults to ROOT
+      [33m[ TEST ][0m it the channel level is what the run was given      [32m[ PASS ][0m it the channel level is what the run was given
   [34mend [0m
   [34mbegin [0msubscription
       [33m[ TEST ][0m it subscribe reports OK      [32m[ PASS ][0m it subscribe reports OK

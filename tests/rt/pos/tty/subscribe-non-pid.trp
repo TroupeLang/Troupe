@@ -3,7 +3,7 @@
    Delivery to something that is not a local process would vanish without a
    word, so it is refused at the call rather than at the first keystroke. *)
 let val a = authority
-    val i = stdin a
+    val i = stdin
     val _ = ttySubscribe (i, 42)
 in ()
 end

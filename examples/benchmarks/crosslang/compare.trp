@@ -30,11 +30,11 @@ import String
 
 let val args = getCliArgs authority
 
-    fun say s   = fwrite (stdout authority, s)
+    fun say s   = fwrite (stdout, s)
     fun sayLn s = say (s ^ "\n")
 
     fun die (code, msg) =
-        let val _ = fwrite (stderr authority, msg ^ "\n")
+        let val _ = fwrite (stderr, msg ^ "\n")
         in exit (authority, code) end
 
     (*==================== parsing ====================*)

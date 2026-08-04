@@ -1,0 +1,11 @@
+2026-07-31T16:08:54.970Z [RTM] [32minfo[39m: Skipping network creation. Observe that all network operations will yield a runtime error.
+Runtime error in thread de21ec46-acc3-4ce5-83be-b22767a49687@{}%{}
+
+  6 | in print secret
+    |    ^
+
+>> write to stdout above the stdio channel level
+ | effect level  {alice}
+ | pc level      {}
+ | channel level {#ROOT}
+>> at tests/rt/neg/stdio/root-refuses-raised.trp:6:4

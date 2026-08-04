@@ -204,5 +204,5 @@ let (* --- Sequenced effects ---------------------------------------------------
         ]
     ]
 
-in Unit.run authority tests
+in Unit.run tests
 end

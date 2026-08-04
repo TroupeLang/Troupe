@@ -120,9 +120,9 @@ referenceDir root = root </> "compiler" </> "test" </> "ir-sexp-conformance" </>
 -- and make it unreadable anywhere else.
 compileReference :: FilePath -> IO IRProgram
 compileReference rel = do
-  let opts = Pipeline.CompileOpts { Pipeline.coMode     = Normal
-                                  , Pipeline.coDump     = Pipeline.silentDump
-                                  , Pipeline.coPPConfig = mkPPConfig False (parsePosFormat "inline")
+  let opts = Pipeline.CompileOpts { Pipeline.coMode       = Normal
+                                  , Pipeline.coDump       = Pipeline.silentDump
+                                  , Pipeline.coPPConfig   = mkPPConfig False (parsePosFormat "inline")
                                   }
   pins   <- maybe [] (either (const []) id) <$> readDepsFile (depsFilePath rel)
   input  <- readFile rel

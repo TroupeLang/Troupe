@@ -1,0 +1,8 @@
+(* stdio model with the channel at {alice}, which is self-dual: alice
+   confidentiality and alice integrity. Public data and alice-raised data both
+   flow to it. *)
+let val public = 1
+    val aliceData = 2 raisedTo `{alice}`
+    val _ = print public
+in print aliceData
+end

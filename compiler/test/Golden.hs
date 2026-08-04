@@ -277,7 +277,7 @@ goldenTests tc = do
     warningTestsForRuntime   <- findByExtension extensions "tests/rt/warn"
     timeoutTestsForRuntime   <- findByExtension extensions "tests/rt/timeout/blocking"
     divergingTestsForRuntime <- findByExtension extensions "tests/rt/timeout/diverging"
-    testsForLib              <- findByExtension extensions "tests/lib"
+    testsForLib              <- notModuleSource <$> findByExtension extensions "tests/lib"
 
     return $ (testGroup ("Troupe golden tests (" ++ ppTestConfig tc ++ ")") $ map ($ tc)
                                 [ compilerTests negativeTestsForCompiler

@@ -1,7 +1,7 @@
 (* ttyLevel reports the channel level, which defaults to ROOT. *)
 let val a = authority
-    val i = stdin a
-    val o = stdout a
+    val i = stdin
+    val o = stdout
     val _ = print (ttyLevel i)
     val _ = print (ttyLevel o)
 in ()

@@ -1,6 +1,0 @@
-(* Capability stdio model at a non-default channel level.
-
-   Acquiring a descriptor asks whether the authority shown suffices for the
-   channel level, which is actsFor(authority, channel level). Root authority
-   acts for every level, so the ambient print works at any --stdiolev. *)
-print "hello"

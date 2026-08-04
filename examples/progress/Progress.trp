@@ -98,7 +98,7 @@ let
      * length of the previous one, because "\r" alone leaves a shorter line's tail behind. *)
     fun draw st nowMs =
         let val line = renderLine st nowMs
-            val out  = stdout st.auth
+            val out  = stdout
             val _    = if st.plain
                        then fwrite (out, line ^ "\n")
                        else fwrite (out, "\r" ^ String.padRight st.lastLen " " line)
@@ -159,7 +159,7 @@ let
      *  later output starts on a fresh one. Returns unit: the state is finished with. *)
     fun finish st =
         let val st' = if st.count = st.lastCount then st else draw st (nowMillis ())
-        in if st'.plain then () else fwrite (stdout st'.auth, "\n")
+        in if st'.plain then () else fwrite (stdout, "\n")
         end
 
     (** Items counted so far. *)

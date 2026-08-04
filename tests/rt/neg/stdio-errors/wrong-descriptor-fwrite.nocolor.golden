@@ -1,7 +1,7 @@
-2026-07-31T16:48:03.607Z [RTM] info: Skipping network creation. Observe that all network operations will yield a runtime error.
-Runtime error in thread 370ae9f8-b8b0-4157-9bcd-94e520db6e1d@{}%{}
+2026-08-03T09:01:31.769Z [RTM] info: Skipping network creation. Observe that all network operations will yield a runtime error.
+Runtime error in thread a95faa9f-33df-4320-af01-aa2776a543db@{}%{}
 
-  1 | let val _ = fwrite (stdin authority, "x")
+  1 | let val _ = fwrite (stdin, "x")
     |             ^
 
 >> value LocalObject is not an output descriptor

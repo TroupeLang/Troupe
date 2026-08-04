@@ -1,0 +1,117 @@
+import Unit
+import Outcome
+import IfcUtil
+import Tty
+
+(* The Tty cases, as a module so that one copy serves every channel level the
+ * drivers run them at. `run` takes the authority, which module code has no
+ * binding for.
+ *
+ * The library over the pipe the golden runner provides: stdin, stdout and stderr are pipes, so
+ * every query reports the non-terminal case and `ttySubscribe` delivers the piped bytes as
+ * events. No pseudo-terminal is involved; raw mode, echo and resize need one and are covered by
+ * a separate harness.
+ *
+ * How the pipe chunks `.trp.input` is the operating system's business, so nothing here counts
+ * events: the loop accumulates payloads until TTY_EOF and the assertions are on the total.
+ *
+ * The downgrade helper is exercised on an event the test injects itself, at the channel level,
+ * rather than on a piped one — an injected event is one event, whatever the pipe does with the
+ * input, and `nextEventAtLevel` is then asserted on rather than merely run. The injection is a
+ * send to self of the wire shape the runtime builds (rt/src/builtins/tty.mts:150), so the
+ * handlers see exactly what a subscription delivers.
+ *
+ * Events and query results are labeled at the channel level, and `Unit.isEq` compares labels as
+ * well as values, so expectations are raised to `Tty.level` rather than to a fixed level. That is
+ * what lets one copy of the cases run at whatever level a driver's `.trp.options` asks for, and
+ * makes each assertion check the labeling contract at that level. *)
+
+let fun run a =
+      let val i = stdin
+          val o = stdout
+
+          fun atChannel v = v raisedTo (Tty.level i)
+
+          (* --- Queries, in the non-terminal case ---------------------------------------------- *)
+
+          val isTtyIn  = Tty.isTty i
+          val isTtyOut = Tty.isTty o
+          val sizeOut  = Tty.size o
+          val rawErr   = Tty.rawMode (i, true)
+          val lvl      = Tty.level i
+
+          (* --- The downgrade helper, on an injected event ------------------------------------- *)
+
+          val _ = IfcUtil.invokeAtLevel (fn () => send (self (), ("TTYDATA", "injected")), lvl)
+          val (okInj, capInj) = Tty.listen (i, a)
+          val downgraded = Tty.nextEventAtLevel (a, lvl, IfcUtil.bot)
+          val blAfterDowngrade = _bl ()
+          val _ = Tty.unlisten capInj
+
+          val downgradedBytes = case downgraded of TTY_DATA b => b
+                                                 | _          => "not a TTY_DATA"
+
+          (* --- Delivery over the pipe ---------------------------------------------------------- *)
+
+          val subscribed = Tty.subscribe (i, self ())
+          val (okListen, cap) = Tty.listen (i, a)
+
+          fun loop acc =
+              case Tty.nextEvent lvl of TTY_DATA b   => loop (acc ^ b)
+                                      | TTY_RESIZE _ => loop acc
+                                      | TTY_EOF      => acc
+
+          val piped = loop ""
+          val _ = Tty.unlisten cap
+          val unsubscribed = Tty.unsubscribe i
+          val unsubscribedAgain = Tty.unsubscribe i
+
+          val tests = Unit.group "Tty" [
+
+              Unit.group "queries on a pipe" [
+                  Unit.it "stdin is not a terminal"  (Unit.isEq (atChannel false) isTtyIn)
+                , Unit.it "stdout is not a terminal" (Unit.isEq (atChannel false) isTtyOut)
+                , Unit.it "size reports ERR rather than failing"
+                          (Unit.isEq (atChannel "not a terminal") ((Outcome.unwrapErr sizeOut).reason))
+                , Unit.it "raw mode reports ERR rather than failing"
+                          (Unit.isEq (atChannel "not a terminal") ((Outcome.unwrapErr rawErr).reason))
+                , Unit.it "the channel level is what the run was given"
+                          (Unit.isTrueValue (lvl = Tty.level o))
+              ],
+
+              Unit.group "subscription" [
+                  Unit.it "subscribe reports OK"     (Unit.isTrueValue (Outcome.isOk subscribed))
+                , Unit.it "unsubscribe reports OK"   (Unit.isTrueValue (Outcome.isOk unsubscribed))
+                , Unit.it "unsubscribe is idempotent"
+                          (Unit.isTrueValue (Outcome.isOk unsubscribedAgain))
+              ],
+
+              Unit.group "the receive region" [
+                  Unit.it "an authority covering the channel level certifies the region"
+                          (Unit.isTrueValue okListen)
+                , Unit.it "the injected region is certified too" (Unit.isTrueValue okInj)
+              ],
+
+              Unit.group "delivery" [
+                  Unit.it "the piped bytes arrive as TTY_DATA and end with TTY_EOF"
+                          (Unit.isEq (atChannel "hello troupe") piped)
+                , Unit.it "an event payload is labeled at the channel level"
+                          (Unit.isTrueValue (levelOf piped = Tty.level i))
+              ],
+
+              Unit.group "the downgrade helper" [
+                  Unit.it "nextEventAtLevel keeps the payload"
+                          (Unit.isEq "injected" downgradedBytes)
+                , Unit.it "the payload is declassified to the target level"
+                          (Unit.isTrueValue (levelOf downgradedBytes = IfcUtil.bot))
+                , Unit.it "the event value itself is declassified too"
+                          (Unit.isTrueValue (levelOf downgraded = IfcUtil.bot))
+                , Unit.it "the blocking label is left down"
+                          (Unit.isTrueValue (blAfterDowngrade = IfcUtil.bot))
+              ]
+          ]
+
+      in Unit.run tests
+      end
+in [ ("run", run) ]
+end

@@ -1,4 +1,4 @@
-2026-08-04T08:55:13.496Z [RTM] info: Skipping network creation. Observe that all network operations will yield a runtime error.
+2026-08-04T08:55:13.499Z [RTM] info: Skipping network creation. Observe that all network operations will yield a runtime error.
 [34mbegin [0mTty
   [34mbegin [0mqueries on a pipe
       [33m[ TEST ][0m it stdin is not a terminal      [32m[ PASS ][0m it stdin is not a terminal
@@ -30,4 +30,4 @@
 
 Total:  16
 Passes: 16
->>> Main thread finished with value: true@{#ROOT}%{#ROOT}
+>>> Main thread finished with value: true@{alice}%{alice}

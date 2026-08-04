@@ -1,0 +1,3 @@
+# The cases are level-agnostic; this driver runs them at a named principal's
+# level, where an event carries that principal's integrity as well.
+--stdiolev '{alice}'

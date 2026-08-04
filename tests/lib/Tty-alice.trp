@@ -1,0 +1,7 @@
+(* The Tty cases at a channel level of a named principal, which is where the
+ * single-dimension downgrades used to refuse: an event drawn from {alice}
+ * carries alice integrity, and reaching the target level moves both
+ * dimensions. See modsrc/TtyCases for the cases. *)
+import "./modsrc/TtyCases"
+
+TtyCases.run authority

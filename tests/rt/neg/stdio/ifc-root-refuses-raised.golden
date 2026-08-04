@@ -8,4 +8,4 @@ Runtime error in thread de21ec46-acc3-4ce5-83be-b22767a49687@{}%{}
  | effect level  {alice}
  | pc level      {}
  | channel level {#ROOT}
->> at tests/rt/neg/stdio-ifc/ifc-root-refuses-raised.trp:6:4
+>> at tests/rt/neg/stdio/ifc-root-refuses-raised.trp:6:4

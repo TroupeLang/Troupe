@@ -8,4 +8,4 @@ Runtime error in thread fce4e388-6493-4936-bf37-3c9eb0cc615a@{}%{}
  | effect level  <#null-confidentiality;bob>
  | pc level      {}
  | channel level {alice}
->> at tests/rt/neg/stdio-ifc/ifc-alice-refuses-taint.trp:4:4
+>> at tests/rt/neg/stdio/ifc-alice-refuses-taint.trp:4:4

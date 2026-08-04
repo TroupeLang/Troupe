@@ -10,9 +10,10 @@ This example demonstrates trust-based information flow control between two nodes
 When the client sends information labeled at `{alice}` to the server:
 1. The client can send because it trusts the server at that level
 2. Because the server does not trust the client, the message arrives with null integrity and a
-   per-message **quarantine authority** in its metadata record. The server's gate — `raisembox`, a
-   ranged `rcv`, then `lowermbox`, `blockdown` and explicit `downgrade` calls with its own authority
-   — brings the payload back to `{}` before use, and it sends the reply under that quarantine
+   per-message **quarantine authority** in its metadata record. The server's gate —
+   `enableRangedReceive`, a ranged `rcv`, then `disableRangedReceive`, `blockdown` and explicit
+   `downgrade` calls with its own authority — brings the payload back to `{}` before use, and it
+   sends the reply under that quarantine
    authority (`invokeAtLevel`). The client extracts `quarantineAuth` from the reply metadata with
    `rcvp` and calls `endorse` on the response it receives.
 

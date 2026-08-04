@@ -9,8 +9,8 @@
  * Troupe's mailbox semantics makes this explicit. A plain `receive` is a
  * point receive at the current pc, so a public-pc counter never even sees
  * the secret-presence message (the naive port deadlocks — observed). To
- * count such messages the counter must raise its mailbox clearance
- * (`raisembox`) and use a ranged receive (`rcv`), and the monitor then
+ * count such messages the counter must open a ranged-receive region
+ * (`enableRangedReceive`) and use a ranged receive (`rcv`), and the monitor then
  * taints the resulting count with the receive's upper bound: presence
  * provenance cannot be counted away.
  *
@@ -18,13 +18,12 @@
  * rest of its execution (including the later GET), so the receiving side of
  * the request/reply must use ranged receives as well.
  *
- * Both processes keep their clearance raised for their whole lifetime: after
- * a ranged receive of secret-presence data the pc is tainted, and lowering
- * the clearance at that point is a downgrade the monitor rejects (attempting
- * it also exposes a runtime bug — the rejection crashes with an empty
- * ImplementationError instead of an IFC diagnostic; see the study report).
- * The runtime prints a warning at process exit about the unrestored
- * clearance; that warning is expected here.
+ * Both processes keep their region open for their whole lifetime: after a
+ * ranged receive of secret-presence data the pc is tainted, and closing the
+ * region at that point is a downgrade the monitor rejects. The regions are
+ * therefore opened under the null authority: the enable reports ok = false
+ * and the region has no close. The runtime prints a warning at process exit
+ * about the unrestored clearance; that warning is expected here.
  *
  *   ./local.sh examples/savina/counting-labeled.trp
  *
@@ -37,16 +36,17 @@ datatype Atoms = INC | GET | RESULT
 
 let val publicIncs = 10
     val secret = (1 raisedTo `{alice}`) > 0   (* alice-labeled boolean *)
-    val clr = `<alice;#null-integrity>`       (* clearance covering secret presence *)
+    val clr = `<alice;#null-integrity>`       (* ceiling covering secret presence *)
+    val noClose = attenuate (authority, `<#null-confidentiality;#null-integrity>`)  (* the regions below never close *)
 
     fun counter c =
         rcv (`{}`, clr,
              [ hn INC      => counter (c + 1)
              , hn (GET, p) => send (p, (RESULT, c)) ])
 
-    val cnt = spawn (fn () => (raisembox clr; counter 0))
+    val cnt = spawn (fn () => (enableRangedReceive (`{}`, clr, noClose); counter 0))
 
-    val _ = raisembox clr
+    val _ = enableRangedReceive (`{}`, clr, noClose)
 
     fun produce k = if k = 0 then () else (send (cnt, INC); produce (k - 1))
     val _ = produce publicIncs

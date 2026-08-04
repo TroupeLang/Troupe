@@ -146,11 +146,25 @@ class RangedReceiveCap {
   pc_enable: any;
   lo: any;
   valid: boolean;
-  constructor (snapshot: MboxClearance, pc_enable:any, lo:any, valid:boolean) {
+  // The two ends of the move the disable has to make, as the enable's certification
+  // saw them (each joined with the ambient ceiling), the authority shown against
+  // them, and — when the certification refused — why. The disable reports the
+  // refusal, so it needs the operands the enable weighed; without them it can only
+  // say that something was wrong.
+  levFrom: any;
+  levTo: any;
+  authLevel: any;
+  dgReason: DowngradeErrorReason | null;
+  constructor (snapshot: MboxClearance, pc_enable:any, lo:any, valid:boolean,
+               levFrom:any, levTo:any, authLevel:any, dgReason: DowngradeErrorReason | null) {
     this.mclearSnapshot = snapshot;
     this.pc_enable = pc_enable;
     this.lo = lo;
     this.valid = valid;
+    this.levFrom = levFrom;
+    this.levTo = levTo;
+    this.authLevel = authLevel;
+    this.dgReason = dgReason;
   }
 }
 
@@ -1259,8 +1273,9 @@ export class Thread {
             downgradeKind: DowngradeKind.MAILBOX,
             downgradeDimension: DowngradeDimension.BOTH,  // Cross-dimensional: changes both confidentiality and integrity
             blockLevel: this.bl,
-            pcLevel: this.pc
-        });       
+            pcLevel: this.pc,
+            operationDescription: "lowermbox"
+        });
         
         this.mailbox.mclear = cap.data; // restoring the clearance level
         this.mailbox.caps = cap.prev;
@@ -1291,10 +1306,13 @@ export class Thread {
         // construction; with NMIFC off it is the plain privilege relation (privFlowsTo).
         // Unlike the legacy path the enable never throws: an unfavourable decision
         // degrades to ok_to_dg = false (an ordinary region that never closes).
+        const levFrom = lub (hi.val, Delta);
+        const levTo   = lub (lo.val, Delta);
         const dgDecision: DowngradeResult =
             levels.okToDowngrade (DowngradeKind.MAILBOX, DowngradeDimension.BOTH)
-                  (lub (hi.val, Delta), lub (lo.val, Delta), authLevel, this.bl, this.isNmifcMode, this.pc);
+                  (levFrom, levTo, authLevel, this.bl, this.isNmifcMode, this.pc);
         const okToDg = dgDecision.kind === "SUCCESS";
+        const dgReason = dgDecision.kind === "FAILURE" ? dgDecision.reason : null;
 
         // Blocking-label quarantine: the enable's operand match is a blocking
         // decision (a secret-labelled operand whose constructor diverges across runs
@@ -1313,7 +1331,9 @@ export class Thread {
         // the capability snapshots the pre-enable record so a (valid) disable restores it
         // by identity. The only difference for an uncertified region is valid = false.
         const uid = uuidv4();
-        const capObj = new Capability (uid, new RangedReceiveCap (mc, this.pc, lo.val, okToDg), this.mailbox.caps, capLabel);
+        const capObj = new Capability (uid,
+            new RangedReceiveCap (mc, this.pc, lo.val, okToDg, levFrom, levTo, authLevel, dgReason),
+            this.mailbox.caps, capLabel);
         this.mailbox.caps = uid;
         this.mailbox.mclear = mc.copyWith ({ folds: {
             delta:    lub (mc.delta,    hi.val),
@@ -1339,35 +1359,53 @@ export class Thread {
         // cannot make the disable's outcome observable below the secret.
         this.raiseBlockingThreadLev (cap_lval.lev);
         if (!levels.flowsTo (lub (this.pc, cap_lval.lev), data.pc_enable)) {
-            this.threadError ("Ranged-receive disable occurrence check failed: the capability's context is more sensitive than the pc at the enable\n" +
-                              `| pc level               : ${this.pc.stringRep()}\n` +
-                              `| capability label        : ${cap_lval.lev.stringRep()}\n` +
-                              `| pc level at the enable  : ${data.pc_enable.stringRep()}`, false, null, ErrorKind.IFCCheck);
+            this.threadError ("The pc at the disableRangedReceive must flow to the pc at the enableRangedReceive.\n" +
+                              ` | pc level at the disableRangedReceive : ${this.pc.stringRep()}\n` +
+                              ` | pc level at the enableRangedReceive  : ${data.pc_enable.stringRep()}\n` +
+                              ` | level of the capability              : ${cap_lval.lev.stringRep()}`, false, null, ErrorKind.IFCCheck);
         }
         // The release level: the close's observable restoration lands at the region's
         // floor lo, so its occurrence must not depend on anything above lo — a region
         // enabled at a high pc with a low floor must not close inside the high context
         // (every emitting step must have pc below the event level).
         if (!levels.flowsTo (lub (this.pc, cap_lval.lev), data.lo)) {
-            this.threadError ("Ranged-receive disable occurrence check failed: the capability's context is more sensitive than the region's floor\n" +
-                              `| pc level               : ${this.pc.stringRep()}\n` +
-                              `| capability label        : ${cap_lval.lev.stringRep()}\n` +
-                              `| region floor (lo)       : ${data.lo.stringRep()}`, false, null, ErrorKind.IFCCheck);
+            this.threadError ("The pc at the disableRangedReceive must flow to the lower bound of the enableRangedReceive.\n" +
+                              ` | pc level at the disableRangedReceive   : ${this.pc.stringRep()}\n` +
+                              ` | lower bound of the enableRangedReceive : ${data.lo.stringRep()}\n` +
+                              ` | level of the capability                : ${cap_lval.lev.stringRep()}`, false, null, ErrorKind.IFCCheck);
         }
 
-        // (b) Validity — an invalid (uncertified) capability has no close and fails.
+        // (b) Validity — the enable's certification refused, so this capability has no
+        // close. The enable did not report it then (it returns the decision instead of
+        // throwing), so the refusal is explained here, from the operands the enable
+        // weighed, through the same formatter every other downgrade uses.
         if (!data.valid) {
-            this.threadError ("Ranged-receive disable on an invalid capability: the region was uncertified (ok_to_dg = false) and has no close", false, null, ErrorKind.IFCCheck);
+            const params: ValidateDowngradeParams = {
+                downgradeKind: DowngradeKind.MAILBOX,
+                downgradeDimension: DowngradeDimension.BOTH,
+                levFrom: data.levFrom,
+                levTo: data.levTo,
+                authorityLevel: data.authLevel,
+                blockLevel: this.bl,
+                pcLevel: this.pc,
+                operationDescription: "disableRangedReceive"
+            };
+            try {
+                this.threadError (getDowngradeErrorMessage (params, data.dgReason), false, null, ErrorKind.IFCCheck);
+            } catch (e) {
+                if (e instanceof ImplementationError) { this.threadError (e.message, true); }
+                else { throw e; }
+            }
         }
 
         // (c) LIFO scoping — the capability must be the head of the chain.
         if (this.mailbox.caps == null) {
-            this.threadError ("unmatched ranged-receive disable", false, null, ErrorKind.IFCCheck);
+            this.threadError ("disableRangedReceive has no open enableRangedReceive to close.", false, null, ErrorKind.IFCCheck);
         }
         if (this.mailbox.caps != cap.uid) {
-            this.threadError ("Ill-scoped enable/disable of ranged receive:\n" +
-                              `expected cap: ${this.mailbox.caps}\n` +
-                              `provided cap: ${cap.uid}`, false, null, ErrorKind.IFCCheck);
+            this.threadError ("disableRangedReceive must close the last enableRangedReceive first.\n" +
+                              ` | capability of the last enableRangedReceive : ${this.mailbox.caps}\n` +
+                              ` | capability provided                        : ${cap.uid}`, false, null, ErrorKind.IFCCheck);
         }
 
         // (d) No authority check — the downgrade was certified at the enable. Pop: restore

@@ -141,20 +141,20 @@ export function BuiltinReceive<TBase extends Constructor<UserRuntimeZero>>(Base:
           let rcvClearance = lub (lowb.val, mclear.delta, mclear.boost_level)
           if (!flowsTo (occ, rcvClearance)) {
             let errorMessage =
-              "Ranged-receive consume occurrence check failed: whether the removal fires depends on data above the receive clearance\n" +
-              ` | receive lower bound (floor): ${lowb.val.stringRep()}\n` +
-              ` | receive clearance          : ${rcvClearance.stringRep()}\n` +
-              ` | occurrence level (occ)     : ${occ.stringRep()}\n` +
-              ` | pc level                   : ${theThread.pc.stringRep()}`
+              "The data that causes this receive or consume does not flow to the level it can read.\n" +
+              ` | level of the data that causes the receive or consume : ${occ.stringRep()}\n` +
+              ` | level the receive or consume can read                : ${rcvClearance.stringRep()}\n` +
+              ` | lower bound of the receive or consume                : ${lowb.val.stringRep()}\n` +
+              ` | pc level                                             : ${theThread.pc.stringRep()}`
             theThread.threadError (errorMessage);
           }
 
-          // The floor premise: the consume may not read below any open region floor. Φ ⊑ l1.
+          // The floor premise: the consume cannot read below any open region floor. Φ ⊑ l1.
           if (!flowsTo (mclear.phi, lowb.val)) {
             let errorMessage =
-              "Ranged-receive consume floor check failed: the consume reads below the active floor\n" +
-              ` | receive lower bound (floor): ${lowb.val.stringRep()}\n` +
-              ` | active floor (Phi)         : ${mclear.phi.stringRep()}`
+              "The lower bound of the open enableRangedReceives must flow to the lower bound of this receive or consume.\n" +
+              ` | lower bound of the open enableRangedReceives : ${mclear.phi.stringRep()}\n` +
+              ` | lower bound of the receive or consume        : ${lowb.val.stringRep()}`
             theThread.threadError (errorMessage);
           }
 
@@ -165,12 +165,10 @@ export function BuiltinReceive<TBase extends Constructor<UserRuntimeZero>>(Base:
             flowsTo (lub (i.lev, highb.val), lub (lowb.val, mclear.delta, mclear.boost_level))
           if (!selection_ok) {
             let errorMessage =
-              "Not enough mailbox clearance for this receive\n" +
-              ` | receive lower bound   : ${lowb.val.stringRep()}\n` +
-              ` | receive upper bound   : ${highb.val.stringRep()}\n` +
-              ` | index label           : ${i.lev.stringRep()}\n` +
-              ` | active ceiling (Delta): ${mclear.delta.stringRep()}\n` +
-              ` | mailbox clearance     : ${mclear.boost_level.stringRep()}`
+              "The upper bound of this receive or consume does not flow to the level it can read.\n" +
+              ` | upper bound of the receive or consume : ${highb.val.stringRep()}\n` +
+              ` | level the receive or consume can read : ${lub (lowb.val, mclear.delta, mclear.boost_level).stringRep()}\n` +
+              ` | level of the message index            : ${i.lev.stringRep()}`
             theThread.threadError (errorMessage);
           }
 
@@ -236,8 +234,8 @@ export function BuiltinReceive<TBase extends Constructor<UserRuntimeZero>>(Base:
           // compose with a standing region's active range.
           if (theThread.mailbox.caps != null) {
             let errorMessage =
-              "consumeWithAuthority requires no open clearance region: an enableRangedReceive (or legacy raisembox) region is open\n" +
-              ` | open capability chain head: ${theThread.mailbox.caps}`
+              "consumeWithAuthority is not possible while an enableRangedReceive is open.\n" +
+              ` | capability of the last enableRangedReceive : ${theThread.mailbox.caps}`
             theThread.threadError (errorMessage)
           }
           if (!flowsTo (mclear.boost_level, BOT)) {
@@ -255,10 +253,10 @@ export function BuiltinReceive<TBase extends Constructor<UserRuntimeZero>>(Base:
           let occ = lub (theThread.pc, i.lev, lowb.lev, highb.lev, auth.lev)
           if (!flowsTo (occ, lowb.val)) {
             let errorMessage =
-              "consumeWithAuthority occurrence check failed: whether the removal fires depends on data above the floor\n" +
-              ` | receive lower bound (floor): ${lowb.val.stringRep()}\n` +
-              ` | occurrence level (occ)     : ${occ.stringRep()}\n` +
-              ` | pc level                   : ${theThread.pc.stringRep()}`
+              "The data that causes this consumeWithAuthority does not flow to the level it can read.\n" +
+              ` | level of the data that causes the consumeWithAuthority : ${occ.stringRep()}\n` +
+              ` | level the consumeWithAuthority can read                : ${lowb.val.stringRep()}\n` +
+              ` | pc level                                               : ${theThread.pc.stringRep()}`
             theThread.threadError (errorMessage)
           }
 
@@ -269,12 +267,12 @@ export function BuiltinReceive<TBase extends Constructor<UserRuntimeZero>>(Base:
           let aLev = auth.val.authorityLevel
           if (!privFlowsTo (aLev, Hi, lowb.val)) {
             let errorMessage =
-              "Insufficient authority for this consume: the shown authority does not cover the selection down to the floor\n" +
-              ` | receive lower bound (floor)            : ${lowb.val.stringRep()}\n` +
-              ` | receive upper bound                    : ${highb.val.stringRep()}\n` +
-              ` | index label                            : ${i.lev.stringRep()}\n` +
-              ` | selection boundary (highb ⊔ lev(i))    : ${Hi.stringRep()}\n` +
-              ` | authority provided                     : ${aLev.stringRep()}`
+              "consumeWithAuthority cannot release the message to its lower bound with this authority.\n" +
+              ` | level the selection is made at            : ${Hi.stringRep()}\n` +
+              ` | lower bound given to consumeWithAuthority : ${lowb.val.stringRep()}\n` +
+              ` | level of the authority                    : ${aLev.stringRep()}\n` +
+              ` | upper bound given to consumeWithAuthority : ${highb.val.stringRep()}\n` +
+              ` | level of the message index                : ${i.lev.stringRep()}`
             theThread.threadError (errorMessage)
           }
 

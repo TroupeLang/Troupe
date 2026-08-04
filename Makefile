@@ -1,4 +1,4 @@
-.PHONY: rt trp-rt compiler lib p2p-tools npm clean test ci dist check-compiler notebook \
+.PHONY: rt trp-rt compiler lib p2p-tools npm clean test ci test/examples dist check-compiler notebook \
         dev-planning-to-html
 
 # TODO: Rename to 'build/*' ?
@@ -106,7 +106,18 @@ test: test/local test/ir-sexp-corpus-troupe test/multinode test/hostile-peer tes
 # ./bin/golden alone leaves out far more -- every Haskell suite runs under
 # `stack test`, which only test/local reaches, and the IR conformance corpus
 # lives there.
-ci: test test/prop-rt test/prop-differential
+ci: test test/examples test/prop-rt test/prop-differential
+
+# Every example and benchmark compiles. Nothing else covers examples/: the
+# golden suite is tests/ only, so a library change or a moved module hash can
+# break a benchmark silently -- as it did when examples/progress/Progress.trp
+# changed and examples/md-navigator's pin was left behind.
+#
+# A module component that imports another module has no dependencies file of its
+# own, so it is compiled by each program that imports it and counted there
+# rather than on its own. Everything else is compiled directly.
+test/examples: compiler lib/out/.build-stamp
+	@./scripts/compile-examples.sh
 
 # Test target for Docker runner (no Haskell toolchain available).
 test/docker: ci-test-golden-no-color test/multinode test/hostile-peer test/result-socket

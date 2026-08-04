@@ -129,6 +129,8 @@ jobs:
           }
       - name: run all tests
         run: make test
+      - name: compile every example and benchmark
+        run: make test/examples
       - name: run runtime lattice property tests
         run: make test/prop-rt
       - name: run differential lattice harness

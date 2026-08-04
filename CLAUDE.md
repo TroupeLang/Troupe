@@ -62,11 +62,15 @@ asserted:
   |------------------|---------------------------------------------------------------------------------|
   | `./bin/golden`   | the golden tests only — no Haskell suite, so no IR conformance corpus           |
   | `make test`      | the above plus every `stack test` suite, multinode, hostile-peer, result-socket  |
-  | `make ci`        | the above plus `test/prop-rt` and `test/prop-differential`                       |
+  | `make ci`        | the above plus `test/examples`, `test/prop-rt` and `test/prop-differential`      |
 
   A green `./bin/golden` reads like success — 1166 tests, several minutes — while leaving the
-  conformance corpus, the property suites and the network tests unrun. Run `make ci` before
-  committing anything that touches the compiler or the runtime, and before any push.
+  conformance corpus, the property suites, the network tests and every example unrun. Run
+  `make ci` before committing anything that touches the compiler or the runtime, and before any
+  push.
+- **`tests/` is not all the code.** `examples/` holds 145 programs — the editor, the savina
+  benchmarks, the CLI demos — and no test suite compiles them. A library change or a moved module
+  hash breaks them silently; `make test/examples`, inside `make ci`, is what notices.
 - Running the suite takes time. Run it once, redirect output to a temp file, and read that file
   for failures and status instead of re-running from scratch.
 - When a golden test `t.trp` fails, run `./local.sh t.trp` to see the actual output before

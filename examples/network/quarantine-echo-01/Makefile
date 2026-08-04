@@ -3,12 +3,23 @@ MKID=node $(TROUPE_ROOT)/p2p-tools/built/mkid.mjs
 MKALIASES=node $(TROUPE_ROOT)/p2p-tools/built/mkaliases.js
 START=$(TROUPE_ROOT)/network.sh
 
+# This channel level is corrupt -- more secret than it is trusted -- and has to
+# be. What the example prints is confidential and untrusted at once: the endorsed
+# reply is alice-confidential, and its integrity carries the peer's quarantine
+# tag. Admitting both means confidentiality at least alice and integrity at most
+# that tag, which is corruptness by definition. Measured on the running example:
+# {alice} and <#null-confidentiality;#null-integrity> are both non-corrupt and
+# both refuse it, from opposite directions. The tag is generated per run and per
+# peer, so #null-integrity is the only integrity weak enough to write down.
+# (the # in a label is escaped: make would read it as a comment)
+STDIOLEV=--stdiolev='<\#root-confidentiality;\#null-integrity>'
+
 # Server configuration
 SERVER_PORT=6789
-SERVER_CMD=$(START) qecho-server.trp --debugquarantine --disable-relay --id=ids/server.json --port=$(SERVER_PORT)
+SERVER_CMD=$(START) qecho-server.trp $(STDIOLEV) --debugquarantine --disable-relay --id=ids/server.json --port=$(SERVER_PORT)
 
 # Client configuration
-CLIENT_CMD=$(START) qecho-client.trp --debugquarantine --disable-relay --id=ids/client.json --aliases=aliases.json --trustmap=client-trustmap.json
+CLIENT_CMD=$(START) qecho-client.trp $(STDIOLEV) --debugquarantine --disable-relay --id=ids/client.json --aliases=aliases.json --trustmap=client-trustmap.json
 
 # Run both server and client together
 # Usage: make run (or: make setup && make run)

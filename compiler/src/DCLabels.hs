@@ -30,7 +30,7 @@ module DCLabels
 import GHC.Generics(Generic)
 import Sexp
 import Data.List (sort, nub, dropWhileEnd)
-import Data.List.Utils (split)
+import Util.StringUtil (splitOn)
 import Data.Char (toLower, isSpace)
 import qualified Text.PrettyPrint.HughesPJ as PP
 import Text.PrettyPrint.HughesPJ (text, hsep)
@@ -235,7 +235,7 @@ v1LabelEq l1 l2 = normalizeV1Label l1 == normalizeV1Label l2
 -- Parses comma-separated principal names, normalizes them
 -- (lowercase, trimmed, sorted, deduplicated)
 normalizeV1Label :: String -> [String]
-normalizeV1Label s = snub $ filter (not . null) $ map (lowerString . trim) $ split "," (stripBraces s)
+normalizeV1Label s = snub $ filter (not . null) $ map (lowerString . trim) $ splitOn "," (stripBraces s)
   where
     trim = dropWhileEnd isSpace . dropWhile isSpace
     stripBraces = dropWhileEnd (== '}') . dropWhile (== '{')

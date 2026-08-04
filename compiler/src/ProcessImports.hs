@@ -9,8 +9,8 @@ import System.Environment
 import System.Exit
 import System.Directory (doesFileExist)
 import System.FilePath
-import Data.List (intercalate)
-import Data.String.Utils
+import Data.List (intercalate, isPrefixOf, isSuffixOf)
+import Util.StringUtil (splitOn)
 
 -- | Whether the frontend enforces the dependencies file (a normal compile) or
 -- establishes it (the maintenance utility). Under 'Enforce', a dependency's
@@ -27,7 +27,7 @@ defaultBin="/bin/troupec"
 tryGetRelativeHome :: IO (Maybe String)
 tryGetRelativeHome = do
    progPath <- getExecutablePath
-   if endswith defaultBin progPath
+   if defaultBin `isSuffixOf` progPath
    then do
        let home = take (length progPath - length defaultBin) progPath
        markerExists <- doesFileExist (home ++ "/.troupe-root")
@@ -62,12 +62,12 @@ getTroupeHome = do
 -- is checked at resolution.
 checkModulePath :: String -> Either String ()
 checkModulePath p
-  | not (startswith "./" p || startswith "../" p)
+  | not ("./" `isPrefixOf` p || "../" `isPrefixOf` p)
                      = Left "the path must start with \"./\" or \"../\""
-  | endswith "/" p   = Left "the path must not end with \"/\""
+  | "/" `isSuffixOf` p = Left "the path must not end with \"/\""
   | any null segs    = Left "the path must not contain empty segments"
   | otherwise        = Right ()
-  where segs = split "/" p
+  where segs = splitOn "/" p
 
 -- | Lexically collapse @seg/..@ and @.@ from a path, without touching the
 -- filesystem (so it never resolves symlinks or requires the file to exist).
@@ -121,7 +121,7 @@ relativeToBase base target =
 -- identity, which is the content hash.
 resolveModule :: FilePath -> FilePath -> String -> (FilePath, String)
 resolveModule root importingFile lit =
-  let rel       = if startswith "./" lit then drop 2 lit else lit
+  let rel       = if "./" `isPrefixOf` lit then drop 2 lit else lit
       rawTarget = normalise (takeDirectory importingFile </> rel)
       target    = collapseDotDot rawTarget
       key       = relativeToBase root rawTarget

@@ -1,0 +1,9 @@
+-- The WebAssembly cross-build of troupec is driven by cabal, because stack
+-- cannot drive a cross toolchain. It builds the same package, from the same
+-- hpack-generated Troupe-compiler.cabal, as the native stack build; see the
+-- `compiler-wasm` target in the top-level Makefile for how it is invoked and
+-- what has to be on the environment.
+--
+-- Only exe:troupec is ever built this way. The other executables and every test
+-- suite stay native.
+packages: .

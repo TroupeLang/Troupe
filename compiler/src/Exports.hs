@@ -12,8 +12,7 @@ import Basics
 import Direct
 import TroupePositionInfo (Located(..), unLoc)
 import Control.Monad.Except
-import Data.List (intercalate, partition)
-import Data.String.Utils (startswith)
+import Data.List (intercalate, partition, isPrefixOf)
 
 type Exports = [(Basics.VarName, Basics.VarName)]
 
@@ -33,7 +32,7 @@ renderDatatypeLine (h, c) = datatypePrefix ++ h ++ " " ++ c
 -- | Whether an interface line is a datatype line (as opposed to a value-name
 -- line).
 isDatatypeLine :: String -> Bool
-isDatatypeLine = startswith datatypePrefix
+isDatatypeLine = isPrefixOf datatypePrefix
 
 -- | Parse a datatype interface line into its (group hash, canonical form) pair.
 -- Inverse of 'renderDatatypeLine': the hash is the first whitespace-delimited
@@ -60,7 +59,7 @@ renderModuleHashLine h = moduleHashPrefix ++ h
 
 -- | Whether an interface line is the module-hash line.
 isModuleHashLine :: String -> Bool
-isModuleHashLine = startswith moduleHashPrefix
+isModuleHashLine = isPrefixOf moduleHashPrefix
 
 -- | Parse the module-hash line into its hash (the token after the prefix).
 parseModuleHashLine :: String -> String
@@ -80,7 +79,7 @@ renderFixityLine (v, Basics.Fixity a n) =
         assocCode Basics.OpNon   = "n"
 
 isFixityLine :: String -> Bool
-isFixityLine = startswith fixityPrefix
+isFixityLine = isPrefixOf fixityPrefix
 
 -- | Inverse of 'renderFixityLine'. Total on lines the writer produces; a
 -- malformed line (foreign tooling) degrades to a level-9 non-associative

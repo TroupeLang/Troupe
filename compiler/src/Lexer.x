@@ -16,7 +16,11 @@ import Direct
 import Control.Monad.Except
 import Data.Char (isSpace, toLower)
 import Data.List (dropWhileEnd)
-import Data.Char ( chr )
+-- 'ord' is used by addControlToString below. alex 3.5.3.0 and earlier emit an
+-- `import Data.Char (ord)` into the generated prelude, which is why omitting it
+-- here compiled; 3.5.4.0 and later qualify their own use instead, and the
+-- omission becomes "Variable not in scope: ord".
+import Data.Char ( chr, ord )
 import Numeric ( readDec, readBin, readOct, readHex )
 import Control.Monad (when)
 }

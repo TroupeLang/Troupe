@@ -391,8 +391,10 @@ fromStdinIR putStrLn format = do
     putStrLn "" -- magic marker to be recognized by the JS runtime; 2018-03-04; aa
     hFlush stdout
     fromStdinIR putStrLn format
-  -- AA: 2018-07-15: consider timestamping these entries
-  where debugOut s = appendFile "/tmp/debug" (s ++ "\n")
+  -- Diagnostics go to stderr: stdout carries the protocol the runtime parses, and a
+  -- file append needs a writable path the host may not have (under WASI, /tmp is not
+  -- preopened unless the embedder says so, and the append throws rather than logging).
+  where debugOut s = hPutStrLn stderr s
 
         ir2Stack = Raw2Stack.raw2Stack . RawOpt.rawopt . IR2Raw.ir2raw
 

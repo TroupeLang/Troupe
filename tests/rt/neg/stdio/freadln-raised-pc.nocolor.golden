@@ -8,4 +8,4 @@ Runtime error in thread e17e6c6b-6c5f-44c9-afa7-25c8fef9e376@{}%{}
  | effect level  {alice}
  | pc level      {alice}
  | channel level {#ROOT}
->> at tests/rt/neg/stdio/ifc-freadln-raised-pc.trp:6:35
+>> at tests/rt/neg/stdio/freadln-raised-pc.trp:6:35

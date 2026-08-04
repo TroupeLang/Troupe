@@ -8,4 +8,4 @@ Runtime error in thread a06ba344-bdc0-43c9-8736-b845b91742aa@{}%{}
  | effect level  {bob}
  | pc level      {}
  | channel level {alice}
->> at tests/rt/neg/stdio/ifc-alice-refuses-bob.trp:4:4
+>> at tests/rt/neg/stdio/alice-refuses-bob.trp:4:4

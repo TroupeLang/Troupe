@@ -55,6 +55,18 @@ asserted:
 
 ## Running tests
 
+- **`make ci` is the suite.** It runs what CI runs, in CI's order. Anything short of it is a
+  subset, and the subsets do not announce what they leave out:
+
+  | Command          | Covers                                                                          |
+  |------------------|---------------------------------------------------------------------------------|
+  | `./bin/golden`   | the golden tests only — no Haskell suite, so no IR conformance corpus           |
+  | `make test`      | the above plus every `stack test` suite, multinode, hostile-peer, result-socket  |
+  | `make ci`        | the above plus `test/prop-rt` and `test/prop-differential`                       |
+
+  A green `./bin/golden` reads like success — 1166 tests, several minutes — while leaving the
+  conformance corpus, the property suites and the network tests unrun. Run `make ci` before
+  committing anything that touches the compiler or the runtime, and before any push.
 - Running the suite takes time. Run it once, redirect output to a temp file, and read that file
   for failures and status instead of re-running from scratch.
 - When a golden test `t.trp` fails, run `./local.sh t.trp` to see the actual output before
@@ -103,9 +115,10 @@ current pc and blocking labels for correct information.
 
 AI-generated commits must be held to the highest quality bar.
 
-- **Never commit an unverified change.** Verify code changes by the relevant tests passing
-  (`make test` / `bin/golden`), behavioral changes by observing the new behavior directly, and
-  documentation by review. A change that merely builds or type-checks is **not** verified.
+- **Never commit an unverified change.** Verify code changes by `make ci` passing (see
+  [Running tests](#running-tests) — `./bin/golden` on its own is a subset and is not verification),
+  behavioral changes by observing the new behavior directly, and documentation by review. A change
+  that merely builds or type-checks is **not** verified.
 - If a change cannot be verified — the tool that exercises it hangs, is broken, or is unavailable —
   **do not commit it.** Leave it in the working tree and surface the situation; never commit on
   faith.

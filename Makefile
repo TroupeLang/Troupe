@@ -1,4 +1,4 @@
-.PHONY: rt trp-rt compiler lib p2p-tools npm clean test dist check-compiler notebook \
+.PHONY: rt trp-rt compiler lib p2p-tools npm clean test ci dist check-compiler notebook \
         dev-planning-to-html
 
 # TODO: Rename to 'build/*' ?
@@ -100,6 +100,13 @@ ci-test-golden-no-color:
 	./bin/golden --no-color
 
 test: test/local test/ir-sexp-corpus-troupe test/multinode test/hostile-peer test/result-socket
+
+# Everything CI runs, in CI's order (.github/workflows/run_tests.yml). Use this
+# before pushing: `make test` alone leaves out the two property targets, and
+# ./bin/golden alone leaves out far more -- every Haskell suite runs under
+# `stack test`, which only test/local reaches, and the IR conformance corpus
+# lives there.
+ci: test test/prop-rt test/prop-differential
 
 # Test target for Docker runner (no Haskell toolchain available).
 test/docker: ci-test-golden-no-color test/multinode test/hostile-peer test/result-socket

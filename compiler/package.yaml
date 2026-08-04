@@ -35,7 +35,6 @@ dependencies:
 - directory
 - strict
 - aeson
-- MissingH
 - tagged
 - sourcemap >= 0.1.7
 - SHA
@@ -218,6 +217,17 @@ tests:
     - QuickCheck
     - tasty
     - tasty-quickcheck
+  stringutil-test:
+    main: StringUtilTest.hs
+    source-dirs: test/stringutil-test
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - Troupe-compiler
+    - tasty
+    - tasty-hunit
   synvarhash-test:
     main: SynVarHashTest.hs
     source-dirs: test/synvarhash-test

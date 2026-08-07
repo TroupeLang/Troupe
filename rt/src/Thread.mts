@@ -83,32 +83,24 @@ export class Capability<T> {
     }
 }
 
+/** The ACTIVE RECEIVE RANGE of the open ranged receives. This record lives inside the
+ *  branch-balance discipline (returnImmediate) which snapshots and compares it by object
+ *  identity, so every mutation allocates a fresh record. The active range spans ALL open
+ *  regions; under nesting it is the JOIN of the open ranges (floors joined, ceilings
+ *  joined), not their intersection. A region whose open reported ok = false never closes:
+ *  its own disable fails on validity, and the LIFO chain-head check blocks every enclosing
+ *  close while it stays open. Δ = delta, the active ceiling, is what the receive clearance
+ *  draws on; Φ = phi, the active floor, is what every consume must respect; every reader of
+ *  delta is tainted with deltaLab (the ceiling label), every reader of phi with phiLab (the
+ *  floor label).
+ */
 class  MboxClearance {
-  // Legacy raise/lower machinery (raisembox/lowermbox); untouched by the ranged
-  // receive protocol below.
-  boost_level: any;
-  pc_at_creation: any;
-
-  // The ranged-receive ACTIVE RECEIVE RANGE (enable/disable). These live inside the
-  // same record that the branch-balance discipline (returnImmediate) snapshots and
-  // compares by object identity, so every mutation allocates a fresh record. The
-  // active range spans ALL open regions, certified or not; under nesting it is the
-  // JOIN of the open ranges (floors joined, ceilings joined), not their intersection.
-  // An uncertified (ok_to_dg = false) region is an ordinary region that never closes:
-  // its own disable fails on validity, and the LIFO chain-head check blocks every
-  // enclosing close while it stays open (exactly like a legacy raise that no authority
-  // can lower). Δ = delta, the active ceiling, is what the receive clearance draws on;
-  // Φ = phi, the active floor, is what every consume must respect; every reader of
-  // delta is tainted with deltaLab (the ceiling label), every reader of phi with
-  // phiLab (the floor label).
   delta: any;      // the active ceiling: join of the open regions' ceilings hi (base BOT)
   phi: any;        // the active floor:   join of the open regions' floors  lo  (base BOT)
   deltaLab: any;   // the ceiling label:  join of the open regions' ld(hi)      (base BOT)
   phiLab: any;     // the floor label:    join of the open regions' ld(lo)      (base BOT)
 
-  constructor (lclear:any, pc:any, folds:any = null) {
-    this.boost_level = lclear;
-    this.pc_at_creation = pc;
+  constructor (folds:any = null) {
     const B = levels.BOT;
     this.delta     = folds?.delta     ?? B;
     this.phi       = folds?.phi       ?? B;
@@ -117,21 +109,16 @@ class  MboxClearance {
   }
 
   // Allocate a fresh record, preserving every field unless overridden. `overrides`
-  // may carry `boost_level`, `pc_at_creation`, and a `folds` object with any subset
-  // of the four active-range fields.
+  // carries a `folds` object with any subset of the four active-range fields.
   copyWith (overrides:any) {
-    const f = {
+    return new MboxClearance ({
       delta: this.delta, phi: this.phi, deltaLab: this.deltaLab, phiLab: this.phiLab,
       ...(overrides.folds ?? {})
-    };
-    return new MboxClearance (
-      overrides.boost_level ?? this.boost_level,
-      overrides.pc_at_creation ?? this.pc_at_creation,
-      f);
+    });
   }
 
   stringRep () {
-    return this.boost_level.stringRep ()
+    return "[" + this.phi.stringRep () + ".." + this.delta.stringRep () + "]"
   }
 }
 
@@ -196,7 +183,7 @@ class Mailbox extends Array {
 
     constructor () {
         super ()
-        this.mclear = new MboxClearance (levels.BOT, levels.BOT);
+        this.mclear = new MboxClearance ();
         this.caps = null;
         this.head = 0;
 
@@ -1214,75 +1201,6 @@ export class Thread {
         this.mailbox.newMessage (message);    
     }
 
-    raiseMboxClearance (new_lclear: any) {        
-        /*
-        if (!flowsTo(this.pc, this.mailbox.lclear)) {
-            this.threadError( `Cannot raise mailbox clearance level in a high context\n` + 
-                              `| current thread's pc level: ${this.pc.stringRep()}\n` +
-                              `| current mailbox clearance level: ${this.mailbox.lclear.stringRep()}`)
-            return;
-        } */
-
-        let uid = uuidv4() ;
-        let cap = this.mkVal (new Capability(uid, this.mailbox.mclear, this.mailbox.caps, this.pc))
-        this.mailbox.caps = uid;
-        this.mailbox.mclear = this.mailbox.mclear.copyWith(
-            { boost_level: lub (new_lclear.val, this.mailbox.mclear.boost_level)
-            , pc_at_creation: this.pc });
-
-        // this.returnSuspended( cap ); 
-        // this.sched.stepThread();         
-        return this.returnImmediateLValue(cap)
-    }
-
-    lowerMboxClearance (cap_lval:any, auth:any) {
-        if (this.mailbox.caps == null ) {
-            this.threadError ("unmatched lowering of mailbox clearance", false, null, ErrorKind.IFCCheck)
-            return null; // threadError throws
-        }
-
-        let cap:Capability<MboxClearance> = cap_lval.val
-
-        if (this.mailbox.caps != cap.uid ) {
-            this.threadError ("Ill-scoped raise/lower of mailbox clearance:\n" +
-                              `expected cap: ${this.mailbox.caps}\n` +
-                              `provided cap: ${cap.uid}`, false, null, ErrorKind.IFCCheck)
-            return null; // threadError throws
-        }
-
-
-        // since we are going to update the level of the current mailbox label
-        // we have to check that we do not affect it in a high context
-        // note: the intuition here follows the principle of non-sensitive upgrade
-        // 2020-02-12:AA
-
-        if (!levels.flowsTo (this.pc , this.mailbox.mclear.pc_at_creation)) {
-            this.threadError ("Cannot lower mailbox when the pc more sensitive than the mailbox clearance level\n" +
-                              `| current thread's pc level: ${this.pc.stringRep()}\n` +
-                              `| mailbox clearance level: ${this.mailbox.mclear.pc_at_creation.stringRep()}`, false, null, ErrorKind.IFCCheck)
-
-        }
-
-        const currentMboxBoostLevel = this.mailbox.mclear.boost_level;
-        const targetMboxBoostLevel = cap.data.boost_level;
-
-        this._validateDowngradeOrThrow({
-            levFrom: currentMboxBoostLevel,
-            levTo: targetMboxBoostLevel,
-            authorityLevel: auth.val.authorityLevel,
-            downgradeKind: DowngradeKind.MAILBOX,
-            downgradeDimension: DowngradeDimension.BOTH,  // Cross-dimensional: changes both confidentiality and integrity
-            blockLevel: this.bl,
-            pcLevel: this.pc,
-            operationDescription: "lowermbox"
-        });
-        
-        this.mailbox.mclear = cap.data; // restoring the clearance level
-        this.mailbox.caps = cap.prev;
-
-        return this.returnImmediateLValue(__unit);
-    }
-
     // Ranged-receive: open a clearance region ⟨lo, hi⟩ whose close is certified up front
     // by the shown authority. Never refuses (beyond the builtin's type checks). Returns
     // the pair (ok_to_dg, cap); when the shown authority does not cover restoring the
@@ -1301,7 +1219,7 @@ export class Thread {
         // is the check that would be decided then. The decision goes through the SAME
         // pure downgrade-decision function every other downgrade runs (okToDowngrade with
         // the mailbox kind and the cross-dimensional target, exactly as the legacy
-        // lowermbox's _validateDowngradeOrThrow does) — so with NMIFC on the certification
+        // every other mailbox downgrade ran) — so with NMIFC on the decision
         // inherits the robust-declassification / transparent-endorsement discipline by
         // construction; with NMIFC off it is the plain privilege relation (privFlowsTo).
         // Unlike the legacy path the enable never throws: an unfavourable decision

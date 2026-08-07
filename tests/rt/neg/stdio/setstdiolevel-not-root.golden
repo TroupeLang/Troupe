@@ -1,0 +1,9 @@
+2026-08-07T20:14:56.572Z [RTM] [32minfo[39m: Skipping network creation. Observe that all network operations will yield a runtime error.
+Runtime error in thread 174632b6-2387-48ed-9b27-484bd592af5c@{}%{}
+
+  4 | in setStdioLevel (weak, `<;alice>`)
+    |    ^
+
+>> Provided authority is not ROOT
+ | level of the provided authority: {alice}
+>> at tests/rt/neg/stdio/setstdiolevel-not-root.trp:4:4

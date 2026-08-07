@@ -1,0 +1,10 @@
+2026-08-07T20:15:03.312Z [RTM] info: Skipping network creation. Observe that all network operations will yield a runtime error.
+Runtime error in thread 01e42e43-7c4c-4643-8672-263c47a7958b@{}%{}
+
+  3 | let val line = freadlnAtLevel (stdin, authority, `{}`)
+    |                ^
+
+>> read from stdin at a level above the level the runtime started at
+ | requested level {}
+ | startup level   {alice}
+>> at tests/rt/neg/stdio/freadln-at-level-above-ceiling.trp:3:16

@@ -1,0 +1,7 @@
+(* Changing the level is an effect on the channel — ttyLevel reports it and a
+   later write is checked against it — so it carries the sink check a write
+   carries. From a pc raised above the channel level it is refused. *)
+let val secret = 42 raisedTo `{alice}`
+    val _ = if secret > 0 then setStdioLevel (authority, `<;alice>`) else ()
+in ()
+end

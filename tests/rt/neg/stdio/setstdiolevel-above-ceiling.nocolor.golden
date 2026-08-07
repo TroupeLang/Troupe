@@ -1,0 +1,10 @@
+2026-08-07T20:15:02.379Z [RTM] info: Skipping network creation. Observe that all network operations will yield a runtime error.
+Runtime error in thread d1811936-7136-4490-be73-ce846465998d@{}%{}
+
+  4 | let val _ = setStdioLevel (authority, `{}`)
+    |             ^
+
+>> stdio channel level above the level the runtime started at
+ | requested level {}
+ | startup level   {alice}
+>> at tests/rt/neg/stdio/setstdiolevel-above-ceiling.trp:4:13

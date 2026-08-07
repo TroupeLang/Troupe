@@ -1,0 +1,5 @@
+(* Moving the channel level requires full authority; an attenuated one is
+   refused. *)
+let val weak = attenuate (authority, `{alice}`)
+in setStdioLevel (weak, `<;alice>`)
+end

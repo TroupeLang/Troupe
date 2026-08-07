@@ -1,0 +1,5 @@
+(* The read level is capped by the startup level the same way: a channel at
+   {alice} does not act for `{}`. *)
+let val line = freadlnAtLevel (stdin, authority, `{}`)
+in print line
+end

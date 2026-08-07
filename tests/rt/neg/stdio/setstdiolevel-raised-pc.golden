@@ -1,0 +1,11 @@
+2026-08-07T20:14:56.599Z [RTM] [32minfo[39m: Skipping network creation. Observe that all network operations will yield a runtime error.
+Runtime error in thread aab8a7e0-1ab7-4b58-bdd7-ce009c6ff4b2@{}%{}
+
+  5 |     val _ = if secret > 0 then setStdioLevel (authority, `<;alice>`) else ()
+    |                                ^
+
+>> level change above the stdio channel level
+ | effect level  {alice}
+ | pc level      {alice}
+ | channel level {#ROOT}
+>> at tests/rt/neg/stdio/setstdiolevel-raised-pc.trp:5:32

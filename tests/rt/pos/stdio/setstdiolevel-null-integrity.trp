@@ -1,0 +1,10 @@
+(* setStdioLevel moves the channel under full authority. The default ROOT
+   channel refuses tainted data; lowered to null integrity it admits it, and
+   ttyLevel reports the level in force rather than the one the runtime started
+   at. *)
+let val tainted = 42 raisedTo `<;bob>`
+    val _ = print (ttyLevel stdout)
+    val _ = setStdioLevel (authority, `<#root-confidentiality;#null-integrity>`)
+    val _ = print (ttyLevel stdout)
+in print tainted
+end

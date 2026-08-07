@@ -1,0 +1,6 @@
+(* The startup level is the ceiling and it does not move: a channel at {alice}
+   does not act for `{}`, which raises integrity back to root, so the change is
+   refused. *)
+let val _ = setStdioLevel (authority, `{}`)
+in print "unreachable"
+end

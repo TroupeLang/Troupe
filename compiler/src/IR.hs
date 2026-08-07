@@ -329,6 +329,7 @@ instance WellFormedIRCheck IRExpr where
                      , "floor"
                      , "flowsTo"                     
                      , "freadln"
+                     , "freadlnAtLevel"
                      , "fwrite"
                      -- The ambient names: what `print` and its neighbours
                      -- resolve to, in a program, a module or a library alike
@@ -379,6 +380,9 @@ instance WellFormedIRCheck IRExpr where
                      , "_servicetest"
                      , "_setProcessDebuggingName"
                      , "_setFailureRate"
+                     -- The channel level, moved under full authority
+                     -- (builtins/stdio.mts).
+                     , "setStdioLevel"
                      , "sleep"
                      , "spawn"
                      , "sqrt"

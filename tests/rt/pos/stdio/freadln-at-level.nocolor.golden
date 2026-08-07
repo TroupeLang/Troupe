@@ -1,0 +1,4 @@
+2026-08-07T20:15:02.428Z [RTM] info: Skipping network creation. Observe that all network operations will yield a runtime error.
+"public input"@{}%{}
+"channel input"@{#ROOT}%{}
+>>> Main thread finished with value: ()@{#ROOT}%{#ROOT}

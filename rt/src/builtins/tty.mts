@@ -31,11 +31,11 @@ import { stdio_level, checkChannelEffect, suspendReadline } from './stdio.mjs';
  *  - `ttyIsTTY` and `ttySize` return observations drawn *through* the channel,
  *    so their results carry the channel level, exactly as `freadln` labels a
  *    line with `mkValWithLev(s, stdio_level)` (stdio.mts).
- *  - `ttyLevel` returns run configuration — which level the operator started
- *    the runtime with — not anything the channel carried, so it returns at the
- *    caller's pc. This is the deliberate contrast with `levelOf`, which labels
- *    a returned level at `lub(pc, l)` because a value's level is provenance
- *    about that value (levelops.mts).
+ *  - `ttyLevel` returns run configuration — which level the channel runs at,
+ *    from `--stdiolev` or from a later `setStdioLevel` — not anything the
+ *    channel carried, so it returns at the caller's pc. This is the deliberate
+ *    contrast with `levelOf`, which labels a returned level at `lub(pc, l)`
+ *    because a value's level is provenance about that value (levelops.mts).
  *
  * Error disposition follows the SimpleFileIO rule: a bad argument is fatal, a
  * bad environment is a value. A non-descriptor or the wrong descriptor kills

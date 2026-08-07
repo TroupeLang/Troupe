@@ -1,0 +1,10 @@
+(* The startup level is the ceiling, and the level named must be one it acts
+   for: weaker in both dimensions. From a channel at {alice}, `<;alice>` is
+   public at alice integrity, so alice-confidential data reaches the channel
+   before the change and public data still does after it. *)
+let val aliceData = 1 raisedTo `{alice}`
+    val _ = print aliceData
+    val _ = setStdioLevel (authority, `<;alice>`)
+    val _ = print (ttyLevel stdout)
+in print "public still writes"
+end

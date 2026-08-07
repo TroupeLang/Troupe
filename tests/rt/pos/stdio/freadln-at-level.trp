@@ -1,0 +1,10 @@
+(* freadlnAtLevel reads a line at the level it is given rather than at the
+   channel level, which is a declassification of the input and is what the full
+   authority pays for: the line comes back public and the blocking label rises
+   to `{}` instead of to the ROOT channel. The plain freadln below is the
+   contrast — its line carries the channel level. *)
+let val line = freadlnAtLevel (stdin, authority, `{}`)
+    val _ = printWithLabels line
+    val plain = freadln stdin
+in printWithLabels plain
+end

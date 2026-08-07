@@ -99,7 +99,8 @@ require **full (ROOT) authority**: `persist`, `cliargs`, `exit`, `register`, and
 
 `rt/src/builtins/stdio.mts` and `rt/src/builtins/tty.mts`. stdio is a pair of channels at a level
 `L`, set by `--stdiolev` (default ROOT) in either V1 (`'{alice}'`) or V2
-(`'<alice;#root-integrity>'`) syntax.
+(`'<alice;#root-integrity>'`) syntax. The startup level is also the ceiling on the two primitives
+below, and that ceiling does not move.
 
 `stdin`, `stdout` and `stderr` are **values**, not something acquired: a descriptor names a stream
 and grants nothing, so there is nothing for it to show and nothing to check. Enforcement sits on
@@ -116,6 +117,18 @@ the operations:
 and `inputLine` are runtime builtins, available to a program, a module and a library on the same
 terms. `print` and its two neighbours write a line to stdout; `fwriteln` and `fwritelnWithLabels`
 take an explicit descriptor, which is the form to reach for when the destination is a parameter.
+
+**Naming a level takes full authority.** Two primitives take a level, and both require ROOT
+authority and check that the startup level `actsFor` the level named — weaker in both dimensions,
+the bound `attenuate` puts on an authority. Neither can widen the channel beyond what the operator
+granted on the command line.
+
+- `setStdioLevel (authority, lev)` moves `L` for the rest of the run and for every thread;
+  `ttyLevel` reports the level in force. The change is itself an effect on the channel and carries
+  the sink check a write carries.
+- `freadlnAtLevel (stdin, authority, lev)` reads a line at `lev` rather than at `L`: the line is
+  labelled at `lev` and the blocking label rises to `lev`. This is a declassification of the input,
+  which is what the authority pays for; the consume is checked against `L`, as `freadln`'s is.
 
 **Receive-then-lower-the-blocking-label needs a channel whose integrity something can act for.**
 `lib/Tty.trp`'s `nextEventAtLevel` closes with `blockdecl auth`, and the blocking label it lowers

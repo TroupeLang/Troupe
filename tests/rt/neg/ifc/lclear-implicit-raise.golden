@@ -1,8 +1,8 @@
-2026-01-06T14:33:34.638Z [RTM] [32minfo[39m: Skipping network creation. Observe that all external IO operations will yield a runtime error.
-Runtime error in thread 8608a762-7290-4e01-8cf1-e5d9c13fc64b@{}%{}
+2026-08-06T09:51:37.041Z [RTM] [32minfo[39m: Skipping network creation. Observe that all network operations will yield a runtime error.
+Runtime error in thread ddf8b81f-1645-46ed-b8f0-d0c6c99b887b@{}%{}
 
-  8 |         then raisembox (`{alice}`)  
-    |                         ^
+  7 |         then enableRangedReceive (`{}`, `{alice}`, authority)
+    |              ^
 
 >> Mailbox clearance label is not restorted after being raised in a branch; stack depth = 11
->> at tests/rt/neg/ifc/lclear-implicit-raise.trp:8:25
+>> at tests/rt/neg/ifc/lclear-implicit-raise.trp:7:14

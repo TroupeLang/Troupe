@@ -29,17 +29,32 @@ export function formatPiniInsufficientAuthorityMsg(operationDescription: string,
            ` | to level of the blocking level: ${toBlockingLevel.stringRep()}`;
 }
 
-export function formatMboxBlockingLevelMismatchMsg(currentBlockingLevel: Level, targetMailboxLevel: Level): string {
-    return `Current blocking level does not flow to the target level for lowering mailbox clearance\n` +
-           ` | current blocking level: ${currentBlockingLevel.stringRep()}\n` +
-           ` | target mailbox level: ${targetMailboxLevel.stringRep()}`;
+// The mailbox arm's operands are the two ends of the move the operation makes:
+// where the mailbox stands now, and where the operation puts it. Both are named
+// the same way in every mailbox message so one term keeps one meaning.
+export function formatMboxBlockingLevelMismatchMsg(operationDescription: string, currentBlockingLevel: Level, targetMailboxLevel: Level): string {
+    return `Blocking level too sensitive for ${operationDescription}\n` +
+           ` | blocking level now           : ${currentBlockingLevel.stringRep()}\n` +
+           ` | earlier level of the mailbox : ${targetMailboxLevel.stringRep()}`;
 }
 
-export function formatMboxInsufficientAuthorityMsg(authorityProvidedLevel: Level, currentMailboxLevel: Level, targetMailboxLevel: Level): string {
-    return `Insufficient authority for lowering the mailbox clearance\n` +
-           `| authority provided: ${authorityProvidedLevel.stringRep()}\n` +
-           `| current level of the mailbox: ${currentMailboxLevel.stringRep()}\n` +
-           `| target level of the mailbox: ${targetMailboxLevel.stringRep()}`;
+export function formatMboxInsufficientAuthorityMsg(operationDescription: string, authorityProvidedLevel: Level, currentMailboxLevel: Level, targetMailboxLevel: Level): string {
+    return `${operationDescription} cannot put the mailbox back to its earlier level with this authority.\n` +
+           ` | level of the mailbox now     : ${currentMailboxLevel.stringRep()}\n` +
+           ` | earlier level of the mailbox : ${targetMailboxLevel.stringRep()}\n` +
+           ` | level of the authority       : ${authorityProvidedLevel.stringRep()}`;
+}
+
+export function formatMboxConfidentialityMismatchMsg(operationDescription: string, currentMailboxLevel: Level, targetMailboxLevel: Level): string {
+    return `Confidentiality level mismatch for ${operationDescription}\n` +
+           ` | confidentiality of the mailbox now     : ${currentMailboxLevel.confidentiality.stringRep(DC_CONF_LITERALS)}\n` +
+           ` | earlier confidentiality of the mailbox : ${targetMailboxLevel.confidentiality.stringRep(DC_CONF_LITERALS)}`;
+}
+
+export function formatMboxIntegrityMismatchMsg(operationDescription: string, currentMailboxLevel: Level, targetMailboxLevel: Level): string {
+    return `Integrity level mismatch for ${operationDescription}\n` +
+           ` | integrity of the mailbox now     : ${currentMailboxLevel.integrity.stringRep(DC_INTG_LITERALS)}\n` +
+           ` | earlier integrity of the mailbox : ${targetMailboxLevel.integrity.stringRep(DC_INTG_LITERALS)}`;
 }
 
 export function formatValueInsufficientAuthorityMsg(operationDescription: string, dataLevel: Level, authorityLevel: Level, targetLevel: Level): string {
@@ -50,7 +65,11 @@ export function formatValueInsufficientAuthorityMsg(operationDescription: string
 }
 
 function fromLevelLabel(kind: DowngradeKind): string {
-    return kind === DowngradeKind.BLOCKING ? "current blocking level" : "level of the data";
+    switch (kind) {
+        case DowngradeKind.BLOCKING: return "current blocking level";
+        case DowngradeKind.MAILBOX:  return "level of the mailbox now";
+        default:                     return "level of the data";
+    }
 }
 
 export function formatRobustnessViolationMsg(operationDescription: string, fromLevel: Level, targetLevel: Level, pcLevel: Level, kind: DowngradeKind): string {
@@ -102,16 +121,22 @@ function getMailboxDowngradeErrorMessageForReason(
     levFrom: Level,
     levTo: Level,
     authorityLevel: Level,
-    currentBlockingLevelForCheck: Level
+    currentBlockingLevelForCheck: Level,
+    pcLevel?: Level
 ): string {
     switch (reason) {
-        case DowngradeErrorReason.INTEGRITY_MISMATCH: return formatIntegrityMismatchMsg(operationDescription, levFrom, levTo);
-        case DowngradeErrorReason.CONFIDENTIALITY_MISMATCH: return formatConfidentialityMismatchMsg(operationDescription, levFrom, levTo);
-        case DowngradeErrorReason.BLOCKING_LEVEL_MISMATCH: return formatMboxBlockingLevelMismatchMsg(currentBlockingLevelForCheck, levTo);
-        case DowngradeErrorReason.INSUFFICIENT_AUTHORITY: return formatMboxInsufficientAuthorityMsg(authorityLevel, levFrom, levTo);
+        case DowngradeErrorReason.INTEGRITY_MISMATCH: return formatMboxIntegrityMismatchMsg(operationDescription, levFrom, levTo);
+        case DowngradeErrorReason.CONFIDENTIALITY_MISMATCH: return formatMboxConfidentialityMismatchMsg(operationDescription, levFrom, levTo);
+        case DowngradeErrorReason.BLOCKING_LEVEL_MISMATCH: return formatMboxBlockingLevelMismatchMsg(operationDescription, currentBlockingLevelForCheck, levTo);
+        case DowngradeErrorReason.INSUFFICIENT_AUTHORITY: return formatMboxInsufficientAuthorityMsg(operationDescription, authorityLevel, levFrom, levTo);
+        // enableRangedReceive decides its downgrade under NMIFC like every other
+        // downgrade, so both NMIFC reasons reach this arm.
         case DowngradeErrorReason.ROBUSTNESS_VIOLATION:
+            if (!pcLevel) throw new ImplementationError("pcLevel required for ROBUSTNESS_VIOLATION");
+            return formatRobustnessViolationMsg(operationDescription, levFrom, levTo, pcLevel, DowngradeKind.MAILBOX);
         case DowngradeErrorReason.TRANSPARENCY_VIOLATION:
-            throw new ImplementationError(`NMIFC violations should not occur for MAILBOX kind: ${reason}`);
+            if (!pcLevel) throw new ImplementationError("pcLevel required for TRANSPARENCY_VIOLATION");
+            return formatTransparencyViolationMsg(operationDescription, levFrom, levTo, pcLevel, DowngradeKind.MAILBOX);
         default:
             const _exhaustiveMboxReason: never = reason;
             throw new ImplementationError(`Unexpected reason for MAILBOX: ${_exhaustiveMboxReason}`);
@@ -160,11 +185,16 @@ export function getDowngradeErrorMessage(params: ValidateDowngradeParams, reason
             }
             return getBlockDowngradeErrorMessageForReason(reason, opDesc, levFrom, levTo, authorityLevel, pcLevel);
         case DowngradeKind.MAILBOX:
-            opDesc = "lowering mailbox clearance"; // Standardize opDesc for mailbox
+            // The caller names the primitive it is refusing; there is no standard
+            // description to fall back on now that the mailbox is moved by more
+            // than one operation.
+            if (typeof opDesc !== 'string') {
+                throw new ImplementationError("operationDescription is required for MAILBOX downgradeKind.");
+            }
             if (currentBlockingLevelForCheck === null) {
                 throw new ImplementationError("currentBlockingLevelForCheck is required for MAILBOX downgradeKind.");
             }
-            return getMailboxDowngradeErrorMessageForReason(reason, opDesc, levFrom, levTo, authorityLevel, currentBlockingLevelForCheck);
+            return getMailboxDowngradeErrorMessageForReason(reason, opDesc, levFrom, levTo, authorityLevel, currentBlockingLevelForCheck, pcLevel);
         case DowngradeKind.VALUE:
             opDesc = opDesc || "value downgrade"; // Default opDesc for value
             return getValueDowngradeErrorMessageForReason(reason, opDesc, levFrom, levTo, authorityLevel, currentBlockingLevelForCheck, pcLevel);

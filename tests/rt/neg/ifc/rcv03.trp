@@ -1,7 +1,7 @@
 let val secret = 10 raisedTo `<secret;#root-integrity>`
     val pid = spawn (
                     fn () =>
-                         let val _ = raisembox( `<secret;#root-integrity>`)  in 
+                         let val _ = enableRangedReceive (`<;#root-integrity>`, `<secret;#root-integrity>`, attenuate (authority, `<#null-confidentiality;#null-integrity>`)) in 
                          rcv ( `{}`
                              , `<secret;#root-integrity>`
                              , [  hn 2 => adv 2

@@ -1,7 +1,7 @@
 let val main = self () 
     fun f1 () = send (main, 1); send (main, 2)
     val _ = spawn (f1)
-    val c = raisembox `<alice;#root-integrity>`
+    val _ = enableRangedReceive (`<;#root-integrity>`, `<alice;#root-integrity>`, attenuate (authority, `<#null-confidentiality;#null-integrity>`))
     val p = pinipush (authority)
     val _ = debugpc()
     val u = rcv (`{}`, `<alice;#root-integrity>`, [hn _ => 42]) 

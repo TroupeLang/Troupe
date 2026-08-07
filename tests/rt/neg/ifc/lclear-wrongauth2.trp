@@ -1,7 +1,10 @@
-(* negative test; insufficient authority  *)
-let val c1 = raisembox (`<alice;#root-integrity>`) 
-    val c2 = raisembox (`<bob;#root-integrity>`)    
-    val _ = lowermbox ( c2, attenuate (authority, `<alice;#root-integrity>` ))
-    val _ = lowermbox ( c1, attenuate (authority, `<bob;#root-integrity>`))
-in () 
+(* negative test; insufficient authority. Each region shows the authority of the
+   other one, so neither is certified: the inner disable is refused on its invalid
+   capability. *)
+let val (ok1, c1) = enableRangedReceive (`<;#root-integrity>`, `<alice;#root-integrity>`, attenuate (authority, `<bob;#root-integrity>`))
+    val (ok2, c2) = enableRangedReceive (`<;#root-integrity>`, `<bob;#root-integrity>`, attenuate (authority, `<alice;#root-integrity>`))
+    val _ = printWithLabels (ok1, ok2)
+    val _ = disableRangedReceive c2
+    val _ = disableRangedReceive c1
+in ()
 end

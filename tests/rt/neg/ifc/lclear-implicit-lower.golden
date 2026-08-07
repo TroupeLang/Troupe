@@ -1,10 +1,11 @@
-2026-01-06T14:33:32.496Z [RTM] [32minfo[39m: Skipping network creation. Observe that all external IO operations will yield a runtime error.
-Runtime error in thread 99cd84a0-a27f-4f9d-ae36-626e9941f880@{}%{}
+2026-08-06T09:51:32.771Z [RTM] [32minfo[39m: Skipping network creation. Observe that all network operations will yield a runtime error.
+Runtime error in thread d2417741-4f74-4f97-aea1-f200cea488db@{}%{}
 
-  5 |         then lowermbox (c, authority)
+  5 |         then disableRangedReceive c
     |              ^
 
->> Cannot lower mailbox when the pc more sensitive than the mailbox clearance level
-| current thread's pc level: {alice}
-| mailbox clearance level: {}
+>> The pc at the disableRangedReceive must flow to the pc at the enableRangedReceive.
+ | pc level at the disableRangedReceive : {alice}
+ | pc level at the enableRangedReceive  : {}
+ | level of the capability              : {}
 >> at tests/rt/neg/ifc/lclear-implicit-lower.trp:5:14

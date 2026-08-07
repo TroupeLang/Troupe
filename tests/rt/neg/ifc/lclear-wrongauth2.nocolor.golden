@@ -1,11 +1,12 @@
-2026-03-09T22:33:06.479Z [RTM] info: Skipping network creation. Observe that all external IO operations will yield a runtime error.
-Runtime error in thread 562627e2-bb4e-4457-ada2-fe9cd67dbb49@{}%{}
+2026-08-06T09:54:18.096Z [RTM] info: Skipping network creation. Observe that all network operations will yield a runtime error.
+(false@{}%{}, false@{}%{})@{}%{}
+Runtime error in thread 5af55050-191e-45d2-87f1-f596d5f669d6@{}%{}
 
-  4 |     val _ = lowermbox ( c2, attenuate (authority, `<alice;#root-integrity>` ))
+  7 |     val _ = disableRangedReceive c2
     |             ^
 
->> Insufficient authority for lowering the mailbox clearance
-| authority provided: <alice;#root-integrity>
-| current level of the mailbox: <alice&bob;#root-integrity>
-| target level of the mailbox: <alice;#root-integrity>
->> at tests/rt/neg/ifc/lclear-wrongauth2.trp:4:13
+>> disableRangedReceive cannot put the mailbox back to its earlier level with this authority.
+ | level of the mailbox now     : <alice&bob;#root-integrity>
+ | earlier level of the mailbox : <alice;#root-integrity>
+ | level of the authority       : <alice;#root-integrity>
+>> at tests/rt/neg/ifc/lclear-wrongauth2.trp:7:13

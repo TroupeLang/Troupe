@@ -137,8 +137,7 @@ export class MailboxProcessor implements MailboxInterface {
         let mb = theThread.mailbox;
         debug `peek index: ${index}`
         debug `peek interval: [${lowb}, ${highb}]`
-        let lclear = mb.mclear
-        theThread.raiseBlockingThreadLev (lub (highb, lclear.boost_level))
+        theThread.raiseBlockingThreadLev (highb)
         theThread.invalidateSparseBit()
         let _i = mb.head, _j = 0
 
@@ -170,8 +169,7 @@ export class MailboxProcessor implements MailboxInterface {
         let mb = theThread.mailbox;
         debug `consume index: ${index}`
         debug `consume interval: [${lowb} to ${highb}]`
-        let lclear = mb.mclear
-        theThread.raiseBlockingThreadLev (lub (highb, lclear.boost_level))
+        theThread.raiseBlockingThreadLev (highb)
         theThread.invalidateSparseBit()
         let kontFound = (i:number) => {
             mb.resetPeekCache ();

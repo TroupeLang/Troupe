@@ -1,8 +1,8 @@
 (* attempts to leak the value of `secret` through internal timing leak  *)
 
-let fun rcv_ hns = let val c = raisembox `<secret;#root-integrity>` 
+let fun rcv_ hns = let val (_, c) = enableRangedReceive (`<;#root-integrity>`, `<secret;#root-integrity>`, authority)
                        val r = rcv (`{}`, `<secret;#root-integrity>`, hns)
-                       val _ = lowermbox (c, authority)
+                       val _ = disableRangedReceive c
                    in r 
                    end
  

@@ -1,11 +1,11 @@
-2026-03-09T22:33:07.277Z [RTM] info: Skipping network creation. Observe that all external IO operations will yield a runtime error.
-Runtime error in thread [main]2b36d226-0673-45b8-8b78-1fabd0dc217f@{}%{}
+2026-08-06T09:54:18.974Z [RTM] info: Skipping network creation. Observe that all network operations will yield a runtime error.
+Runtime error in thread [main]53eaf912-580c-47f4-8212-a22eaadb0faf@{}%{}
 
-  7 |    in rcv (`{}`, `{secret}`, [hn x => x])
-    |       ^
+  11 |       val _ = disableRangedReceive c
+     |               ^
 
->> PC level at the time of raising the mailbox clearance is too sensitive for this receive
- | receive lower bound: {}
- | pc level at the time of receive: {secret}
- | pc level at the time of raise: {secret}
->> at tests/rt/neg/ifc/lclear-indirect-high-raise.trp:7:7
+>> The pc at the disableRangedReceive must flow to the lower bound of the enableRangedReceive.
+ | pc level at the disableRangedReceive   : {secret}
+ | lower bound of the enableRangedReceive : {}
+ | level of the capability                : {secret}
+>> at tests/rt/neg/ifc/lclear-indirect-high-raise.trp:11:15

@@ -29,13 +29,13 @@ let
         let
             val _ = debugMbox()
             (* Gate pattern: receive untrusted data and systematically downgrade *)
-            val c = raisembox (`<; #null-integrity>`)
+            val (_, c) = enableRangedReceive (`<;#root-integrity>`, `<; #null-integrity>`, authority)
             val datum =
                 rcv ( `{}`
                     , `<; #null-integrity>`
                     , [ hn x | y => let val _ = debugValue y in (x,y) end ])
 
-            val _ = lowermbox (c, authority)
+            val _ = disableRangedReceive c
             val _ = blockdown authority
             val (x,y) = downgrade (datum, authority, `{}`)
             val x' = downgrade (x, authority, `{}`)

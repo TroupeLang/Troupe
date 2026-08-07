@@ -1,7 +1,7 @@
-(* positive test; nested raise/lowering *)
-let val c1 = raisembox (`<alice;#root-integrity>`) 
-    val c2 = raisembox (`<bob;#root-integrity>`)    
-    val _ = lowermbox ( c2, attenuate (authority, `<bob;#root-integrity>` ))
-    val _ = lowermbox ( c1, attenuate (authority, `<alice;#root-integrity>`))
-in () 
+(* positive test; nested regions, closed innermost-first *)
+let val (_, c1) = enableRangedReceive (`<;#root-integrity>`, `<alice;#root-integrity>`, attenuate (authority, `<alice;#root-integrity>`))
+    val (_, c2) = enableRangedReceive (`<;#root-integrity>`, `<bob;#root-integrity>`, attenuate (authority, `<bob;#root-integrity>`))
+    val _ = disableRangedReceive c2
+    val _ = disableRangedReceive c1
+in ()
 end

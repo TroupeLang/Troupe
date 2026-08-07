@@ -1,13 +1,18 @@
-(* positive; the receives respect the pc-level of the raisembox *)
-let val main = self () 
+(* positive; the receives respect the pc-level at which the region was opened.
+   The region lives entirely inside the secret branch, so its floor is the secret
+   pc: the close releases at `<secret;#root-integrity>`, which is where the branch
+   already sits. *)
+let val main = self ()
     val _ = spawn (fn () => if (1 raisedTo `<secret;#root-integrity>` > 0) then send (main, 1) else ())
-in 
-if true raisedTo `<secret;#root-integrity>` then 
-  let val c = raisembox (`<topsecret;#root-integrity>`)
+in
+if true raisedTo `<secret;#root-integrity>` then
+  let val (_, c) = enableRangedReceive ( `<secret;#root-integrity>`
+                                       , `<topsecret;#root-integrity>`
+                                       , attenuate (authority, `<topsecret;#root-integrity>`))
       val y = rcv (`<secret;#root-integrity>`, `<secret & topsecret;#root-integrity>`, [hn x=> x])
-      val _ = lowermbox (c, attenuate (authority, `<topsecret;#root-integrity>`))
+      val _ = disableRangedReceive c
   in y
-  end 
-else 
+  end
+else
   ()
 end

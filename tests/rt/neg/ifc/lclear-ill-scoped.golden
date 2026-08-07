@@ -1,10 +1,10 @@
-2026-01-06T14:33:33.946Z [RTM] [32minfo[39m: Skipping network creation. Observe that all external IO operations will yield a runtime error.
-Runtime error in thread 0d77891e-d4cc-4e86-a814-e82714e81d04@{}%{}
+2026-08-06T09:51:36.115Z [RTM] [32minfo[39m: Skipping network creation. Observe that all network operations will yield a runtime error.
+Runtime error in thread 2865e6bf-bd5c-4867-a2ed-f89bfa26f70c@{}%{}
 
-  4 |     val _ = lowermbox ( c1, attenuate (authority, `{bob}` ))
+  6 |     val _ = disableRangedReceive c1
     |             ^
 
->> Ill-scoped raise/lower of mailbox clearance:
-expected cap: f38fa344-a8b9-4694-bdae-7f674cd79aeb
-provided cap: 72a62479-0f81-438b-9a0c-38e671108abb
->> at tests/rt/neg/ifc/lclear-ill-scoped.trp:4:13
+>> disableRangedReceive must close the last enableRangedReceive first.
+ | capability of the last enableRangedReceive : 408063c9-e6ed-45f6-b41b-5a26dbefb4a6
+ | capability provided                        : 8c24ad0c-2465-4223-a525-e59e83e17b49
+>> at tests/rt/neg/ifc/lclear-ill-scoped.trp:6:13

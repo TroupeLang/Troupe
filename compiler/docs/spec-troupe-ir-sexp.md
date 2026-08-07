@@ -118,8 +118,9 @@ newtype DCLabelExp  = DCLabelExp (LabelComponent, LabelComponent) -- (confidenti
 **Why this grammar is stable under language growth.** Troupe's entire primitive surface — the
 downgrade family (`declassify`, `endorse`, `downgrade`, `declassifyType`, `endorseType`,
 `downgradeType`), the blocking-label family (`blockdeclto`, `blockendorseto`, `blockdownto`, …),
-the mailbox primitives (`peek`, `consume`, `guard`, `raisembox`, `lowermbox`), the actor layer
-(`spawn`, `self`, `send`, `receive`), `attenuate`, `levelOf`, and every other builtin — enters the
+the mailbox primitives (`peek`, `consume`, `guard`, `enableRangedReceive`, `disableRangedReceive`),
+the actor layer (`spawn`, `self`, `send`, `receive`), `attenuate`, `levelOf`, and every other
+builtin — enters the
 IR as `Base VarName` applied via ordinary calls, i.e. as a *string*, not as an AST constructor. New
 primitives therefore never change this grammar; they only add names the runtime binds. The format
 is a fixed point of the IR's *structure*, which has been stable for years, so the spec can be held

@@ -73,13 +73,13 @@ The server endorses data that was influenced by untrusted (attacker) code. This 
 
 ## Key Security Primitives Used
 
-| Primitive                  | Purpose                                                    |
-|----------------------------|------------------------------------------------------------|
-| `raisembox` / `lowermbox`  | Temporarily adjust mailbox clearance for receiving messages |
-| `blockdown`                | Downgrade both PC and blocking labels                      |
-| `endorse`                  | Raise integrity of data (the NMIFC-relevant operation)     |
-| `declassify`               | Release confidentiality of authentication result           |
-| `raisedTo`                 | Attach security labels to values                           |
+| Primitive                                      | Purpose                                                       |
+|------------------------------------------------|---------------------------------------------------------------|
+| `enableRangedReceive` / `disableRangedReceive` | Open and close a ranged-receive region for receiving messages |
+| `blockdown`                                    | Downgrade both PC and blocking labels                         |
+| `endorse`                                      | Raise integrity of data (the NMIFC-relevant operation)        |
+| `declassify`                                   | Release confidentiality of authentication result              |
+| `raisedTo`                                     | Attach security labels to values                              |
 
 ## Why This Matters
 

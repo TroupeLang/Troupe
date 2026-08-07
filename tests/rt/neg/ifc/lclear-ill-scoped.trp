@@ -1,7 +1,9 @@
-(* negative test; ill-scoped raise/lowering *)
-let val c1 = raisembox (`{alice}`) 
-    val c2 = raisembox (`{bob}`)    
-    val _ = lowermbox ( c1, attenuate (authority, `{bob}` ))
-    val _ = lowermbox ( c2, attenuate (authority, `{alice}`))
-in () 
+(* negative test; ill-scoped enable/disable of ranged receives. Both regions are
+   certified (root authority), so the refusal is attributed to the LIFO scoping and
+   not to an invalid capability. *)
+let val (_, c1) = enableRangedReceive (`{}`, `{alice}`, authority)
+    val (_, c2) = enableRangedReceive (`{}`, `{bob}`, authority)
+    val _ = disableRangedReceive c1
+    val _ = disableRangedReceive c2
+in ()
 end

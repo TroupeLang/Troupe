@@ -7,9 +7,9 @@ let val main = self ()
                               in () 
                              end )
 
-    val c = raisembox (`<alice & bob;#root-integrity>`)     
+    val (_, c) = enableRangedReceive (`<;#root-integrity>`, `<alice & bob;#root-integrity>`, authority)
     val r1 = rcv (`{}`, `<alice;#root-integrity>`, [hn x => x]) 
-    val _ = lowermbox (c, authority) 
+    val _ = disableRangedReceive c
     val r2 = rcv (`{}`, `<alice;#root-integrity>`, [hn x => x]) (*
     val _ = debugpc ()
     val _ = printWithLabels r1 

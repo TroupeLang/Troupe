@@ -1,5 +1,8 @@
-(* negative test; should fail *)
-let val c = raisembox (`<alice;#root-integrity>`)
-    val () = lowermbox (c, attenuate (authority, `<bob;#root-integrity>`))    
+(* negative test; should fail. The shown authority (bob) cannot certify restoring
+   the mailbox view from alice down to public, so the enable returns ok = false and
+   the region has no close: the disable is refused on the invalid capability. *)
+let val (ok, c) = enableRangedReceive (`<;#root-integrity>`, `<alice;#root-integrity>`, attenuate (authority, `<bob;#root-integrity>`))
+    val _ = printWithLabels ok
+    val () = disableRangedReceive c
 in c
-end 
+end

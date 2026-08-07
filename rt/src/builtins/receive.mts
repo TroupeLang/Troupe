@@ -12,42 +12,6 @@ import { debug } from 'console';
 
 
 
-/*
-// this function must only be called from 
-// one of the checked functions 
-function _receiveFromMailbox ($r:RuntimeInterface, lowb, highb, handlers) {
-  let mclear = $r.$t.mailbox.mclear
-  
-  let is_sufficient_clearance = 
-    flowsTo( lub (highb.val, $r.$t.pc)
-          ,  lub (lowb.val, mclear.boost_level ))
-
-    if (!is_sufficient_clearance)  {  
-      let errorMessage = 
-        "Not enough mailbox clearance for this receive\n" +
-        ` | receive lower bound: ${lowb.val.stringRep()}\n` + 
-        ` | receive upper bound: ${highb.val.stringRep()}\n` +
-        ` | pc level           : ${$r.$t.pc.stringRep()}\n` +
-        ` | mailbox clearance  : ${mclear.boost_level.stringRep()}` 
-      $r.$t.threadError (errorMessage);
-    }    
-  
-    let is_clearance_a_leak = flowsTo( mclear.pc_at_creation, glb ($r.$t.pc, lowb.val))
-
-    if (!is_clearance_a_leak)  {
-      let errorMessage = 
-        "PC level at the time of raising the mailbox clearance is too sensitive for this receive\n" +
-        ` | receive lower bound: ${lowb.val.stringRep()}\n` + 
-        ` | pc level at the time of receive: ${$r.$t.pc.stringRep()}\n` +        
-        ` | pc level at the time of raise: ${mclear.pc_at_creation.stringRep()}`  // we need better terminology for these       
-      $r.$t.threadError (errorMessage);
-    }
-
-
-    return $r.__mbox.rcv(lowb.val, highb.val, handlers, mclear.boost_level)
-    
-}
-*/
 
  
 /** Receiving functionality; 2020-02-12; AA 
@@ -104,12 +68,12 @@ export function BuiltinReceive<TBase extends Constructor<UserRuntimeZero>>(Base:
           // and the sub-stream up to the active ceiling (which in-region removals perturb
           // secret-dependently), so the operand labels and the ceiling terms quarantine
           // the thread's blocking label: bl ⊔= ld(i) ⊔ ld(l1) ⊔ ld(l2) ⊔ Δ ⊔ Δlab.
-          // (The __mbox.peek path additionally raises bl by l2 ⊔ boost_level.)
+          // (The __mbox.peek path additionally raises bl by l2.)
           theThread.raiseBlockingThreadLev (lub (i.lev, lowb.lev, highb.lev,
                                                  mclear.delta, mclear.deltaLab))
           return this.runtime.__mbox.peek (
               lub (this.runtime.$t.pc, i.lev, lowb.lev, highb.lev, highb.val,
-                   mclear.boost_level, mclear.delta, mclear.deltaLab),
+                   mclear.delta, mclear.deltaLab),
               i.val, lowb.val, highb.val )
         })
 
@@ -130,60 +94,40 @@ export function BuiltinReceive<TBase extends Constructor<UserRuntimeZero>>(Base:
           // ALL mailbox observations, removals included, so an in-region consume's
           // occurrence must flow to the receive clearance — the read's floor joined
           // with the active ceiling:
-          // pc ⊔ ld(i) ⊔ ld(l1) ⊔ ld(l2) ⊑ l1 ⊔ Δ. During coexistence the receive
-          // clearance also carries the legacy standing clearance, exactly as the
-          // selection premise's bound does — this restores the shape of the original
-          // combined check pc ⊔ highb ⊑ lowb ⊔ clearance, whose pc the standing
-          // clearance cleared all along.
-          // Outside any region (Δ = ⊥, clearance = ⊥) the premise degenerates to the
-          // hard pc ⊔ ld(·) ⊑ l1.
+          // pc ⊔ ld(i) ⊔ ld(l1) ⊔ ld(l2) ⊑ l1 ⊔ Δ.
+          // Outside any region (Δ = ⊥) the premise degenerates to the hard
+          // pc ⊔ ld(·) ⊑ l1.
           let occ = lub (theThread.pc, i.lev, lowb.lev, highb.lev)
-          let rcvClearance = lub (lowb.val, mclear.delta, mclear.boost_level)
+          let rcvClearance = lub (lowb.val, mclear.delta)
           if (!flowsTo (occ, rcvClearance)) {
             let errorMessage =
-              "Ranged-receive consume occurrence check failed: whether the removal fires depends on data above the receive clearance\n" +
-              ` | receive lower bound (floor): ${lowb.val.stringRep()}\n` +
-              ` | receive clearance          : ${rcvClearance.stringRep()}\n` +
-              ` | occurrence level (occ)     : ${occ.stringRep()}\n` +
-              ` | pc level                   : ${theThread.pc.stringRep()}`
+              "The data that causes this receive or consume does not flow to the level it can read.\n" +
+              ` | level of the data that causes the receive or consume : ${occ.stringRep()}\n` +
+              ` | level the receive or consume can read                : ${rcvClearance.stringRep()}\n` +
+              ` | lower bound of the receive or consume                : ${lowb.val.stringRep()}\n` +
+              ` | pc level                                             : ${theThread.pc.stringRep()}`
             theThread.threadError (errorMessage);
           }
 
-          // The floor premise: the consume may not read below any open region floor. Φ ⊑ l1.
+          // The floor premise: the consume cannot read below any open region floor. Φ ⊑ l1.
           if (!flowsTo (mclear.phi, lowb.val)) {
             let errorMessage =
-              "Ranged-receive consume floor check failed: the consume reads below the active floor\n" +
-              ` | receive lower bound (floor): ${lowb.val.stringRep()}\n` +
-              ` | active floor (Phi)         : ${mclear.phi.stringRep()}`
+              "The lower bound of the open enableRangedReceives must flow to the lower bound of this receive or consume.\n" +
+              ` | lower bound of the open enableRangedReceives : ${mclear.phi.stringRep()}\n` +
+              ` | lower bound of the receive or consume        : ${lowb.val.stringRep()}`
             theThread.threadError (errorMessage);
           }
 
-          // The selection premise: lev(i) ⊔ l2 ⊑ l1 ⊔ Δ. The legacy standing clearance
-          // (boost_level) is kept in the target alongside Δ so legacy raisembox programs
-          // still pass.
-          let selection_ok =
-            flowsTo (lub (i.lev, highb.val), lub (lowb.val, mclear.delta, mclear.boost_level))
+          // The selection premise: lev(i) ⊔ l2 ⊑ l1 ⊔ Δ — the same receive clearance
+          // the occurrence premise bounds against.
+          let selection_ok = flowsTo (lub (i.lev, highb.val), rcvClearance)
           if (!selection_ok) {
             let errorMessage =
-              "Not enough mailbox clearance for this receive\n" +
-              ` | receive lower bound   : ${lowb.val.stringRep()}\n` +
-              ` | receive upper bound   : ${highb.val.stringRep()}\n` +
-              ` | index label           : ${i.lev.stringRep()}\n` +
-              ` | active ceiling (Delta): ${mclear.delta.stringRep()}\n` +
-              ` | mailbox clearance     : ${mclear.boost_level.stringRep()}`
+              "The upper bound of this receive or consume does not flow to the level it can read.\n" +
+              ` | upper bound of the receive or consume : ${highb.val.stringRep()}\n` +
+              ` | level the receive or consume can read : ${rcvClearance.stringRep()}\n` +
+              ` | level of the message index            : ${i.lev.stringRep()}`
             theThread.threadError (errorMessage);
-          }
-
-          // Legacy protection (retained; vacuous without raisembox, since pc_at_creation
-          // stays ⊥): the pc at the time of raising the standing clearance must not itself
-          // be a leak for this receive.
-          if (!flowsTo (mclear.pc_at_creation, glb (theThread.pc, lowb.val))) {
-            let errorMessage =
-              "PC level at the time of raising the mailbox clearance is too sensitive for this receive\n" +
-              ` | receive lower bound: ${lowb.val.stringRep()}\n` +
-              ` | pc level at the time of receive: ${theThread.pc.stringRep()}\n` +
-              ` | pc level at the time of raise: ${mclear.pc_at_creation.stringRep()}`
-            theThread.threadError (errorMessage)
           }
 
           // Blocking label absorbs ld(l1) ⊔ ld(l2) ⊔ lev(i) ⊔ l2 ⊔ Δ ⊔ Δlab ⊔ Φlab — the
@@ -192,14 +136,14 @@ export function BuiltinReceive<TBase extends Constructor<UserRuntimeZero>>(Base:
           // ceiling, and the floor check reads Φ under Φlab, so the active-range terms
           // quarantine the consume's blocking channel exactly as the read taint confines
           // its value channel. (The __mbox.consume path additionally raises bl by
-          // l2 ⊔ boost_level.)
+          // l2.)
           theThread.raiseBlockingThreadLev (lub (lowb.lev, highb.lev, i.lev, highb.val,
                                                  mclear.delta, mclear.deltaLab, mclear.phiLab))
 
           // Result taint: v.data ⊔ pc ⊔ lev(i) ⊔ l2 ⊔ Δ ⊔ Δlab ⊔ Φlab, plus the ld(l1)/ld(l2)
-          // operand terms; v.data is joined inside __mbox.consume. boost_level kept (legacy).
+          // operand terms; v.data is joined inside __mbox.consume.
           let consume_l = lub (theThread.pc, i.lev, lowb.lev, highb.lev, highb.val,
-                               mclear.boost_level, mclear.delta, mclear.deltaLab, mclear.phiLab)
+                               mclear.delta, mclear.deltaLab, mclear.phiLab)
           return this.runtime.__mbox.consume ( consume_l, i.val, lowb.val, highb.val )
         })
 
@@ -229,24 +173,15 @@ export function BuiltinReceive<TBase extends Constructor<UserRuntimeZero>>(Base:
           let mclear = theThread.mailbox.mclear
 
           // The regionlessness premise: the instant form is the bare-thread (top-level)
-          // instance. An open clearance region — a non-empty capability chain, from
-          // enableRangedReceive or the legacy raisembox — is refused; so is a residual
-          // legacy standing clearance (boost_level above BOT). Inside a region the
-          // program already holds the bracket spelling; the instant form does not
-          // compose with a standing region's active range.
+          // instance, so an open region — a non-empty capability chain — is refused.
+          // Inside a region the program already holds the bracket spelling; the instant
+          // form does not compose with a region's active range.
           if (theThread.mailbox.caps != null) {
             let errorMessage =
-              "consumeWithAuthority requires no open clearance region: an enableRangedReceive (or legacy raisembox) region is open\n" +
-              ` | open capability chain head: ${theThread.mailbox.caps}`
+              "consumeWithAuthority is not possible while an enableRangedReceive is open.\n" +
+              ` | capability of the last enableRangedReceive : ${theThread.mailbox.caps}`
             theThread.threadError (errorMessage)
           }
-          if (!flowsTo (mclear.boost_level, BOT)) {
-            let errorMessage =
-              "consumeWithAuthority requires no standing mailbox clearance\n" +
-              ` | mailbox clearance: ${mclear.boost_level.stringRep()}`
-            theThread.threadError (errorMessage)
-          }
-
           // The occurrence premise, HARD (no active ceiling, no boost): whether the
           // removal fires must not depend on data above the floor. The authority
           // operand's .lev joins in — the selection check reads the authority, so it
@@ -255,10 +190,10 @@ export function BuiltinReceive<TBase extends Constructor<UserRuntimeZero>>(Base:
           let occ = lub (theThread.pc, i.lev, lowb.lev, highb.lev, auth.lev)
           if (!flowsTo (occ, lowb.val)) {
             let errorMessage =
-              "consumeWithAuthority occurrence check failed: whether the removal fires depends on data above the floor\n" +
-              ` | receive lower bound (floor): ${lowb.val.stringRep()}\n` +
-              ` | occurrence level (occ)     : ${occ.stringRep()}\n` +
-              ` | pc level                   : ${theThread.pc.stringRep()}`
+              "The data that causes this consumeWithAuthority does not flow to the level it can read.\n" +
+              ` | level of the data that causes the consumeWithAuthority : ${occ.stringRep()}\n` +
+              ` | level the consumeWithAuthority can read                : ${lowb.val.stringRep()}\n` +
+              ` | pc level                                               : ${theThread.pc.stringRep()}`
             theThread.threadError (errorMessage)
           }
 
@@ -269,12 +204,12 @@ export function BuiltinReceive<TBase extends Constructor<UserRuntimeZero>>(Base:
           let aLev = auth.val.authorityLevel
           if (!privFlowsTo (aLev, Hi, lowb.val)) {
             let errorMessage =
-              "Insufficient authority for this consume: the shown authority does not cover the selection down to the floor\n" +
-              ` | receive lower bound (floor)            : ${lowb.val.stringRep()}\n` +
-              ` | receive upper bound                    : ${highb.val.stringRep()}\n` +
-              ` | index label                            : ${i.lev.stringRep()}\n` +
-              ` | selection boundary (highb ⊔ lev(i))    : ${Hi.stringRep()}\n` +
-              ` | authority provided                     : ${aLev.stringRep()}`
+              "consumeWithAuthority cannot release the message to its lower bound with this authority.\n" +
+              ` | level the selection is made at            : ${Hi.stringRep()}\n` +
+              ` | lower bound given to consumeWithAuthority : ${lowb.val.stringRep()}\n` +
+              ` | level of the authority                    : ${aLev.stringRep()}\n` +
+              ` | upper bound given to consumeWithAuthority : ${highb.val.stringRep()}\n` +
+              ` | level of the message index                : ${i.lev.stringRep()}`
             theThread.threadError (errorMessage)
           }
 
@@ -283,7 +218,7 @@ export function BuiltinReceive<TBase extends Constructor<UserRuntimeZero>>(Base:
           // four operands (the authority operand included — the selection check consults
           // it, mirroring the enable's auth.lev join). bl ⊔= i.lev ⊔ lowb.lev ⊔ highb.lev
           // ⊔ auth.lev ⊔ highb ⊔ i.lev. (The __mbox.consume path additionally raises bl
-          // by highb ⊔ boost_level; boost_level = BOT here by the regionlessness premise.)
+          // by highb.)
           theThread.raiseBlockingThreadLev (lub (i.lev, lowb.lev, highb.lev, auth.lev, Hi))
 
           // Result: readTainted at occ ⊔ highb ⊔ i.lev — v.data is joined inside

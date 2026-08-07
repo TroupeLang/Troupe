@@ -1,7 +1,7 @@
-(* negative test; lowering clearance in a context than the original *)
+(* negative test; closing a region in a context more sensitive than its floor *)
 
-let val c = raisembox (`{alice,bob}`)        
-in  if (true raisedTo`{alice}`) 
-        then lowermbox (c, authority)
-        else ()     
+let val (_, c) = enableRangedReceive (`{}`, `{alice,bob}`, authority)
+in  if (true raisedTo`{alice}`)
+        then disableRangedReceive c
+        else ()
 end

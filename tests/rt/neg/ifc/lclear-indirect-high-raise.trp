@@ -1,11 +1,16 @@
-(* negative ; receiving below the level of the pc at the raise time *)
+(* negative ; a region opened under a secret pc with a public floor: the close
+   releases at the floor, so its occurrence may not depend on the secret branch.
+   Contrast tests/rt/pos/ifc/lclear-nested-raise-ok.trp, where the floor is the
+   secret pc itself and the close is accepted. *)
 let val _ = _setProcessDebuggingName ("main") 
     val _ = send (self (), 1)
 in 
 if true raisedTo `{secret}` then 
-  let val c = raisembox (`{secret}`)
-   in rcv (`{}`, `{secret}`, [hn x => x])
+  let val (_, c) = enableRangedReceive (`{}`, `{secret}`, authority)
+      val r = rcv (`{}`, `{secret}`, [hn x => x])
+      val _ = disableRangedReceive c
+   in r
   end 
 else 
   ()
-end    
+end

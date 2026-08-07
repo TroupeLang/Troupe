@@ -12,14 +12,14 @@ let
     val _ = register("echo", self(), authority)
     val _ = print "SERVER: Registered echo service"
 
-    (* Gate pattern: raise mbox, receive, lower mbox, downgrade *)
-    val c = raisembox(`<; #null-integrity>`)
+    (* Gate pattern: open a region, receive, close the region, downgrade *)
+    val (_, c) = enableRangedReceive(`<;#root-integrity>`, `<; #null-integrity>`, authority)
     val datum = rcv(
         `{}`,
         `<; #null-integrity>`,
         [hn x | y => (x, y)]
     )
-    val _ = lowermbox(c, authority)
+    val _ = disableRangedReceive c
     val _ = blockdown authority
 
     (* Downgrade the received data - matching original example exactly *)

@@ -1,9 +1,12 @@
-(* positive; there is sufficient clearance to 
+(* positive; there is sufficient clearance to
    perform the receive *)
 
-let val main = self () 
+let val main = self ()
     val _ = spawn ( fn () => send (main, 42))
-    val c = raisembox (`<alice & bob;#root-integrity>`)    
+    (* the region is never closed, so it shows the null authority: the enable
+       succeeds with ok = false and the region stays open for good *)
+    val nullAuth = attenuate (authority, `<#null-confidentiality;#null-integrity>`)
+    val _ = enableRangedReceive (`<;#root-integrity>`, `<alice & bob;#root-integrity>`, nullAuth)
     val result =  rcv (`{}`, `<alice;#root-integrity>`, [hn x => print x ] )
     val _ = debugpc ()
 in  result

@@ -1,12 +1,12 @@
-2026-07-31T08:17:00.345Z [RTM] [32minfo[39m: Skipping network creation. Observe that all network operations will yield a runtime error.
-Runtime error in thread 7328f05d-db62-48bc-9db5-725106f460c8@{}%{}
+2026-08-06T09:51:37.039Z [RTM] [32minfo[39m: Skipping network creation. Observe that all network operations will yield a runtime error.
+Runtime error in thread 4490abb4-31ea-434e-b9e2-b79753532e6e@{}%{}
 
   10 |         then rcvp (`{}`, [hn x => x]) 
      |              ^
 
->> Ranged-receive consume occurrence check failed: whether the removal fires depends on data above the receive clearance
- | receive lower bound (floor): {}
- | receive clearance          : {}
- | occurrence level (occ)     : {alice}
- | pc level                   : {alice}
+>> The data that causes this receive or consume does not flow to the level it can read.
+ | level of the data that causes the receive or consume : {alice}
+ | level the receive or consume can read                : {}
+ | lower bound of the receive or consume                : {}
+ | pc level                                             : {alice}
 >> at tests/rt/neg/ifc/lclear-implicit-receive.trp:10:14

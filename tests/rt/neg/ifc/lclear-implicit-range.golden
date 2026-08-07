@@ -1,13 +1,11 @@
-2026-07-31T08:17:00.347Z [RTM] [32minfo[39m: Skipping network creation. Observe that all network operations will yield a runtime error.
-Runtime error in thread 57fa36e1-349f-4650-8c03-890b57e93de0@{}%{}
+2026-08-06T09:51:35.330Z [RTM] [32minfo[39m: Skipping network creation. Observe that all network operations will yield a runtime error.
+Runtime error in thread 391570da-01ca-48fc-89be-ef1c5f47ec0d@{}%{}
 
   4 | consume (0,`{}`, `{alice}`) 
     | ^
 
->> Not enough mailbox clearance for this receive
- | receive lower bound   : {}
- | receive upper bound   : {alice}
- | index label           : {}
- | active ceiling (Delta): {}
- | mailbox clearance     : {}
+>> The upper bound of this receive or consume does not flow to the level it can read.
+ | upper bound of the receive or consume : {alice}
+ | level the receive or consume can read : {}
+ | level of the message index            : {}
 >> at tests/rt/neg/ifc/lclear-implicit-range.trp:4:1

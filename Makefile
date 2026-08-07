@@ -1,4 +1,5 @@
-.PHONY: rt trp-rt compiler lib p2p-tools npm clean test ci test/examples dist check-compiler notebook \
+.PHONY: rt trp-rt compiler compiler-wasm lib p2p-tools npm clean test ci test/examples dist \
+        check-compiler notebook \
         dev-planning-to-html
 
 # TODO: Rename to 'build/*' ?
@@ -20,6 +21,39 @@ rt:
 COMPILER=./bin/troupec
 compiler:
 	cd compiler; $(MAKE) all
+
+# The WebAssembly cross-build of troupec, at bin/troupec.wasm.
+#
+# Driven by cabal rather than stack, which cannot drive a cross toolchain. It
+# builds the same package from the same hpack-generated .cabal file as the
+# native build -- and that file is gitignored, so a stack invocation has to
+# regenerate it before cabal can read it.
+#
+# alex and happy run on the build host. Left alone, cabal puts them in the
+# install plan, builds them for wasm32-wasi, and then fails to find them
+# ("The program 'alex' is required but it could not be found") because the
+# artifacts carry a .wasm extension. Naming the native ones from the stack
+# snapshot avoids the whole detour.
+#
+# Needs the ghc-wasm-meta toolchain (FLAVOUR=9.10, matching the native GHC).
+# Point GHC_WASM_ENV elsewhere if it is not installed in the default place.
+GHC_WASM_ENV ?= $(HOME)/.ghc-wasm/env
+compiler-wasm:
+	@if [ ! -f "$(GHC_WASM_ENV)" ]; then \
+		echo "No wasm toolchain environment at $(GHC_WASM_ENV)." >&2; \
+		echo "Install it with ghc-wasm-meta's setup.sh (FLAVOUR=9.10), or set" >&2; \
+		echo "GHC_WASM_ENV to the env file of an existing installation." >&2; \
+		exit 1; \
+	fi
+	cd compiler && stack build --dry-run >/dev/null
+	cd compiler && \
+	  alex=`stack exec -- which alex` && happy=`stack exec -- which happy` && \
+	  . "$(GHC_WASM_ENV)" && \
+	  wasm32-wasi-cabal build exe:troupec --with-alex=$$alex --with-happy=$$happy
+	mkdir -p bin
+	cd compiler && . "$(GHC_WASM_ENV)" && \
+	  cp `wasm32-wasi-cabal list-bin exe:troupec` ../bin/troupec.wasm
+	@echo "built bin/troupec.wasm"
 
 p2p-tools:
 	cd p2p-tools; tsc

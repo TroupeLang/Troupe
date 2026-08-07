@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>troupec in the browser</title>
+<style>
+  :root {
+    --bg: #fbfbfd; --panel: #fff; --ink: #17171c; --dim: #6b6b76;
+    --line: #dcdce4; --accent: #3f5fd0; --warn: #8a5b00; --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14141a; --panel: #1c1c24; --ink: #e8e8ef; --dim: #9a9aa8;
+      --line: #33333f; --accent: #92a8ff; --warn: #e0b050;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.5 system-ui, sans-serif;
+  }
+  header { padding: 14px 18px; border-bottom: 1px solid var(--line); }
+  h1 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: .2px; }
+  header p { margin: 4px 0 0; color: var(--dim); font-size: 12.5px; }
+  #status { font-variant-numeric: tabular-nums; }
+  main { display: grid; grid-template-columns: minmax(280px, 4fr) minmax(320px, 6fr); gap: 1px;
+         background: var(--line); height: calc(100vh - 76px); }
+  @media (max-width: 820px) { main { grid-template-columns: 1fr; height: auto; } }
+  section { background: var(--panel); display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+  .head { padding: 8px 12px; border-bottom: 1px solid var(--line); display: flex; gap: 10px;
+          align-items: center; flex-wrap: wrap; }
+  .head h2 { margin: 0; font-size: 12px; text-transform: uppercase; letter-spacing: .7px; color: var(--dim); }
+  textarea, pre {
+    font-family: var(--mono); font-size: 12.5px; margin: 0; border: 0; outline: none;
+    background: transparent; color: inherit; flex: 1; padding: 12px; overflow: auto; min-height: 180px;
+  }
+  textarea { resize: none; width: 100%; }
+  pre { white-space: pre; }
+  button, select {
+    font: inherit; font-size: 12.5px; padding: 4px 10px; border-radius: 6px;
+    border: 1px solid var(--line); background: var(--panel); color: inherit; cursor: pointer;
+  }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: .5; cursor: default; }
+  .tabs { display: flex; gap: 2px; overflow-x: auto; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  .tabs button { border: 0; border-radius: 5px; padding: 3px 9px; white-space: nowrap; color: var(--dim); }
+  .tabs button[aria-selected="true"] { background: var(--accent); color: #fff; }
+  .bar { padding: 6px 12px; border-top: 1px solid var(--line); color: var(--dim); font-size: 12px;
+         display: flex; justify-content: space-between; gap: 12px; }
+  .err { color: var(--warn); white-space: pre-wrap; }
+  details { border-top: 1px solid var(--line); }
+  summary { padding: 8px 12px; cursor: pointer; font-size: 12px; text-transform: uppercase;
+            letter-spacing: .7px; color: var(--dim); }
+  .ir { padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+  .ir textarea { min-height: 90px; border: 1px solid var(--line); border-radius: 6px; flex: none; height: 90px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>troupec in the browser</h1>
+  <p>The Haskell compiler, cross-built to WebAssembly, compiling in this page —
+     with every intermediate stage of the pipeline. <span id="status">loading the compiler…</span></p>
+</header>
+
+<main>
+  <section>
+    <div class="head">
+      <h2>source</h2>
+      <button id="compile" class="primary" disabled>compile</button>
+      <select id="sample" aria-label="sample program"></select>
+    </div>
+    <textarea id="source" spellcheck="false"></textarea>
+
+    <details id="irPanel">
+      <summary>compile received IR — the path a node takes when a closure arrives</summary>
+      <div class="ir">
+        <p style="margin:0;color:var(--dim);font-size:12px">
+          A base64 <code>TRPI</code> blob, as it travels between nodes. The compiler links it into
+          the JavaScript the receiver evaluates. One blob per line.
+        </p>
+        <textarea id="blob" spellcheck="false" placeholder="VFJQSQIfiwgA…"></textarea>
+        <div><button id="link" disabled>link IR</button>
+             <button id="fillBlob">use the blob from the compile above</button></div>
+        <pre id="linkOut" style="min-height:80px"></pre>
+      </div>
+    </details>
+  </section>
+
+  <section>
+    <div class="tabs" id="tabs"></div>
+    <pre id="view">Compile something.</pre>
+    <div class="bar"><span id="meta"></span><span id="errs" class="err"></span></div>
+  </section>
+</main>
+
+<script type="module">
+import { compileSource, linkBlobs, STAGES } from './demo.mjs';
+
+const $ = (id) => document.getElementById(id);
+const SAMPLES = {
+  'hello': `let\n  val greeting = "hello from a compiler in your browser"\nin\n  print greeting\nend\n`,
+  'arithmetic and functions': `let\n  fun square x = x * x\n  fun sumTo n = if n <= 0 then 0 else n + sumTo (n - 1)\nin\n  print (square 12);\n  print (sumTo 100)\nend\n`,
+  'a library import': `import List\nlet\n  val xs = [3, 1, 4, 1, 5, 9, 2, 6]\nin\n  print (List.length xs);\n  print (List.reverse xs)\nend\n`,
+  'labelled data': `let\n  val secret = 42 raisedTo \`alice\`\nin\n  print (secret + 1)\nend\n`,
+};
+
+let result = null;
+let selected = 'emitted JavaScript';
+
+function renderTabs() {
+  const names = ['emitted JavaScript', ...(result ? [...result.stages.keys()] : [])];
+  if (!names.includes(selected)) selected = names[0];
+  $('tabs').replaceChildren(...names.map((n) => {
+    const b = document.createElement('button');
+    b.textContent = n;
+    b.setAttribute('aria-selected', String(n === selected));
+    b.onclick = () => { selected = n; renderTabs(); renderView(); };
+    return b;
+  }));
+}
+
+function renderView() {
+  if (!result) { $('view').textContent = 'Compile something.'; return; }
+  $('view').textContent = selected === 'emitted JavaScript'
+    ? (result.js || '(no output)')
+    : (result.stages.get(selected) ?? '(stage not produced)');
+}
+
+async function doCompile() {
+  $('compile').disabled = true;
+  $('meta').textContent = 'compiling…';
+  $('errs').textContent = '';
+  try {
+    result = await compileSource($('source').value);
+    const stageCount = result.stages.size;
+    $('meta').textContent =
+      `exit ${result.code} · ${result.ms.toFixed(0)} ms · ${stageCount} stages · `
+      + `${result.js.length.toLocaleString()} bytes of JavaScript`;
+    if (!result.ok) $('errs').textContent = (result.crash ?? result.errors ?? '').slice(0, 400);
+    renderTabs(); renderView();
+  } finally {
+    $('compile').disabled = false;
+  }
+}
+
+async function doLink() {
+  const blobs = $('blob').value.split('\n').map((s) => s.trim()).filter(Boolean);
+  if (!blobs.length) { $('linkOut').textContent = 'Paste a blob first.'; return; }
+  $('link').disabled = true;
+  $('linkOut').textContent = 'linking…';
+  try {
+    const r = await linkBlobs(blobs);
+    $('linkOut').textContent = r.snippets.length
+      ? r.snippets.map((s, i) =>
+          `// snippet ${i + 1}${s.malformed ? ' (unparsed)' : ''}\n${s.code ?? ''}`).join('\n\n')
+        + `\n\n// exit ${r.code} · ${r.ms.toFixed(0)} ms`
+      : `no snippets · exit ${r.code}\n${r.crash ?? r.errors ?? ''}`;
+  } finally {
+    $('link').disabled = false;
+  }
+}
+
+// The emitted JavaScript carries one blob per serialized function; lift the
+// first one out so the IR panel can be tried without hunting for input.
+function fillBlobFromResult() {
+  const m = result?.js?.match(/\.serialized = "([A-Za-z0-9+/=]+)"/);
+  $('blob').value = m ? m[1] : '';
+  $('irPanel').open = true;
+  if (!m) $('linkOut').textContent = 'Compile a program first — its blobs appear in the output.';
+}
+
+$('sample').replaceChildren(...Object.keys(SAMPLES).map((k) => new Option(k, k)));
+$('source').value = SAMPLES['hello'];
+$('sample').onchange = (e) => { $('source').value = SAMPLES[e.target.value]; };
+$('compile').onclick = doCompile;
+$('link').onclick = doLink;
+$('fillBlob').onclick = fillBlobFromResult;
+
+// Warm the module so the first compile is not also the download.
+fetch('troupec.wasm', { method: 'HEAD' }).then((r) => {
+  if (!r.ok) throw new Error('missing');
+  const mb = (Number(r.headers.get('content-length') || 0) / 1e6).toFixed(1);
+  $('status').textContent = `compiler loaded (${mb} MB).`;
+  $('compile').disabled = false;
+  $('link').disabled = false;
+}).catch(() => {
+  $('status').innerHTML = 'bin/troupec.wasm is missing — build it with <code>make compiler-wasm</code>.';
+});
+</script>
+</body>
+</html>

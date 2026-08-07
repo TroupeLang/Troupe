@@ -15,6 +15,11 @@ copyright:           "2025 Aarhus University"
 # common to point users to the README.md file.
 description:         Please see the README on GitHub at <https://github.com/githubuser/Troupe-compiler#readme>
 
+# Dependencies shared by every component. hpack copies this list onto each one, so
+# anything here is also a dependency of the wasm cross-build of `troupec` -- which is
+# why the test-only packages (tasty, tasty-golden, optparse-applicative) and the
+# host-process ones (process, shellwords) are declared per-component instead. The
+# `golden` executable is where all five are actually used.
 dependencies:
 - base >= 4.7 && < 5
 - zlib
@@ -26,17 +31,11 @@ dependencies:
 - bytestring
 - text
 - base64-bytestring
-- process
 - filepath
 - directory
-- tasty
-- tasty-golden
 - strict
 - aeson
-- MissingH
 - tagged
-- optparse-applicative
-- shellwords
 - sourcemap >= 0.1.7
 - SHA
 
@@ -55,10 +54,14 @@ executables:
     main:                Main.hs
     source-dirs:         app
     ghc-options:
-    - -threaded
-    - -rtsopts
-    - -with-rtsopts=-N
     - -W
+    # The wasm RTS is single-threaded, and -N asks for more than one capability.
+    when:
+    - condition: "!arch(wasm32)"
+      ghc-options:
+      - -threaded
+      - -rtsopts
+      - -with-rtsopts=-N
     dependencies:
     - Troupe-compiler
 
@@ -94,6 +97,11 @@ executables:
     - -with-rtsopts=-N
     dependencies:
     - Troupe-compiler
+    - tasty
+    - tasty-golden
+    - optparse-applicative
+    - process
+    - shellwords
 
 tests:
   # The golden suite is built once, as the installed `golden` executable
@@ -183,6 +191,7 @@ tests:
     dependencies:
     - Troupe-compiler
     - QuickCheck
+    - tasty
     - tasty-quickcheck
   caseelim-prop-test:
     main: CaseElimProps.hs
@@ -194,6 +203,7 @@ tests:
     dependencies:
     - Troupe-compiler
     - QuickCheck
+    - tasty
     - tasty-quickcheck
   labelrt-prop-test:
     main: LabelRoundtripProps.hs
@@ -205,7 +215,19 @@ tests:
     dependencies:
     - Troupe-compiler
     - QuickCheck
+    - tasty
     - tasty-quickcheck
+  stringutil-test:
+    main: StringUtilTest.hs
+    source-dirs: test/stringutil-test
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - Troupe-compiler
+    - tasty
+    - tasty-hunit
   synvarhash-test:
     main: SynVarHashTest.hs
     source-dirs: test/synvarhash-test

@@ -35,7 +35,7 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Base64 as B64
 import qualified Data.ByteString.Char8 as BSC
 import qualified Data.ByteString.Lazy as BSL
-import           Data.List (maximumBy)
+import           Data.List (isInfixOf, maximumBy)
 import           Data.Ord (comparing)
 import           System.Directory (createDirectoryIfMissing, doesFileExist, getCurrentDirectory,
                                   withCurrentDirectory)
@@ -45,15 +45,19 @@ import           System.FilePath (takeDirectory, (</>), (<.>))
 import           Test.Tasty
 import           Test.Tasty.HUnit
 
+import           Basics (LibName(..))
 import           CompileMode (CompileMode(..))
 import           DepsFile (depsFilePath, readDepsFile)
-import           IR (FunDef, IRProgram(..), SerializationUnit(..))
+import           IR (FunDef(..), HFN(..), IRProgram(..), IRBBTree(..), IRInst(..),
+                     IRExpr(..), IRTerminator(..), SerializationUnit(..), VarAccess(..))
 import qualified IRBlob
 import           IRSexp (parseProg, parseUnit, printProgWithPos, printUnit)
 import qualified Pipeline
 import           PrettyPrint (mkPPConfig, parsePosFormat)
 import           ProcessImports (PinCheck(..))
-import           TroupePositionInfo (unLoc)
+import           RetCPS (VarName(..))
+import           Sexp (Datum(..), renderDatum, toSexp)
+import           TroupePositionInfo (noLoc, unLoc)
 
 -- | The programs the reference artifacts are cut from, chosen to span the grammar:
 -- arithmetic and recursion; both float spellings the printer can emit;
@@ -138,6 +142,51 @@ largestFun (IRProgram fs) =
   snd (maximumBy (comparing fst)
         [ (length (printUnit (FunSerialization f)), f) | f <- map unLoc fs ])
 
+-- | The native-module reference unit: hand-built rather than compiled, so the
+-- corpus does not depend on which native-module manifests a checkout has
+-- installed. Two modules, referenced out of canonical order and one of them
+-- twice, pin the @natives@ header's form: sorted, deduplicated.
+nativeFun :: FunDef
+nativeFun =
+  FunDef (HFN "main") (noLoc (VN "$$authorityarg")) []
+    (BB [ noLoc (Assign (VN "a") (Lib (LibName "native:Zeta") "zOp"))
+        , noLoc (Assign (VN "b") (Lib (LibName "native:FFIDemo") "ffiDemoGreet"))
+        , noLoc (Assign (VN "c") (Lib (LibName "native:FFIDemo") "ffiDemoAdd")) ]
+        (noLoc (Ret (noLoc (VarLocal (VN "b"))))))
+
+nativeProgram :: IRProgram
+nativeProgram = IRProgram [noLoc nativeFun]
+
+-- | A wrapped document built by hand, so its header can disagree with its body.
+handDocument :: Datum -> [Datum] -> String
+handDocument bodyD extra =
+  renderDatum (Lst ([ Atom "troupe-ir-sexp", toSexp (2 :: Integer), bodyD ] ++ extra)) ++ "\n"
+
+nativesHeader :: [String] -> Datum
+nativesHeader ns = Lst (Atom "natives" : map Str ns)
+
+-- | One function whose only work is a reference into the given library name.
+funWithRef :: String -> FunDef
+funWithRef l =
+  FunDef (HFN "f") (noLoc (VN "arg")) []
+    (BB [noLoc (Assign (VN "r") (Lib (LibName l) "x"))]
+        (noLoc (Ret (noLoc (VarLocal (VN "r"))))))
+
+libRefUnit :: String -> SerializationUnit
+libRefUnit = FunSerialization . funWithRef
+
+-- | Document bodies for the rejection cases: one with no native references,
+-- one with the reference unit's.
+plainBody, nativeBody :: Datum
+plainBody  = toSexp (IRProgram [noLoc (funWithRef "lists")])
+nativeBody = toSexp nativeProgram
+
+refuseDoc :: String -> Assertion
+refuseDoc text =
+  case parseProg text of
+    Left _  -> return ()
+    Right _ -> assertFailure ("accepted\n--- text ---\n" ++ text)
+
 main :: IO ()
 main = do
   root      <- troupeRoot
@@ -160,6 +209,26 @@ main = do
         writeFile blobPath (BSC.unpack (B64.encode (IRBlob.encodeBlob funUnit)) ++ "\n")
       Nothing -> return ()
     return (name, rel, ir, progUnit, funUnit, sexpPath, blobPath)
+
+  -- The native reference unit is hand-built (see 'nativeFun'), not compiled,
+  -- and its artifacts are checked in and regenerated like the others — but in
+  -- a sibling directory, because the Node and Troupe halves of the interchange
+  -- check (scripts/ir-blob-interchange.mjs, ir-sexp-troupe-conformance.sh)
+  -- walk data/ wholesale and the second implementation does not read the
+  -- natives extension yet. When trp-compiler's reader learns it, these move
+  -- into data/ and gain their cross-implementation counterparts.
+  let nativesDir     = takeDirectory dir </> "data-natives"
+      nativeSexpPath = nativesDir </> "native" <.> "sexp"
+      nativeBlobPath = nativesDir </> "native" <.> "blob"
+      nativeFunUnit  = FunSerialization nativeFun
+      nativeProgUnit = ProgramSerialization nativeProgram
+  createDirectoryIfMissing True nativesDir
+  case regen of
+    Just _ -> do
+      writeFile nativeSexpPath (printProgWithPos nativeProgram)
+      writeFile nativeBlobPath
+        (BSC.unpack (B64.encode (IRBlob.encodeBlob nativeFunUnit)) ++ "\n")
+    Nothing -> return ()
 
   defaultMain $ testGroup "troupe-ir-sexp conformance corpus"
     [ testGroup "L1: parse (print x) == x"
@@ -253,6 +322,56 @@ main = do
         [ testCase name $
             parseUnit (printUnit funUnit) `unitEq'` funUnit
         | (name, _, _, _, funUnit, _, _) <- cases ]
+
+      -- A body referencing native modules carries them in the document's
+      -- optional fourth element, canonical (sorted, deduplicated) and verified
+      -- against the body on decode.
+    , testGroup "natives header: the reference unit"
+        [ testCase "the printed document carries the canonical header" $
+            let squash = unwords . words
+                text   = squash (printProgWithPos nativeProgram)
+            in assertBool ("no canonical (natives ...) element in: " ++ text)
+                          ("(natives \"FFIDemo\" \"Zeta\")" `isInfixOf` text)
+        , testCase "L1: parse (print x) == x" $
+            progEq (parseProg (printProgWithPos nativeProgram)) nativeProgram
+        , testGroup "L4: deserialize (encodeBlob u) == u"
+            [ testCase "function unit" $
+                unitEq (IRBlob.deserialize (IRBlob.encodeBlob nativeFunUnit)) nativeFunUnit
+            , testCase "program unit" $
+                unitEq (IRBlob.deserialize (IRBlob.encodeBlob nativeProgUnit)) nativeProgUnit
+            ]
+        , testCase "L2: the checked-in document still parses to the reference IR" $ do
+            exists <- doesFileExist nativeSexpPath
+            unless exists $
+              assertFailure (nativeSexpPath ++ " is missing; regenerate with IR_SEXP_REGENERATE=1")
+            text <- readFile nativeSexpPath
+            progEq (parseProg text) nativeProgram
+        , testCase "L3: the checked-in blob still decodes to the reference function" $ do
+            exists <- doesFileExist nativeBlobPath
+            unless exists $
+              assertFailure (nativeBlobPath ++ " is missing; regenerate with IR_SEXP_REGENERATE=1")
+            b64 <- readFile nativeBlobPath
+            raw <- either (assertFailure . ("base64: " ++)) return
+                     (B64.decode (BSC.pack (filter (/= '\n') b64)))
+            unitEq (IRBlob.deserialize raw) nativeFunUnit
+        ]
+
+      -- The header is a claim the decoder verifies, never trusts (L5 for the
+      -- document layer): each of these must be a Left.
+    , testGroup "natives header: disagreement and malformed namespaces are refused"
+        [ testCase "header present, body without the reference" $
+            refuseDoc (handDocument plainBody [nativesHeader ["FFIDemo"]])
+        , testCase "body with the reference, header absent" $
+            refuseDoc (handDocument nativeBody [])
+        , testCase "header out of canonical order" $
+            refuseDoc (handDocument nativeBody [nativesHeader ["Zeta", "FFIDemo"]])
+        , testCase "empty (natives) element" $
+            refuseDoc (handDocument plainBody [nativesHeader []])
+        , testCase "empty module name in the native: namespace" $
+            case IRBlob.deserialize (IRBlob.encodeBlob (libRefUnit "native:")) of
+              Left _  -> return ()
+              Right _ -> assertFailure "accepted an empty native module name"
+        ]
     ]
   where
     -- IR values have no Show instance, so a mismatch is reported by printing

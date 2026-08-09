@@ -238,6 +238,12 @@ EXPR ::= (bin BINOP VARACCESS VARACCESS)                 -- Bin
        | (lib STRING STRING)                             -- Lib LibName VarName
 ```
 
+The first string of `lib` is a namespace-carrying library name: a stdlib library name
+(`"lists"`), a content-addressed module identity (`"module:<hash>"`), or a native module
+reference (`"native:<Name>"`). In the `native:` namespace the name after the prefix must be
+nonempty and contain no further `:` and no `/`; a document whose body references native modules
+also carries the `natives` header (see *Format identification and versioning*).
+
 **Terminators (`IRTerminator`).**
 
 ```
@@ -401,9 +407,27 @@ its version. This wrapper is the outermost production, replacing `(program …)`
 `(program …)` is nested inside it, and nothing else in the grammar changes:
 
 ```
-DOCUMENT ::= (troupe-ir-sexp VERSION PROGRAM)
+DOCUMENT ::= (troupe-ir-sexp VERSION BODY)
+           | (troupe-ir-sexp VERSION BODY NATIVES)
 VERSION  ::= a positive integer literal           ; current = 2
+BODY     ::= PROGRAM | FUN
 PROGRAM  ::= (program FUN*)
+NATIVES  ::= (natives STRING+)
+```
+
+**The `natives` header.** A document whose body references native modules — `(lib "native:X" …)`
+nodes — carries them in the `NATIVES` element: the module names with the `native:` prefix
+stripped, sorted lexicographically, deduplicated. The element is present exactly when the list is
+non-empty, so a native-free document keeps the three-element wrapper form byte for byte (that
+text is a module's content-addressed identity). The header is derived from the body by the printer and is
+a claim, not an input: a parser MUST recompute the list from the body it decoded and reject any
+disagreement in either direction — a header entry the body never references, or a body reference
+the header omits. Example:
+
+```
+(troupe-ir-sexp 2
+  (program …)
+  (natives "FFIDemo" "SimpleFiles"))
 ```
 
 Example (the `a + b` program, wrapped):
@@ -441,7 +465,10 @@ Example (the `a + b` program, wrapped):
 
 - `1` — initial grammar.
 - `2` — optional source positions (the `@` wrapper); `(program …)` no longer carries an `(atoms …)`
-  list, atoms having been retired from the language.
+  list, atoms having been retired from the language. Extended additively (no bump, per the policy
+  above) with the optional `natives` wrapper element and the `native:` library-name namespace: every
+  version-2 document from before the extension is unchanged, and a pre-extension reader rejects a
+  natives-bearing document loudly at the wrapper.
 
 ## Blobs — the mobile-code framing
 

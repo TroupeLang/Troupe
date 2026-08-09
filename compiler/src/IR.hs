@@ -11,6 +11,7 @@
 module IR where
 
 import           Consts
+import           BaseFunctions (isBaseFunction)
 import qualified Basics
 import           RetCPS                    (VarName (..))
 
@@ -183,6 +184,24 @@ instance ComputesDependencies IRTerminator where
 instance ComputesDependencies FunDef where
   dependencies (FunDef _ _ _ bb) = dependencies bb
 
+instance ComputesDependencies IRProgram where
+  dependencies (IRProgram funs) = mapM_ dependencies funs
+
+instance ComputesDependencies SerializationUnit where
+  dependencies (FunSerialization f)     = dependencies f
+  dependencies (ProgramSerialization p) = dependencies p
+
+-- | The native modules a body references — the @native:@ portion of its
+-- library dependencies, with the namespace prefix stripped — sorted and
+-- deduplicated. This is the list the @natives@ document header carries
+-- ("IRSexp"): the printer derives it here, and the decoder recomputes it here
+-- to verify the header.
+nativeModules :: ComputesDependencies a => a -> [String]
+nativeModules a =
+  let (_, libs) = execWriter (dependencies a)
+  in sort (nub [ rest | Basics.LibName l <- libs
+                      , Just rest <- [stripPrefix "native:" l] ])
+
 
 ppDepsAsJSON :: ComputesDependencies a => a -> (PP.Doc , PP.Doc)
 ppDepsAsJSON a = let (ffs_0,lls_0) = execWriter  (dependencies a)
@@ -270,147 +289,21 @@ instance WellFormedIRCheck IRExpr where
     -- code over wire. Such malformed code would result
     -- in a JS output returning a runtime error (which should
     -- generally be avoided)
-     if  fname `elem`[
-                       "$$authorityarg"
-                     , "adv"
-                     , "ladv"
-                     , "attenuate"
-                     , "_blockThread"
-                     , "blockdecl"
-                     , "blockdeclto"
-                     , "blockdown"
-                     , "blockdownto"
-                     , "blockendorse"
-                     , "blockendorseto"
-                     , "bigAdd"
-                     , "bigSub"
-                     , "bigMul"
-                     , "bigDiv"
-                     , "bigMod"
-                     , "bigNeg"
-                     , "bigCmp"
-                     , "bigFromInt"
-                     , "bigFromLiteral"
-                     , "bigFromString"
-                     , "bigToInt"
-                     , "bigToString"
-                     , "base64Decode"
-                     , "base64Encode"
-                     , "cert"
-                     , "charCodeAtWithDefault"
-                     , "charFromCode"
-                     , "coalesce"
-                     , "consume"
-                     , "consumeWithAuthority"
-                     , "_debug"
-                     , "debugMbox"
-                     , "debugpc"
-                     , "debugValue"
-                     , "declassify"
-                     , "declassifyType"
-                     , "disableRangedReceive"
-                     , "downgrade"
-                     , "downgradeType"
-                     , "enableRangedReceive"
-                     , "endorse"
-                     -- SimpleFileIO whole-file primitives (ROOT-authority; see builtins/simplefileio.mts)
-                     , "appendFile"
-                     , "fileExists"
-                     , "fileStat"
-                     , "makeDir"
-                     , "readDir"
-                     , "readFile"
-                     , "readFileBytes"
-                     , "removeFile"
-                     , "writeFile"
-                     , "writeFileBytes"
-                     , "endorseType"
-                     , "exit"
-                     , "floor"
-                     , "flowsTo"                     
-                     , "freadln"
-                     , "freadlnAtLevel"
-                     , "fwrite"
-                     -- The ambient names: what `print` and its neighbours
-                     -- resolve to, in a program, a module or a library alike
-                     -- (builtins/stdio.mts).
-                     , "fwriteln"
-                     , "fwritelnWithLabels"
-                     , "inputLine"
-                     , "print"
-                     , "printString"
-                     , "printWithLabels"
-                     , "getTime"
-                     , "getCliArgs"
-                     , "getType"
-                     , "gunzip"
-                     , "gzip"
-                     , "getNanoTime"
-                     , "_getSystemProcess"
-                     , "guard"
-                     , "intToString"                     
-                     , "listToTuple"
-                     , "levelOf"
-                     , "mkuuid"
-                     , "mkSecret"
-                     , "monitorlocal"
-                     , "newlabel"                     
-                     , "node"
-                     , "_pc"
-                     , "_bl"
-                  -- , "pcpop"
-                     , "peek"
-                     , "pinipush"
-                     , "pinipushto"
-                     , "pinipop"
-                    --  , "pcpush"                      
-                     , "raiseTrust"
-                     , "random"
-                     , "receive"
-                     , "recordExtend"
-                     , "recordToList"
-                     , "register"
-                     , "_resetScheduler"
-                     , "rcv"
-                     , "rcvp"
-                     , "sandbox"
-                     , "save"
-                     , "send"
-                     , "self"
-                     , "_servicetest"
-                     , "_setProcessDebuggingName"
-                     , "_setFailureRate"
-                     -- The channel level, moved under full authority
-                     -- (builtins/stdio.mts).
-                     , "setStdioLevel"
-                     , "sleep"
-                     , "spawn"
-                     , "sqrt"
-                     , "substring"
-                     , "stdin"
-                     , "stdout"
-                     , "stderr"
-                     , "strIndexOf"
-                     , "stringToInt"
-                     , "strlen"
-                     , "restore"
-                     , "toStringL"
-                     , "toString"
-                     -- Signal disposition (see builtins/signals.mts)
-                     , "trapSigterm"
-                     -- Terminal primitives (see builtins/tty.mts)
-                     , "ttyIsTTY"
-                     , "ttyLevel"
-                     , "ttyRawMode"
-                     , "ttySize"
-                     , "ttySubscribe"
-                     , "ttyUnsubscribe"
-                     , "untrapSigterm"
-                     , "whereis"
-                                      
-                     ]
+    --
+    -- The whitelist itself lives in "BaseFunctions", shared with the
+    -- renamer's missing-require error (Core) and the native-module
+    -- manifest reader (ProcessImports).
+     if isBaseFunction fname
         then return ()
         else throwError $ "bad base function: " ++ fname
+  -- A "native:" library name is a native-module reference; the name after the
+  -- prefix must be nonempty and free of ':' and '/'. A shape check only:
+  -- whether the receiving runtime provides the module is its own decision,
+  -- made at link time.
+  wfir (Lib (Basics.LibName l) _)
+    | Just rest <- stripPrefix "native:" l
+    , null rest || ':' `elem` rest || '/' `elem` rest =
+        throwError $ "bad native module name: " ++ l
   wfir (ProjIdx _ idx) =
     when (idx > (fromIntegral Consts.llvm_maxIndex :: Word)) $
       throwError $ "ProjIdx: illegal index: " ++ show idx ++ " (max index: " ++ show Consts.llvm_maxIndex ++ ")"

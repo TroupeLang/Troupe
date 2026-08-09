@@ -45,7 +45,6 @@ import           DepsFile (DepEntry)
 import           Exports (extractExports, exportsFileContent)
 import           Basics (isOperatorName, VarName)
 import qualified Data.Map as Map
-import qualified Data.Set as Set
 import qualified ModuleHash
 import           OpReassoc (fileFixityEnv)
 import           System.Directory (createDirectoryIfMissing)
@@ -91,9 +90,10 @@ data Folded = Folded
   , fdConsumed :: [(String, [String])]  -- ^ (library, consumed group hashes)
   , fdExports  :: Maybe [String]        -- ^ export list, for a library compile
   , fdDeps     :: [DepEntry]            -- ^ module dependencies this file resolved
-  , fdNativeNames :: Set.Set VarName    -- ^ value names of all installed native-module
-                                        --   manifests; the renamer's builtin fallthrough
-                                        --   consults it for the missing-require error
+  , fdNativeProviders :: Map.Map VarName String
+      -- ^ for each value name declared by an installed native-module manifest,
+      --   the module that provides it; the renamer's builtin fallthrough
+      --   consults it for the missing-require error
   }
 
 -- | Parse through syntactic-variant folding. @root@ is the project root that
@@ -105,7 +105,7 @@ frontEndFold pin root opts file input = do
                    Left err -> die err
                    Right p  -> return p
 
-  (sprog, resolvedDeps, nativeNames) <- processImports pin root file prog_parsed
+  (sprog, resolvedDeps, nativeProviders) <- processImports pin root file prog_parsed
 
   -- The parse-phase program (flat operator chains); this is what the SYNTAX
   -- dump shows.
@@ -141,7 +141,7 @@ frontEndFold pin root opts file input = do
                 , fdConsumed = SVF.frConsumed foldRes
                 , fdExports  = exports
                 , fdDeps     = resolvedDeps
-                , fdNativeNames = nativeNames
+                , fdNativeProviders = nativeProviders
                 }
 
 -- | Pattern-match elimination through closure conversion and IR optimization.
@@ -161,7 +161,7 @@ frontEndIR opts fd = do
   dumpSep dump "LOWERING FUNS AND LETS"
   dumpFile dump "out/out.lowered" (showIndent 2 lowered)
 
-  renamed <- case runExcept (Core.renameProg lowered) of
+  renamed <- case runExcept (Core.renameProg (fdNativeProviders fd) lowered) of
                Right p -> return p
                Left s  -> die ("troupec: " ++ s)
   dumpSep dump "α RENAMING"

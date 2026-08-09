@@ -54,6 +54,7 @@ To try Troupe without a manual install, use the VSCode development container in 
 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)   | Editor setup, build/test commands, running programs, source maps |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Compilation pipeline, runtime architecture, IFC, file extensions |
 | [docs/MODULES.md](docs/MODULES.md)           | Module system: imports and content-addressed identity            |
+| [docs/FFI.md](docs/FFI.md)                   | Native modules: `require native`, manifests, host registries     |
 | [docs/VARIANTS.md](docs/VARIANTS.md)         | Syntactic variants: `datatype` declarations and constructors     |
 | [docs/OPERATORS.md](docs/OPERATORS.md)       | User-defined infix operators and fixity declarations             |
 | [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) | Test-suite layout and how to add a built-in function             |

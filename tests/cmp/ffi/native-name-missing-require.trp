@@ -1,0 +1,2 @@
+(* Negative test: using a native-manifest name without its require *)
+print (ffiDemoGreet "world")

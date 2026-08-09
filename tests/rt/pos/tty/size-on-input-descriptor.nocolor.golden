@@ -1,8 +1,8 @@
-2026-07-31T16:37:29.425Z [RTM] info: Skipping network creation. Observe that all network operations will yield a runtime error.
-Runtime error in thread d9fc067a-66ed-4a40-8e5f-468e02f77520@{}%{}
+2026-08-09T17:05:41.863Z [RTM] info: Skipping network creation. Observe that all network operations will yield a runtime error.
+Runtime error in thread 44985d9a-c264-4429-a4c2-1d5728c8d034@{}%{}
 
-  6 | in print (ttySize i)
+  8 | in print (ttySize i)
     |           ^
 
 >> value LocalObject is not an output descriptor
->> at tests/rt/pos/tty/size-on-input-descriptor.trp:6:11
+>> at tests/rt/pos/tty/size-on-input-descriptor.trp:8:11

@@ -1,0 +1,10 @@
+(* A closure over a native function survives a save/restore round trip on the
+ * same node: the blob carries the natives header and relinks through this
+ * runtime's registry. *)
+require native FFIDemo
+
+let fun addBoth (x, y) = ffiDemoAdd (x, y)
+    val _ = save (authority, "ffi-restore-roundtrip", addBoth)
+    val f = restore "ffi-restore-roundtrip"
+in print (f (20, 22))
+end

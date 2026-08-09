@@ -1,0 +1,10 @@
+(* A confidentiality-labeled ROOT authority passes the root-authority check
+ * without raising the pc or the blocking label: assertions raise the blocking
+ * label by the value's taint component, which raisedTo does not touch. *)
+require native SimpleFiles
+
+let val auth = authority raisedTo `{alice}`
+    val r = fileExists (auth, "no-such-file")
+in debugpc ();
+   print r
+end

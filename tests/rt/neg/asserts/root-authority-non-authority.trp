@@ -1,0 +1,4 @@
+(* A non-authority where ROOT authority is expected is a thread error, not a
+ * process crash: assertIsRootAuthority instance-checks its argument (through
+ * assertIsAuthority) before reading the authority level off it. *)
+print (getCliArgs 5)

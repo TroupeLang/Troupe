@@ -1,0 +1,5 @@
+(* `as` renames the qualified access path; the unqualified names stay bound. *)
+require native FFIDemo as F
+
+print (F.ffiDemoGreet "alias");
+print (ffiDemoAdd (40, 2))

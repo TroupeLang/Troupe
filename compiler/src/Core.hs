@@ -27,6 +27,7 @@ import GHC.Generics(Generic)
 import Sexp
 
 import           Basics
+import           BaseFunctions (isBaseFunction)
 import qualified DirectWOPats as D
 import qualified Data.Map.Strict as Map
 import qualified Data.Set as Set
@@ -272,10 +273,14 @@ lower (Loc pos (D.Un op le)) = Loc pos (Un op (lower le))
 
 -- This is the only function that is exported here
 
-renameProg :: Prog -> Except String Prog
-renameProg (Prog imports term) =
+-- | @nativeProviders@ maps each value name declared by an installed
+-- native-module manifest to its module name ('Pipeline' threads it in from
+-- 'ProcessImports'); 'lookforgen' consults it for the missing-require error.
+renameProg :: Map.Map VarName String -> Prog -> Except String Prog
+renameProg nativeProviders (Prog imports term) =
   let initEnv    = Map.empty
-      initReader = mapFromImports imports
+      (unqualEnv, libExports) = mapFromImports imports
+      initReader = (unqualEnv, libExports, nativeProviders)
       initState  = 0
   in do
       (term', _, _) <- runRWST (rename term initEnv) initReader initState
@@ -305,13 +310,16 @@ type UnqualifiedLibEnv = Map.Map VarName LibName
 --   (original library name for codegen, set of available exports)
 -- Used for resolving and validating A.foo() syntax
 type LibExports = Map.Map LibName (LibName, Set.Set VarName)
+-- | Map from each installed native-manifest value name to its module name,
+-- for the missing-require error
+type NativeProviders = Map.Map VarName String
 -- | Combined environment for the Reader monad
-type LibEnv = (UnqualifiedLibEnv, LibExports)
+type LibEnv = (UnqualifiedLibEnv, LibExports, NativeProviders)
 
 type Env    = Map.Map VarName VarName
 
 
-mapFromImports :: Imports -> LibEnv
+mapFromImports :: Imports -> (UnqualifiedLibEnv, LibExports)
 mapFromImports (Imports imports) =
   let
     -- Get effective exports: use selected if specified, otherwise all exports
@@ -326,14 +334,17 @@ mapFromImports (Imports imports) =
       Just alias -> alias
       Nothing -> importLib imp
 
-    -- The name codegen addresses the import by: the library name, or the
-    -- content-addressed module identity ("module:<hash>") for a module import.
-    -- ProcessImports has, by this point, resolved a module import's path to its
-    -- IR hash and stored it in importPath, so the reference is location-free and
-    -- Merkle (it carries the dependency's hash inline).
-    codegenName imp = case importPath imp of
-      Just hash -> LibName ("module:" ++ hash)
-      Nothing   -> importLib imp
+    -- The name codegen addresses the import by: the library name, the
+    -- content-addressed module identity ("module:<hash>") for a module import,
+    -- or the "native:<Name>" namespace for a native require. ProcessImports
+    -- has, by this point, resolved a module import's path to its IR hash and
+    -- stored it in importSource, so the reference is location-free and Merkle
+    -- (it carries the dependency's hash inline).
+    codegenName imp = case importSource imp of
+      FromModule hash -> LibName ("module:" ++ hash)
+      FromLibrary     -> importLib imp
+      FromNative      -> let LibName name = importLib imp
+                         in LibName ("native:" ++ name)
 
     -- Build unqualified environment (only unqualified imports)
     -- Maps each exported function name to the original library
@@ -394,14 +405,25 @@ lookforgen v m =
     case Map.lookup v m of
        Just v -> return $ RegVar v
        Nothing -> do
-          (unqualEnv, _) <- ask
+          (unqualEnv, _, nativeProviders) <- ask
           case Map.lookup v unqualEnv of
             Just lib' -> return $ LibVar lib' v
             -- An unresolved ordinary name falls through to the ambient
             -- builtins (BaseName). No builtin has an operator name, and the
             -- fallthrough would emit the invalid JavaScript rt.<+>, so an
             -- unresolved operator is an error here.
+            --
+            -- A name an installed native-module manifest declares is not
+            -- ambient: using it takes the module's require, so the fallthrough
+            -- becomes a targeted error. Base functions are exempt, checked
+            -- here and enforced at manifest-read time (ProcessImports), so a
+            -- manifest can never shadow one.
             Nothing
+              | Just m <- Map.lookup v nativeProviders
+              , not (isBaseFunction v) ->
+                  lift $ throwError $
+                    "'" ++ v ++ "' is provided by native module '" ++ m
+                    ++ "': add 'require native " ++ m ++ "'"
               | isOperatorName v ->
                   lift $ throwError $
                     "unbound operator '" ++ v ++ "': it is neither defined"
@@ -485,7 +507,7 @@ renameTerm pos (ProjField lt f) m = do
       -- Check if this is a qualified module access (e.g., A.foo or Alias.foo)
       -- At this stage, vars are RegVar from lowering, so we check RegVar
       Loc _ (Var (RegVar v)) | not (Map.member v m) -> do
-        (_, libExports) <- ask
+        (_, libExports, _) <- ask
         case Map.lookup (LibName v) libExports of
           Just (originalLib, exports) ->
             if Set.member f exports

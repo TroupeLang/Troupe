@@ -15,7 +15,7 @@ import { readFile, writeFile, readFileBytes, writeFileBytes, appendFile, fileExi
  * The effects are sequenced through `val` bindings rather than written inline in the assertion
  * list, so the order in which the filesystem is touched is the order it is read here.
  *
- * Every result the runtime produces is labeled at ROOT (see rt/src/builtins/simplefileio.mts:98),
+ * Every result the runtime produces is labeled at ROOT (see rt/src/ffi/node/simplefiles.mts),
  * and `Unit.isEq` compares labels as well as values. Expectations are therefore raised to
  * `IfcUtil.root`, which makes each assertion check the labeling contract too. *)
 

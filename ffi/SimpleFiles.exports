@@ -1,0 +1,10 @@
+readFile
+readFileBytes
+writeFile
+writeFileBytes
+appendFile
+fileExists
+readDir
+makeDir
+fileStat
+removeFile

@@ -31,6 +31,8 @@ module IRSexp
   , Datum(..)
   ) where
 
+import           Data.List (intercalate)
+
 import           IR
 import           Basics (FieldName)
 import           Sexp
@@ -58,18 +60,26 @@ printProg = printProgWithPos . erasePosProg
 
 -- | Print a whole program, keeping source positions.
 printProgWithPos :: IRProgram -> String
-printProgWithPos = printDocument
+printProgWithPos p = printDocument (nativeModules p) p
 
 -- | Print a serialization unit — one function, or a whole program — keeping
 -- source positions. This is what a blob carries ("IRBlob").
 printUnit :: SerializationUnit -> String
-printUnit = printDocument
+printUnit u = printDocument (nativeModules u) u
 
--- | Wrap an encodable value in the versioned document.
-printDocument :: Sexp a => a -> String
-printDocument x = renderDatum (Lst [ Atom "troupe-ir-sexp"
-                                   , toSexp formatVersion
-                                   , toSexp x ]) ++ "\n"
+-- | Wrap an encodable value in the versioned document. The natives list —
+-- derived from the body by the caller ('IR.nativeModules', so it is sorted and
+-- deduplicated) — becomes the optional fourth element, omitted when empty so
+-- that a native-free document keeps the three-element form byte for byte (that
+-- text is a module's content-addressed identity, "ModuleHash").
+printDocument :: Sexp a => [String] -> a -> String
+printDocument natives x =
+  renderDatum (Lst ([ Atom "troupe-ir-sexp"
+                    , toSexp formatVersion
+                    , toSexp x ] ++ nativesHeader)) ++ "\n"
+  where nativesHeader
+          | null natives = []
+          | otherwise    = [Lst (Atom "natives" : map Str natives)]
 
 ------------------------------------------------------------
 -- Parsing.
@@ -83,21 +93,51 @@ parseProg = parseDocument
 parseUnit :: String -> Either String SerializationUnit
 parseUnit = parseDocument
 
-parseDocument :: Sexp a => String -> Either String a
+parseDocument :: (Sexp a, ComputesDependencies a) => String -> Either String a
 parseDocument input = readDatum input >>= decodeDocument
 
-decodeDocument :: Sexp a => Datum -> Either String a
-decodeDocument (Lst [Atom "troupe-ir-sexp", verD, bodyD]) = do
-  ver <- fromSexp verD
-  if ver == formatVersion
-    then fromSexp bodyD
-    else Left ("unsupported troupe-ir-sexp version: " ++ show ver
-               ++ " (this build supports version " ++ show formatVersion ++ ")")
+decodeDocument :: (Sexp a, ComputesDependencies a) => Datum -> Either String a
+decodeDocument (Lst (Atom "troupe-ir-sexp" : verD : bodyD : rest))
+  | length rest <= 1 = do
+      ver <- fromSexp verD
+      if ver == formatVersion
+        then do
+          body    <- fromSexp bodyD
+          claimed <- case rest of
+                       []   -> Right []
+                       nD:_ -> decodeNativesHeader nD
+          checkNatives claimed (nativeModules body)
+          Right body
+        else Left ("unsupported troupe-ir-sexp version: " ++ show ver
+                   ++ " (this build supports version " ++ show formatVersion ++ ")")
 decodeDocument (Lst (Atom "troupe-ir-sexp" : _)) =
-  Left "malformed troupe-ir-sexp wrapper: expected (troupe-ir-sexp VERSION BODY)"
+  Left ("malformed troupe-ir-sexp wrapper: expected (troupe-ir-sexp VERSION BODY)"
+        ++ " or (troupe-ir-sexp VERSION BODY (natives NAME ...))")
 decodeDocument d =
   Left ("not a troupe-ir-sexp document: expected head symbol \"troupe-ir-sexp\", got "
         ++ headHint d)
+
+decodeNativesHeader :: Datum -> Either String [String]
+decodeNativesHeader (Lst (Atom "natives" : nDs)) | not (null nDs) = mapM asName nDs
+decodeNativesHeader d =
+  Left ("malformed natives header: expected (natives NAME ...) with at least one name, got "
+        ++ headHint d)
+
+-- | The natives header is a claim the decoder verifies, never trusts: it must
+-- equal — same names, sorted, deduplicated — the list recomputed from the
+-- decoded body, so a header entry the body never references is rejected as
+-- loudly as a reference the header omits.
+checkNatives :: [String] -> [String] -> Either String ()
+checkNatives claimed actual
+  | claimed == actual = Right ()
+  | otherwise = Left (claim ++ " but the body references " ++ refs)
+  where
+    claim = case claimed of
+      [] -> "the document has no natives header"
+      ns -> "the natives header lists " ++ intercalate ", " ns
+    refs = case actual of
+      [] -> "no native modules"
+      ns -> "native modules " ++ intercalate ", " ns
 
 ------------------------------------------------------------
 -- Position erasure (for stating R1 over position-erased ASTs).

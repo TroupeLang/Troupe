@@ -22,7 +22,8 @@ authoritative sequence.
    file header may carry fixity declarations. See [OPERATORS.md](OPERATORS.md).
 2. **Front end:**
    - Import processing (`ProcessImports.hs`) — resolve library and module imports, read their
-     `.exports` interfaces, and either enforce or establish the dependency pins.
+     `.exports` interfaces, and either enforce or establish the dependency pins. `require native`
+     declarations resolve against the `$TROUPE/ffi/*.exports` manifests here; see [FFI.md](FFI.md).
    - Operator re-association (`OpReassoc.hs`) — translate `Surface` into the `Direct` AST,
      rebuilding each operator chain from the fixity environment (built-ins seeded; user
      operators from the header declarations and the imported `fixity` interface lines).
@@ -84,6 +85,7 @@ Key components:
 | `deserialize.mts`      | Value deserialization from the wire                           |
 | `p2p/p2p.mts`          | P2P networking layer                                          |
 | `builtins/`            | Language built-ins                                            |
+| `ffi/`                 | Native modules: registry and hosts (see [FFI.md](FFI.md))     |
 
 `loadLibs.mts` is marked deprecated in its own header and is not imported anywhere under `rt/src/`.
 
@@ -97,10 +99,10 @@ require **full (ROOT) authority**: `persist`, `cliargs`, `exit`, `register`, and
 
 ### Standard streams (stdio)
 
-`rt/src/builtins/stdio.mts` and `rt/src/builtins/tty.mts`. stdio is a pair of channels at a level
-`L`, set by `--stdiolev` (default ROOT) in either V1 (`'{alice}'`) or V2
-(`'<alice;#root-integrity>'`) syntax. The startup level is also the ceiling on the two primitives
-below, and that ceiling does not move.
+`rt/src/builtins/stdio.mts` and the native module `Tty` (`rt/src/ffi/node/tty.mts`, see
+[FFI.md](FFI.md)). stdio is a pair of channels at a level `L`, set by `--stdiolev` (default ROOT)
+in either V1 (`'{alice}'`) or V2 (`'<alice;#root-integrity>'`) syntax. The startup level is also
+the ceiling on the two primitives below, and that ceiling does not move.
 
 `stdin`, `stdout` and `stderr` are **values**, not something acquired: a descriptor names a stream
 and grants nothing, so there is nothing for it to show and nothing to check. Enforcement sits on
@@ -136,7 +138,8 @@ was raised by the channel. ROOT is fine and a named principal is fine; a channel
 `#null-integrity` leaves nothing to declassify from, and the receive path fails there even though
 the write path does not.
 
-Terminal support beyond the streams: `ttyIsTTY`/`ttySize`/`ttyLevel` (queries), `ttyRawMode`
+Terminal support beyond the streams is the native module `Tty`, whose `require native Tty` is
+carried by `lib/Tty.trp`: `ttyIsTTY`/`ttySize`/`ttyLevel` (queries), `ttyRawMode`
 (line-discipline switch; entering raw mode closes the lazily-created readline interface, which a
 later `freadln` re-creates), and `ttySubscribe`/`ttyUnsubscribe` (event delivery). Events are
 runtime-built mailbox messages with string tags — `("TTYDATA", bytes)` one per chunk,
@@ -144,17 +147,18 @@ latin1-decoded; `("TTYRESIZE", cols, rows)`; the bare string `"TTYEOF"` — deli
 network's mailbox ingress path with presence and payload at `L`. There is exactly one
 subscriber, module-private, replaced on re-subscribe; if it has died, the next event tears the
 subscription down and leaves raw mode. `lib/Tty.trp` names the events as a datatype and
-packages the receive ceremony (a ranged-receive region up to `L`). `ttyRestore`, run from
-`cleanupAsync` for every program, detaches the listeners, resets raw mode if the runtime set it,
-and pauses stdin; it restores termios, not screen state, and no signal handlers are installed —
-an external SIGTERM leaves a raw terminal raw.
+packages the receive ceremony (a ranged-receive region up to `L`). `ttyRestore`, registered with
+the native-module registry and run from `cleanupAsync` for every program, detaches the listeners,
+resets raw mode if the runtime set it, and pauses stdin; it restores termios, not screen state,
+and no signal handlers are installed — an external SIGTERM leaves a raw terminal raw.
 
 ### File I/O (`SimpleFileIO`)
 
-Whole-file read/write lives in `rt/src/builtins/simplefileio.mts`. It is a **placeholder** — a
-deliberately small surface (`readFile`, `writeFile`, `readFileBytes`, `writeFileBytes`,
-`appendFile`, `fileExists`) that exists to support document-processing programs and is expected to
-be superseded by a labelled-path model.
+Whole-file read/write lives in `rt/src/ffi/node/simplefiles.mts`, the native module `SimpleFiles`
+(see [FFI.md](FFI.md)); `lib/SimpleFileIO.trp` carries the `require native` and is the interface
+programs import. It is a **placeholder** — a deliberately small surface (`readFile`, `writeFile`,
+`readFileBytes`, `writeFileBytes`, `appendFile`, `fileExists`) that exists to support
+document-processing programs and is expected to be superseded by a labelled-path model.
 
 - **Authority.** Every operation requires ROOT authority (mirrors `persist`). Untrusted code cannot
   reach the filesystem at all, so per-write confidentiality checks and per-path levels are deferred

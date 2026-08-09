@@ -1,3 +1,5 @@
+require native Tty
+
 (* ttyLevel reports the channel level, which defaults to ROOT. *)
 let val a = authority
     val i = stdin

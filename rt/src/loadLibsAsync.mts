@@ -6,6 +6,7 @@ const { readFile } = fs.promises
 
 import { getTroupeRoot } from './troupeRoot.mjs'
 import { seedModuleResolver, resolveModuleFile, moduleDisplayName } from './moduleResolver.mjs'
+import * as nativeModules from './ffi/registry.mjs'
 import { mkLogger } from './logger.mjs'
 const logger = mkLogger('lib')
 
@@ -30,6 +31,16 @@ function loadLib(libname: string, rtObj, root): Promise<LoadedLib> {
         return __libcache[libname]
     }
     const p = (async (): Promise<LoadedLib> => {
+        // A "native:" name resolves through the host's native-module registry:
+        // no file, no instantiation, no dependencies of its own. The registered
+        // table is served as the values of an already-loaded library; a name
+        // the host did not register raises NativeUnavailableError, rejecting a
+        // received closure as cleanly as a missing module below. Native modules
+        // export no datatypes, so the datatype hash list is empty.
+        if (libname.startsWith("native:")) {
+            const values = nativeModules.resolve(libname.slice("native:".length))
+            return { values, datatypeHashes: [] }
+        }
         // Find the file. Libraries load from the standard location; a "module:"
         // identity names a compiled module addressed by its content hash and
         // resolved to <root>/<dir>/out/<Base>.js through the dependencies-file

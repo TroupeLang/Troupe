@@ -1,3 +1,5 @@
+require native Tty
+
 (* The labels on the query results at the default channel level.
 
    ttyIsTTY and ttySize are observations drawn through the channel, so their

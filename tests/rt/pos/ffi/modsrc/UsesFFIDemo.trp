@@ -1,0 +1,10 @@
+(* Module carrying a `require native`: the native reference travels through the
+ * module's content-addressed identity and its dependencies file. *)
+require native FFIDemo
+
+let fun double x     = ffiDemoAdd (x, x)
+    fun greet name   = ffiDemoGreet name
+in [ ("double", double)
+   , ("greet", greet)
+   ]
+end

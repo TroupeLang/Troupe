@@ -17,7 +17,7 @@
  *
  * WHY THE SUPERVISOR IS THE SUBSCRIBER. The runtime's own safety net keys on the subscriber:
  * when an event arrives for a subscriber that has died, the runtime unsubscribes and restores
- * termios (rt/src/builtins/tty.mts:107-134). Making the process that must survive the session
+ * termios (rt/src/ffi/node/tty.mts:110-139). Making the process that must survive the session
  * the subscriber keeps that net behind the one process whose death would wedge the terminal.
  *
  * WHY EVERY EVENT IS ACKNOWLEDGED. The supervisor forwards one event and waits for the kernel's

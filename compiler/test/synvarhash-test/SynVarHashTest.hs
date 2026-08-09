@@ -23,8 +23,8 @@ import           Exports (exportsFileContent, isDatatypeLine, parseDatatypeLine,
                           parseExportsFile, ExportsInterface(..))
 import           SynVarFolding (foldProg)
 import           Direct (Prog(..), Term(List))
-import           Basics (Imports(..), ImportDecl(..), ImportMode(..), LibName(..),
-                         Fixity(..), OpAssoc(..))
+import           Basics (Imports(..), ImportDecl(..), ImportMode(..), ImportSource(..),
+                         LibName(..), Fixity(..), OpAssoc(..))
 import           TroupePositionInfo (Located(..), PosInf(..))
 
 -- Exact group hashes from the spec, reused as dependency hashes in later
@@ -467,6 +467,7 @@ foldImports dts =
   where
     imp = ImportDecl
       { importLib       = LibName "Fake"
+      , importSource    = FromLibrary
       , importAlias     = Nothing
       , importExports   = Just []
       , importSelected  = Nothing

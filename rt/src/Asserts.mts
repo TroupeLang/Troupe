@@ -299,6 +299,9 @@ export function rawAssertIsLevel (x: any, source: AssertionSource = AssertionSou
 }
 
 export function assertIsRootAuthority(x: any, source: AssertionSource = AssertionSource.AssertInBuiltIn, pos: string | null = null) {
+    // The instance check first: reading authorityLevel off a non-authority is a
+    // raw TypeError, which no thread can trap.
+    assertIsAuthority(x, source, pos);
     let isTop = actsFor(x.val.authorityLevel, levels.ROOT);
     if (!isTop) {
         let errorMessage =

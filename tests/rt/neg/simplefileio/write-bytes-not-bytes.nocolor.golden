@@ -1,8 +1,8 @@
-2026-08-01T11:18:04.435Z [RTM] info: Skipping network creation. Observe that all network operations will yield a runtime error.
-Runtime error in thread df1381ca-5a56-4d50-ab8e-fcf45cd81a6e@{}%{}
+2026-08-09T12:21:55.907Z [RTM] info: Skipping network creation. Observe that all network operations will yield a runtime error.
+Runtime error in thread a632d5d4-d979-4432-a814-de54cb67ea3f@{}%{}
 
-  6 | print (writeFileBytes (authority, "oops.bin", "ok so far " ^ String.strCode 9731))
+  7 | print (writeFileBytes (authority, "oops.bin", "ok so far " ^ String.strCode 9731))
     |        ^
 
 >> writeFileBytes: argument is not a byte string: character 10 is code unit 9731, above 255
->> at tests/rt/neg/simplefileio/write-bytes-not-bytes.trp:6:8
+>> at tests/rt/neg/simplefileio/write-bytes-not-bytes.trp:7:8

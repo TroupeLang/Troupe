@@ -1,3 +1,5 @@
+require native Tty
+
 (* setStdioLevel moves the channel under full authority. The default ROOT
    channel refuses tainted data; lowered to null integrity it admits it, and
    ttyLevel reports the level in force rather than the one the runtime started

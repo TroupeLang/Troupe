@@ -1,0 +1,56 @@
+(* Restoring a value that requires a native module this runtime does not have
+ * fails as a thread error, not a node crash.
+ *
+ * No second runtime with a different registry is available to a single-program
+ * test, so the unavailable module is produced by honest surgery on a real
+ * persisted value: save a closure over ffiDemoAdd, rewrite the module name
+ * inside its persisted blob (base64 -> TRPI framing -> gzip -> document text,
+ * and back), and restore the doctored file. The rename covers both the
+ * `(lib "native:...")` references and the `(natives ...)` header, so the
+ * document stays well formed and the failure is exactly the availability
+ * check. Needs `--io-root .` (see .options) so SimpleFileIO reads the file
+ * `save` wrote under ./out. *)
+require native FFIDemo
+import { readFile, writeFile } SimpleFileIO
+import { gzip, gunzip, base64Encode, base64Decode } BytesAndZips
+import Outcome
+import Option
+import String
+import List
+
+let fun die msg = let val _ = fwrite (stderr, "test setup failed: " ^ msg ^ "\x0a")
+                  in exit (authority, 1) end
+
+    fun unwrapOutcome (OK v)  = v
+      | unwrapOutcome (ERR e) = die e.reason
+
+    fun unwrapOption (SOME v) = v
+      | unwrapOption NONE     = die "no TRPI blob in the persisted file"
+
+    fun replace (needle, replacement, s) =
+        String.concatWith replacement (String.split needle s)
+
+    fun addBoth pair = ffiDemoAdd pair
+    val _ = save (authority, "ffi-unknown-src", addBoth)
+
+    val srcPath = "out/saved.ffi-unknown-src.persist.json"
+    val dstPath = "out/saved.ffi-unknown-doctored.persist.json"
+
+    val json = unwrapOutcome (readFile (authority, srcPath))
+
+    (* The closure's code travels as a base64 TRPI blob; every TRPI blob's
+       base64 starts with "VFJQSQ". *)
+    val blob = unwrapOption (List.find (String.startsWith "VFJQSQ")
+                                       (String.split "\x22" json))
+
+    val raw    = unwrapOutcome (base64Decode blob)
+    val header = String.substring (raw, 0, 5)
+    val doc    = unwrapOutcome (gunzip (String.substring (raw, 5, String.size raw)))
+
+    val doc'  = replace ("FFIDemo", "AbsentModule", doc)
+    val blob' = base64Encode (header ^ gzip doc')
+    val json' = replace (blob, blob', json)
+
+    val _ = unwrapOutcome (writeFile (authority, dstPath, json'))
+in restore "ffi-unknown-doctored"
+end

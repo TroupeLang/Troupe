@@ -1,3 +1,5 @@
+require native Tty
+
 (* Terminal event delivery, end to end, over a pipe.
 
    `ttySubscribe` does not require a terminal: on a pipe it attaches the same

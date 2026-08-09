@@ -132,6 +132,16 @@ newtype LibName = LibName String deriving (Eq, Show, Generic, Ord)
 data ImportMode = Qualified | Unqualified
   deriving (Eq, Show, Ord, Generic)
 
+-- | What kind of provider an import declaration names: a stdlib library
+-- (@import List@), a program module (@import "./util/Fmt"@), or a native
+-- module (@require native SimpleFiles@). 'FromModule' carries the literal
+-- path until 'ProcessImports' resolves it, the module's content hash after.
+data ImportSource
+  = FromLibrary
+  | FromModule String
+  | FromNative
+  deriving (Eq, Show, Ord, Generic)
+
 
 
 -- 2018-07-02; AA: note on the data structure that we use for imports:
@@ -145,8 +155,8 @@ data ImportMode = Qualified | Unqualified
 --   - Selective imports: import List (head, tail)
 
 data ImportDecl = ImportDecl
-  { importLib      :: LibName          -- Bound name: the library name, or the module's last path segment
-  , importPath     :: Maybe String     -- Just the literal path for a module import (import "./..."); Nothing for a library
+  { importLib      :: LibName          -- Bound name: the library name, the module's last path segment, or the native module name
+  , importSource   :: ImportSource     -- Library, module (with its path, later its hash), or native module
   , importAlias    :: Maybe LibName    -- Optional alias (from "as X")
   , importExports  :: Maybe [VarName]  -- Value exports from .exports file (filled by ProcessImports)
   , importSelected :: Maybe [VarName]  -- Selective imports (user-specified)

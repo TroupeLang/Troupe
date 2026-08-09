@@ -1,8 +1,8 @@
-2026-07-31T17:21:42.512Z [RTM] info: Skipping network creation. Observe that all network operations will yield a runtime error.
-Runtime error in thread a4504f46-d751-4141-ad2b-cdd4924048b4@{}%{}
+2026-08-09T17:05:41.845Z [RTM] info: Skipping network creation. Observe that all network operations will yield a runtime error.
+Runtime error in thread d9208e4f-8791-4e02-91b1-2f81eed13249@{}%{}
 
-  7 |     val _ = ttySubscribe (i, 42)
+  9 |     val _ = ttySubscribe (i, 42)
     |             ^
 
 >> value 42@{}%{} is not a process id
->> at tests/rt/pos/tty/subscribe-non-pid.trp:7:13
+>> at tests/rt/pos/tty/subscribe-non-pid.trp:9:13

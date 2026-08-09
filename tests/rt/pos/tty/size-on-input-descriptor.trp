@@ -1,3 +1,5 @@
+require native Tty
+
 (* ttySize takes an output descriptor. Handing it the stdin descriptor is a
    programming error and kills the thread, the same disposition fwrite uses for
    an input descriptor. *)

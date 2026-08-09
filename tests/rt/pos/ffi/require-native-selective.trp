@@ -1,0 +1,7 @@
+(* Selection binds the chosen name both unqualified and under the module name.
+ * (Using the unselected name unqualified is a compile error; see
+ * tests/cmp/ffi/require-native-selective-out-of-scope.trp.) *)
+require native { ffiDemoAdd } FFIDemo
+
+print (ffiDemoAdd (1, 2));
+print (FFIDemo.ffiDemoAdd (3, 4))

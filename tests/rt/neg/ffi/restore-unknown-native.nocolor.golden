@@ -1,0 +1,8 @@
+2026-08-09T11:47:15.114Z [RTM] info: Skipping network creation. Observe that all network operations will yield a runtime error.
+Runtime error in thread 3232665e-faa2-4adf-a9b4-3a8433dd5afa@{}%{}
+
+  55 | in restore "ffi-unknown-doctored"
+     |    ^
+
+>> Error restoring value: cannot deserialize inbound value: native module 'AbsentModule' is not available on this runtime
+>> at tests/rt/neg/ffi/restore-unknown-native.trp:55:4

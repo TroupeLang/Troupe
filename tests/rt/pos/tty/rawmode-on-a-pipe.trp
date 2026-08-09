@@ -1,3 +1,5 @@
+require native Tty
+
 (* ttyRawMode under the golden runner, where stdin is a pipe rather than a
    terminal. Both directions return an Err value rather than throwing: on a pipe
    process.stdin.setRawMode is undefined, and a missing terminal is an

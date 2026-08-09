@@ -28,6 +28,7 @@ import {
     IngressClassification
 } from './Ingress.mjs';
 import { TroupeError } from './TroupeError.mjs';
+import { NativeUnavailableError } from './ffi/registry.mjs';
 import { SchedulerInterface } from './SchedulerInterface.mjs';
 
 const argv = getCliArgs();
@@ -190,15 +191,17 @@ function asDeserializationError(cause: unknown): DeserializationError {
 }
 
 // The list of exceptions expected when processing untrusted inbound data: a
-// value we cannot reconstruct or link (e.g. a closure naming a module or
-// library this node does not have). A receiving boundary drops these and keeps
-// serving. This is deliberately narrow by type but wide in intent: adversarial
-// inputs are expected here, so they must be handled rather than crash the node.
-// Anything not on this list is unexpected and must surface (see the node's
-// fail-fast policy), so a genuine bug is exposed rather than silently swallowed.
-// Extend this predicate as further expected inbound-error classes are added.
+// value we cannot reconstruct or link (e.g. a closure naming a module,
+// library, or native module this node does not have). A receiving boundary
+// drops these and keeps serving. This is deliberately narrow by type but wide
+// in intent: adversarial inputs are expected here, so they must be handled
+// rather than crash the node. Anything not on this list is unexpected and must
+// surface (see the node's fail-fast policy), so a genuine bug is exposed
+// rather than silently swallowed. Extend this predicate as further expected
+// inbound-error classes are added.
 export function isExpectedInboundError(e: unknown): boolean {
-    return e instanceof DeserializationError;
+    return e instanceof DeserializationError
+        || e instanceof NativeUnavailableError;
 }
 
 // Wrapper around the reconstruction logic: any failure to reconstruct an

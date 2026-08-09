@@ -1,5 +1,6 @@
 module ProcessImports (PinCheck(..), processImports, discoverModules) where
 import Basics
+import BaseFunctions (isBaseFunction)
 import Surface
 import DepsFile (DepEntry(..), lookupPinByPath)
 import Exports (ExportsInterface(..), parseExportsFile)
@@ -7,9 +8,10 @@ import Parser (parseProg)
 import Control.Monad (unless, foldM)
 import System.Environment
 import System.Exit
-import System.Directory (doesFileExist)
+import System.Directory (doesFileExist, doesDirectoryExist, listDirectory)
 import System.FilePath
-import Data.List (intercalate, isPrefixOf, isSuffixOf)
+import Data.List (intercalate, isPrefixOf, isSuffixOf, sort)
+import qualified Data.Map.Strict as Map
 import Util.StringUtil (splitOn)
 
 -- | Whether the frontend enforces the dependencies file (a normal compile) or
@@ -21,6 +23,7 @@ import Util.StringUtil (splitOn)
 data PinCheck = Enforce [DepEntry] | Establish
 
 defaultLibFolder="/lib/out/"
+defaultFfiFolder="/ffi/"
 defaultBin="/bin/troupec"
 
 -- Try to get home from executable path (returns Nothing if not possible)
@@ -34,18 +37,20 @@ tryGetRelativeHome = do
        if markerExists then return (Just home) else return Nothing
    else return Nothing
 
-getTroupeHome :: IO String
-getTroupeHome = do
+tryGetTroupeHome :: IO (Maybe String)
+tryGetTroupeHome = do
   -- Try self-location first (for worktree support)
   selfLocated <- tryGetRelativeHome
   case selfLocated of
+      Just home -> return (Just home)
+      Nothing -> lookupEnv "TROUPE"  -- Fall back to TROUPE env var
+
+getTroupeHome :: IO String
+getTroupeHome = do
+  maybeHome <- tryGetTroupeHome
+  case maybeHome of
       Just home -> return home
-      Nothing -> do
-          -- Fall back to TROUPE env var
-          maybeVar <- lookupEnv "TROUPE"
-          case maybeVar of
-              Just troupeEnv -> return troupeEnv
-              Nothing -> die "Cannot determine Troupe home folder. Consider setting up the TROUPE environment variable"
+      Nothing -> die "Cannot determine Troupe home folder. Consider setting up the TROUPE environment variable"
 
 --------------------------------------------------------------------------------
 -- Module imports (import "./Path")
@@ -211,7 +216,7 @@ processModuleImport pin root file imp lit = do
   return ( imp { importExports = Just nameLines
                , importDatatypes = datatypes
                , importFixities = restrictFixities imp (eiFixities iface)
-               , importPath = Just actualHash }
+               , importSource = FromModule actualHash }
          , entry )
 
 --------------------------------------------------------------------------------
@@ -254,17 +259,90 @@ processLibImport imp = do
                           , importFixities = restrictFixities imp (eiFixities iface) }
 
 --------------------------------------------------------------------------------
+-- Native requires (require native Name)
+
+-- | Resolve a native require against its manifest, @$TROUPE/ffi/<Name>.exports@.
+-- A manifest carries value names and fixity lines only; a module-hash or
+-- datatype line in one is rejected.
+processNativeRequire :: ImportDecl -> IO ImportDecl
+processNativeRequire imp = do
+  troupeEnv <- getTroupeHome
+  let LibName name = importLib imp
+  let fname = troupeEnv ++ defaultFfiFolder ++ name ++ ".exports"
+  fileExists <- doesFileExist fname
+  unless fileExists $
+    -- Report the location relative to the Troupe home ($TROUPE) so the
+    -- message is stable across checkouts (it is captured in golden tests).
+    die $ "unknown native module '" ++ name
+        ++ "': no $TROUPE" ++ defaultFfiFolder ++ name ++ ".exports"
+  input <- readFile fname
+  let iface     = parseExportsFile input
+      nameLines = eiNames iface
+  unless (null (eiModuleHashes iface)) $
+    die $ "invalid native module manifest $TROUPE" ++ defaultFfiFolder ++ name
+        ++ ".exports: module-hash lines are not allowed"
+  unless (null (eiDatatypes iface)) $
+    die $ "invalid native module manifest $TROUPE" ++ defaultFfiFolder ++ name
+        ++ ".exports: datatype lines are not allowed"
+  -- A manifest may not declare a core base function: the ambient name would
+  -- otherwise depend on which manifests happen to be installed. The renamer
+  -- (Core.lookforgen) also resolves base functions first, so a manifest that
+  -- slips past this check still cannot shadow one.
+  case filter isBaseFunction nameLines of
+    []      -> return ()
+    (b : _) -> die $ "invalid native module manifest $TROUPE" ++ defaultFfiFolder
+                   ++ name ++ ".exports: '" ++ b ++ "' is a core base function"
+  case importSelected imp of
+    Just selected -> do
+      let missing = filter (`notElem` nameLines) selected
+      unless (null missing) $
+        die $ "native module '" ++ name ++ "' does not export: " ++ unwords missing
+    Nothing -> return ()
+  return imp { importExports = Just nameLines
+             , importFixities = restrictFixities imp (eiFixities iface) }
+
+-- | For each value name declared by an installed native-module manifest
+-- (@$TROUPE/ffi/*.exports@), the module that provides it — read once per
+-- compile. The renamer's builtin fallthrough consults this map so that a
+-- native name used without its @require@ gets a targeted error naming the
+-- module to require. When the Troupe home cannot be determined or has no
+-- @ffi/@ directory, no manifests are installed and the map is empty. Should
+-- two manifests declare the same name, the alphabetically first module wins
+-- (the manifests are read in sorted order and the union is left-biased) — the
+-- error names one module either way, and this keeps it deterministic.
+installedNativeProviders :: IO (Map.Map VarName String)
+installedNativeProviders = do
+  maybeHome <- tryGetTroupeHome
+  case maybeHome of
+    Nothing -> return Map.empty
+    Just home -> do
+      let dir = home ++ defaultFfiFolder
+      dirExists <- doesDirectoryExist dir
+      if not dirExists
+        then return Map.empty
+        else do
+          files <- listDirectory dir
+          let manifests = sort [ f | f <- files, takeExtension f == ".exports" ]
+          maps <- mapM (\f -> do
+                          names <- eiNames . parseExportsFile <$> readFile (dir </> f)
+                          return (Map.fromList [ (n, takeBaseName f) | n <- names ]))
+                       manifests
+          return (Map.unions maps)
+
+--------------------------------------------------------------------------------
 
 -- | Process one import, returning the resolved declaration and, for a module
 -- import, the dependency entry it resolved (its @(path, hash, name)@); a library
--- import yields 'Nothing'.
+-- import or a native require yields 'Nothing'.
 processImport :: PinCheck -> FilePath -> FilePath -> ImportDecl -> IO (ImportDecl, Maybe DepEntry)
 processImport pin root file imp =
-  case importPath imp of
-    Just lit -> do (imp', entry) <- processModuleImport pin root file imp lit
-                   return (imp', Just entry)
-    Nothing -> do imp' <- processLibImport imp
-                  return (imp', Nothing)
+  case importSource imp of
+    FromModule lit -> do (imp', entry) <- processModuleImport pin root file imp lit
+                         return (imp', Just entry)
+    FromLibrary -> do imp' <- processLibImport imp
+                      return (imp', Nothing)
+    FromNative -> do imp' <- processNativeRequire imp
+                     return (imp', Nothing)
 
 -- | The name an import binds (alias if present, otherwise the library name or
 -- the module's last path segment).
@@ -274,33 +352,40 @@ boundName imp = let LibName n = case importAlias imp of
                                   Nothing -> importLib imp
                 in n
 
--- | Reject two imports binding the same name when a module import is involved
--- (existing behavior for library-only collisions is left unchanged).
+-- | Reject two imports binding the same name when a module import or a native
+-- require is involved (existing behavior for library-only collisions is left
+-- unchanged).
 checkDuplicateBinds :: [ImportDecl] -> IO ()
 checkDuplicateBinds imports = mapM_ checkOne (zip [(0::Int)..] imports)
   where
     checkOne (i, imp) =
       let clashes = [ imp' | (j, imp') <- zip [0..] imports, j < i
                            , boundName imp' == boundName imp
-                           , isModule imp || isModule imp' ]
+                           , participates imp || participates imp' ]
       in case clashes of
            []      -> return ()
            (_ : _) -> die $ "two imports bind the name '" ++ boundName imp
                           ++ "'; use 'as' to disambiguate"
-    isModule imp = case importPath imp of Just _ -> True; Nothing -> False
+    participates imp = case importSource imp of
+      FromLibrary  -> False
+      FromModule _ -> True
+      FromNative   -> True
 
 -- | Process the imports of the program in file `file`, with module imports
 -- resolved relative to it and displayed relative to `root` (the directory of
--- the main file). Returns the program with resolved imports and the module
+-- the main file). Returns the program with resolved imports, the module
 -- dependency entries it resolved (the module @(path, hash, name)@ triples,
--- for the maintenance utility to record; ignored on a normal enforcing compile).
-processImports :: PinCheck -> FilePath -> FilePath -> Prog -> IO (Prog, [DepEntry])
+-- for the maintenance utility to record; ignored on a normal enforcing
+-- compile), and the installed native-module name-to-module map (for the
+-- renamer's missing-require error).
+processImports :: PinCheck -> FilePath -> FilePath -> Prog -> IO (Prog, [DepEntry], Map.Map VarName String)
 processImports pin root file (Prog (Imports imports) fixities groups term) = do
   checkDuplicateBinds imports
   results <- mapM (processImport pin root file) imports
+  nativeProviders <- installedNativeProviders
   let imports' = map fst results
       deps     = [ d | (_, Just d) <- results ]
-  return (Prog (Imports imports') fixities groups term, deps)
+  return (Prog (Imports imports') fixities groups term, deps, nativeProviders)
 
 --------------------------------------------------------------------------------
 -- Module graph discovery for the compilation driver.
@@ -329,7 +414,7 @@ discoverModules mainFile = do
           case parseProg file input of
             Left err -> die err
             Right (Prog (Imports imports) _ _ _) -> do
-              let lits = [ lit | imp <- imports, Just lit <- [importPath imp] ]
+              let lits = [ lit | imp <- imports, FromModule lit <- [importSource imp] ]
               deps <- mapM (resolveOne root file) lits
               (order', done') <- foldM (visit root (file : stack)) (order, done) deps
               return (file : order', file : done')

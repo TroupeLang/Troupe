@@ -48,6 +48,8 @@ import Control.Monad.State
     case  { L _ TokenCase }
     of    { L _ TokenOf }
     import { L _ TokenImport }
+    require { L _ TokenRequire }
+    native { L _ TokenNative }
     datatype { L _ TokenDatatype }
     fn    { L _ TokenFn }
     hn    { L _ TokenHn }
@@ -184,9 +186,11 @@ OpNames : OPSYM                        { [opTok $1] }
    | OPSYM OpNames                     { opTok $1 : $2 }
 
 ImportDecl: import OptQualified OptSelection VAR OptAlias ImportDecl
-              { (ImportDecl (LibName (varTok $4)) Nothing $5 Nothing $3 $2 [] []) : $6 }
+              { (ImportDecl (LibName (varTok $4)) FromLibrary $5 Nothing $3 $2 [] []) : $6 }
           | import OptQualified OptSelection STRING OptAlias ImportDecl
-              { (ImportDecl (LibName (moduleBindName (strTok $4))) (Just (strTok $4)) $5 Nothing $3 $2 [] []) : $6 }
+              { (ImportDecl (LibName (moduleBindName (strTok $4))) (FromModule (strTok $4)) $5 Nothing $3 $2 [] []) : $6 }
+          | require native OptQualified OptSelection VAR OptAlias ImportDecl
+              { (ImportDecl (LibName (varTok $5)) FromNative $6 Nothing $4 $3 [] []) : $7 }
           | { [] }
 
 OptQualified : qualified  { Qualified }
@@ -833,6 +837,8 @@ cleanExpectedToken "else" = "keyword 'else'"
 cleanExpectedToken "case" = "keyword 'case'"
 cleanExpectedToken "of" = "keyword 'of'"
 cleanExpectedToken "import" = "keyword 'import'"
+cleanExpectedToken "require" = "keyword 'require'"
+cleanExpectedToken "native" = "keyword 'native'"
 cleanExpectedToken "fn" = "keyword 'fn'"
 cleanExpectedToken "hn" = "keyword 'hn'"
 cleanExpectedToken "pini" = "keyword 'pini'"

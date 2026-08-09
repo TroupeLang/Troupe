@@ -1,4 +1,5 @@
 import String
+require native SimpleFiles
 
 (* writeFileBytes takes a byte string, as the codec's byte primitives do: a code unit above 255
  * is a defect in the calling program, not a bad environment, so it is a thread error rather than

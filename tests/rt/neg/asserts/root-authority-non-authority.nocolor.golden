@@ -1,0 +1,8 @@
+2026-08-09T15:30:42.576Z [RTM] info: Skipping network creation. Observe that all network operations will yield a runtime error.
+Runtime error in thread ab391e9c-66a4-4446-b411-30dcde79f7ec@{}%{}
+
+  4 | print (getCliArgs 5)
+    |        ^
+
+>> value 5@{}%{} is not a authority
+>> at tests/rt/neg/asserts/root-authority-non-authority.trp:4:8

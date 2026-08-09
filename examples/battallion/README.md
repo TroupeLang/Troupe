@@ -35,7 +35,7 @@ open, resolved inside it. The same subtree bounds where `:w` can write, includin
 
 Everything the editor refuses at startup is one line on stderr and exit 1, written while the
 terminal is still the shell's: no file named, more than one, an empty path, and a file that cannot
-be read. The path rules are the runtime's (`rt/src/builtins/simplefileio.mts`) and the reason it
+be read. The path rules are the runtime's (`rt/src/ffi/node/simplefiles.mts`) and the reason it
 gives is reported as it comes:
 
 | Path                              | What happens                                            |

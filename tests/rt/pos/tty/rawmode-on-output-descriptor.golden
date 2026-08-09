@@ -1,8 +1,8 @@
-2026-07-31T16:56:49.001Z [RTM] [32minfo[39m: Skipping network creation. Observe that all network operations will yield a runtime error.
-Runtime error in thread d0ef3b42-0b91-46a1-9f1a-b48edacea205@{}%{}
+2026-08-09T17:05:27.937Z [RTM] [32minfo[39m: Skipping network creation. Observe that all network operations will yield a runtime error.
+Runtime error in thread 2b3f8832-cb66-47d3-9b17-6f3327535da1@{}%{}
 
-  6 | in print (ttyRawMode (o, true))
+  8 | in print (ttyRawMode (o, true))
     |           ^
 
 >> value LocalObject is not an input descriptor
->> at tests/rt/pos/tty/rawmode-on-output-descriptor.trp:6:11
+>> at tests/rt/pos/tty/rawmode-on-output-descriptor.trp:8:11

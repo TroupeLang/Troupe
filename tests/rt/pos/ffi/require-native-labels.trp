@@ -1,0 +1,10 @@
+(* A native function's result carries the join of its arguments' labels, like
+ * the pure string builtins. *)
+require native FFIDemo
+
+let val sum      = ffiDemoAdd (2 raisedTo `{alice}`, 3)
+    val greeting = ffiDemoGreet ("world" raisedTo `{bob}`)
+in printWithLabels sum;
+   printWithLabels greeting;
+   printWithLabels (ffiDemoAdd (2, 3))
+end

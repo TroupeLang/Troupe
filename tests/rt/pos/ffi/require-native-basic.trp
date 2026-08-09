@@ -1,0 +1,6 @@
+(* `require native` binds the module's manifest names unqualified. Uses every
+ * name in ffi/FFIDemo.exports, so a manifest/registry drift fails this test. *)
+require native FFIDemo
+
+print (ffiDemoGreet "world");
+print (ffiDemoAdd (2, 3))

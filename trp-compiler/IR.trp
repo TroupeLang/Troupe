@@ -391,15 +391,79 @@ let
              | ERR e => ERR e)
       | decodeBody _ = fail "expected a (fun ...) or (program ...) serialization unit"
 
-    (** Decode a whole document: the versioned wrapper and its body. *)
-    fun decode (LST [ATOM "troupe-ir-sexp", ver, body]) =
+    (*--- Native modules ---*)
+
+    (* The native modules a body references: the `lib` names in the "native:" namespace,
+       prefix-stripped, sorted, deduplicated — the canonical contents of the document's
+       optional `natives` element (`IR.nativeModules` on the Haskell side). *)
+    fun nativesExpr (LIB (l, _)) acc =
+          if String.startsWith "native:" l
+          then String.substring (l, 7, String.size l) :: acc
+          else acc
+      | nativesExpr _ acc = acc
+
+    fun nativesInst (ASSIGN (_, e)) acc = nativesExpr e acc
+      | nativesInst (MKCLOS _)      acc = acc
+
+    fun nativesBB (BB (insts, (_, term))) acc =
+          nativesTerm term (List.foldl (fn ((_, i), a) => nativesInst i a) acc insts)
+    and nativesTerm (IFTERM (_, t, e))     acc = nativesBB e (nativesBB t acc)
+      | nativesTerm (ASSERTELSE (_, b, _)) acc = nativesBB b acc
+      | nativesTerm (STACKEXP (_, a, b))   acc = nativesBB b (nativesBB a acc)
+      | nativesTerm _                      acc = acc
+
+    fun nativesFun (FUNDEF (_, _, _, body)) acc = nativesBB body acc
+
+    fun nativesBody (FUNUNIT f)               acc = nativesFun f acc
+      | nativesBody (PROGUNIT (IRPROGRAM fs)) acc =
+          List.foldl (fn ((_, f), a) => nativesFun f a) acc fs
+
+    fun dedupSorted []            = []
+      | dedupSorted [x]           = [x]
+      | dedupSorted (x :: y :: r) = if x = y then dedupSorted (y :: r)
+                                    else x :: dedupSorted (y :: r)
+
+    fun nativeModules u = dedupSorted (List.sort (fn a => fn b => a < b) (nativesBody u []))
+
+    (* The optional fourth wrapper element. Present only with at least one name. *)
+    fun decodeNativesHeader (LST ((ATOM "natives") :: (n :: ns))) = mapM asName (n :: ns)
+      | decodeNativesHeader _ =
+          fail "malformed natives header: expected (natives NAME ...) with at least one name"
+
+    (* The header is a claim the decoder verifies, never trusts: it must equal — same names,
+       sorted, deduplicated — the list recomputed from the decoded body. *)
+    fun describeClaim [] = "the document has no natives header"
+      | describeClaim ns = "the natives header lists " ^ String.concatWith ", " ns
+
+    fun describeRefs [] = "no native modules"
+      | describeRefs ns = "native modules " ^ String.concatWith ", " ns
+
+    fun checkNatives (claimed, u) =
+        let val actual = nativeModules u
+        in if claimed = actual
+           then OK u
+           else fail (describeClaim claimed ^ " but the body references " ^ describeRefs actual)
+        end
+
+    fun decodeVersioned (ver, body, claimed) =
           (case asAtom ver of
                ERR e => ERR e
              | OK v =>
                  if v = formatVersion
-                 then decodeBody body
+                 then (case claimed of
+                           ERR e => ERR e
+                         | OK ns =>
+                             (case decodeBody body of
+                                  ERR e => ERR e
+                                | OK u  => checkNatives (ns, u)))
                  else fail ("unsupported troupe-ir-sexp version: " ^ v
                             ^ " (this implementation supports version " ^ formatVersion ^ ")"))
+
+    (** Decode a whole document: the versioned wrapper, its body, and the optional natives
+        header. *)
+    fun decode (LST [ATOM "troupe-ir-sexp", ver, body]) = decodeVersioned (ver, body, OK [])
+      | decode (LST [ATOM "troupe-ir-sexp", ver, body, natives]) =
+          decodeVersioned (ver, body, decodeNativesHeader natives)
       | decode _ = fail "not a troupe-ir-sexp document"
 
     (*--- Encoding ---*)
@@ -489,8 +553,14 @@ let
     fun encodeBody (FUNUNIT f)  = encodeFun f
       | encodeBody (PROGUNIT p) = encodeProgram p
 
-    (** Encode a serialization unit as a whole document. *)
-    fun encode u = LST [ATOM "troupe-ir-sexp", ATOM formatVersion, encodeBody u]
+    (** Encode a serialization unit as a whole document. A body that references native modules
+        carries them in the optional `natives` element, derived from the body like the header
+        the decoder verifies. *)
+    fun encode u =
+        case nativeModules u of
+            [] => LST [ATOM "troupe-ir-sexp", ATOM formatVersion, encodeBody u]
+          | ns => LST [ ATOM "troupe-ir-sexp", ATOM formatVersion, encodeBody u
+                      , LST ((ATOM "natives") :: List.map (fn n => STR n) ns) ]
 
     (** Read a document from text. *)
     fun fromString text =

@@ -1,0 +1,5 @@
+(* The `require native` sits in the imported module, not here. *)
+import "./modsrc/UsesFFIDemo"
+
+print (UsesFFIDemo.double 21);
+print (UsesFFIDemo.greet "module")

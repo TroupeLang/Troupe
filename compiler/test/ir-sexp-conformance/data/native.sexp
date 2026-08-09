@@ -6,7 +6,7 @@
    (arg "$$authorityarg")
    (consts)
    (bb
-    ((assign "a" (lib "native:Zeta" "zOp"))
+    ((@ (rt "native reference") (assign "a" (lib "native:Zeta" "zOp")))
      (assign "b" (lib "native:FFIDemo" "ffiDemoGreet"))
      (assign "c" (lib "native:FFIDemo" "ffiDemoAdd")))
     (ret (local "b")))))

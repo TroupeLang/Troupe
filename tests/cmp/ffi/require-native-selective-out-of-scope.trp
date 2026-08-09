@@ -1,0 +1,4 @@
+(* Negative test: a require exists but does not select the name being used *)
+require native { ffiDemoAdd } FFIDemo
+
+print (ffiDemoGreet "world")

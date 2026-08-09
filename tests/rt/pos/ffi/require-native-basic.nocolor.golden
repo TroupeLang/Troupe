@@ -1,0 +1,4 @@
+2026-08-09T11:47:15.011Z [RTM] info: Skipping network creation. Observe that all network operations will yield a runtime error.
+"Hello, world!"
+5
+>>> Main thread finished with value: ()@{}%{}

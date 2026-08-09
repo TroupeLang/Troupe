@@ -57,7 +57,7 @@ import           PrettyPrint (mkPPConfig, parsePosFormat)
 import           ProcessImports (PinCheck(..))
 import           RetCPS (VarName(..))
 import           Sexp (Datum(..), renderDatum, toSexp)
-import           TroupePositionInfo (noLoc, unLoc)
+import           TroupePositionInfo (Located(..), PosInf(..), noLoc, unLoc)
 
 -- | The programs the reference artifacts are cut from, chosen to span the grammar:
 -- arithmetic and recursion; both float spellings the printer can emit;
@@ -145,11 +145,15 @@ largestFun (IRProgram fs) =
 -- | The native-module reference unit: hand-built rather than compiled, so the
 -- corpus does not depend on which native-module manifests a checkout has
 -- installed. Two modules, referenced out of canonical order and one of them
--- twice, pin the @natives@ header's form: sorted, deduplicated.
+-- twice, pin the @natives@ header's form: sorted, deduplicated. The first
+-- instruction carries a source position because
+-- scripts/ir-blob-interchange.mjs requires every reference blob in @data/@
+-- to carry at least one.
 nativeFun :: FunDef
 nativeFun =
   FunDef (HFN "main") (noLoc (VN "$$authorityarg")) []
-    (BB [ noLoc (Assign (VN "a") (Lib (LibName "native:Zeta") "zOp"))
+    (BB [ Loc (RTGen "native reference")
+              (Assign (VN "a") (Lib (LibName "native:Zeta") "zOp"))
         , noLoc (Assign (VN "b") (Lib (LibName "native:FFIDemo") "ffiDemoGreet"))
         , noLoc (Assign (VN "c") (Lib (LibName "native:FFIDemo") "ffiDemoAdd")) ]
         (noLoc (Ret (noLoc (VarLocal (VN "b"))))))
@@ -210,25 +214,27 @@ main = do
       Nothing -> return ()
     return (name, rel, ir, progUnit, funUnit, sexpPath, blobPath)
 
-  -- The native reference unit is hand-built (see 'nativeFun'), not compiled,
-  -- and its artifacts are checked in and regenerated like the others — but in
-  -- a sibling directory, because the Node and Troupe halves of the interchange
-  -- check (scripts/ir-blob-interchange.mjs, ir-sexp-troupe-conformance.sh)
-  -- walk data/ wholesale and the second implementation does not read the
-  -- natives extension yet. When trp-compiler's reader learns it, these move
-  -- into data/ and gain their cross-implementation counterparts.
-  let nativesDir     = takeDirectory dir </> "data-natives"
-      nativeSexpPath = nativesDir </> "native" <.> "sexp"
-      nativeBlobPath = nativesDir </> "native" <.> "blob"
+  -- The native reference unit is hand-built (see 'nativeFun'), not compiled;
+  -- its artifacts live in data/ with the others, so the Node and Troupe
+  -- halves of the interchange check (scripts/ir-blob-interchange.mjs,
+  -- ir-sexp-troupe-conformance.sh), which walk data/ wholesale, cover the
+  -- natives extension too.
+  let nativeSexpPath = dir </> "native" <.> "sexp"
+      nativeBlobPath = dir </> "native" <.> "blob"
       nativeFunUnit  = FunSerialization nativeFun
       nativeProgUnit = ProgramSerialization nativeProgram
-  createDirectoryIfMissing True nativesDir
   case regen of
     Just _ -> do
       writeFile nativeSexpPath (printProgWithPos nativeProgram)
       writeFile nativeBlobPath
         (BSC.unpack (B64.encode (IRBlob.encodeBlob nativeFunUnit)) ++ "\n")
     Nothing -> return ()
+
+  -- What the cross-implementation checks range over: every document in data/,
+  -- the compiled references plus the hand-built native one, matching the
+  -- wholesale walk of the interchange scripts.
+  let crossCases = [ (name, ir, funUnit) | (name, _, ir, _, funUnit, _, _) <- cases ]
+                   ++ [ ("native", nativeProgram, nativeFunUnit) ]
 
   defaultMain $ testGroup "troupe-ir-sexp conformance corpus"
     [ testGroup "L1: parse (print x) == x"
@@ -275,7 +281,7 @@ main = do
             raw <- either (assertFailure . ("base64: " ++)) return
                      (B64.decode (BSC.pack (filter (/= '\n') b64)))
             unitEq (IRBlob.deserialize raw) funUnit
-        | (name, _, _, _, funUnit, _, _) <- cases ]
+        | (name, _, funUnit) <- crossCases ]
 
       -- The other direction of L2: the document was printed by the Troupe
       -- implementation, from IR it decoded itself, so a pass means each side
@@ -289,7 +295,7 @@ main = do
                              \ ./scripts/ir-sexp-troupe-conformance.sh --write-troupe-references")
             text <- readFile troupePath
             progEq (parseProg text) ir
-        | (name, _, ir, _, _, _, _) <- cases ]
+        | (name, ir, _) <- crossCases ]
 
       -- The other direction of the same law: this blob was written by the Troupe
       -- implementation, from IR it decoded itself, and its payload was compressed
@@ -305,7 +311,7 @@ main = do
             raw <- either (assertFailure . ("base64: " ++)) return
                      (B64.decode (BSC.pack (filter (/= '\n') b64)))
             unitEq (IRBlob.deserialize raw) funUnit
-        | (name, _, _, _, funUnit, _, _) <- cases ]
+        | (name, _, funUnit) <- crossCases ]
 
       -- A reader that accepts nonsense is not conformant either. Mobile code
       -- arrives from other nodes, so every one of these is reachable input.

@@ -1,0 +1,4 @@
+2026-08-09T11:47:14.994Z [RTM] info: Skipping network creation. Observe that all network operations will yield a runtime error.
+42
+"Hello, module!"
+>>> Main thread finished with value: ()@{}%{}

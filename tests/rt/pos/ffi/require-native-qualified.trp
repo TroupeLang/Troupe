@@ -1,0 +1,5 @@
+(* `require native qualified` binds the names under the module name only. *)
+require native qualified FFIDemo
+
+print (FFIDemo.ffiDemoAdd (20, 22));
+print (FFIDemo.ffiDemoGreet "qualified")

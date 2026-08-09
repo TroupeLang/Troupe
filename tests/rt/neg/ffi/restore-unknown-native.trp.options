@@ -1,0 +1,2 @@
+# SimpleFileIO must see the ./out directory that `save`/`restore` use.
+--io-root .

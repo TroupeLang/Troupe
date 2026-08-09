@@ -47,7 +47,7 @@ import { stdio_level, checkChannelEffect, suspendReadline } from './stdio.mjs';
  *
  * Helper names carry a prefix: every builtin mixin contributes to one prototype
  * chain, so a plain `mkOk`/`mkErr` here would be shadowed by the identically
- * named helper of a mixin applied later (simplefileio.mts has both).
+ * named helper of a mixin applied later (codec.mts has both).
  */
 /**
  * Whether *this* component put stdin into raw mode. A program that read a line

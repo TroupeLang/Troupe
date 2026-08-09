@@ -9,8 +9,10 @@
 
 A **module** is a program-local `.trp` file that another `.trp` file in the same program imports by
 a relative path. A **library** is what a bare-identifier import names (`import List`), resolved
-under `$TROUPE/lib/out`. The two share the same `.exports` interface format and the same runtime
-loader, and differ in how they are found, how they are identified, and when they are built:
+under `$TROUPE/lib/out`. (A third dependency form, `require native`, names a group of
+host-implemented primitives rather than Troupe code; see [FFI.md](FFI.md).) The two share the same
+`.exports` interface format and the same runtime loader, and differ in how they are found, how they
+are identified, and when they are built:
 
 |                             | Library                          | Module                                    |
 |-----------------------------|----------------------------------|-------------------------------------------|

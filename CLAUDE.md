@@ -11,6 +11,7 @@ for how to work here. For human-facing reference material, see:
 - [docs/MODULES.md](docs/MODULES.md) — program-relative modules, content-addressed identity, pins
 - [docs/OPERATORS.md](docs/OPERATORS.md) — user-defined infix operators and declared fixity
 - [docs/VARIANTS.md](docs/VARIANTS.md) — `datatype` declarations and syntactic variants
+- [docs/FFI.md](docs/FFI.md) — native modules: `require native`, manifests, per-host availability
 - [docs/NETWORKING.md](docs/NETWORKING.md) — P2P runtime
 
 ## Build before running

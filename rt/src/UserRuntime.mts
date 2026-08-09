@@ -13,7 +13,6 @@ import { BuiltinLevOps } from './builtins/levelops.mjs'
 import { BuiltinMboxClear } from './builtins/mboxclear.mjs'
 import { BuiltinMkUuid } from './builtins/mkuuid.mjs'
 import { BuiltinPersist } from './builtins/persist.mjs'
-import { BuiltinSimpleFileIO } from './builtins/simplefileio.mjs'
 import { BuiltinNodeUtils } from './builtins/nodeutil.mjs'
 import { BuiltinSelf } from './builtins/self.mjs'
 import { BuiltinExit } from './builtins/exit.mjs'
@@ -66,7 +65,6 @@ export const UserRuntime =
     BuiltinSelf(
     BuiltinNodeUtils(
     BuiltinPersist(
-    BuiltinSimpleFileIO(
     BuiltinMkUuid(
     BuiltinMboxClear(
     BuiltinLevOps(
@@ -83,4 +81,4 @@ export const UserRuntime =
     BuiltinSignals(
     BuiltinTty(
     BuiltinStdIo(UserRuntimeZero)
-    ))))))))))))))))))))))))))))))))))))))
+    )))))))))))))))))))))))))))))))))))))

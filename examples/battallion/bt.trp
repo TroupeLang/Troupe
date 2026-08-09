@@ -38,7 +38,7 @@
  * the second line names the subtree the resolution happened in.
  *
  * THE FILE HAS TO BE TEXT, AND ONE THAT IS NOT IS REFUSED BEFORE THE SESSION BEGINS.
- * `SimpleFileIO.readFile` decodes with a fatal decoder (rt/src/builtins/simplefileio.mts), so a
+ * `SimpleFileIO.readFile` decodes with a fatal decoder (rt/src/ffi/node/simplefiles.mts), so a
  * file whose bytes are not valid UTF-8 fails to open with "file is not valid UTF-8" — the same
  * one-line startup refusal as a missing file, and nothing on disk is touched. Editing arbitrary
  * bytes is out of scope rather than unavailable: `readFileBytes` and `writeFileBytes` are there,

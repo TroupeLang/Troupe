@@ -22,7 +22,8 @@ authoritative sequence.
    file header may carry fixity declarations. See [OPERATORS.md](OPERATORS.md).
 2. **Front end:**
    - Import processing (`ProcessImports.hs`) — resolve library and module imports, read their
-     `.exports` interfaces, and either enforce or establish the dependency pins.
+     `.exports` interfaces, and either enforce or establish the dependency pins. `require native`
+     declarations resolve against the `$TROUPE/ffi/*.exports` manifests here; see [FFI.md](FFI.md).
    - Operator re-association (`OpReassoc.hs`) — translate `Surface` into the `Direct` AST,
      rebuilding each operator chain from the fixity environment (built-ins seeded; user
      operators from the header declarations and the imported `fixity` interface lines).
@@ -84,6 +85,7 @@ Key components:
 | `deserialize.mts`      | Value deserialization from the wire                           |
 | `p2p/p2p.mts`          | P2P networking layer                                          |
 | `builtins/`            | Language built-ins                                            |
+| `ffi/`                 | Native modules: registry and hosts (see [FFI.md](FFI.md))     |
 
 `loadLibs.mts` is marked deprecated in its own header and is not imported anywhere under `rt/src/`.
 
@@ -151,10 +153,11 @@ an external SIGTERM leaves a raw terminal raw.
 
 ### File I/O (`SimpleFileIO`)
 
-Whole-file read/write lives in `rt/src/builtins/simplefileio.mts`. It is a **placeholder** — a
-deliberately small surface (`readFile`, `writeFile`, `readFileBytes`, `writeFileBytes`,
-`appendFile`, `fileExists`) that exists to support document-processing programs and is expected to
-be superseded by a labelled-path model.
+Whole-file read/write lives in `rt/src/ffi/node/simplefiles.mts`, the native module `SimpleFiles`
+(see [FFI.md](FFI.md)); `lib/SimpleFileIO.trp` carries the `require native` and is the interface
+programs import. It is a **placeholder** — a deliberately small surface (`readFile`, `writeFile`,
+`readFileBytes`, `writeFileBytes`, `appendFile`, `fileExists`) that exists to support
+document-processing programs and is expected to be superseded by a labelled-path model.
 
 - **Authority.** Every operation requires ROOT authority (mirrors `persist`). Untrusted code cannot
   reach the filesystem at all, so per-write confidentiality checks and per-path levels are deferred

@@ -1,12 +1,13 @@
 import Outcome
+require native SimpleFiles
 
 (** SimpleFileIO - file access reported as an Outcome rather than a tagged record.
  *
- *  The runtime builtins return `{tag = "Ok", value}` / `{tag = "Err", error = {reason, path}}`.
- *  This wrapper converts that at the boundary, so no library-source hash has to be embedded in
- *  the runtime to build a datatype value there.
+ *  The `SimpleFiles` native primitives return `{tag = "Ok", value}` /
+ *  `{tag = "Err", error = {reason, path}}`. This wrapper converts that at the boundary, so no
+ *  library-source hash has to be embedded in the runtime to build a datatype value there.
  *
- *  Import it selectively to shadow the builtins, leaving call sites unchanged:
+ *  Import it selectively to shadow the raw primitives, leaving call sites unchanged:
  *
  *    import { readFile, writeFile } SimpleFileIO
  *
@@ -31,7 +32,7 @@ import Outcome
  *  There is no `appendFileBytes`; appending is UTF-8 only.
  *)
 
-let (* The builtins, captured before the definitions below shadow their names. *)
+let (* The native primitives, captured before the definitions below shadow their names. *)
     val rawReadFile   = readFile
     val rawWriteFile  = writeFile
     val rawReadFileBytes  = readFileBytes

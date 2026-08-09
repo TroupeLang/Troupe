@@ -1,9 +1,15 @@
 import { start } from './runtimeMonitored.mjs';
 import { getRuntimeObject } from './SysState.mjs';
+import { registerNodeNatives } from './ffi/node/index.mjs';
 import path  from 'path';
 import fs from 'node:fs'
 import { getCliArgs, TroupeCliArg } from './TroupeCliArgs.mjs';
 const argv = getCliArgs();
+
+// The node host's native modules must be registered before the first library
+// link (start's linkLibs, and any linkLibs a deserialized value triggers), so
+// that a "native:" link record resolves through a populated registry.
+registerNodeNatives();
 
 let p:any = argv[TroupeCliArg.File];
 if (!p) {

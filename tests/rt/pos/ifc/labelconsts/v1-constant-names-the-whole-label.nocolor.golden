@@ -1,0 +1,5 @@
+2026-08-09T09:33:07.796Z [RTM] info: Skipping network creation. Observe that all network operations will yield a runtime error.
+"a listed name is not the constant: true"
+"it is a two-principal tagset: true"
+"printed as {#root,alice}"
+>>> Main thread finished with value: ()@{}%{}

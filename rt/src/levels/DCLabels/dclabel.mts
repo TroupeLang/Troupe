@@ -537,6 +537,14 @@ export const IFC_TOP = new DCLabel(CNF_FALSE, CNF_TRUE)
 export const TRUST_NULL = new DCLabel(CNF_TRUE, CNF_TRUE)
 export const TRUST_ROOT = new DCLabel(CNF_FALSE, CNF_FALSE)
 
+// Keyed by the same names the V1 printer emits, so the two directions cannot
+// drift apart. The empty label is handled separately: it has no name.
+const V1_CONSTANTS: { [name: string]: DCLabel } = {
+    [DC_TRUST_ROOT.toLowerCase()]: TRUST_ROOT,
+    [DC_TRUST_NULL.toLowerCase()]: TRUST_NULL,
+    [DC_IFC_TOP.toLowerCase()]:    IFC_TOP,
+}
+
 
 export class DCLevelSystem extends AbstractLevelSystem<DCLabel> {
     BOT = IFC_BOT
@@ -596,8 +604,14 @@ export class DCLevelSystem extends AbstractLevelSystem<DCLabel> {
             return IFC_BOT
         }
 
-        if (str == "#TOP") {
-            return IFC_TOP;
+        // The lattice constants a V1 label can name, in the spellings the V1
+        // printer emits for them (DC_TRUST_ROOT and friends in dcl_pp_config),
+        // so printing one and reading it back gives the constant again. A
+        // constant names the whole label, matching the compiler's v1LabelConst:
+        // "{alice, #root}" is a two-principal tagset, not a join with ROOT.
+        const constant = V1_CONSTANTS[str.toLowerCase()]
+        if (constant) {
+            return constant
         }
 
         // Drop empty/whitespace-only segments (e.g. "{alice,,bob}", "{ , }") so a

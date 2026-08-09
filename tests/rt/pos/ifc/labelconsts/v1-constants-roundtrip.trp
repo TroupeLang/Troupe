@@ -1,0 +1,25 @@
+(* The lattice constants the V1 printer emits can be read back in V1 syntax.
+ * Each `{#NAME}` denotes the same level as its V2 spelling, so printing a
+ * level and pasting the result into a program gives that level again. *)
+
+let val root     = `{#ROOT}`
+    val rootV2   = `<#root-confidentiality; #root-integrity>`
+    val null     = `{#NULL}`
+    val nullV2   = `<#null-confidentiality; #null-integrity>`
+    val top      = `{#TOP}`
+    val topV2    = `<#root-confidentiality; #null-integrity>`
+    val bot      = `{}`
+    val botV2    = `<#null-confidentiality; #root-integrity>`
+
+    fun same (name, a, b) =
+        print (name ^ ": equal " ^ toString (a = b)
+                    ^ ", flows up " ^ toString (flowsTo (a, b))
+                    ^ ", flows down " ^ toString (flowsTo (b, a)))
+in
+  same ("#ROOT", root, rootV2);
+  same ("#NULL", null, nullV2);
+  same ("#TOP",  top,  topV2);
+  same ("{}",    bot,  botV2);
+  print ("the four are distinct: "
+         ^ toString (root <> null andalso null <> top andalso top <> bot))
+end

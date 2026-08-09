@@ -382,7 +382,7 @@ APat : VAR                                 {% atPos $1 (VarPattern (varTok $1)) 
      | STRING                              {% atPos $1 (ValPattern (LString (strTok $1))) }
      | true                                {% atPos $1 (ValPattern (LBool True)) }
      | false                               {% atPos $1 (ValPattern (LBool False)) }
-     | LABEL                               {% atPos $1 (ValPattern (LLabel (lblTok $1))) }
+     | LABEL                               {% atPos $1 (ValPattern (v1LabelLit (lblTok $1))) }
      | '`<' DCLabelExp '>`'                {% atPos $1 (ValPattern (LDCLabel $2)) }
      | '(' Pattern ')'                     { $2 }
      | '(' CSPattern PatElem ')'           {% atPos $1 (TuplePattern (reverse ($3:$2))) }
@@ -424,7 +424,7 @@ Lit:   NUM                        {% atPos $1 (LNumeric (NumInt (numTok $1))) }
      | STRING                      {% atPos $1 (LString (strTok $1)) }
      | true                        {% atPos $1 (LBool True) }
      | false                       {% atPos $1 (LBool False) }
-     | LABEL                       {% atPos $1 (LLabel (lblTok $1)) }
+     | LABEL                       {% atPos $1 (v1LabelLit (lblTok $1)) }
      |'`<' DCLabelExp '>`'         {% atPos $1 (LDCLabel $2) }
 
 

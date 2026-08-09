@@ -1,0 +1,12 @@
+(* A constant names the whole label. Listed alongside other principals the
+ * name is an ordinary principal, because a lattice constant cannot be one
+ * conjunct of a label expression. *)
+
+let val root      = `{#ROOT}`
+    val withAlice = `{alice, #root}`
+    val alice     = `{alice}`
+in
+  print ("a listed name is not the constant: " ^ toString (withAlice <> root));
+  print ("it is a two-principal tagset: "      ^ toString (withAlice <> alice));
+  print ("printed as " ^ toString withAlice)
+end

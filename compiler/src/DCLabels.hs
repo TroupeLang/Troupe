@@ -23,6 +23,7 @@ module DCLabels
   , cnfEq
   , cnfImplies
   , v1LabelEq
+  , v1LabelConst
   , v1LabelToDCLabelExp
   , CNF(..)
   , DisjTags(..)
@@ -240,17 +241,33 @@ normalizeV1Label s = snub $ filter (not . null) $ map (lowerString . trim) $ spl
     trim = dropWhileEnd isSpace . dropWhile isSpace
     stripBraces = dropWhileEnd (== '}') . dropWhile (== '{')
 
+-- | The lattice constants that a V1 label string can name. These are the
+-- spellings the V1 pretty printer emits for them (dcl_pp_config.mts), so
+-- printing a constant and reading it back gives the constant again. A
+-- constant names the whole label: "{alice, #root}" is a two-principal tagset,
+-- not a join with ROOT, since a LabelConst cannot be an operand of a LabelExp.
+v1LabelConst :: String -> Maybe DCLabelExp
+v1LabelConst s =
+    case normalizeV1Label s of
+        ["#root"] -> Just (DCLabelExp (ConstComponent LabelFalse, ConstComponent LabelFalse))
+        ["#null"] -> Just (DCLabelExp (ConstComponent LabelTrue,  ConstComponent LabelTrue))
+        ["#top"]  -> Just (DCLabelExp (ConstComponent LabelFalse, ConstComponent LabelTrue))
+        _         -> Nothing
+
 -- | Convert V1 label string to DCLabelExp for cross-syntax comparison
 -- V1 "{}" means IFC_BOT = <True; False> (most public, least trusted)
 -- V1 "{alice, bob}" means <alice & bob ; alice & bob>
 v1LabelToDCLabelExp :: String -> DCLabelExp
 v1LabelToDCLabelExp s =
-    let tags = normalizeV1Label s
-    in case tags of
-        []  -> DCLabelExp (ConstComponent LabelTrue, ConstComponent LabelFalse)  -- IFC_BOT
-        [t] -> let e = ExprComponent (TagExp t) in DCLabelExp (e, e)
-        ts  -> let e = ExprComponent (foldr1 (\a b -> OpExp Conj a b) (map TagExp ts))
-               in DCLabelExp (e, e)
+    case v1LabelConst s of
+      Just dc -> dc
+      Nothing ->
+        let tags = normalizeV1Label s
+        in case tags of
+            []  -> DCLabelExp (ConstComponent LabelTrue, ConstComponent LabelFalse)  -- IFC_BOT
+            [t] -> let e = ExprComponent (TagExp t) in DCLabelExp (e, e)
+            ts  -> let e = ExprComponent (foldr1 (\a b -> OpExp Conj a b) (map TagExp ts))
+                   in DCLabelExp (e, e)
 
 ------------------------------------------------------------
 -- s-expression serialization (see "Sexp")

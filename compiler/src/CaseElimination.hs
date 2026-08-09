@@ -180,7 +180,7 @@ collectPattern (lv, Loc _ (S.AtPattern lp l)) = do
   let pos = getLoc lv
   (innerTests, innerWrap) <- collectPattern (lv, lp)
   -- The label test is just another conjunct, evaluated before the inner pattern.
-  let levelTest = Loc pos (Bin Eq (Loc pos (Un LevelOf lv)) (Loc pos (Lit (LLabel l))))
+  let levelTest = Loc pos (Bin Eq (Loc pos (Un LevelOf lv)) (Loc pos (Lit (transLit (S.v1LabelLit l)))))
   return (levelTest : innerTests, innerWrap)
 collectPattern (lv, Loc _ (S.VarPattern var)) =
   let pos = getLoc lv

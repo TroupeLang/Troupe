@@ -325,6 +325,20 @@ All DC label tags are normalized to lowercase. For example, `` `<Alice ; Bob>` `
 
 The user guide currently uses the V1 label syntax `` `{alice}` ``, which the present Troupe runtime interprets as a DC Label corresponding to `` `<alice ; alice>` ``.
 
+Four V1 spellings name lattice constants rather than principals. These are the spellings the V1
+printer emits for them, so a level read from output or from an error message denotes the same level
+when written back into a program or passed to `--stdiolev`:
+
+| V1        | V2                                        | Meaning                       |
+|-----------|-------------------------------------------|-------------------------------|
+| `{}`      | `<#null-confidentiality;#root-integrity>` | public and trusted            |
+| `{#ROOT}` | `<#root-confidentiality;#root-integrity>` | secret and trusted            |
+| `{#NULL}` | `<#null-confidentiality;#null-integrity>` | public and untrusted          |
+| `{#TOP}`  | `<#root-confidentiality;#null-integrity>` | secret and untrusted          |
+
+A constant names the whole label: in `` `{alice, #root}` `` the name is an ordinary principal,
+because a constant cannot be one conjunct of a label expression.
+
 ## File extensions
 
 Source and compiler artifacts:

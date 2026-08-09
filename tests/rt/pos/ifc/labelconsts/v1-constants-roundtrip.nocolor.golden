@@ -1,0 +1,7 @@
+2026-08-09T09:33:07.807Z [RTM] info: Skipping network creation. Observe that all network operations will yield a runtime error.
+"#ROOT: equal true, flows up true, flows down true"
+"#NULL: equal true, flows up true, flows down true"
+"#TOP: equal true, flows up true, flows down true"
+"{}: equal true, flows up true, flows down true"
+"the four are distinct: true"
+>>> Main thread finished with value: ()@{}%{}

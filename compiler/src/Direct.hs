@@ -4,6 +4,7 @@ module Direct ( Lambda (..)
               , FunDecl (..)
               , Numeric(..)
               , Lit(..)
+              , v1LabelLit
               , DeclPattern(..)
               , RecordPatternMode(..)
               , Prog(..)
@@ -58,6 +59,11 @@ data Lit
     | LLabel String
     | LDCLabel DCLabelExp
   deriving (Eq, Show)
+
+-- | The literal a V1 label surface form denotes: one of the lattice constants
+-- it can name, otherwise the tagset spelled by its principals.
+v1LabelLit :: String -> Lit
+v1LabelLit s = maybe (LLabel s) LDCLabel (v1LabelConst s)
 
 data RecordPatternMode = ExactMatch | WildcardMatch
   deriving (Eq, Show)

@@ -40,6 +40,7 @@ module Surface ( Lambda (..)
                -- Re-exported term-free layers (shared with Direct)
                , D.Numeric (..)
                , D.Lit (..)
+               , D.v1LabelLit
                , D.RecordPatternMode (..)
                , D.FieldName
                , D.QName

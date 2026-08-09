@@ -1,0 +1,16 @@
+(* A constant name is matched after the label body is trimmed and lowercased,
+ * the same normalization ordinary principals get, so case and surrounding
+ * whitespace do not change which level is denoted. *)
+
+let val plain   = `{#ROOT}`
+    val lower   = `{#root}`
+    val mixed   = `{#RoOt}`
+    val spaced  = `{ #ROOT}`
+    val padded  = `{   #root   }`
+in
+  print ("lower: "  ^ toString (plain = lower));
+  print ("mixed: "  ^ toString (plain = mixed));
+  print ("spaced: " ^ toString (plain = spaced));
+  print ("padded: " ^ toString (plain = padded));
+  print ("printed as " ^ toString padded)
+end

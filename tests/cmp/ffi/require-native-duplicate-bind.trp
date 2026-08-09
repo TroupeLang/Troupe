@@ -1,0 +1,5 @@
+(* Negative test: an import and a native require binding the same name *)
+import List as FFIDemo
+require native FFIDemo
+
+print 1

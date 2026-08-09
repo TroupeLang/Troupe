@@ -1,0 +1,4 @@
+(* Negative test: require of a native module that has no installed manifest *)
+require native NoSuchNative
+
+print 1

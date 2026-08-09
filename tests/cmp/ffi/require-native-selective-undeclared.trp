@@ -1,0 +1,4 @@
+(* Negative test: selective require of a name the manifest does not declare *)
+require native { noSuchFn } FFIDemo
+
+print 1

@@ -329,11 +329,14 @@ mapFromImports (Imports imports) =
     -- The name codegen addresses the import by: the library name, or the
     -- content-addressed module identity ("module:<hash>") for a module import.
     -- ProcessImports has, by this point, resolved a module import's path to its
-    -- IR hash and stored it in importPath, so the reference is location-free and
-    -- Merkle (it carries the dependency's hash inline).
-    codegenName imp = case importPath imp of
-      Just hash -> LibName ("module:" ++ hash)
-      Nothing   -> importLib imp
+    -- IR hash and stored it in importSource, so the reference is location-free
+    -- and Merkle (it carries the dependency's hash inline). A native require is
+    -- addressed by its module name for now; the "native:<Name>" codegen name
+    -- arrives with the IR support for natives.
+    codegenName imp = case importSource imp of
+      FromModule hash -> LibName ("module:" ++ hash)
+      FromLibrary     -> importLib imp
+      FromNative      -> importLib imp
 
     -- Build unqualified environment (only unqualified imports)
     -- Maps each exported function name to the original library

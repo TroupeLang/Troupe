@@ -214,12 +214,15 @@ ppProg (Prog (Imports imports) fixities groups term) =
         else
           let ppLibName imp =
                 let LibName ln = importLib imp
-                    s = case importPath imp of
-                          Just p  -> "\"" ++ p ++ "\""
-                          Nothing -> ln
+                    kw = case importSource imp of
+                           FromNative -> "require native"
+                           _          -> "import"
+                    s = case importSource imp of
+                          FromModule p -> "\"" ++ p ++ "\""
+                          _            -> ln
                     modeText = case importMode imp of
-                      Qualified -> text "import qualified" <+> text s
-                      Unqualified -> text "import" <+> text s
+                      Qualified -> text (kw ++ " qualified") <+> text s
+                      Unqualified -> text kw <+> text s
                     selectText = case importSelected imp of
                       Just names -> text " only (" PP.<> (hsep $ PP.punctuate (text ",") (map text names)) PP.<> text ")"
                       Nothing -> PP.empty

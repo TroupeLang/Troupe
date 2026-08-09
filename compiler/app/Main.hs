@@ -29,7 +29,7 @@ import System.Exit
 import ProcessImports
 import DepsFile (DepEntry(..), depsFilePath, readDepsFile, writeDepsFile, lookupPinByPath)
 import Direct (Prog(..))
-import Basics (Imports(..), importPath)
+import Basics (Imports(..), ImportSource(..), importSource)
 import System.Directory (createDirectoryIfMissing)
 import Exports
 import CompileMode
@@ -202,7 +202,9 @@ emitJS outPath srcPath root flags copts folded iropt = do
   -- (transitively) uses modules, so the runtime can seed its
   -- hash -> (location, name) resolver and locate compiled artifacts.
   let usesModules = let Prog (Imports imps) _ _ = Pipeline.fdProg folded
-                    in any (\imp -> importPath imp /= Nothing) imps
+                    in any (\imp -> case importSource imp of
+                                       FromModule _ -> True
+                                       _            -> False) imps
       isProgram = usesModules && not (LibMode `elem` flags)
       moduleRoot     = if isProgram then Just root else Nothing
       -- Keyed off the source, not the output: the dependencies file sits

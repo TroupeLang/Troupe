@@ -30,7 +30,7 @@ module SynVarFolding ( foldProg, FoldResult(..) ) where
 
 import           Direct
 import           Basics (VarName, Imports(..), ImportDecl(..), ImportMode(..),
-                         LibName(..))
+                         ImportSource(..), LibName(..))
 import qualified SynVarHash as H
 import           Exports (renderDatatypeLine)
 import           InternalError (internalError)
@@ -194,16 +194,17 @@ buildImportEnv (Imports imports) = foldM addImport emptyEnv imports
           -- mechanism: a library is a separately distributed artifact, so the
           -- importer records the group hashes it consumed and the runtime
           -- re-checks them against the library's embedded exported-hash list.
-          -- A module (import "./Path", importPath = Just) has no such standalone
-          -- artifact to skew-check — it is recompiled from source alongside the
-          -- importer in one build, and a module artifact carries no
-          -- __datatypeHashes list to check against. Recording a module here
+          -- A module (import "./Path", importSource = FromModule) has no such
+          -- standalone artifact to skew-check — it is recompiled from source
+          -- alongside the importer in one build, and a module artifact carries
+          -- no __datatypeHashes list to check against. Recording a module here
           -- would key the consumed record by the bare module name and make the
           -- runtime try to load it as a library (lib/out/<Name>.js); its
           -- constructors are inline tagged tuples and introduce no runtime
-          -- dependency on the provider at all. So only libraries feed the
-          -- skew record.
-          isLibraryImport = importPath imp == Nothing
+          -- dependency on the provider at all. A native require declares no
+          -- datatypes (its manifest rejects datatype lines), so it has nothing
+          -- to skew-check either. So only libraries feed the skew record.
+          isLibraryImport = importSource imp == FromLibrary
       -- Each interface line is one group's (stored hash, canonical form); parse
       -- the canonical form, recompute the group's hash, and verify the stored
       -- hash matches it before building the datatype entries.

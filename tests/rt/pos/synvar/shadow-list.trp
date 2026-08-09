@@ -4,9 +4,9 @@
    form, untouched by type-name shadowing, so [1,2,3] still works. *)
 datatype list = NIL2 | CONS2 of int * list
 
-let val mine   = CONS2 (1, CONS2 (2, NIL2))
-    val native = [1, 2, 3]
+let val mine    = CONS2 (1, CONS2 (2, NIL2))
+    val builtin = [1, 2, 3]
 in
   print mine;    (* (CONS2 (1, (CONS2 (2, (NIL2))))) *)
-  print native   (* [1, 2, 3] *)
+  print builtin  (* [1, 2, 3] *)
 end

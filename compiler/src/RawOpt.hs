@@ -213,7 +213,7 @@ typeOfLit lit =
       Core.LLabel _ -> Just RawLevel
       Core.LBool _ -> Just RawBoolean
       Core.LDCLabel _ -> Just RawDCLabel
-      
+
 
 -- | Whether a label constant denotes the lattice bottom (the join identity).
 -- Both the V1 empty tagset @{}@ and the DC @<True; False>@ denote IFC_BOT; the
@@ -404,10 +404,10 @@ pevalInst li = do
       SetState p r -> _keep $ do
         markUsed r
         monInsert p r
-      RTAssertion (AssertType r rt) -> do
+      RTAssertion (AssertType r assertedType) -> do
         case Map.lookup r (stateRawVarTypes pstate) of
-          Just rt' | rt' == rt -> return []
-          _ -> _keep $ _setRawType r rt >> markUsed r
+          Just knownType | knownType `isSubtypeOf` assertedType -> return []
+          _ -> _keep $ _setRawType r assertedType >> markUsed r
       -- RTAssertion (AssertEqTypes opt_ls x y) -> do
       --   let _m = stateTypes pstate
       --   let keep = _keep $ markUsed [x,y]

@@ -71,6 +71,11 @@ data RawType
     deriving (Eq, Show)
 
 
+isSubtypeOf :: RawType -> RawType -> Bool
+RawDCLabel `isSubtypeOf` RawLevel = True  -- both are AbstractLevel at run time
+sub        `isSubtypeOf` super    = sub == super
+
+
 -- | A runtime assertion stopping the current thread if the condition is not satisfied.
 data RTAssertion
   = AssertType RawVar RawType

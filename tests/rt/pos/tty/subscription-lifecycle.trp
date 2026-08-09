@@ -1,3 +1,5 @@
+require native Tty
+
 (* The subscription operations' return values.
 
    `ttyUnsubscribe` is idempotent: it answers `Ok` whether or not anything was

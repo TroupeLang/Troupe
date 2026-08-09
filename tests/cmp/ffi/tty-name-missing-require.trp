@@ -1,0 +1,2 @@
+(* Negative test: using a Tty primitive without its require *)
+print (ttySize stdout)

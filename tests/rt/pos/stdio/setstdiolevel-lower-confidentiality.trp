@@ -1,3 +1,5 @@
+require native Tty
+
 (* The startup level is the ceiling, and the level named must be one it acts
    for: weaker in both dimensions. From a channel at {alice}, `<;alice>` is
    public at alice integrity, so alice-confidential data reaches the channel

@@ -1,2 +1,4 @@
+require native Tty
+
 (* A value that is not a descriptor at all fails the type assertion. *)
 print (ttyIsTTY 42)

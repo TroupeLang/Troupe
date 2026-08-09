@@ -64,9 +64,10 @@ reviewed rigorously rather than depend on the monitor.
                     takes ROOT `authority` and resolves its path inside the `--io-root` subtree;
                     a path escaping that subtree fails rather than reaching the filesystem.
                     Import it selectively -- `import { readFile, writeFile } SimpleFileIO`
-                    shadows the builtins of those names, leaving call sites unchanged. A name
-                    left out of that list still resolves, to the raw builtin, whose tagged
-                    record does not match `OK`. The text operations are UTF-8: `readFile`
+                    binds those names, leaving call sites unchanged. The raw primitives are
+                    the native module `SimpleFiles`, whose require this library carries; a
+                    name left out of the list is a compile error naming the missing
+                    declaration. The text operations are UTF-8: `readFile`
                     refuses a file whose bytes are not valid UTF-8 with
                     `ERR {reason = "file is not valid UTF-8", path}` rather than substituting
                     U+FFFD, and `readFileBytes` / `writeFileBytes` carry the bytes themselves
@@ -113,8 +114,9 @@ reviewed rigorously rather than depend on the monitor.
                     so one receive waits on terminal events and its own protocol together.
                     `nextEventAtLevel` receives and declassifies an event's payload, the
                     `IfcUtil.freadlnAtLevel` idiom. Query and effect results are `Outcome`
-                    values; the raw builtins (`ttySize`, `ttyRawMode`, ...) stay ambient and
-                    return tagged records that never match `OK`, so call the wrappers.
+                    values; the raw primitives are the native module `Tty`, whose require this
+                    library carries, and their tagged records never match `OK`, so call the
+                    wrappers.
 - `timeout`       : Timers that send a message or exit the program after a duration.
 - `Unit`          : Unit testing.
 - `VariantsDemo`  : Datatype groups (`color`, `'a box`, `shape`) and functions over them, exported

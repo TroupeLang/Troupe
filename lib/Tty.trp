@@ -1,20 +1,22 @@
 import Outcome
 import IfcUtil
 import List
+require native Tty
 
 (** Tty - terminal queries, raw mode, and keystroke delivery as mailbox events.
  *
  *  The runtime ships bytes, not decoded keys: `ttySubscribe` attaches listeners to the stdin
  *  descriptor and pushes one message per chunk into the subscriber's mailbox. This module names
- *  those messages, converts the tagged records the query builtins return, and packages the
+ *  those messages, converts the tagged records the raw primitives return, and packages the
  *  receive ceremony a subscriber must perform.
  *
- *  THE RAW BUILTINS STAY IN SCOPE. `ttySize`, `ttyRawMode`, `ttySubscribe` and `ttyUnsubscribe`
- *  are ambient names that no import shadows: a program that calls them directly gets the runtime's
- *  `{tag = "Ok", value}` / `{tag = "Err", error = {reason}}` record, whose shape never matches
- *  `OK` or `ERR`, and the mismatch surfaces as a failed match rather than as a missing import.
- *  Call the wrappers below — `Tty.size`, `Tty.rawMode`, `Tty.subscribe`, `Tty.unsubscribe` — and
- *  import `Outcome` to match on the result.
+ *  THE RAW PRIMITIVES ARE THE NATIVE MODULE `Tty`. This library carries the `require native Tty`
+ *  declaration, so a program that imports it needs none of its own; a program that calls a raw
+ *  name (`ttySize`, `ttyRawMode`, ...) without the require is a compile error naming the missing
+ *  declaration. With the require, a direct call returns the runtime's `{tag = "Ok", value}` /
+ *  `{tag = "Err", error = {reason}}` record, whose shape never matches `OK` or `ERR`. Call the
+ *  wrappers below — `Tty.size`, `Tty.rawMode`, `Tty.subscribe`, `Tty.unsubscribe` — and import
+ *  `Outcome` to match on the result.
  *
  *  EVENTS ARE LABELLED. An event's presence and payload are both at the channel level
  *  (`level fd`, set by `--stdiolev`), so a plain `receive` — whose interval is `[pc, pc]` — never

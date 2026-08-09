@@ -1,3 +1,5 @@
+require native Tty
+
 (* stdio model: entering raw mode changes the echo and the line discipline
    of the channel visibly, so it is an effect and carries the same sink check as
    a write. From a pc raised above the channel level it is refused. *)

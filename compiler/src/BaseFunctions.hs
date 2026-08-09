@@ -139,13 +139,6 @@ baseFunctions = Set.fromList
                      , "toString"
                      -- Signal disposition (see builtins/signals.mts)
                      , "trapSigterm"
-                     -- Terminal primitives (see builtins/tty.mts)
-                     , "ttyIsTTY"
-                     , "ttyLevel"
-                     , "ttyRawMode"
-                     , "ttySize"
-                     , "ttySubscribe"
-                     , "ttyUnsubscribe"
                      , "untrapSigterm"
                      , "whereis"
                      ]

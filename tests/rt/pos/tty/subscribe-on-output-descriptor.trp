@@ -1,3 +1,5 @@
+require native Tty
+
 (* Terminal events come from the input channel, so `ttySubscribe` accepts only
    the stdin descriptor. Handing it an output descriptor is a programming
    error and kills the thread, as it does for `ttyRawMode`. *)

@@ -1,8 +1,8 @@
-2026-07-31T16:37:23.876Z [RTM] [32minfo[39m: Skipping network creation. Observe that all network operations will yield a runtime error.
-Runtime error in thread 5a5852e6-ede9-42dd-bcd2-a2b6f50067ce@{}%{}
+2026-08-09T17:05:27.928Z [RTM] [32minfo[39m: Skipping network creation. Observe that all network operations will yield a runtime error.
+Runtime error in thread c736893a-9096-4d98-916d-2c01d370056f@{}%{}
 
-  2 | print (ttyIsTTY 42)
+  4 | print (ttyIsTTY 42)
     |        ^
 
 >> value 42@{}%{} is not a local object
->> at tests/rt/pos/tty/not-a-descriptor.trp:2:8
+>> at tests/rt/pos/tty/not-a-descriptor.trp:4:8

@@ -27,7 +27,7 @@ import * as os from 'node:os';
  *    where the original byte was.
  *  - readFileBytes/writeFileBytes carry the file's bytes as a string with one code unit per
  *    byte (`latin1`), the byte-string convention of the codec built-ins
- *    (rt/src/builtins/codec.mts) and of the tty reader (rt/src/builtins/tty.mts). A string
+ *    (rt/src/builtins/codec.mts) and of the tty reader (rt/src/ffi/node/tty.mts). A string
  *    holding a code unit above 255 is not a byte string, and `writeFileBytes` refuses one as a
  *    thread error rather than truncating it — as base64Encode and gunzip do, and for the same
  *    reason: the convention is only safe if breaking it is loud.

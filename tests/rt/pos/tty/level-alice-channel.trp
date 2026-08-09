@@ -1,3 +1,5 @@
+require native Tty
+
 (* With the channel level set by the operator, ttyLevel reports it, and an
    observation drawn through the channel carries it. The level ttyLevel returns
    is itself at the caller's pc: it discloses the run configuration, not

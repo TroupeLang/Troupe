@@ -1,6 +1,5 @@
 import { UserRuntimeZero } from './builtins/UserRuntimeZero.mjs'
 import { BuiltinStdIo } from './builtins/stdio.mjs'
-import { BuiltinTty } from './builtins/tty.mjs'
 import { BuiltinSignals } from './builtins/signals.mjs'
 import { BuiltinMath } from './builtins/math.mjs'
 import { BuiltinBigInt } from './builtins/bigint.mjs'
@@ -79,6 +78,5 @@ export const UserRuntime =
     BuiltinRecordReflection(
     BuiltinTypeInformation(
     BuiltinSignals(
-    BuiltinTty(
     BuiltinStdIo(UserRuntimeZero)
-    )))))))))))))))))))))))))))))))))))))
+    ))))))))))))))))))))))))))))))))))))

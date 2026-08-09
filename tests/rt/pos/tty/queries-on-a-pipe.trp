@@ -1,3 +1,5 @@
+require native Tty
+
 (* The terminal queries under the golden runner, where stdin, stdout and stderr
    are pipes rather than terminals.
 

@@ -14,7 +14,7 @@ import * as levels from './Level.mjs'
 import * as DS from './deserialize.mjs'
 import { p2p, P2pUserError } from './p2p/p2p.mjs'
 import { closeReadline } from './builtins/stdio.mjs';
-import { ttyRestore } from './builtins/tty.mjs';
+import { runCleanups as runNativeCleanups } from './ffi/registry.mjs';
 import { __theRegister } from './builtins/whereis.mjs';
 import { assertIsFunction } from './Asserts.mjs'
 import runId from './runId.mjs'
@@ -480,7 +480,7 @@ setRuntimeObject(__rtObj)
 
 async function cleanupAsync() {
   await sendSocketMessageAndClose({ type: 'process-exit', exitCode: 0 });
-  ttyRestore()
+  runNativeCleanups()
   closeReadline()
   DS.stopCompiler();
   if (__p2pRunning) {
@@ -538,9 +538,10 @@ bulletProofSigint();
   So the listener is attached only while a program has asked for one with
   `trapSigterm`, and removed with `untrapSigterm` (builtins/signals.mts). A
   program that never traps keeps the OS default: immediate death, no
-  `cleanupAsync`, and therefore no `ttyRestore` — the terminal-state gap that
-  a runtime default was meant to close stays open, and closing it needs the
-  scheduler to yield on a bound that is wall-clock rather than step-count.
+  `cleanupAsync`, and therefore no terminal restore (`ttyRestore`,
+  ffi/node/tty.mts) — the terminal-state gap that a runtime default was meant
+  to close stays open, and closing it needs the scheduler to yield on a bound
+  that is wall-clock rather than step-count.
 
 \*****************************************************************************/
 

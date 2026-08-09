@@ -153,12 +153,20 @@ importing an implementation file must not decide what is registered or touch hos
 Work that needs the process environment runs at first use — `simplefiles.mts` resolves its
 `--io-root` sandbox on the first file operation, not at import.
 
+A module that holds host state a program's death must not leave behind registers a restore
+function with `nativeModules.registerCleanup(...)` next to its `register` line; the runtime's
+cleanup path runs every registered restore on every termination route that reaches it, without
+importing any host-specific module. A restore runs outside any thread and must be safe when
+nothing was set up and safe to run twice — `tty.mts` registers `ttyRestore` this way to leave
+raw mode and detach its listeners.
+
 Worked examples in the tree:
 
 | File                              | Demonstrates                                                        |
 |-----------------------------------|---------------------------------------------------------------------|
 | `rt/src/ffi/node/ffidemo.mts`     | Minimal platform-neutral module; result labels join argument labels |
 | `rt/src/ffi/node/simplefiles.mts` | Authority checks, sandboxing, suspending the thread for async I/O   |
+| `rt/src/ffi/node/tty.mts`         | A client of core-owned state (stdio's channel level and sink check); a registered shutdown restore |
 
 ## Failure modes
 
@@ -194,3 +202,4 @@ Every message below is the compiler's or runtime's actual output.
 | Inbound-error classification                        | `rt/src/deserialize.mts`                       |
 | Demonstration module                                | `rt/src/ffi/node/ffidemo.mts`                  |
 | Whole-file I/O module (`SimpleFiles`)               | `rt/src/ffi/node/simplefiles.mts`              |
+| Terminal module (`Tty`)                             | `rt/src/ffi/node/tty.mts`                      |

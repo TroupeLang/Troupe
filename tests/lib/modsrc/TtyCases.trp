@@ -18,7 +18,7 @@ import Tty
  * The downgrade helper is exercised on an event the test injects itself, at the channel level,
  * rather than on a piped one — an injected event is one event, whatever the pipe does with the
  * input, and `nextEventAtLevel` is then asserted on rather than merely run. The injection is a
- * send to self of the wire shape the runtime builds (rt/src/builtins/tty.mts:150), so the
+ * send to self of the wire shape the runtime builds (rt/src/ffi/node/tty.mts:153), so the
  * handlers see exactly what a subscription delivers.
  *
  * Events and query results are labeled at the channel level, and `Unit.isEq` compares labels as

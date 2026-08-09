@@ -1,3 +1,5 @@
+require native Tty
+
 (* Re-subscribing replaces the subscriber; there is exactly one.
 
    Main subscribes itself and then, in the same straight-line stretch, hands

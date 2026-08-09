@@ -99,10 +99,10 @@ require **full (ROOT) authority**: `persist`, `cliargs`, `exit`, `register`, and
 
 ### Standard streams (stdio)
 
-`rt/src/builtins/stdio.mts` and `rt/src/builtins/tty.mts`. stdio is a pair of channels at a level
-`L`, set by `--stdiolev` (default ROOT) in either V1 (`'{alice}'`) or V2
-(`'<alice;#root-integrity>'`) syntax. The startup level is also the ceiling on the two primitives
-below, and that ceiling does not move.
+`rt/src/builtins/stdio.mts` and the native module `Tty` (`rt/src/ffi/node/tty.mts`, see
+[FFI.md](FFI.md)). stdio is a pair of channels at a level `L`, set by `--stdiolev` (default ROOT)
+in either V1 (`'{alice}'`) or V2 (`'<alice;#root-integrity>'`) syntax. The startup level is also
+the ceiling on the two primitives below, and that ceiling does not move.
 
 `stdin`, `stdout` and `stderr` are **values**, not something acquired: a descriptor names a stream
 and grants nothing, so there is nothing for it to show and nothing to check. Enforcement sits on
@@ -138,7 +138,8 @@ was raised by the channel. ROOT is fine and a named principal is fine; a channel
 `#null-integrity` leaves nothing to declassify from, and the receive path fails there even though
 the write path does not.
 
-Terminal support beyond the streams: `ttyIsTTY`/`ttySize`/`ttyLevel` (queries), `ttyRawMode`
+Terminal support beyond the streams is the native module `Tty`, whose `require native Tty` is
+carried by `lib/Tty.trp`: `ttyIsTTY`/`ttySize`/`ttyLevel` (queries), `ttyRawMode`
 (line-discipline switch; entering raw mode closes the lazily-created readline interface, which a
 later `freadln` re-creates), and `ttySubscribe`/`ttyUnsubscribe` (event delivery). Events are
 runtime-built mailbox messages with string tags — `("TTYDATA", bytes)` one per chunk,
@@ -146,10 +147,10 @@ latin1-decoded; `("TTYRESIZE", cols, rows)`; the bare string `"TTYEOF"` — deli
 network's mailbox ingress path with presence and payload at `L`. There is exactly one
 subscriber, module-private, replaced on re-subscribe; if it has died, the next event tears the
 subscription down and leaves raw mode. `lib/Tty.trp` names the events as a datatype and
-packages the receive ceremony (a ranged-receive region up to `L`). `ttyRestore`, run from
-`cleanupAsync` for every program, detaches the listeners, resets raw mode if the runtime set it,
-and pauses stdin; it restores termios, not screen state, and no signal handlers are installed —
-an external SIGTERM leaves a raw terminal raw.
+packages the receive ceremony (a ranged-receive region up to `L`). `ttyRestore`, registered with
+the native-module registry and run from `cleanupAsync` for every program, detaches the listeners,
+resets raw mode if the runtime set it, and pauses stdin; it restores termios, not screen state,
+and no signal handlers are installed — an external SIGTERM leaves a raw terminal raw.
 
 ### File I/O (`SimpleFileIO`)
 

@@ -3,7 +3,7 @@
  * A program-relative module of examples/battallion. Pure: no process, no receive, no timer.
  *
  * INPUT CONTRACT. The input is the payload of a `Tty.TTY_DATA` event, which the runtime builds
- * with `chunk.toString('latin1')` (`rt/src/builtins/tty.mts:150`): one code unit per byte, in
+ * with `chunk.toString('latin1')` (`rt/src/ffi/node/tty.mts:153`): one code unit per byte, in
  * 0..255, independent of where chunk boundaries fall. So a "character" in this module's input is
  * a byte, and a multibyte UTF-8 character is several of them. A code unit above 255 cannot come
  * from that source; should one arrive, it is passed through as a printable key.

@@ -1,0 +1,1 @@
+troupec: 'ttySize' is provided by native module 'Tty': add 'require native Tty'

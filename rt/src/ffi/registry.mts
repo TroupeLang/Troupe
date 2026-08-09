@@ -38,3 +38,23 @@ export function resolve(name: string): NativeExports {
     }
     return table
 }
+
+// Shutdown restores. A native module that holds host state a program's death
+// must not leave behind (the terminal's raw mode, an armed subscription)
+// registers a restore function alongside its export table; the runtime's
+// cleanup path (cleanupAsync, runtimeMonitored.mts) runs every registered
+// restore, in registration order, without importing any host-specific module.
+// A restore runs outside any thread, must be safe when nothing was set up,
+// and must be safe to run twice — cleanup runs on every termination route
+// that reaches it.
+const __cleanups: Array<() => void> = []
+
+export function registerCleanup(fn: () => void): void {
+    __cleanups.push(fn)
+}
+
+export function runCleanups(): void {
+    for (const fn of __cleanups) {
+        fn()
+    }
+}

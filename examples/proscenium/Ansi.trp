@@ -1,0 +1,88 @@
+(* Ansi — the escape-sequence vocabulary Proscenium writes, as pure string data.
+ *
+ * A program-relative module of examples/proscenium. Pure: every export is a string or a
+ * function returning one; no descriptor, no process, no effect. The renderer and the
+ * supervisor (Term.trp) are the writers; nothing here writes.
+ *
+ * The vocabulary is the xterm one. Proscenium carries no terminfo: every modern terminal
+ * library surveyed for this design (Ink, terminal-kit, Bubble Tea, Textual) assumes an
+ * xterm-compatible terminal, and the sequences below are that common core. A terminal that
+ * does not know a private mode ignores its set/reset pair, which is why the synchronized
+ * output brackets are safe to emit unconditionally.
+ *
+ * MODE PAIRS come as enter/leave values. The supervisor writes them around the session:
+ * `enterAlt`/`leaveAlt` switch to the alternate screen buffer and back (the shell's
+ * scrollback is untouched); `disableWrap`/`enableWrap` clear and set DECAWM so an over-wide
+ * row is clipped at the right edge instead of wrapping and scrolling the frame
+ * (examples/battallion/Screen.trp's header records the failure mode); `hideCursor`/
+ * `showCursor` bracket each frame; `enablePaste`/`disablePaste` turn on bracketed paste
+ * (mode 2004), and `enableMouse`/`disableMouse` turn on SGR mouse reporting (modes 1000 +
+ * 1006), whose reports arrive as CSI sequences on stdin for Key.trp to decode.
+ *
+ * SYNCHRONIZED OUTPUT (mode 2026) brackets a frame so the terminal presents it atomically:
+ * `sync s` wraps a payload in the set/reset pair. Terminals without the mode ignore the
+ * brackets and present the payload as before.
+ *
+ * COORDINATES count from zero here and are emitted counting from one, which is what the
+ * terminal expects.
+ *)
+
+let val esc = "\x1b"
+    val csi = esc ^ "["
+
+    (*------------------------------  Mode pairs  ------------------------------*)
+
+    val enterAlt     = csi ^ "?1049h"
+    val leaveAlt     = csi ^ "?1049l"
+    val disableWrap  = csi ^ "?7l"
+    val enableWrap   = csi ^ "?7h"
+    val hideCursor   = csi ^ "?25l"
+    val showCursor   = csi ^ "?25h"
+    val enablePaste  = csi ^ "?2004h"
+    val disablePaste = csi ^ "?2004l"
+    val enableMouse  = csi ^ "?1000h" ^ csi ^ "?1006h"
+    val disableMouse = csi ^ "?1006l" ^ csi ^ "?1000l"
+
+    val beginSync = csi ^ "?2026h"
+    val endSync   = csi ^ "?2026l"
+
+    (** A payload wrapped in the synchronized-output brackets. *)
+    fun sync s = beginSync ^ s ^ endSync
+
+    (*---------------------------  Cursor and erasing  -------------------------*)
+
+    (** Move the cursor to `(row, col)`, both counting from zero. *)
+    fun cursorTo (row, col) =
+        csi ^ toString (row + 1) ^ ";" ^ toString (col + 1) ^ "H"
+
+    val home        = csi ^ "H"
+    val eraseLine   = csi ^ "2K"
+    val eraseBelow  = csi ^ "J"
+    val eraseScreen = csi ^ "2J"
+
+    (** DECSCUSR: select the cursor's shape. 0 is the terminal's default; 2, 4, 6 are the
+     *  steady block, underline, and bar. The space before the final byte is part of the
+     *  sequence. *)
+    fun cursorStyle n = csi ^ toString n ^ " q"
+
+in [ ("enterAlt", enterAlt)
+   , ("leaveAlt", leaveAlt)
+   , ("disableWrap", disableWrap)
+   , ("enableWrap", enableWrap)
+   , ("hideCursor", hideCursor)
+   , ("showCursor", showCursor)
+   , ("enablePaste", enablePaste)
+   , ("disablePaste", disablePaste)
+   , ("enableMouse", enableMouse)
+   , ("disableMouse", disableMouse)
+   , ("beginSync", beginSync)
+   , ("endSync", endSync)
+   , ("sync", sync)
+   , ("cursorTo", cursorTo)
+   , ("cursorStyle", cursorStyle)
+   , ("home", home)
+   , ("eraseLine", eraseLine)
+   , ("eraseBelow", eraseBelow)
+   , ("eraseScreen", eraseScreen)
+   ]
+end

@@ -1,0 +1,98 @@
+(* keyprobe — checks Key's decoding against expected events, the remainder behavior, flush
+ * readings, and the carrying-transparency invariant over every chunking of a mixed stream.
+ *
+ * Run: ./local.sh examples/proscenium/keyprobe.trp
+ *)
+
+import String
+import List
+import "./Key"
+
+let fun say s = fwrite (stdout, s)
+
+    fun check (name, ok) = say ((if ok then "PASS " else "FAIL ") ^ name ^ "\n")
+
+    val nm = {alt = false, ctrl = false, shift = false}
+    val am = {alt = true,  ctrl = false, shift = false}
+    val cm = {alt = false, ctrl = true,  shift = false}
+
+    fun decEq (bytes, want) =
+        let val (evs, rest) = Key.decode bytes
+        in evs = want andalso rest = ""
+        end
+
+    val _ = check ( "printables"
+                  , decEq ("abc", [ KEY (KEY_PRINT "a", nm), KEY (KEY_PRINT "b", nm)
+                                  , KEY (KEY_PRINT "c", nm) ]) )
+    val _ = check ("arrow",        decEq ("\x1b[A", [KEY (KEY_UP, nm)]))
+    val _ = check ("alt chord",    decEq ("\x1bx", [KEY (KEY_PRINT "x", am)]))
+    val _ = check ("ss3 f1",       decEq ("\x1bOP", [KEY (KEY_F 1, nm)]))
+    val _ = check ("tilde f5",     decEq ("\x1b[15~", [KEY (KEY_F 5, nm)]))
+    val _ = check ("ctrl arrow",   decEq ("\x1b[1;5A", [KEY (KEY_UP, cm)]))
+    val _ = check ("alt delete",   decEq ("\x1b[3;3~", [KEY (KEY_DELETE, am)]))
+    val _ = check ("insert",       decEq ("\x1b[2~", [KEY (KEY_INSERT, nm)]))
+    val _ = check ("ctrl letter",  decEq ("\x01", [KEY (KEY_CTRL "a", nm)]))
+    val _ = check ( "backtab"
+                  , decEq ("\x1b[Z", [KEY (KEY_TAB, {alt = false, ctrl = false, shift = true})]) )
+    val _ = check ( "alt-modified sequence"
+                  , decEq ("\x1b\x1b[A", [KEY (KEY_UP, am)]) )
+
+    val _ = check ( "mouse press"
+                  , decEq ( "\x1b[<0;10;5M"
+                          , [MOUSE {kind = MOUSE_PRESS 0, x = 9, y = 4, alt = false, ctrl = false, shift = false}] ) )
+    val _ = check ( "mouse release"
+                  , decEq ( "\x1b[<0;10;5m"
+                          , [MOUSE {kind = MOUSE_RELEASE 0, x = 9, y = 4, alt = false, ctrl = false, shift = false}] ) )
+    val _ = check ( "wheel up"
+                  , decEq ( "\x1b[<64;3;3M"
+                          , [MOUSE {kind = MOUSE_WHEELUP, x = 2, y = 2, alt = false, ctrl = false, shift = false}] ) )
+    val _ = check ( "drag"
+                  , decEq ( "\x1b[<32;4;4M"
+                          , [MOUSE {kind = MOUSE_DRAG 0, x = 3, y = 3, alt = false, ctrl = false, shift = false}] ) )
+    val _ = check ( "ctrl click"
+                  , decEq ( "\x1b[<16;2;2M"
+                          , [MOUSE {kind = MOUSE_PRESS 0, x = 1, y = 1, alt = false, ctrl = true, shift = false}] ) )
+
+    val _ = check ("paste", decEq ("\x1b[200~hi\x1b[201~", [PASTE "hi"]))
+    val _ = check ( "paste hides escapes"
+                  , decEq ("\x1b[200~a\x1b[Ab\x1b[201~", [PASTE "a\x1b[Ab"]) )
+
+    val eAcute = String.strCode 0xe9
+    val _ = check ("utf8 two bytes", decEq ("\xc3\xa9", [KEY (KEY_PRINT eAcute, nm)]))
+    val _ = check ("alt utf8",       decEq ("\x1b\xc3\xa9", [KEY (KEY_PRINT eAcute, am)]))
+
+    (*------------------------------  Remainders and flush  -----------------------------*)
+
+    fun restOf bytes = let val (_, rest) = Key.decode bytes in rest end
+
+    val _ = check ("lone esc pends",      restOf "\x1b" = "\x1b")
+    val _ = check ("open csi pends",      restOf "\x1b[1;5" = "\x1b[1;5")
+    val _ = check ("utf8 lead pends",     restOf "\xc3" = "\xc3")
+    val _ = check ("open paste pends",    restOf "\x1b[200~abc" = "\x1b[200~abc")
+
+    val _ = check ("flush esc",   Key.flush "\x1b" = [KEY (KEY_ESC, nm)])
+    val _ = check ("flush paste", Key.flush "\x1b[200~abc" = [PASTE "abc"])
+    val _ = check ("flush junk",  Key.flush "\x1b[1" = [KEY (KEY_UNKNOWN "\x1b[1", nm)])
+
+    (*--------------------------  Carrying transparency  --------------------------------*)
+
+    val stream = "a\x1b[A\x1bx\xc3\xa9\x1b[1;5A\x1b[<0;10;5M\x1b[200~pa\x1bste\x1b[201~\x1bOP\x1b[15~z"
+
+    val whole = let val (evs, rest) = Key.decode stream in (evs, rest) end
+
+    fun cutAt i =
+        let val p1 = String.substring (stream, 0, i)
+            val p2 = String.substring (stream, i, String.size stream)
+            val (evs1, r1) = Key.decode p1
+            val (evs2, r2) = Key.decode (r1 ^ p2)
+        in (List.append evs1 evs2, r2)
+        end
+
+    fun allCuts i =
+        if i > String.size stream then true
+        else cutAt i = whole andalso allCuts (i + 1)
+
+    val _ = check ("carrying transparent at every cut", allCuts 0)
+
+in ()
+end

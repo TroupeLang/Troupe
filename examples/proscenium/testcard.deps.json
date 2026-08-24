@@ -1,0 +1,6 @@
+{
+  "deps": [
+    {"path": "Ansi", "hash": "9vrb4ti2hssdjorne9q0n3cise4oc20240f8a3cn1mim12ecar40", "name": "Ansi"},
+    {"path": "Style", "hash": "5jrgulnqcubrdhujjkoon4i88bcamgo7ft9bhkppss69jgrhqhrg", "name": "Style"}
+  ]
+}

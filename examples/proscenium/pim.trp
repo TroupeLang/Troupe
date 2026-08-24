@@ -1,0 +1,403 @@
+(* pim — the personal information manager demonstrator: a month calendar, the selected day's
+ * agenda, and a task list, persisted as JSON through the supervisor-request protocol.
+ *
+ *   ./local.sh examples/proscenium/pim.trp --io-root /tmp/pim
+ *   ./local.sh examples/proscenium/pim.trp --io-root /tmp/pim -- notes.json
+ *
+ * The data file (first program argument, default pim.json) resolves inside --io-root; a
+ * missing file starts empty and appears on the first change. Every mutation saves: the
+ * kernel never touches the file — it sends ("save", path, json) with Term's ASK command, and
+ * the serve function runs SimpleFileIO under the supervisor's root authority (Term.trp, "THE
+ * REQUEST PROTOCOL").
+ *
+ * KEYS. Tab switches the focused pane (calendar or tasks; the focused pane carries the
+ * accent border and the ◆ marker in its title — the marker is the cue that survives
+ * without color). Calendar: arrows move by day and week, PageUp/PageDown by month, Home returns to
+ * today (underlined; a day with events carries a •), x deletes the selected day's events.
+ * Tasks: Up/Down select, Space toggles done, x deletes. Anywhere: n opens the new-event
+ * dialog, t the new-task dialog, q or CTRL-c quits. The mouse selects days and tasks and
+ * drives the dialogs.
+ *)
+
+import String
+import List
+import Number
+import Option
+import Outcome
+import Time
+import Json
+import SimpleFileIO
+import "./Term"
+import "./Key"
+import "./Image"
+import "./Style"
+import "./Widget"
+
+let val intDiv = Number.intDiv
+
+    fun imax (a, b) = if a > b then a else b
+
+    (*----------------------------------  Dates  ----------------------------------*)
+
+    fun fmt2 n = if n < 10 then "0" ^ toString n else toString n
+
+    (** The date as its sortable file spelling, YYYY-MM-DD. *)
+    fun dateKey d = toString d.year ^ "-" ^ fmt2 d.month ^ "-" ^ fmt2 d.day
+
+    fun sameDate (a, b) = a.year = b.year andalso a.month = b.month andalso a.day = b.day
+
+    val monthNames = [ "January", "February", "March", "April", "May", "June", "July"
+                     , "August", "September", "October", "November", "December" ]
+
+    fun monthName m = List.nth monthNames (m - 1)
+
+    (*----------------------------------  Model  ----------------------------------*)
+
+    (* m = {cols, rows, th, path, today, sel, events, tasks, pane, taskSel, dialogs, status}
+     * events : {date (a dateKey), time, title} list, tasks : {title, done, pri, due} list. *)
+
+    fun withM (m, sel, events, tasks, pane, taskSel, dialogs, status) =
+        { cols = m.cols, rows = m.rows, th = m.th, path = m.path, today = m.today
+        , sel = sel, events = events, tasks = tasks, pane = pane, taskSel = taskSel
+        , dialogs = dialogs, status = status }
+
+    fun withSel (m, sel)       = withM (m, sel, m.events, m.tasks, m.pane, m.taskSel, m.dialogs, m.status)
+    fun withStatus (m, s)      = withM (m, m.sel, m.events, m.tasks, m.pane, m.taskSel, m.dialogs, s)
+    fun withDialogs (m, ds)    = withM (m, m.sel, m.events, m.tasks, m.pane, m.taskSel, ds, m.status)
+    fun withPane (m, p)        = withM (m, m.sel, m.events, m.tasks, p, m.taskSel, m.dialogs, m.status)
+    fun withTaskSel (m, i)     = withM (m, m.sel, m.events, m.tasks, m.pane, i, m.dialogs, m.status)
+    fun withData (m, es, ts, s) = withM (m, m.sel, es, ts, m.pane, m.taskSel, m.dialogs, s)
+
+    fun eventsOn (m, key) = List.filter (fn e => e.date = key) m.events
+
+    (*-------------------------------  Persistence  -------------------------------*)
+
+    fun toJson m = Json.stringify {events = m.events, tasks = m.tasks}
+
+    (** One save command for the model's current data. *)
+    fun saveCmd m = [ASK ("save", m.path, toJson m)]
+
+    (** The parsed file, or empty data with a status when it does not parse as expected.
+     *  Model N (lib/Json.trp): objects are records, arrays are lists, so the items are used
+     *  directly once the two fields are known to be arrays. *)
+    fun loadData text =
+        case Json.parse text of
+             ERR e => ([], [], "corrupt file, starting empty: " ^ e.reason)
+           | OK v  =>
+                 (case (Json.field "events" v, Json.field "tasks" v) of
+                       (SOME es, SOME ts) =>
+                           if Json.kindOf es = "array" andalso Json.kindOf ts = "array"
+                           then (es, ts, "loaded")
+                           else ([], [], "unexpected file shape, starting empty")
+                     | _ => ([], [], "unexpected file shape, starting empty"))
+
+    (*---------------------------------  Dialogs  ---------------------------------*)
+
+    fun eventDialog () =
+        { kind = "newevent", title = " New event ", w = 44, h = 11
+        , form = Widget.form
+              [ Widget.label "Time (HH:MM):"
+              , Widget.input ("time", "09:00", 8)
+              , Widget.label "Title:"
+              , Widget.input ("title", "", 30)
+              , Widget.label ""
+              , Widget.buttons [("ok", "OK"), ("cancel", "Cancel")] ] }
+
+    fun taskDialog () =
+        { kind = "newtask", title = " New task ", w = 44, h = 14
+        , form = Widget.form
+              [ Widget.label "Title:"
+              , Widget.input ("title", "", 30)
+              , Widget.label "Priority:"
+              , Widget.radio ("pri", ["low", "normal", "high"], 1)
+              , Widget.label "Due (YYYY-MM-DD, empty for none):"
+              , Widget.input ("due", "", 12)
+              , Widget.label ""
+              , Widget.buttons [("ok", "OK"), ("cancel", "Cancel")] ] }
+
+    (*----------------------------------  Init  -----------------------------------*)
+
+    fun init path {cols, rows, ui, dark} =
+        let val today = Time.dateToday ()
+        in ( { cols = cols, rows = rows, th = Widget.modern dark, path = path
+             , today = today, sel = today, events = [], tasks = []
+             , pane = "cal", taskSel = 0, dialogs = [], status = "loading..." }
+           , [ASK ("load", path)] )
+        end
+
+    (*------------------------------  Dialog results  -----------------------------*)
+
+    fun setTopForm (m, d, frm) =
+        let val d' = {kind = d.kind, title = d.title, w = d.w, h = d.h, form = frm}
+        in case m.dialogs of
+                _ :: rest => withDialogs (m, d' :: rest)
+              | []        => m
+        end
+
+    fun pop m = case m.dialogs of _ :: rest => withDialogs (m, rest) | [] => m
+
+    fun addEvent (m, frm) =
+        let val title = Widget.inputText (frm, "title")
+        in if title = ""
+           then (withStatus (m, "a title is required"), [])
+           else let val e = { date = dateKey m.sel
+                            , time = Widget.inputText (frm, "time"), title = title }
+                    val m' = withData (pop m, e :: m.events, m.tasks, "event added")
+                in (m', saveCmd m')
+                end
+        end
+
+    fun addTask (m, frm) =
+        let val title = Widget.inputText (frm, "title")
+        in if title = ""
+           then (withStatus (m, "a title is required"), [])
+           else let val t = { title = title, done = false
+                            , pri = Widget.radioSel (frm, "pri")
+                            , due = Widget.inputText (frm, "due") }
+                    val m' = withData (pop m, m.events, List.append m.tasks [t], "task added")
+                in (m', saveCmd m')
+                end
+        end
+
+    fun dialogResult (m, d, frm, res) =
+        case res of
+             FR_CANCELLED  => (pop m, [])
+           | FR_PRESSED id =>
+                 (     if id = "cancel"          then (pop m, [])
+                  else if d.kind = "newevent"    then addEvent (m, frm)
+                  else if d.kind = "newtask"     then addTask (m, frm)
+                  else (pop m, []))
+           | _ => (m, [])
+
+    (*--------------------------------  Pane keys  --------------------------------*)
+
+    fun calKey (k, m) =
+        case k of
+             KEY_UP       => (withSel (m, Time.addDays m.sel (0 - 7)), [])
+           | KEY_DOWN     => (withSel (m, Time.addDays m.sel 7), [])
+           | KEY_LEFT     => (withSel (m, Time.addDays m.sel (0 - 1)), [])
+           | KEY_RIGHT    => (withSel (m, Time.addDays m.sel 1), [])
+           | KEY_PAGEUP   => (withSel (m, Time.addMonths m.sel (0 - 1)), [])
+           | KEY_PAGEDOWN => (withSel (m, Time.addMonths m.sel 1), [])
+           | KEY_HOME     => (withSel (m, m.today), [])
+           | KEY_PRINT "x" =>
+                 let val key = dateKey m.sel
+                     val kept = List.filter (fn e => e.date <> key) m.events
+                     val gone = List.length m.events - List.length kept
+                     val m' = withData (m, kept, m.tasks, toString gone ^ " event(s) deleted")
+                 in if gone = 0 then (withStatus (m, "no events on this day"), [])
+                    else (m', saveCmd m')
+                 end
+           | _ => (m, [])
+
+    fun clampTaskSel (m, i) =
+        let val n = List.length m.tasks
+        in if n = 0 then 0 else if i < 0 then 0 else if i >= n then n - 1 else i
+        end
+
+    fun taskKey (k, m) =
+        case k of
+             KEY_UP   => (withTaskSel (m, clampTaskSel (m, m.taskSel - 1)), [])
+           | KEY_DOWN => (withTaskSel (m, clampTaskSel (m, m.taskSel + 1)), [])
+           | KEY_PRINT " " =>
+                 let val ts = List.mapi (fn (i, t) =>
+                                  if i = m.taskSel
+                                  then {title = t.title, done = not t.done, pri = t.pri, due = t.due}
+                                  else t) m.tasks
+                     val m' = withData (m, m.events, ts, "task toggled")
+                 in if List.length m.tasks = 0 then (m, []) else (m', saveCmd m')
+                 end
+           | KEY_PRINT "x" =>
+                 if List.length m.tasks = 0 then (m, [])
+                 else let val ts = List.filteri (fn (i, _) => i <> m.taskSel) m.tasks
+                          val m' = withTaskSel ( withData (m, m.events, ts, "task deleted")
+                                               , clampTaskSel (withData (m, m.events, ts, ""), m.taskSel) )
+                      in (m', saveCmd m')
+                      end
+           | _ => (m, [])
+
+    fun paneKey (k, m) =
+        case k of
+             KEY_TAB => (withPane (m, if m.pane = "cal" then "tasks" else "cal"), [])
+           | KEY_PRINT "q" => (m, [QUIT])
+           | KEY_CTRL "c"  => (m, [QUIT])
+           | KEY_PRINT "n" => (withDialogs (m, [eventDialog ()]), [])
+           | KEY_PRINT "t" => (withDialogs (m, [taskDialog ()]), [])
+           | _ => if m.pane = "cal" then calKey (k, m) else taskKey (k, m)
+
+    (*----------------------------------  Update  ---------------------------------*)
+
+    fun onReply (r, m) =
+        case r of
+             ("loaded", ok, text) =>
+                 if ok
+                 then let val (es, ts, s) = loadData text
+                      in (withData (m, es, ts, s), [])
+                      end
+                 else (withStatus (m, "new file: " ^ m.path), [])
+           | ("saved", ok, msg) =>
+                 (withStatus (m, if ok then m.status ^ " — saved" else "save failed: " ^ msg), [])
+           | _ => (m, [])
+
+    fun update (ev, m) =
+        case ev of
+             RESIZED {cols, rows} =>
+                 ( { cols = cols, rows = rows, th = m.th, path = m.path, today = m.today
+                   , sel = m.sel, events = m.events, tasks = m.tasks, pane = m.pane
+                   , taskSel = m.taskSel, dialogs = m.dialogs, status = m.status }
+                 , [] )
+           | REPLY r => onReply (r, m)
+           | _ =>
+        (case m.dialogs of
+              d :: _ =>
+                  let val (frm', res) = Widget.formUpdate (ev, d.form)
+                  in dialogResult (setTopForm (m, d, frm'), d, frm', res)
+                  end
+            | [] =>
+                  (case ev of
+                        EV (KEY (k, mods)) => paneKey (k, m)
+                      | HIT (("day", y, mo, dy), MOUSE mm) =>
+                            (case mm.kind of
+                                  MOUSE_PRESS _ =>
+                                      (withPane (withSel (m, Time.dateFromYMD y mo dy), "cal"), [])
+                                | _ => (m, []))
+                      | HIT (("task", i), MOUSE mm) =>
+                            (case mm.kind of
+                                  MOUSE_PRESS _ =>
+                                      (withPane (withTaskSel (m, clampTaskSel (m, i)), "tasks"), [])
+                                | _ => (m, []))
+                      | _ => (m, [])))
+
+    (*-----------------------------------  View  ----------------------------------*)
+
+    fun calCell (th, m, focused, day, valid, hasEvents) =
+        if not valid then Image.text th.dlg "    "
+        else
+        let val d = Time.dateFromYMD m.sel.year m.sel.month day
+            val a0 = if day = m.sel.day
+                     then (if focused then th.selFocus else th.sel)
+                     else th.dlg
+            val a  = if sameDate (d, m.today)
+                     then a0 |> Style.withUnderline true
+                     else a0
+            val marker = if hasEvents then "•" else " "
+            val txt = (if day < 10 then " " ^ toString day else toString day) ^ marker ^ " "
+        in Image.region ("day", m.sel.year, m.sel.month, day) (Image.text a txt)
+        end
+
+    fun calendarContent (th, m, focused, w) =
+        let val y = m.sel.year
+            val mo = m.sel.month
+            val days = Time.daysInMonth y mo
+            val fdow = Time.dayOfWeek (Time.dateFromYMD y mo 1)
+            fun hasEv day = List.exist (fn e => e.date = dateKey (Time.dateFromYMD y mo day))
+                                       m.events
+            fun cell slot =
+                let val day = slot - fdow + 1
+                in calCell (th, m, focused, day, day >= 1 andalso day <= days, day >= 1
+                            andalso day <= days andalso hasEv day)
+                end
+            fun week r = Image.hcat (List.map (fn c => cell (r * 7 + c)) [0, 1, 2, 3, 4, 5, 6])
+            val header = monthName mo ^ " " ^ toString y
+            val hdrPad = imax (intDiv (w - String.size header) 2, 0)
+        in Image.vcat
+               ( Image.shift (hdrPad, 0) (Image.text th.title header)
+              :: Image.text th.dlg "Su  Mo  Tu  We  Th  Fr  Sa"
+              :: List.map week [0, 1, 2, 3, 4, 5] )
+        end
+
+    fun agendaContent (th, m) =
+        let val evs = List.sort (fn a => fn b => a.time <= b.time)
+                                (eventsOn (m, dateKey m.sel))
+        in if List.length evs = 0
+           then Image.text th.dlg "no events — press n"
+           else Image.vcat (List.map (fn e => Image.text th.dlg (" " ^ e.time ^ "  " ^ e.title))
+                                     evs)
+        end
+
+    fun taskRow (th, m, focused, i, t) =
+        let val a = if i = m.taskSel then (if focused then th.selFocus else th.sel) else th.dlg
+            val pri = if t.pri = 2 then "! " else if t.pri = 0 then "- " else "  "
+            val due = if t.due = "" then "" else "  (" ^ t.due ^ ")"
+            val txt = (if t.done then th.checkOn else th.checkOff) ^ pri ^ t.title ^ due
+        in Image.region ("task", i) (Image.text a txt)
+        end
+
+    fun tasksContent (th, m, focused) =
+        if List.length m.tasks = 0
+        then Image.text th.dlg "no tasks — press t"
+        else Image.vcat (List.mapi (fn (i, t) => taskRow (th, m, focused, i, t)) m.tasks)
+
+    (** The backdrop under an open dialog: the terminal's own faint rendition. *)
+    fun dimAll a = Style.default |> Style.withDim true
+
+    fun overlayDialogs (th, cols, rows, ds, base) =
+        let fun go ([], acc) = acc
+              | go (d :: rest, acc) =
+                    let val (x, y) = Widget.centered (cols, rows, d.w, d.h)
+                        val img = Image.shift (x, y)
+                                      (Widget.paneOf (th, d.w, d.h, d.title, Widget.B_ROUND,
+                                                      th.barSel,
+                                                      Widget.formView (th, d.w - 4, d.form)))
+                    in go (rest, img </> acc)
+                    end
+        in case ds of
+                [] => base
+              | _  => go (List.reverse ds, Image.mapAttrs dimAll base)
+        end
+
+    fun view m =
+        let val th = m.th
+            val calFocused = m.pane = "cal"
+            val midH = imax (m.rows - 2, 4)
+            val calW = 33
+            val calH = 11
+            val rightW = imax (m.cols - calW - 1, 20)
+            val agendaH = imax (intDiv midH 2, 4)
+            val tasksH = imax (midH - agendaH, 4)
+            val calPane = Widget.paneOf (th, calW, calH,
+                                (if calFocused then " ◆ Calendar " else " Calendar "),
+                                Widget.B_ROUND,
+                                if calFocused then th.barSel else th.bar,
+                                calendarContent (th, m, calFocused, calW - 4))
+            val left = calPane <-> Image.space (calW, imax (midH - calH, 0))
+            val agenda = Widget.paneOf (th, rightW, agendaH, " Agenda — " ^ dateKey m.sel ^ " ",
+                               Widget.B_ROUND, th.bar, agendaContent (th, m))
+            val tasks = Widget.paneOf (th, rightW, tasksH,
+                              (if calFocused then " Tasks " else " ◆ Tasks "),
+                              Widget.B_ROUND,
+                              if calFocused then th.bar else th.barSel,
+                              tasksContent (th, m, not calFocused))
+            val middle = left <|> Image.space (1, 1) <|> (agenda <-> tasks)
+            val base = Image.vcat
+                [ Image.hcat [ Image.text th.title " ● pim"
+                             , Image.text th.bar ("  " ^ m.path) ]
+                , middle
+                , Image.hcat
+                      [ Image.text th.bar "  Tab pane  n event  t task  Space done  x delete  q quit   "
+                      , Image.text th.barSel m.status ] ]
+        in overlayDialogs (th, m.cols, m.rows, m.dialogs, base)
+        end
+
+    (*----------------------------------  Serve  ----------------------------------*)
+
+    (** Runs in the supervisor, with the root authority; the kernel only ever sees the
+     *  replies. Paths resolve inside --io-root (lib/SimpleFileIO.trp). *)
+    fun serve (auth, req) =
+        case req of
+             ("load", p) =>
+                 (case SimpleFileIO.readFile (auth, p) of
+                       OK t  => ("loaded", true, t)
+                     | ERR e => ("loaded", false, e.reason))
+           | ("save", p, text) =>
+                 (case SimpleFileIO.writeFile (auth, p, text) of
+                       OK _  => ("saved", true, "")
+                     | ERR e => ("saved", false, e.reason))
+           | other => ("unserved", false, "")
+
+    val args = getCliArgs authority
+    val path = case args of p :: _ => p | [] => "pim.json"
+    val opts = {depth = Style.TRUECOLOR, mouse = true, paste = false}
+
+in Term.runServed (authority, opts, serve, {init = init path, update = update, view = view})
+end

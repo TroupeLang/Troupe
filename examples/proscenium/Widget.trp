@@ -1,0 +1,593 @@
+(* Widget — Proscenium's widget layer: dialog chrome, the form controls, and the focus ring.
+ *
+ * A program-relative module of examples/proscenium. Pure: every function maps values to
+ * values; the effectful loop stays in Term.trp. The component shape is the one the design
+ * plan fixes (_dev_planning/tui-library/step-widgets-and-demos.md): a form is a value — a
+ * control list plus a focus index — and `formUpdate` folds one Term event into it, returning
+ * the next form and a result the application acts on.
+ *
+ * A CONTROL is one entry of a dialog's vertical layout:
+ *
+ *   label s                       a text row; never focused
+ *   input (id, text, width)      a one-row text editor with its own cell cursor and
+ *                                 horizontal scrolling
+ *   checkbox (id, text, on)      toggled with Space or a click
+ *   radio (id, labels, sel)      one column of options; Up/Down move the selection while
+ *                                 the group is focused, a click selects directly
+ *   listbox (id, items, h, w)    a scrolling list with a scrollbar column; Up/Down, PageUp/
+ *                                 PageDown, Home/End move the selection, a click selects
+ *   buttons [(id, text), ...]    one centered row; Space or Enter presses the focused one,
+ *                                 Left/Right move along the row
+ *
+ * THE FOCUS RING is the flattened list of focus stops — every control except labels, and
+ * every button of a row individually. Tab cycles forward, Shift-Tab backward (the decoder
+ * reads the terminal's CSI Z as Tab with shift). Enter anywhere presses the focused button
+ * if a button is focused, and otherwise the form's first button — the Turbo Vision default-
+ * button reading.
+ *
+ * `formUpdate` RETURNS one of: FR_NONE (the event was consumed or ignored), FR_PRESSED id
+ * (a button), FR_CHANGED id (a checkbox, radio, or list selection moved by key or click),
+ * FR_CANCELLED (Esc). Input edits return FR_NONE; the application reads the text with
+ * `inputText` when a button lands.
+ *
+ * MOUSE. Every focus stop's view carries a region tag — ("ctl", i, j) for a control (j is
+ * the button index within a row, 0 elsewhere), ("opt", i, j) for one radio option, and
+ * ("row", i, j) for one visible list row. `formUpdate` acts on HIT events with those tags:
+ * a press focuses the stop, and presses a button, toggles a checkbox, or selects the option
+ * or row it names. The application only routes `HIT (tag, _)` events whose tags it did not
+ * place itself into `formUpdate`.
+ *
+ * THE THEME is a record of attributes; `turbo ()` is the Turbo Vision palette on the basic
+ * 16 colors. A function rather than a value: a module's top level must not call functions
+ * (the export table dies in the loader), and attribute records are built by Style calls.
+ *
+ * WIDTH is UTF-16 code units, as everywhere in Proscenium (Image.trp's header); the input
+ * editor moves and deletes by code unit, so an astral-plane character is two positions —
+ * accepted for now, alongside the width-table deferral.
+ *)
+
+import List
+import String
+import Number
+import Option
+import "./Image"
+import "./Style"
+import "./Key"
+import "./Term"
+
+datatype control =
+      LABEL    of string
+    | INPUT    of {id : string, text : string, cursor : int, scroll : int, width : int}
+    | CHECKBOX of {id : string, text : string, on : bool}
+    | RADIO    of {id : string, labels : string list, sel : int}
+    | LISTBOX  of {id : string, items : string list, sel : int, top : int,
+                   height : int, width : int}
+    | BUTTONS  of {buttons : {id : string, text : string} list}
+
+datatype formResult = FR_NONE
+                    | FR_PRESSED of string
+                    | FR_CHANGED of string
+                    | FR_CANCELLED
+
+datatype borderKind = B_SINGLE | B_DOUBLE | B_ROUND
+
+let val intDiv = Number.intDiv
+
+    fun imax (a, b) = if a > b then a else b
+    fun imin (a, b) = if a < b then a else b
+    fun clamp (lo, hi, v) = if v < lo then lo else if v > hi then hi else v
+
+    (*----------------------------------  Theme  ----------------------------------*)
+
+    fun attr (f, b) = Style.withBg (Style.BASIC b) (Style.withFg (Style.BASIC f) Style.default)
+
+    (** The Turbo Vision palette on the basic 16 colors, with its glyph decorations. *)
+    fun turbo () =
+        { desktop     = attr (6, 4)      (* cyan on blue, under the ▒ fill        *)
+        , bar         = attr (0, 7)      (* menu and status bars: black on gray   *)
+        , barSel      = attr (0, 2)      (* the open menu title: black on green   *)
+        , dlg         = attr (0, 7)      (* dialog surface and labels             *)
+        , title       = attr (4, 7)      (* dialog title: blue on gray            *)
+        , input       = attr (7, 4)      (* input strip: white on blue            *)
+        , inputFocus  = attr (15, 4)     (* focused input: bright white on blue   *)
+        , button      = attr (0, 2)      (* black on green                        *)
+        , buttonFocus = attr (15, 2)     (* focused button: bright white on green *)
+        , sel         = attr (0, 6)      (* selection, unfocused: black on cyan   *)
+        , selFocus    = attr (0, 2)      (* selection, focused: black on green    *)
+        , shadow      = attr (7, 0)      (* the black offset shadow               *)
+        , checkOn     = "[X] ",   checkOff = "[ ] "
+        , radioOn     = "(•) ",   radioOff = "( ) "
+        , btnL        = "[ ",     btnR     = " ]"
+        , btnFocusL   = "▶ ",     btnFocusR = " ◀"
+        }
+
+    (** The modern skin, per the 2022–2026 survey in the design plan: terminal-default
+     *  background everywhere, one accent (Catppuccin mauve, degrading with the depth
+     *  option), a gray ramp for secondary text, huh-style buttons whose focus is an accent
+     *  background fill, ●/○ radios and ◼/◻ checkboxes. Pair it with rounded borders
+     *  (`paneOf`/`boxOf` with B_ROUND), the accent on the focused border only. *)
+    (* CLOSED PALETTES. A terminal offers two self-consistent design systems: the user's
+     * base-16 palette, and a fully self-painted palette whose contrast the theme controls.
+     * Every readability defect this skin shipped came from mixing systems inside one cell —
+     * a fixed background under the terminal's foreground, a fixed foreground on the
+     * terminal's background, reverse video building bands from the user's colors. The rule:
+     * every attribute that carries a background is an explicit fg+bg pair from the
+     * variant's own ramp; attributes on the terminal-default background carry only a
+     * foreground tuned to the detected polarity, or a style (underline, bold, dim).
+     * Term.run detects the polarity with the OSC 11 background query (fallback: light) and
+     * hands it to init as `dark`; the application passes it here. *)
+
+    (** The modern skin as a light/dark pair of closed palettes: Catppuccin Latte mauve and
+     *  a light-gray ramp on a light terminal, Mocha mauve and a dark-gray ramp on a dark
+     *  one. Selections are subtle explicit tint pairs; input fields are underlined;
+     *  huh-style buttons fill with the accent under focus. Pair it with rounded borders
+     *  (`paneOf`/`boxOf` with B_ROUND), the accent on the focused border only. *)
+    fun modern dark =
+        let val accent = if dark then Style.RGB (203, 166, 247)   (* Mocha mauve *)
+                         else Style.RGB (136, 57, 239)            (* Latte mauve *)
+            val plain  = Style.default
+            fun fg n   = plain |> Style.withFg (Style.IDX n)
+            fun pair (f, b) = plain |> Style.withFg (Style.IDX f) |> Style.withBg (Style.IDX b)
+        in
+        { desktop     = plain
+        , bar         = if dark then fg 245 else fg 243           (* secondary text        *)
+        , barSel      = plain |> Style.withFg accent
+        , dlg         = plain
+        , title       = plain |> Style.withFg accent |> Style.withBold true
+          (* Input fields are underlined for their whole width: a bare field is invisible
+           * while empty, and any tinted strip fights one polarity or the other. The
+           * underline inherits the terminal's contrast; the cursor sitting in the field is
+           * the focus cue — bold was tried and read as noise. *)
+        , input       = plain |> Style.withUnderline true
+        , inputFocus  = plain |> Style.withUnderline true
+        , button      = if dark then pair (252, 237) else pair (236, 252)
+        , buttonFocus = (if dark then plain |> Style.withFg (Style.RGB (30, 30, 46))
+                         else plain |> Style.withFg (Style.RGB (252, 250, 255)))
+                        |> Style.withBg accent
+          (* Selection tints: barely-raised explicit pairs from the variant's ramp — the
+           * focused one a step stronger; the pointer and pane marker carry focus, so the
+           * tints stay quiet. *)
+        , sel         = if dark then pair (250, 236) else pair (240, 254)
+        , selFocus    = if dark then pair (254, 238) else pair (232, 252)
+        , shadow      = if dark then fg 245 else fg 243
+        , checkOn     = "◼ ",     checkOff = "◻ "
+        , radioOn     = "● ",     radioOff = "○ "
+        , btnL        = "  ",     btnR     = "  "
+        , btnFocusL   = "  ",     btnFocusR = "  "
+        }
+        end
+
+    (*----------------------------------  Chrome  ----------------------------------*)
+
+    (** A full-width one-row bar: `label` over a fill of `a`. The stretch wrapper pins the
+     *  height — a bare fill carries vertical weight 1, and a bar that kept it would be
+     *  handed surplus rows by the layout. *)
+    fun bar (a, label) =
+        Image.stretch (1, 0) (Image.overlay (Image.text a label) (Image.fillA a " "))
+
+    fun boxRow (l, m, r, w) = l ^ String.repeat (w - 2) m ^ r
+
+    (** A bordered box of `(w, h)` in attribute `a`, with the border kind's glyph set —
+     *  B_ROUND is the modern rounded set. *)
+    fun boxOf (a, w, h, kind) =
+        let val (tl, hz, tr, vt, bl, br) =
+                case kind of
+                     B_DOUBLE => ("╔", "═", "╗", "║", "╚", "╝")
+                   | B_ROUND  => ("╭", "─", "╮", "│", "╰", "╯")
+                   | _        => ("┌", "─", "┐", "│", "└", "┘")
+            val topR = Image.text a (boxRow (tl, hz, tr, w))
+            val botR = Image.text a (boxRow (bl, hz, br, w))
+            val midR = Image.text a (boxRow (vt, " ", vt, w))
+            fun mids k = if k <= 0 then [] else midR :: mids (k - 1)
+        in Image.vcat (topR :: List.append (mids (h - 2)) [botR])
+        end
+
+    fun box (a, w, h, dbl) = boxOf (a, w, h, if dbl then B_DOUBLE else B_SINGLE)
+
+    (** `d` with its shadow: the silhouette of `d`'s exact size in the shadow rendition,
+     *  offset one row down and two columns right, under it. *)
+    fun withShadow (th, d) =
+        Image.overlay d (Image.shift (2, 1)
+                             (Image.crop (0, 0, Image.width d, Image.height d)
+                                         (Image.fillA th.shadow " ")))
+
+    (** A double-bordered, titled, shadowed dialog of `(w, h)` around `body`, which is
+     *  placed inside the borders and clipped to them. *)
+    fun dialog (th, title, w, h, body) =
+        let val label = Image.shift (intDiv (w - String.size title) 2, 0)
+                                    (Image.text th.title title)
+            val inner = Image.shift (3, 2) (Image.crop (0, 0, w - 4, h - 3) body)
+        in withShadow (th, Image.overlay label (Image.overlay inner (box (th.dlg, w, h, true))))
+        end
+
+    (** The top-left corner that centers a `(w, h)` box on a `(cols, rows)` screen. *)
+    fun centered (cols, rows, w, h) = (intDiv (cols - w) 2, intDiv (rows - h) 2)
+
+    (** A titled pane with a chosen border kind and border attribute — the modern shape:
+     *  rounded borders, the accent attribute on the focused pane's border, the title
+     *  embedded in the top border line. `content` sits inside the borders, clipped. *)
+    fun paneOf (th, w, h, title, kind, borderA, content) =
+        let val lbl = Image.shift (2, 0) (Image.text th.title title)
+            val inner = Image.shift (2, 1) (Image.crop (0, 0, w - 4, h - 2) content)
+        in Image.overlay lbl (Image.overlay inner (boxOf (borderA, w, h, kind)))
+        end
+
+    (** The Turbo Vision pane: single borders, double when `dbl` marks it focused. *)
+    fun pane (th, w, h, title, dbl, content) =
+        paneOf (th, w, h, title, if dbl then B_DOUBLE else B_SINGLE, th.dlg, content)
+
+    (** A `w`-cell progress bar showing `done` of `total`. The fill paints glyphs, so it
+     *  uses the accent foreground (`th.barSel`), not the reverse-video selection. *)
+    fun gauge (th, w, done, total) =
+        let val t = imax (total, 1)
+            val filled = imin (intDiv (done * w) t, w)
+        in Image.beside (Image.text th.barSel (String.repeat filled "█"))
+                        (Image.text th.bar (String.repeat (w - filled) "░"))
+        end
+
+    (** The last `w` of `values` (newest first) as one row of eighth-block bars, scaled to
+     *  the largest shown value. *)
+    fun sparkline (th, values, w) =
+        let val shown = List.reverse (List.take w values)
+            val top = imax (List.foldl (fn (v, a) => imax (v, a)) 0 shown, 1)
+            val glyphs = ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"]
+            fun cell v = List.nth glyphs (imin (intDiv (v * 8) top, 7))
+        in Image.text th.barSel
+                      (List.foldl (fn (v, acc) => acc ^ cell v) "" shown)
+        end
+
+    (*-------------------------------  Constructors  -------------------------------*)
+
+    fun label s = LABEL s
+
+    fun input (id, text, width) =
+        INPUT {id = id, text = text, cursor = String.size text, scroll = 0, width = width}
+
+    fun checkbox (id, text, on) = CHECKBOX {id = id, text = text, on = on}
+
+    fun radio (id, labels, sel) = RADIO {id = id, labels = labels, sel = sel}
+
+    fun listbox (id, items, height, width) =
+        LISTBOX {id = id, items = items, sel = 0, top = 0, height = height, width = width}
+
+    fun buttons pairs =
+        BUTTONS {buttons = List.map (fn (id, text) => {id = id, text = text}) pairs}
+
+    fun form controls = {controls = controls, focus = 0}
+
+    (*----------------------------------  Values  ----------------------------------*)
+
+    fun findControl (frm, want) =
+        List.find (fn c => case c of
+                                INPUT r    => r.id = want
+                              | CHECKBOX r => r.id = want
+                              | RADIO r    => r.id = want
+                              | LISTBOX r  => r.id = want
+                              | _          => false)
+                  frm.controls
+
+    (** The text of the input `id`; "" when there is no such input. *)
+    fun inputText (frm, id) =
+        case findControl (frm, id) of SOME (INPUT r) => r.text | _ => ""
+
+    (** Whether the checkbox `id` is on. *)
+    fun checkboxOn (frm, id) =
+        case findControl (frm, id) of SOME (CHECKBOX r) => r.on | _ => false
+
+    (** The selected index of the radio group `id`. *)
+    fun radioSel (frm, id) =
+        case findControl (frm, id) of SOME (RADIO r) => r.sel | _ => 0
+
+    (** The selected item of the listbox `id`; "" when there is none. *)
+    fun listItem (frm, id) =
+        case findControl (frm, id) of
+             SOME (LISTBOX r) => (case List.find (fn _ => true) (List.drop r.sel r.items) of
+                                       SOME it => it
+                                     | NONE    => "")
+           | _ => ""
+
+    (*--------------------------------  Focus ring  --------------------------------*)
+
+    (** Every focus stop as (control index, sub index): labels contribute none, a button row
+     *  one per button, everything else one. *)
+    fun stops controls =
+        List.concat (List.mapi (fn (i, c) =>
+            case c of LABEL _            => []
+                    | BUTTONS {buttons}  => List.mapi (fn (j, _) => (i, j)) buttons
+                    | _                  => [(i, 0)]) controls)
+
+    fun focusedStop frm =
+        let val ss = stops frm.controls
+            val n = List.length ss
+        in if n = 0 then NONE else SOME (List.nth ss (frm.focus mod n))
+        end
+
+    fun moveFocus (frm, d) =
+        let val n = List.length (stops frm.controls)
+        in if n = 0 then frm
+           else {controls = frm.controls, focus = (frm.focus + d + n) mod n}
+        end
+
+    fun focusTo (frm, i, j) =
+        let val ss = stops frm.controls
+            fun idx ([], _)              = 0
+              | idx ((a, b) :: rest, k)  = if a = i andalso b = j then k else idx (rest, k + 1)
+        in {controls = frm.controls, focus = idx (ss, 0)}
+        end
+
+    fun setControl (frm, i, c) =
+        { controls = List.mapi (fn (j, old) => if j = i then c else old) frm.controls
+        , focus = frm.focus }
+
+    fun controlAt (frm, i) = List.nth frm.controls i
+
+    (** The id of the form's first button — the default Enter presses. *)
+    fun defaultButton controls =
+        let fun go [] = NONE
+              | go (c :: rest) =
+                    (case c of
+                          BUTTONS {buttons} =>
+                              (case buttons of b :: _ => SOME b.id | [] => go rest)
+                        | _ => go rest)
+        in go controls
+        end
+
+    (*-----------------------------  Per-control keys  -----------------------------*)
+
+    (** Keep the cursor visible: scroll follows it at either edge. *)
+    fun inputScroll r =
+        let val scroll = if r.cursor < r.scroll then r.cursor
+                         else if r.cursor > r.scroll + r.width - 1 then r.cursor - r.width + 1
+                         else r.scroll
+        in { id = r.id, text = r.text, cursor = r.cursor, scroll = scroll, width = r.width }
+        end
+
+    fun inputWith (r, text, cursor) =
+        inputScroll { id = r.id, text = text, cursor = cursor, scroll = r.scroll
+                    , width = r.width }
+
+    fun inputKey (k, r) =
+        let val n = String.size r.text
+        in case k of
+                KEY_PRINT c =>
+                    inputWith ( r
+                              , String.substring (r.text, 0, r.cursor) ^ c
+                                ^ String.substring (r.text, r.cursor, n)
+                              , r.cursor + String.size c )
+              | KEY_BACKSPACE =>
+                    if r.cursor = 0 then r
+                    else inputWith ( r
+                                   , String.substring (r.text, 0, r.cursor - 1)
+                                     ^ String.substring (r.text, r.cursor, n)
+                                   , r.cursor - 1 )
+              | KEY_DELETE =>
+                    if r.cursor >= n then r
+                    else inputWith ( r
+                                   , String.substring (r.text, 0, r.cursor)
+                                     ^ String.substring (r.text, r.cursor + 1, n)
+                                   , r.cursor )
+              | KEY_LEFT  => inputWith (r, r.text, imax (r.cursor - 1, 0))
+              | KEY_RIGHT => inputWith (r, r.text, imin (r.cursor + 1, n))
+              | KEY_HOME  => inputWith (r, r.text, 0)
+              | KEY_END   => inputWith (r, r.text, n)
+              | _ => r
+        end
+
+    (** Keep the selection visible: top follows it at either edge. *)
+    fun listWith (r, sel) =
+        let val n = List.length r.items
+            val sel' = clamp (0, imax (n - 1, 0), sel)
+            val top = if sel' < r.top then sel'
+                      else if sel' >= r.top + r.height then sel' - r.height + 1
+                      else r.top
+        in { id = r.id, items = r.items, sel = sel', top = top
+           , height = r.height, width = r.width }
+        end
+
+    fun listKey (k, r) =
+        case k of
+             KEY_UP       => listWith (r, r.sel - 1)
+           | KEY_DOWN     => listWith (r, r.sel + 1)
+           | KEY_PAGEUP   => listWith (r, r.sel - r.height)
+           | KEY_PAGEDOWN => listWith (r, r.sel + r.height)
+           | KEY_HOME     => listWith (r, 0)
+           | KEY_END      => listWith (r, List.length r.items - 1)
+           | _ => r
+
+    fun radioWith (r, sel) =
+        {id = r.id, labels = r.labels, sel = clamp (0, List.length r.labels - 1, sel)}
+
+    (*---------------------------------  formUpdate  --------------------------------*)
+
+    fun buttonIdAt (c, j) =
+        case c of BUTTONS {buttons} =>
+                      (case List.find (fn _ => true) (List.drop j buttons) of
+                            SOME b => SOME b.id
+                          | NONE   => NONE)
+                | _ => NONE
+
+    fun formKey (k, mods, frm) =
+        case k of
+             KEY_TAB => (moveFocus (frm, if mods.shift then 0 - 1 else 1), FR_NONE)
+           | KEY_ESC => (frm, FR_CANCELLED)
+           | _ =>
+        (case focusedStop frm of
+              NONE => (frm, FR_NONE)
+            | SOME (i, j) =>
+        (case (k, controlAt (frm, i)) of
+              (KEY_ENTER, c) =>
+                  (case buttonIdAt (c, j) of
+                        SOME id => (frm, FR_PRESSED id)
+                      | NONE => (case defaultButton frm.controls of
+                                      SOME id => (frm, FR_PRESSED id)
+                                    | NONE    => (frm, FR_NONE)))
+            | (KEY_PRINT " ", BUTTONS b) =>
+                  (case buttonIdAt (BUTTONS b, j) of
+                        SOME id => (frm, FR_PRESSED id)
+                      | NONE    => (frm, FR_NONE))
+            | (KEY_PRINT " ", CHECKBOX r) =>
+                  ( setControl (frm, i, CHECKBOX {id = r.id, text = r.text, on = not r.on})
+                  , FR_CHANGED r.id )
+            | (KEY_LEFT,  BUTTONS _) => (moveFocus (frm, 0 - 1), FR_NONE)
+            | (KEY_RIGHT, BUTTONS _) => (moveFocus (frm, 1), FR_NONE)
+            | (KEY_UP,   RADIO r) => (setControl (frm, i, RADIO (radioWith (r, r.sel - 1))), FR_CHANGED r.id)
+            | (KEY_DOWN, RADIO r) => (setControl (frm, i, RADIO (radioWith (r, r.sel + 1))), FR_CHANGED r.id)
+            | (_, INPUT r)   => (setControl (frm, i, INPUT (inputKey (k, r))), FR_NONE)
+            | (_, LISTBOX r) =>
+                  let val r' = listKey (k, r)
+                  in ( setControl (frm, i, LISTBOX r')
+                     , if r'.sel = r.sel then FR_NONE else FR_CHANGED r.id )
+                  end
+            | _ => (frm, FR_NONE)))
+
+    fun formHit (tag, frm) =
+        case tag of
+             ("ctl", i, j) =>
+                 let val frm' = focusTo (frm, i, j)
+                 in case controlAt (frm', i) of
+                         BUTTONS b =>
+                             (case buttonIdAt (BUTTONS b, j) of
+                                   SOME id => (frm', FR_PRESSED id)
+                                 | NONE    => (frm', FR_NONE))
+                       | CHECKBOX r =>
+                             ( setControl (frm', i, CHECKBOX {id = r.id, text = r.text, on = not r.on})
+                             , FR_CHANGED r.id )
+                       | _ => (frm', FR_NONE)
+                 end
+           | ("opt", i, j) =>
+                 (case controlAt (frm, i) of
+                       RADIO r => ( setControl (focusTo (frm, i, 0), i, RADIO (radioWith (r, j)))
+                                  , FR_CHANGED r.id )
+                     | _ => (frm, FR_NONE))
+           | ("row", i, j) =>
+                 (case controlAt (frm, i) of
+                       LISTBOX r => ( setControl (focusTo (frm, i, 0), i, LISTBOX (listWith (r, j)))
+                                    , FR_CHANGED r.id )
+                     | _ => (frm, FR_NONE))
+           | _ => (frm, FR_NONE)
+
+    (** One Term event folded into the form. Key events route to the focused control; a
+     *  mouse press on a tagged region focuses and acts on it; everything else is ignored. *)
+    fun formUpdate (tev, frm) =
+        case tev of
+             EV (KEY (k, mods)) => formKey (k, mods, frm)
+           | HIT (tag, MOUSE m) =>
+                 (case m.kind of
+                       MOUSE_PRESS _ => formHit (tag, frm)
+                     | _             => (frm, FR_NONE))
+           | _ => (frm, FR_NONE)
+
+    (*----------------------------------  Views  -----------------------------------*)
+
+    fun padTo (s, w) = if String.size s >= w then String.substring (s, 0, w)
+                       else s ^ String.repeat (w - String.size s) " "
+
+    (* The focused input places the real terminal cursor (a bar, insert-style) on its cell
+     * via the view's cursor marker; the renderer draws it, so the cell itself keeps its
+     * ordinary rendition. *)
+    fun inputView (th, i, r, foc) =
+        let val a = if foc then th.inputFocus else th.input
+            val visible = padTo (String.substring (r.text, r.scroll, r.scroll + r.width), r.width)
+            val img =
+                if foc
+                then let val cc = r.cursor - r.scroll
+                         val pre = String.substring (visible, 0, cc)
+                         val cur = if cc < String.size visible
+                                   then String.substring (visible, cc, cc + 1) else " "
+                         val post = String.substring (visible, cc + 1, String.size visible)
+                     in Image.hcat [ Image.text a pre
+                                   , Image.cursor CURSOR_BAR (Image.text a cur)
+                                   , Image.text a post ]
+                     end
+                else Image.text a visible
+        in Image.region ("ctl", i, 0) img
+        end
+
+    fun listView (th, i, r, foc) =
+        let val n = List.length r.items
+            val thumb = if n <= 1 then 0 else intDiv (r.sel * (r.height - 1)) (n - 1)
+            fun row j =
+                let val item = case List.find (fn _ => true) (List.drop j r.items) of
+                                    SOME it => it
+                                  | NONE    => ""
+                    val a = if j = r.sel then (if foc then th.selFocus else th.sel) else th.dlg
+                    val barCell = if j - r.top = thumb then "█" else "▒"
+                in Image.beside (Image.region ("row", i, j)
+                                              (Image.text a (padTo (" " ^ item, r.width - 1))))
+                                (Image.text th.dlg barCell)
+                end
+            fun rows (j, k) = if k <= 0 then [] else row j :: rows (j + 1, k - 1)
+        in Image.vcat (rows (r.top, r.height))
+        end
+
+    fun buttonRowView (th, w, i, bs, focJ) =
+        let val imgs = List.mapi (fn (j, b) =>
+                           Image.region ("ctl", i, j)
+                               (if j = focJ
+                                then Image.text th.buttonFocus (th.btnFocusL ^ b.text ^ th.btnFocusR)
+                                else Image.text th.button (th.btnL ^ b.text ^ th.btnR)))
+                       bs
+            fun gap imgs' = case imgs' of
+                                 []        => []
+                               | [x]       => [x]
+                               | x :: rest => x :: Image.space (2, 1) :: gap rest
+            val rowImg = Image.hcat (gap imgs)
+        in Image.shift (imax (intDiv (w - Image.width rowImg) 2, 0), 0) rowImg
+        end
+
+    (** One control's image; `foc` is the focused sub index (the button within a row, 0 for
+     *  other controls), or -1 when the control is not focused. *)
+    fun controlView (th, w, i, c, foc) =
+        case c of
+             LABEL s => Image.text th.dlg s
+           | INPUT r => inputView (th, i, r, foc >= 0)
+           | CHECKBOX r =>
+                 Image.region ("ctl", i, 0)
+                     (Image.text (if foc >= 0 then th.selFocus else th.dlg)
+                                 ((if r.on then th.checkOn else th.checkOff) ^ r.text))
+           | RADIO r =>
+                 Image.vcat (List.mapi (fn (j, l) =>
+                     Image.region ("opt", i, j)
+                         (Image.text (if foc >= 0 andalso j = r.sel then th.selFocus
+                                      else th.dlg)
+                                     ((if j = r.sel then th.radioOn else th.radioOff) ^ l)))
+                     r.labels)
+           | LISTBOX r => listView (th, i, r, foc >= 0)
+           | BUTTONS {buttons} => buttonRowView (th, w, i, buttons, foc)
+
+    (** The form as one image, `w` columns wide, controls stacked in order. *)
+    fun formView (th, w, frm) =
+        let val (fi, fj) = case focusedStop frm of SOME s => s | NONE => (0 - 1, 0 - 1)
+        in Image.vcat (List.mapi (fn (i, c) =>
+                           controlView (th, w, i, c, if i = fi then fj else 0 - 1))
+                       frm.controls)
+        end
+
+in [ ("turbo", turbo)
+   , ("modern", modern)
+   , ("padTo", padTo)
+   , ("bar", bar)
+   , ("box", box)
+   , ("boxOf", boxOf)
+   , ("paneOf", paneOf)
+   , ("withShadow", withShadow)
+   , ("dialog", dialog)
+   , ("centered", centered)
+   , ("pane", pane)
+   , ("gauge", gauge)
+   , ("sparkline", sparkline)
+   , ("label", label)
+   , ("input", input)
+   , ("checkbox", checkbox)
+   , ("radio", radio)
+   , ("listbox", listbox)
+   , ("buttons", buttons)
+   , ("form", form)
+   , ("inputText", inputText)
+   , ("checkboxOn", checkboxOn)
+   , ("radioSel", radioSel)
+   , ("listItem", listItem)
+   , ("formUpdate", formUpdate)
+   , ("formView", formView)
+   ]
+end

@@ -1,0 +1,191 @@
+(* edit — the text-editor demo on the TextView widget: full-bleed buffer with a line-number
+ * gutter, the real bar cursor, mouse click-to-position and wheel scrolling, an optional
+ * vertical split, and file load/save through the supervisor-request protocol.
+ *
+ *   ./local.sh examples/proscenium/edit.trp --io-root /tmp/edit
+ *   ./local.sh examples/proscenium/edit.trp --io-root /tmp/edit -- notes.txt
+ *
+ * The file (first program argument, default scratch.txt) resolves inside --io-root; a
+ * missing file opens an empty buffer. CTRL-s saves, CTRL-q or CTRL-c quits (unsaved changes
+ * show as [+] in the title and are lost on quit — this demo has no are-you-sure dialog).
+ * CTRL-t toggles a vertical split — two views of the one buffer, each with its own cursor
+ * and scroll — and CTRL-w moves the focus between them; the focused view has the terminal
+ * cursor, and an edit in one view appears in the other at once. A click focuses the view it
+ * lands in and positions its cursor. Everything else edits: printables, Enter, Backspace,
+ * Delete, arrows, Home/End, PageUp/PageDown, Tab as four spaces.
+ *)
+
+import String
+import List
+import Number
+import Option
+import Outcome
+import SimpleFileIO
+import "./Term"
+import "./Key"
+import "./Image"
+import "./Style"
+import "./Widget"
+import "./TextView"
+
+let val intDiv = Number.intDiv
+
+    fun imax (a, b) = if a > b then a else b
+
+    (*---------------------------------  Model  ----------------------------------*)
+
+    (* m = {cols, rows, at, path, views (one or two TextView states), focus, dirty, status} *)
+
+    fun mkAttrs () =
+        { ta = { text      = Style.default
+               , gutter    = Style.default |> Style.withFg (Style.BASIC 8)
+                 (* bold in the terminal's own foreground: yellow was unreadable on a
+                  * light terminal *)
+               , gutterCur = Style.default |> Style.withBold true }
+        , bar = Style.withBg (Style.BASIC 7) (Style.withFg (Style.BASIC 0) Style.default)
+        , divider = Style.withFg (Style.BASIC 8) Style.default }
+
+    fun withE (m, views, focus, dirty, status) =
+        { cols = m.cols, rows = m.rows, at = m.at, path = m.path
+        , views = views, focus = focus, dirty = dirty, status = status }
+
+    fun textH m = imax (m.rows - 2, 1)
+
+    (** The width of view `i` under the current layout: a lone view has the whole width; a
+     *  split gives the left view half, the right the rest after the divider column. *)
+    fun viewW (m, i) =
+        if List.length m.views = 1 then m.cols
+        else let val w0 = intDiv (m.cols - 1) 2
+             in if i = 0 then w0 else m.cols - 1 - w0
+             end
+
+    (** The screen column view `i` starts at. *)
+    fun viewX (m, i) = if i = 0 then 0 else viewW (m, 0) + 1
+
+    fun viewAt (m, i) = List.nth m.views i
+
+    fun focused m = viewAt (m, m.focus)
+
+    (** The focused view replaced by `tv'`; when the buffer changed, the other views are
+     *  brought up to date with TextView.tvSync. *)
+    fun setFocused (m, tv', edited) =
+        List.mapi (fn (i, v) => if i = m.focus then tv'
+                                else if edited then TextView.tvSync (tv', v)
+                                else v)
+                  m.views
+
+    fun init path {cols, rows, ui, dark} =
+        ( { cols = cols, rows = rows, at = mkAttrs (), path = path
+          , views = [TextView.tvInit [""]], focus = 0, dirty = false, status = "loading..." }
+        , [ASK ("load", path)] )
+
+    (*---------------------------------  Update  ---------------------------------*)
+
+    fun onReply (r, m) =
+        case r of
+             ("loaded", ok, text) =>
+                 if ok
+                 then (withE (m, [TextView.tvInit (String.lines text)], 0, false, "loaded"), [])
+                 else (withE (m, m.views, m.focus, false, "new file: " ^ m.path), [])
+           | ("saved", ok, msg) =>
+                 if ok then (withE (m, m.views, m.focus, false, "saved"), [])
+                 else (withE (m, m.views, m.focus, m.dirty, "save failed: " ^ msg), [])
+           | _ => (m, [])
+
+    fun toggleSplit m =
+        case m.views of
+             [v]      => withE (m, [v, v], 1, m.dirty, "split")
+           | _        => withE (m, [focused m], 0, m.dirty, "unsplit")
+
+    fun cycleFocus m =
+        withE (m, m.views, (m.focus + 1) mod List.length m.views, m.dirty, m.status)
+
+    fun editKey (k, m) =
+        let val (tv', edited) = TextView.tvKey (k, focused m, viewW (m, m.focus), textH m)
+        in (withE (m, setFocused (m, tv', edited), m.focus, m.dirty orelse edited, m.status), [])
+        end
+
+    fun scrollFocused (m, d) =
+        withE ( m
+              , setFocused (m, TextView.tvScroll (focused m, viewW (m, m.focus), textH m, d), false)
+              , m.focus, m.dirty, m.status )
+
+    fun clickView (m, vid, j, sx) =
+        let val m1 = withE (m, m.views, vid, m.dirty, m.status)
+            val tv' = TextView.tvClick (viewAt (m1, vid), viewW (m1, vid), textH m1, j,
+                                        sx - viewX (m1, vid))
+        in withE (m1, setFocused (m1, tv', false), vid, m1.dirty, m1.status)
+        end
+
+    fun update (ev, m) =
+        case ev of
+             RESIZED {cols, rows} =>
+                 ( { cols = cols, rows = rows, at = m.at, path = m.path
+                   , views = m.views, focus = m.focus, dirty = m.dirty, status = m.status }
+                 , [] )
+           | REPLY r => onReply (r, m)
+           | EV (KEY (KEY_CTRL "s", _)) =>
+                 ( withE (m, m.views, m.focus, m.dirty, "saving...")
+                 , [ASK ("save", m.path, TextView.tvText (focused m))] )
+           | EV (KEY (KEY_CTRL "q", _)) => (m, [QUIT])
+           | EV (KEY (KEY_CTRL "c", _)) => (m, [QUIT])
+           | EV (KEY (KEY_CTRL "t", _)) => (toggleSplit m, [])
+           | EV (KEY (KEY_CTRL "w", _)) => (cycleFocus m, [])
+           | EV (KEY (k, mods)) => editKey (k, m)
+           | EV (MOUSE mm) =>
+                 (case mm.kind of
+                       MOUSE_WHEELUP   => (scrollFocused (m, 0 - 3), [])
+                     | MOUSE_WHEELDOWN => (scrollFocused (m, 3), [])
+                     | _               => (m, []))
+           | HIT (("ln", vid, j), MOUSE mm) =>
+                 (case mm.kind of
+                       MOUSE_PRESS _   => (clickView (m, vid, j, mm.x), [])
+                     | MOUSE_WHEELUP   => (scrollFocused (m, 0 - 3), [])
+                     | MOUSE_WHEELDOWN => (scrollFocused (m, 3), [])
+                     | _ => (m, []))
+           | _ => (m, [])
+
+    (*----------------------------------  View  ----------------------------------*)
+
+    fun view m =
+        let val cur = let val f = focused m in f.cur end
+            val title = "  edit — " ^ m.path ^ (if m.dirty then " [+]" else "")
+                        ^ (if List.length m.views = 2 then "   Ctrl-W other pane" else "")
+            val stat = "  Ctrl-S save  Ctrl-T split  Ctrl-Q quit   Ln " ^ toString (cur.row + 1)
+                       ^ ", Col " ^ toString (cur.col + 1) ^ "   " ^ m.status
+            val h = textH m
+            val body =
+                case m.views of
+                     [v] => TextView.tvView (m.at.ta, 0, m.cols, h, true, v)
+                   | [a, b] =>
+                         Image.hcat
+                             [ TextView.tvView (m.at.ta, 0, viewW (m, 0), h, m.focus = 0, a)
+                             , Image.crop (0, 0, 1, h) (Image.fillA m.at.divider "│")
+                             , TextView.tvView (m.at.ta, 1, viewW (m, 1), h, m.focus = 1, b) ]
+                   | _ => Image.empty
+        in Image.vcat [Widget.bar (m.at.bar, title), body, Widget.bar (m.at.bar, stat)]
+        end
+
+    (*----------------------------------  Serve  ---------------------------------*)
+
+    fun serve (auth, req) =
+        case req of
+             ("load", p) =>
+                 (case SimpleFileIO.readFile (auth, p) of
+                       OK t  => ("loaded", true, t)
+                     | ERR e => ("loaded", false, e.reason))
+           | ("save", p, text) =>
+                 (case SimpleFileIO.writeFile (auth, p, text) of
+                       OK _  => ("saved", true, "")
+                     | ERR e => ("saved", false, e.reason))
+           | other => ("unserved", false, "")
+
+    val args = getCliArgs authority
+    val path = case args of p :: _ => p | [] => "scratch.txt"
+    val opts = {depth = Style.COLORS256, mouse = true, paste = false}
+
+    val code = Term.runServed (authority, opts, serve,
+                               {init = init path, update = update, view = view})
+
+in exit (authority, code)
+end

@@ -1,0 +1,108 @@
+(* dialogdemo — a full-screen Turbo Vision-style scene: the ▒ desktop filling the whole
+ * terminal, a menu bar, a status line, and a centered dialog with a shadow that the arrow
+ * keys move. The first slice of the dialog showcase; it exists to prove the full-screen
+ * composition, centering, resize handling, and per-row redraw on a real terminal.
+ *
+ *   ./local.sh examples/proscenium/dialogdemo.trp
+ *
+ * Arrows move the dialog, Enter or q quits, Esc quits (after the decoder's escape timer).
+ * The dialog stays centered across a resize until it is moved; moving resets the offset the
+ * view adds to the center.
+ *)
+
+import String
+import List
+import Number
+import "./Term"
+import "./Key"
+import "./Image"
+import "./Style"
+
+let val intDiv = Number.intDiv
+
+    (*----------------------------------  Palette  ----------------------------------*)
+
+    val desktopA = Style.withBg (Style.BASIC 4) (Style.withFg (Style.BASIC 6) Style.default)
+    val barA     = Style.withBg (Style.BASIC 7) (Style.withFg (Style.BASIC 0) Style.default)
+    val dialogA  = Style.withBg (Style.BASIC 7) (Style.withFg (Style.BASIC 0) Style.default)
+    val titleA   = Style.withBg (Style.BASIC 7) (Style.withFg (Style.BASIC 4) Style.default)
+    val buttonA  = Style.withBg (Style.BASIC 2) (Style.withFg (Style.BASIC 0) Style.default)
+    val shadowA  = Style.withBg (Style.BASIC 0) Style.default
+
+    (*----------------------------------  Pieces  -----------------------------------*)
+
+    (** A full-width one-row bar: `label` over a fill of `attr`. The stretch wrapper pins the
+     *  height — a bare fill carries vertical weight 1, and a bar that kept it would be
+     *  handed surplus rows by the layout. *)
+    fun bar (attr, label) =
+        Image.stretch (1, 0) (Image.overlay (Image.text attr label) (Image.fillA attr " "))
+
+    fun boxRow (l, m, r, w) = l ^ String.repeat (w - 2) m ^ r
+
+    (** A double-line-bordered dialog of `(w, h)`: centered title, `body` placed inside the
+     *  borders and clipped to them, so an over-long body line ends at the frame instead of
+     *  spilling onto the desktop. *)
+    fun dialogBox (w, h, title, body) =
+        let val topR  = Image.text dialogA (boxRow ("╔", "═", "╗", w))
+            val botR  = Image.text dialogA (boxRow ("╚", "═", "╝", w))
+            val midR  = Image.text dialogA (boxRow ("║", " ", "║", w))
+            fun mids k = if k <= 0 then [] else midR :: mids (k - 1)
+            val box   = Image.vcat (topR :: List.append (mids (h - 2)) [botR])
+            val label = Image.shift (intDiv (w - String.size title) 2, 0)
+                                    (Image.text titleA title)
+            val inner = Image.shift (3, 2) (Image.crop (0, 0, w - 4, h - 3) body)
+        in Image.overlay label (Image.overlay inner box)
+        end
+
+    (** The dialog with its shadow: the dialog's silhouette in the shadow rendition, offset
+     *  one row down and two columns right, under the dialog. *)
+    fun withShadow (w, h, d) =
+        Image.overlay d (Image.shift (2, 1) (Image.crop (0, 0, w, h) (Image.fillA shadowA " ")))
+
+    val dlgW = 38
+    val dlgH = 9
+
+    fun dialog () =
+        let val body =
+                Image.vcat [ Image.text dialogA "A TUI library written in Troupe."
+                           , Image.text dialogA "Arrows move this dialog."
+                           , Image.space (0, 1)
+                           , Image.shift (12, 0) (Image.text buttonA "[ OK ]") ]
+        in withShadow (dlgW, dlgH, dialogBox (dlgW, dlgH, " About ", body))
+        end
+
+    (*-----------------------------------  View  ------------------------------------*)
+
+    fun view m =
+        let val cx = intDiv (m.cols - dlgW) 2 + m.dx
+            val cy = intDiv (m.rows - dlgH) 2 + m.dy
+            val menu = bar (barA, "  File  Edit  Window  Help")
+            val status = bar (barA, "  Enter/q Exit   Arrows Move   ")
+            val middle = Image.overlay (Image.shift (cx, cy - 1) (dialog ()))
+                                       (Image.fillA desktopA "▒")
+        in Image.vcat [menu, middle, status]
+        end
+
+    (*------------------------------------  App  ------------------------------------*)
+
+    fun init {cols, rows, ui, dark} = ({cols = cols, rows = rows, dx = 0, dy = 0}, [])
+
+    fun moved (m, dx, dy) = {cols = m.cols, rows = m.rows, dx = m.dx + dx, dy = m.dy + dy}
+
+    fun update (ev, m) =
+        case ev of
+             EV (KEY (KEY_UP, _))        => (moved (m, 0, 0 - 1), [])
+           | EV (KEY (KEY_DOWN, _))      => (moved (m, 0, 1), [])
+           | EV (KEY (KEY_LEFT, _))      => (moved (m, 0 - 1, 0), [])
+           | EV (KEY (KEY_RIGHT, _))     => (moved (m, 1, 0), [])
+           | EV (KEY (KEY_ENTER, _))     => (m, [QUIT])
+           | EV (KEY (KEY_ESC, _))       => (m, [QUIT])
+           | EV (KEY (KEY_PRINT "q", _)) => (m, [QUIT])
+           | EV (KEY (KEY_CTRL "c", _))  => (m, [QUIT])
+           | RESIZED {cols, rows}        => ({cols = cols, rows = rows, dx = 0, dy = 0}, [])
+           | _                           => (m, [])
+
+    val opts = {depth = Style.COLORS16, mouse = false, paste = false}
+
+in Term.run (authority, opts, {init = init, update = update, view = view})
+end

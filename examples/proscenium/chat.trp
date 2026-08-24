@@ -1,0 +1,200 @@
+(* chat — the chat demonstrator: a message log, a member list, and an input line, with the
+ * other participants being ordinary Troupe processes whose messages arrive in the same
+ * mailbox receive as keystrokes.
+ *
+ *   ./local.sh examples/proscenium/chat.trp
+ *
+ * This run spawns the room and three bots locally. The multinode seam is the spawn site:
+ * `spawn (alias, fn () => ...)` places the same room or peers on another node (see
+ * tests/rt/multinode-tests/ for the alias and trustmap ceremony), and nothing in the UI
+ * changes — a remote member's ("APPMSG", ...) send lands in the kernel's receive exactly
+ * like a local one, which is the point of the demonstrator.
+ *
+ * KEYS. Type into the input line and Enter sends; Esc or CTRL-c quits. The log shows the
+ * newest messages that fit; there is no scrollback navigation yet.
+ *
+ * LABELS. The room receives the UI's messages, whose payloads carry the terminal's channel
+ * level (everything typed does), so like Term's kernel and renderer it opens a confined
+ * ranged-receive region ([bot, channel level], null-attenuated authority) and receives at
+ * that interval for its whole life. The bots receive only their own timer ticks and need no
+ * region. The region ceremony values (the level and the attenuated authority) are built in
+ * the main program, where the root authority lives, and closed over.
+ *)
+
+import String
+import List
+import Number
+import Option
+import IfcUtil
+import Tty
+import timeout
+import "./Term"
+import "./Key"
+import "./Image"
+import "./Style"
+import "./Widget"
+
+let val intDiv = Number.intDiv
+
+    fun imax (a, b) = if a > b then a else b
+
+    val myName = "you"
+
+    (*----------------------------------  Room  -----------------------------------*)
+
+    (* subs: the pids that receive broadcasts (the UIs), with names; names: everyone. *)
+    fun roomLoop (lev, subs, names) =
+        let val msg = rcv ( IfcUtil.bot, lev
+                          , [ hn ("JOIN", p, n)  => ("JOIN", p, n)
+                            , hn ("JOINQ", n)    => ("JOINQ", "", n)
+                            , hn ("SAY", n, t)   => ("SAY", n, t) ])
+            fun bcast (ss, m) = List.foldl (fn ((q, _), _) => send (q, ("APPMSG", m))) () ss
+            val (subs', names') =
+                    case msg of
+                         ("JOIN", p, n) =>
+                             let val ss = (p, n) :: subs
+                                 val ns = List.append names [n]
+                                 val _ = bcast (ss, ("sys", n ^ " joined"))
+                                 val _ = bcast (ss, ("members", ns))
+                             in (ss, ns) end
+                       | ("JOINQ", _, n) =>
+                             let val ns = List.append names [n]
+                                 val _ = bcast (subs, ("sys", n ^ " joined"))
+                                 val _ = bcast (subs, ("members", ns))
+                             in (subs, ns) end
+                       | ("SAY", n, t) =>
+                             let val _ = bcast (subs, ("msg", n, t))
+                             in (subs, names) end
+                       | _ => (subs, names)
+        in roomLoop (lev, subs', names')
+        end
+
+    (** The room's whole life; the loop's result is bound, the confined region never
+     *  closes (the shape Term.trp's renderer documents). *)
+    fun room (lev, weak) =
+        let val (ok, cap) = enableRangedReceive (IfcUtil.bot, lev, weak)
+            val _ = roomLoop (lev, [], [])
+        in ()
+        end
+
+    (*----------------------------------  Bots  -----------------------------------*)
+
+    fun bot (rm, name, period, lines) =
+        let val _ = send (rm, ("JOINQ", name))
+            val n = List.length lines
+            fun loop i =
+                let val _ = timeout.timeout (self ()) "tick" period
+                    val _ = receive [hn "tick" => ()]
+                    val _ = send (rm, ("SAY", name, List.nth lines (i mod n)))
+                in loop (i + 1)
+                end
+            val _ = loop 0
+        in ()
+        end
+
+    val botSpecs =
+        [ ("ada",    2600, [ "the actor model fits this terminal thing nicely"
+                           , "a mailbox is just an event queue with opinions"
+                           , "types are stronger than hope" ])
+        , ("grace",  3900, [ "ship it and write the golden test"
+                           , "a compiler flag is forever" ])
+        , ("edsger", 5300, [ "simplicity is prerequisite for reliability"
+                           , "testing shows the presence of defects" ]) ]
+
+    (*----------------------------------  Model  ----------------------------------*)
+
+    fun withM (m, log, members, form, status) =
+        { cols = m.cols, rows = m.rows, th = m.th, room = m.room
+        , log = log, members = members, form = form, status = status }
+
+    fun freshInput () = Widget.form [Widget.input ("say", "", 64)]
+
+    fun init rm {cols, rows, ui, dark} =
+        let val _ = send (rm, ("JOIN", ui, myName))
+        in ( { cols = cols, rows = rows, th = Widget.turbo (), room = rm
+             , log = [], members = [], form = freshInput (), status = "connected (local room)" }
+           , [] )
+        end
+
+    (*----------------------------------  Update  ---------------------------------*)
+
+    fun push (m, kind, from, text) =
+        withM (m, (kind, from, text) :: m.log, m.members, m.form, m.status)
+
+    fun update (ev, m) =
+        case ev of
+             RESIZED {cols, rows} =>
+                 ( { cols = cols, rows = rows, th = m.th, room = m.room
+                   , log = m.log, members = m.members, form = m.form, status = m.status }
+                 , [] )
+           | APP ("msg", n, t)   => (push (m, "m", n, t), [])
+           | APP ("sys", t)      => (push (m, "s", "", t), [])
+           | APP ("members", ns) => (withM (m, m.log, ns, m.form, m.status), [])
+           | EV (KEY (KEY_ESC, _))    => (m, [QUIT])
+           | EV (KEY (KEY_CTRL "c", _)) => (m, [QUIT])
+           | EV (KEY (KEY_ENTER, _)) =>
+                 let val text = Widget.inputText (m.form, "say")
+                 in if text = "" then (m, [])
+                    else let val _ = send (m.room, ("SAY", myName, text))
+                         in (withM (m, m.log, m.members, freshInput (), m.status), [])
+                         end
+                 end
+           | _ =>
+                 let val (frm', _) = Widget.formUpdate (ev, m.form)
+                 in (withM (m, m.log, m.members, frm', m.status), [])
+                 end
+
+    (*-----------------------------------  View  ----------------------------------*)
+
+    fun logRow (th, entry) =
+        case entry of
+             ("m", n, t) => Image.beside (Image.text th.title ("<" ^ n ^ "> "))
+                                         (Image.text th.dlg t)
+           | (_, _, t)   => Image.text th.sel ("· " ^ t)
+
+    fun view m =
+        let val th = m.th
+            val memberW = 16
+            val midH = imax (m.rows - 3, 3)
+            val logW = imax (m.cols - memberW, 20)
+            val shown = List.reverse (List.take (midH - 2) m.log)
+            val logImg = Image.vcat (List.map (fn e => logRow (th, e)) shown)
+            val logPane = Widget.pane (th, logW, midH, " Chat ", false, logImg)
+            val memImg = Image.vcat (List.map (fn n => Image.text th.dlg (" " ^ n)) m.members)
+            val memPane = Widget.pane (th, memberW, midH, " Members ", false, memImg)
+            val inputRow =
+                Image.stretch (1, 0)
+                    (Image.overlay
+                         (Image.beside (Image.text th.bar (" " ^ myName ^ " ▸ "))
+                                       (Widget.formView (th, 64, m.form)))
+                         (Image.fillA th.bar " "))
+        in Image.vcat
+               [ Widget.bar (th.bar, "  Proscenium Chat — Enter sends, Esc quits   " ^ m.status)
+               , Image.overlay (Image.beside logPane memPane) (Image.fillA th.desktop "▒")
+               , inputRow ]
+        end
+
+    (*-----------------------------------  Main  ----------------------------------*)
+
+    (* The room and the bots are spawned HERE, in the main program, before Term.run. A
+     * message's presence carries the sender's blocking label, and the kernel's is the
+     * channel level (Term.trp, "WHO CAN RECEIVE FROM THE KERNEL"): the room, which receives
+     * the kernel's JOIN and the typed SAYs, needs its confined region; the bots hear only
+     * from their own timers, which are clean exactly because the bots are spawned from
+     * here — spawned from the kernel, they and their timers inherit the raised blocking
+     * label and their plain receives never fire (the shape this file first shipped with,
+     * caught by the tmux pass). *)
+    val weak = attenuate (authority, IfcUtil.null)
+    val lev = Tty.level stdin
+    val rm = spawn (fn () => room (lev, weak))
+    val _ = List.foldl (fn ((n, p, ls), _) => let val _ = spawn (fn () => bot (rm, n, p, ls))
+                                              in () end)
+                       () botSpecs
+    val opts = {depth = Style.COLORS16, mouse = false, paste = false}
+
+    val code = Term.run (authority, opts, {init = init rm, update = update, view = view})
+
+(* exit rather than fall off the end: the bots' timers hold Node's event loop open, so a
+ * plain return would leave the process alive after the session ended. *)
+in exit (authority, code)
+end

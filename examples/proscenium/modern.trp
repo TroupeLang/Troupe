@@ -1,0 +1,305 @@
+(* modern — the modern-style demonstrator: the 2022–2026 terminal design language on the
+ * Proscenium widgets, side by side with the Turbo Vision showcase for contrast.
+ *
+ *   ./local.sh examples/proscenium/modern.trp
+ *
+ * The conventions demonstrated, from the survey in the design plan
+ * (_dev_planning/tui-library/modern-style.md): terminal-default background (no painted
+ * panels, no shadows); rounded borders with the title embedded in the border line; the
+ * focused panel's border in the one accent, unfocused dim; selection as a ▌ half-block
+ * pointer over a quiet tint from the theme's closed palette; a fuzzy picker as the modal
+ * (prompt ❯, matches highlighted, a live counter in the border title, the backdrop dimmed
+ * with Image.mapAttrs); a huh-style confirm whose focused button is an accent fill; a
+ * braille spinner and an accent progress bar; a dim •-separated key footer.
+ *
+ * The palette is Widget.modern's light/dark pair, chosen by Term's OSC 11 background
+ * detection; every color here derives from the theme record, so this file carries no
+ * polarity assumptions of its own. `d` toggles the variant by hand, for terminals the
+ * detection cannot reach.
+ *
+ * KEYS. Up/Down move the file selection (mouse clicks too); p opens the fuzzy picker
+ * (type to filter, Up/Down, Enter opens, Esc closes); c opens the confirm (Left/Right or
+ * Tab, Enter, Esc); d toggles the light/dark variant; q or CTRL-c quits.
+ *)
+
+import String
+import List
+import Number
+import Option
+import "./Term"
+import "./Key"
+import "./Image"
+import "./Style"
+import "./Widget"
+
+let val intDiv = Number.intDiv
+
+    fun imax (a, b) = if a > b then a else b
+    fun imin (a, b) = if a < b then a else b
+    fun clamp (lo, hi, v) = if v < lo then lo else if v > hi then hi else v
+
+    (*---------------------------  Theme-derived attributes  ---------------------------*)
+
+    val plainA = Style.default
+    fun accentA th   = th.barSel
+    fun accentB th   = th.title
+    fun dimA th      = th.bar
+    fun faintA th    = th.bar |> Style.withDim true
+    fun selRowA th   = th.selFocus
+    fun matchSelA th = th.selFocus |> Style.withBold true
+
+    (** The backdrop under a modal: everything in the terminal's own faint rendition. *)
+    fun dimAll a = Style.default |> Style.withDim true
+
+    val spinnerFrames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+
+    (*----------------------------------  Data  -----------------------------------*)
+
+    val items =
+        [ "Ansi.trp", "Style.trp", "Image.trp", "Key.trp", "Term.trp", "Widget.trp"
+        , "Menu.trp", "TextView.trp", "showcase.trp", "pim.trp", "chat.trp", "dash.trp"
+        , "edit.trp", "modern.trp", "counterdemo.trp", "dialogdemo.trp", "testcard.trp"
+        , "imageprobe.trp", "keyprobe.trp", "README.md" ]
+
+    (*----------------------------------  Fuzzy  ----------------------------------*)
+
+    (** Case-insensitive subsequence match: SOME of the matched code-unit positions
+     *  (ascending), or NONE. The empty pattern matches with no positions. *)
+    fun fuzzy (pat, s) =
+        let val np = String.size pat
+            val ns = String.size s
+            fun lc c = if c >= 0x41 andalso c <= 0x5a then c + 0x20 else c
+            fun go (pi, si, acc) =
+                if pi >= np then SOME (List.reverse acc)
+                else if si >= ns then NONE
+                else if lc (String.subCode (pat, pi)) = lc (String.subCode (s, si))
+                then go (pi + 1, si + 1, si :: acc)
+                else go (pi, si + 1, acc)
+        in go (0, 0, [])
+        end
+
+    (** `s` with the characters at `positions` in `aH`, the rest in `aN`, adjacent
+     *  same-attribute characters merged into single leaves. *)
+    fun highlight (aN, aH, s, positions) =
+        let val n = String.size s
+            fun isHit (j, ps) = case ps of p :: _ => p = j | [] => false
+            fun rest (j, ps)  = case ps of p :: t => (if p = j then t else ps) | [] => []
+            fun go (j, ps, curA, curS, acc) =
+                if j >= n
+                then List.reverse (Image.text curA curS :: acc)
+                else let val a = if isHit (j, ps) then aH else aN
+                         val c = String.substring (s, j, j + 1)
+                     in if a = curA
+                        then go (j + 1, rest (j, ps), curA, curS ^ c, acc)
+                        else go (j + 1, rest (j, ps), a, c, Image.text curA curS :: acc)
+                     end
+        in if n = 0 then Image.empty
+           else Image.hcat (go (0, positions, aN, "", []))
+        end
+
+    fun filtered q =
+        List.mapPartial (fn it => case fuzzy (q, it) of
+                                       SOME ps => SOME (it, ps)
+                                     | NONE    => NONE)
+                        items
+
+    (*----------------------------------  Model  ----------------------------------*)
+
+    fun withM (m, sel, modal, spin, prog, status) =
+        { cols = m.cols, rows = m.rows, th = m.th, dark = m.dark
+        , sel = sel, modal = modal, spin = spin, prog = prog, status = status }
+
+    fun init {cols, rows, ui, dark} =
+        ( { cols = cols, rows = rows, th = Widget.modern dark, dark = dark
+          , sel = 0, modal = NONE, spin = 0, prog = 0, status = "ready" }
+        , [AFTER (90, "tick")] )
+
+    fun selName m = case List.find (fn _ => true) (List.drop m.sel items) of
+                         SOME it => it
+                       | NONE    => ""
+
+    fun confirmForm m =
+        Widget.form [ Widget.label ("Delete '" ^ selName m ^ "'?")
+                    , Widget.label "This cannot be undone. (It will not, anyway.)"
+                    , Widget.label ""
+                    , Widget.buttons [("del", "Delete"), ("keep", "Cancel")] ]
+
+    (*----------------------------------  Update  ---------------------------------*)
+
+    fun mainKey (k, m) =
+        case k of
+             KEY_UP   => (withM (m, clamp (0, List.length items - 1, m.sel - 1), NONE, m.spin, m.prog, m.status), [])
+           | KEY_DOWN => (withM (m, clamp (0, List.length items - 1, m.sel + 1), NONE, m.spin, m.prog, m.status), [])
+           | KEY_PRINT "p" => (withM (m, m.sel, SOME ("picker", "", 0), m.spin, m.prog, m.status), [])
+           | KEY_PRINT "c" => (withM (m, m.sel, SOME ("confirm", confirmForm m), m.spin, m.prog, m.status), [])
+           | KEY_PRINT "d" =>
+                 ( { cols = m.cols, rows = m.rows, th = Widget.modern (not m.dark)
+                   , dark = not m.dark, sel = m.sel, modal = m.modal, spin = m.spin
+                   , prog = m.prog
+                   , status = if m.dark then "light variant" else "dark variant" }
+                 , [] )
+           | KEY_PRINT "q" => (m, [QUIT])
+           | KEY_CTRL "c"  => (m, [QUIT])
+           | _ => (m, [])
+
+    fun pickerKey (k, q, ps, m) =
+        let val n = List.length (filtered q)
+            fun keep (q', ps') = (withM (m, m.sel, SOME ("picker", q', ps'), m.spin, m.prog, m.status), [])
+        in case k of
+                KEY_PRINT c   => keep (q ^ c, 0)
+              | KEY_BACKSPACE => keep ( if String.size q = 0 then q
+                                        else String.substring (q, 0, String.size q - 1)
+                                      , 0 )
+              | KEY_UP        => keep (q, clamp (0, imax (imin (n, 8) - 1, 0), ps - 1))
+              | KEY_DOWN      => keep (q, clamp (0, imax (imin (n, 8) - 1, 0), ps + 1))
+              | KEY_ESC       => (withM (m, m.sel, NONE, m.spin, m.prog, "picker closed"), [])
+              | KEY_ENTER     =>
+                    (case List.find (fn _ => true) (List.drop ps (filtered q)) of
+                          SOME (it, _) =>
+                              (withM (m, m.sel, NONE, m.spin, m.prog, "opened " ^ it), [])
+                        | NONE => (withM (m, m.sel, NONE, m.spin, m.prog, "nothing matched"), []))
+              | _ => (m, [])
+        end
+
+    fun confirmEv (ev, frm, m) =
+        let val (frm', res) = Widget.formUpdate (ev, frm)
+        in case res of
+                FR_PRESSED id =>
+                    ( withM (m, m.sel, NONE, m.spin, m.prog,
+                             if id = "del" then "deleted " ^ selName m ^ " (not really)"
+                             else "kept " ^ selName m)
+                    , [] )
+              | FR_CANCELLED => (withM (m, m.sel, NONE, m.spin, m.prog, "kept " ^ selName m), [])
+              | _ => (withM (m, m.sel, SOME ("confirm", frm'), m.spin, m.prog, m.status), [])
+        end
+
+    fun update (ev, m) =
+        case ev of
+             RESIZED {cols, rows} =>
+                 ( { cols = cols, rows = rows, th = m.th, dark = m.dark, sel = m.sel
+                   , modal = m.modal, spin = m.spin, prog = m.prog, status = m.status }
+                 , [] )
+           | APP "tick" =>
+                 let val prog' = imin (m.prog + 2, 100)
+                     val m' = withM (m, m.sel, m.modal, (m.spin + 1) mod 10, prog',
+                                     if prog' = 100 andalso m.prog < 100
+                                     then "indexing finished" else m.status)
+                 in (m', if prog' < 100 then [AFTER (90, "tick")] else [])
+                 end
+           | HIT (("item", i), MOUSE mm) =>
+                 (case (m.modal, mm.kind) of
+                       (NONE, MOUSE_PRESS _) => (withM (m, i, m.modal, m.spin, m.prog, m.status), [])
+                     | (SOME ("confirm", frm), _) => confirmEv (ev, frm, m)
+                     | _ => (m, []))
+           | EV (KEY (k, mods)) =>
+                 (case m.modal of
+                       NONE => mainKey (k, m)
+                     | SOME ("picker", q, ps) => pickerKey (k, q, ps, m)
+                     | SOME ("confirm", frm)  => confirmEv (ev, frm, m)
+                     | _ => (m, []))
+           | _ =>
+                 (case m.modal of
+                       SOME ("confirm", frm) => confirmEv (ev, frm, m)
+                     | _ => (m, []))
+
+    (*-----------------------------------  View  ----------------------------------*)
+
+    fun fileRow (m, i, it) =
+        let val th = m.th
+            val row = if i = m.sel
+                      then Image.beside (Image.text (accentA th) "▌")
+                                        (Image.text (selRowA th) (Widget.padTo (" " ^ it, 27)))
+                      else Image.text plainA (Widget.padTo ("  " ^ it, 28))
+        in Image.region ("item", i) row
+        end
+
+    fun taskRow m =
+        let val th = m.th
+            val frame = case List.find (fn _ => true) (List.drop m.spin spinnerFrames) of
+                             SOME f => f
+                           | NONE   => "⠿"
+        in if m.prog < 100
+           then Image.hcat [ Image.text (accentA th) (frame ^ " ")
+                           , Image.text (dimA th) "indexing "
+                           , Widget.gauge (th, 12, m.prog, 100)
+                           , Image.text (dimA th) (" " ^ toString m.prog ^ "%") ]
+           else Image.text (dimA th) "✓ index up to date"
+        end
+
+    fun filesPane (m, h) =
+        let val rows = Image.vcat (List.mapi (fn (i, it) => fileRow (m, i, it)) items)
+            val body = rows <-> Image.stretch (0, 1) (Image.space (0, 0)) <-> taskRow m
+        in Widget.paneOf (m.th, 32, h, " Files ", Widget.B_ROUND, accentA m.th, body)
+        end
+
+    fun previewPane (m, w, h) =
+        let val th = m.th
+            val body = Image.vcat
+                [ Image.text (accentB th) (selName m)
+                , Image.space (0, 1)
+                , Image.text (dimA th) "kind      program-relative module"
+                , Image.text (dimA th) "modified  2026-08-24"
+                , Image.text (dimA th) "library   Proscenium"
+                , Image.space (0, 1)
+                , Image.text plainA "A part of the terminal UI library"
+                , Image.text plainA "written entirely in Troupe." ]
+        in Widget.paneOf (th, w, h, " Preview ", Widget.B_ROUND, dimA th, body)
+        end
+
+    fun footer m =
+        let val th = m.th
+        in Image.hcat
+               [ Image.text plainA "↑/↓", Image.text (dimA th) " move"
+               , Image.text (faintA th) "  •  ", Image.text plainA "p", Image.text (dimA th) " picker"
+               , Image.text (faintA th) "  •  ", Image.text plainA "c", Image.text (dimA th) " confirm"
+               , Image.text (faintA th) "  •  ", Image.text plainA "d", Image.text (dimA th) " theme"
+               , Image.text (faintA th) "  •  ", Image.text plainA "q", Image.text (dimA th) " quit"
+               , Image.text (faintA th) "   ", Image.text (dimA th) m.status ]
+        end
+
+    fun pickerView (m, q, ps) =
+        let val th = m.th
+            val fs = List.take 8 (filtered q)
+            val n = List.length (filtered q)
+            val title = " Open · " ^ toString n ^ "/" ^ toString (List.length items) ^ " "
+            val prompt = Image.hcat [ Image.text (accentB th) "❯ "
+                                    , Image.text plainA q
+                                    , Image.cursor Image.CURSOR_BAR (Image.space (1, 1)) ]
+            val rows = List.mapi (fn (i, (it, pos)) =>
+                           if i = ps
+                           then Image.beside (Image.text (accentA th) "▌")
+                                             (Image.beside (Image.text (selRowA th) " ")
+                                                           (highlight (selRowA th, matchSelA th, Widget.padTo (it, 36), pos)))
+                           else Image.beside (Image.text plainA "  ")
+                                             (highlight (plainA, accentB th, it, pos)))
+                       fs
+            val body = prompt <-> Image.space (0, 1) <-> Image.vcat rows
+        in Widget.paneOf (th, 44, 13, title, Widget.B_ROUND, accentA th, body)
+        end
+
+    fun confirmView (m, frm) =
+        Widget.paneOf ( m.th, 52, 8, " Confirm ", Widget.B_ROUND, accentA m.th
+                      , Widget.formView (m.th, 46, frm) )
+
+    fun view m =
+        let val th = m.th
+            val h = imax (m.rows - 3, 4)
+            val header = Image.hcat [ Image.text (accentB th) " ● modern"
+                                    , Image.text (dimA th) "  the 2022 terminal design language, in Troupe" ]
+            val main = filesPane (m, h) <|> Image.space (1, 1) <|> previewPane (m, imax (m.cols - 33, 20), h)
+            val base = Image.vcat [header, main, footer m]
+            fun modalOver img =
+                let val (x, y) = Widget.centered (m.cols, m.rows, Image.width img, Image.height img)
+                in Image.overlay (Image.shift (x, y) img) (Image.mapAttrs dimAll base)
+                end
+        in case m.modal of
+                NONE => base
+              | SOME ("picker", q, ps) => modalOver (pickerView (m, q, ps))
+              | SOME ("confirm", frm)  => modalOver (confirmView (m, frm))
+              | _ => base
+        end
+
+    val opts = {depth = Style.TRUECOLOR, mouse = true, paste = false}
+
+in Term.run (authority, opts, {init = init, update = update, view = view})
+end

@@ -1,0 +1,43 @@
+(* counterdemo — the smallest Term application: a counter moved by keys, a capped timer, quit
+ * on q. The smoke test for the constellation: run it interactively, or drive it through a
+ * pipe (Tty.subscribe delivers the same messages on a pipe, and EOF quits):
+ *
+ *   (printf 'jjj'; sleep 0.3; printf 'k'; sleep 0.3; printf 'q') \
+ *     | ./local.sh examples/proscenium/counterdemo.trp
+ *)
+
+import String
+import "./Term"
+import "./Key"
+import "./Image"
+import "./Style"
+
+let val plain = Style.default
+    val hi    = Style.withBold true (Style.withFg (Style.BASIC 3) Style.default)
+
+    fun view m =
+        Image.vcat [ Image.text hi    ("count: " ^ toString m.count)
+                   , Image.text plain ("size: " ^ toString m.cols ^ "x" ^ toString m.rows)
+                   , Image.text plain ("ticks: " ^ toString m.ticks)
+                   , Image.text plain "j: up   k: down   q: quit" ]
+
+    fun withCount (m, c) = {count = c, cols = m.cols, rows = m.rows, ticks = m.ticks}
+
+    fun init {cols, rows, ui, dark} =
+        ({count = 0, cols = cols, rows = rows, ticks = 0}, [AFTER (100, "tick")])
+
+    fun update (ev, m) =
+        case ev of
+             EV (KEY (KEY_PRINT "j", _)) => (withCount (m, m.count + 1), [])
+           | EV (KEY (KEY_PRINT "k", _)) => (withCount (m, m.count - 1), [])
+           | EV (KEY (KEY_PRINT "q", _)) => (m, [QUIT])
+           | EV (KEY (KEY_CTRL "c", _))  => (m, [QUIT])
+           | RESIZED {cols, rows} =>
+                 ({count = m.count, cols = cols, rows = rows, ticks = m.ticks}, [])
+           | APP _ =>
+                 ( {count = m.count, cols = m.cols, rows = m.rows, ticks = m.ticks + 1}
+                 , if m.ticks + 1 < 3 then [AFTER (100, "tick")] else [] )
+           | _ => (m, [])
+
+in Term.run (authority, Term.defaultOpts, {init = init, update = update, view = view})
+end

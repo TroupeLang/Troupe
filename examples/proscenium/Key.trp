@@ -1,0 +1,390 @@
+(* Key — decoding terminal input bytes into events: keys with modifiers, mouse reports,
+ * pastes.
+ *
+ * A program-relative module of examples/proscenium. Pure: no process, no receive, no timer.
+ * The starting point is examples/battallion/Key.trp, whose input contract, invariants, and
+ * byte-level decisions carry over; this decoder widens the surface with what a full-screen
+ * application needs — Alt chords, modifier parameters, function keys, SGR mouse reports,
+ * bracketed paste — and answers in events rather than bare keys.
+ *
+ * INPUT CONTRACT (unchanged). The input is the payload of a `Tty.TTY_DATA` event, which the
+ * runtime builds with `chunk.toString('latin1')` (rt/src/ffi/node/tty.mts): one code unit per
+ * byte, in 0..255, independent of where chunk boundaries fall. A code unit above 255 cannot
+ * come from that source; should one arrive, it passes through as a printable key.
+ *
+ *   val (events, rest) = Key.decode (carry ^ bytes)
+ *
+ * `decode` is greedy and left-to-right. A trailing run that could still grow — a lone ESC, an
+ * unfinished CSI or SS3, a truncated UTF-8 character, a paste whose end marker has not
+ * arrived — comes back as `rest`, and the caller prepends it to the next chunk. `flush` reads
+ * a remainder as final, for when the input closed or the caller's timer fired.
+ *
+ * AN EVENT is a key with its modifiers, a mouse report, or a paste:
+ *
+ *   KEY (k, {alt, ctrl, shift})   modifiers from an Alt prefix or a CSI parameter. A control
+ *                                 chord that raw mode delivers as one byte stays KEY_CTRL
+ *                                 with its letter — the byte is the truth, and mapping it
+ *                                 back to a letter-plus-ctrl would guess at what was pressed.
+ *   MOUSE {kind, x, y, ...}       an SGR (mode 1006) report; x and y count from zero. The
+ *                                 legacy X10 encoding is not decoded: a terminal asked for
+ *                                 1006 answers in 1006.
+ *   PASTE s                       the bytes between the bracketed-paste markers (mode 2004),
+ *                                 exactly as they arrived — UTF-8 undecoded, so a pasted ESC
+ *                                 never acts as a key and the consumer decides about the rest.
+ *
+ * ALT IS THE ESC PREFIX. `ESC c` for `c` other than "[", "O", ESC decodes as `c`'s key with
+ * `alt = true` — this is where battallion's decoder deliberately answered Esc-then-key and
+ * recorded that an Alt-aware decoder must take the other reading (its header, "ESC c"). The
+ * cost battallion avoided lands here: pressing Esc and immediately typing produces the same
+ * bytes as an Alt chord, and only elapsed time separates them, so a caller that wants Esc as
+ * a live key must deliver a lone trailing ESC to `flush` via the timer idiom
+ * (lib/timeout.trp) rather than let the next keystroke arrive first. `ESC ESC` followed by
+ * "[" or "O" reads as the sequence's key with `alt = true`; a lone `ESC ESC` is Alt-Esc.
+ *
+ * CSI MODIFIER PARAMETERS decode instead of being discarded: `CSI 1;5 A` is Ctrl-Up,
+ * `CSI 1;2 F` Shift-End, `CSI 3;3 ~` Alt-Delete. The parameter is a bitmask plus one: bit 1
+ * shift, bit 2 alt, bit 4 ctrl.
+ *
+ * FUNCTION KEYS: SS3 P Q R S and CSI P Q R S are F1..F4; CSI 11~..15~ are F1..F5,
+ * 17~..21~ F6..F10, 23~ and 24~ F11 and F12. CSI 2~ is Insert. CSI Z (Backtab) is Tab with
+ * shift set.
+ *
+ * SINGLE-BYTE DECISIONS carry over from battallion verbatim: LF and CR are Enter, BS and DEL
+ * are Backspace, Tab is Tab; 0x00 and 0x1c..0x1f are KEY_UNKNOWN; UTF-8 leads assemble one
+ * KEY_PRINT with strict validity, one bad byte costing one key.
+ *
+ * INVARIANTS (as in battallion's decoder, restated for the wider surface):
+ *   1. Totality and progress: every step yields one event and advances, or stops.
+ *   2. The remainder is a suffix, and only ever a run a further byte could extend.
+ *   3. Carrying is transparent: any chunking of a stream, decoded with remainders carried,
+ *      yields the same events as decoding the whole stream at once.
+ *   4. `flush s` agrees with `decode s` on every event `decode` produced; it reads a
+ *      remainder of exactly ESC as the Esc key, an unterminated paste as a PASTE of what
+ *      arrived, and anything else as one KEY_UNKNOWN.
+ *
+ * A misspelled nullary constructor in a pattern is a binder, not an error (docs/VARIANTS.md):
+ * the names below are all the values there are.
+ *)
+
+import String
+import List
+import Option
+import Number
+
+datatype key = KEY_PRINT of string      (* one code point, as a string        *)
+             | KEY_ENTER
+             | KEY_TAB
+             | KEY_BACKSPACE
+             | KEY_DELETE
+             | KEY_INSERT
+             | KEY_ESC
+             | KEY_UP
+             | KEY_DOWN
+             | KEY_LEFT
+             | KEY_RIGHT
+             | KEY_HOME
+             | KEY_END
+             | KEY_PAGEUP
+             | KEY_PAGEDOWN
+             | KEY_F of int             (* 1..12                              *)
+             | KEY_CTRL of string       (* the chord's letter, lowercase      *)
+             | KEY_UNKNOWN of string    (* the raw bytes that decoded to none *)
+
+datatype mouse = MOUSE_PRESS of int     (* button: 0 left, 1 middle, 2 right  *)
+               | MOUSE_RELEASE of int
+               | MOUSE_DRAG of int
+               | MOUSE_MOVE
+               | MOUSE_WHEELUP
+               | MOUSE_WHEELDOWN
+
+datatype event = KEY   of key * {alt : bool, ctrl : bool, shift : bool}
+               | MOUSE of {kind : mouse, x : int, y : int, alt : bool, ctrl : bool, shift : bool}
+               | PASTE of string
+
+let val intDiv = Number.intDiv
+
+    (*--------------------------  The bytes this module names  --------------------------*)
+
+    val byteBS  = 0x08      val byteTAB = 0x09      val byteLF  = 0x0a
+    val byteCR  = 0x0d      val byteESC = 0x1b      val byteDEL = 0x7f
+
+    val ctrlLow    = 0x01   val ctrlHigh   = 0x1a   val ctrlLetter = 0x60
+
+    val byteLBRACKET = 0x5b val byteOH = 0x4f
+
+    (* ECMA-48 5.4: parameter bytes, then intermediate bytes, then one final byte. *)
+    val paramLow  = 0x30    val paramHigh  = 0x3f
+    val interLow  = 0x20    val interHigh  = 0x2f
+    val finalLow  = 0x40    val finalHigh  = 0x7e
+
+    val printLow  = 0x20    val printHigh  = 0x7f
+
+    (* UTF-8, exactly as in battallion's decoder. *)
+    val contLow   = 0x80    val contHigh  = 0xbf    val contScale = 0x40
+    val lead2Low  = 0xc2    val lead3Low  = 0xe0    val lead4Low  = 0xf0
+    val lead4High = 0xf4    val lead2Base = 0xc0
+    val leadE0 = 0xe0       val leadE0Low  = 0xa0
+    val leadED = 0xed       val leadEDHigh = 0x9f
+    val leadF0 = 0xf0       val leadF0Low  = 0x90
+    val leadF4 = 0xf4       val leadF4High = 0x8f
+
+    val byteHigh = 0xff
+
+    val digitLow  = 0x30    val digitHigh = 0x39
+
+    val escString   = "\x1b"
+    val pasteOpen   = "\x1b[200~"
+    val pasteClose  = "\x1b[201~"
+
+    val noMods = {alt = false, ctrl = false, shift = false}
+    fun withAlt {alt, ctrl, shift} = {alt = true, ctrl = ctrl, shift = shift}
+
+    fun plain k = KEY (k, noMods)
+
+    (*-------------------------------  Reading the input  -------------------------------*)
+
+    fun byteAt (s, i) = String.subCode (s, i)
+    fun byte1 (s, i)  = String.substring (s, i, i + 1)
+
+    fun runEnd (s, n, j, lo, hi) =
+        if j < n andalso byteAt (s, j) >= lo andalso byteAt (s, j) <= hi
+        then runEnd (s, n, j + 1, lo, hi)
+        else j
+
+    (** The leading decimal number of `p` from position `j`, and the position after it;
+     *  0 stands for "none" — no sequence this module names carries the parameter 0. *)
+    fun numberFrom (p, j) =
+        let val n = String.size p
+            fun go (k, acc) =
+                if k >= n then (acc, k)
+                else let val d = String.subCode (p, k)
+                     in if d >= digitLow andalso d <= digitHigh
+                        then go (k + 1, acc * 10 + (d - digitLow))
+                        else (acc, k)
+                     end
+        in go (j, 0)
+        end
+
+    (** A parameter string `a;b;...` as its first two numbers (0 when absent). *)
+    fun twoParams p =
+        let val (m1, j) = numberFrom (p, 0)
+            val (m2, _) = if j < String.size p andalso byteAt (p, j) = 0x3b
+                          then numberFrom (p, j + 1)
+                          else (0, j)
+        in (m1, m2)
+        end
+
+    (** The modifier record a CSI modifier parameter names: the parameter is a bitmask plus
+     *  one — bit 1 shift, bit 2 alt, bit 4 ctrl; 0 and 1 both mean none. *)
+    fun modsOf m =
+        if m <= 1 then noMods
+        else let val b = m - 1
+             in { shift = b mod 2 = 1
+                , alt   = intDiv b 2 mod 2 = 1
+                , ctrl  = intDiv b 4 mod 2 = 1 }
+             end
+
+    (*----------------------------  Escape-sequence readings  ---------------------------*)
+
+    fun fKey m = if m >= 11 andalso m <= 15 then KEY_F (m - 10)
+                 else if m >= 17 andalso m <= 21 then KEY_F (m - 11)
+                 else if m = 23 then KEY_F 11
+                 else if m = 24 then KEY_F 12
+                 else KEY_UNKNOWN ""
+
+    (** The key a "~" sequence with leading parameter `m` names; `raw` for the readings that
+     *  name nothing. *)
+    fun tildeKey (m, raw) =
+             if m = 1 orelse m = 7 then KEY_HOME
+        else if m = 4 orelse m = 8 then KEY_END
+        else if m = 2              then KEY_INSERT
+        else if m = 3              then KEY_DELETE
+        else if m = 5              then KEY_PAGEUP
+        else if m = 6              then KEY_PAGEDOWN
+        else case fKey m of KEY_UNKNOWN _ => KEY_UNKNOWN raw
+                          | k             => k
+
+    (** The key a sequence with final byte `f` names. Shared by CSI and SS3; the tilde
+     *  reading is CSI-only, SS3 carrying no parameters. *)
+    fun finalKey (f, m, raw) =
+             if f = 0x41 then KEY_UP
+        else if f = 0x42 then KEY_DOWN
+        else if f = 0x43 then KEY_RIGHT
+        else if f = 0x44 then KEY_LEFT
+        else if f = 0x48 then KEY_HOME
+        else if f = 0x46 then KEY_END
+        else if f = 0x50 then KEY_F 1
+        else if f = 0x51 then KEY_F 2
+        else if f = 0x52 then KEY_F 3
+        else if f = 0x53 then KEY_F 4
+        else if f = 0x5a then KEY_TAB    (* CSI Z, Backtab: shift is forced at the CSI site *)
+        else if f = 0x7e then tildeKey (m, raw)
+        else KEY_UNKNOWN raw
+
+    (*----------------------------------  Mouse  ----------------------------------------*)
+
+    (** An SGR report `CSI < b ; x ; y M/m`, given its parameter string after "<" and its
+     *  final byte. Wheel-left and wheel-right (66, 67) and any other exotic code decode to
+     *  KEY_UNKNOWN of the raw sequence. *)
+    fun mouseEvent (p, f, raw) =
+        let val (b, j) = numberFrom (p, 0)
+            val (xy)   = if j < String.size p andalso byteAt (p, j) = 0x3b
+                         then twoParams (String.substring (p, j + 1, String.size p))
+                         else (0, 0)
+            val (x, y) = xy
+            val kind = if b >= 64
+                       then (if b mod 2 = 0 then MOUSE_WHEELUP else MOUSE_WHEELDOWN)
+                       else if intDiv b 32 mod 2 = 1
+                       then (if b mod 4 = 3 then MOUSE_MOVE else MOUSE_DRAG (b mod 4))
+                       else if f = 0x6d then MOUSE_RELEASE (b mod 4)
+                       else MOUSE_PRESS (b mod 4)
+            val bad  = b >= 64 andalso b mod 4 >= 2
+        in if bad then KEY (KEY_UNKNOWN raw, noMods)
+           else MOUSE { kind = kind, x = x - 1, y = y - 1
+                      , shift = intDiv b 4 mod 2 = 1
+                      , alt   = intDiv b 8 mod 2 = 1
+                      , ctrl  = intDiv b 16 mod 2 = 1 }
+        end
+
+    (*--------------------------------  Sequences  --------------------------------------*)
+
+    (** One CSI sequence starting at `i`, where `s` holds ESC "[" at `i`; `alt` came from an
+     *  ESC prefix. `NONE` when the sequence has not finished arriving. *)
+    fun stepCsi (s, n, i, alt) =
+        let val pEnd = runEnd (s, n, i + 2, paramLow, paramHigh)
+            val k    = runEnd (s, n, pEnd,  interLow, interHigh)
+        in if k >= n then NONE
+           else let val f   = byteAt (s, k)
+                    val p   = String.substring (s, i + 2, pEnd)
+                    val raw = String.substring (s, i, k + 1)
+                in if f < finalLow orelse f > finalHigh
+                   then SOME (plain (KEY_UNKNOWN (String.substring (s, i, k))), k)
+                   else if String.startsWith "<" p
+                   then SOME (mouseEvent (String.substring (p, 1, String.size p), f, raw), k + 1)
+                   else if p = "200" andalso f = 0x7e
+                   then let val rest = String.substring (s, k + 1, n)
+                        in case String.indexOf pasteClose rest of
+                                NONE   => NONE
+                              | SOME j => SOME ( PASTE (String.substring (rest, 0, j))
+                                               , k + 1 + j + String.size pasteClose )
+                        end
+                   else let val (m1, m2) = twoParams p
+                            val mods0    = modsOf m2
+                            (* CSI Z is the terminal's spelling of Shift-Tab; the shift is in
+                             * the final byte, not in a parameter. *)
+                            val mods     = if f = 0x5a
+                                           then {alt = mods0.alt, ctrl = mods0.ctrl, shift = true}
+                                           else mods0
+                        in SOME ( KEY ( finalKey (f, m1, raw)
+                                      , if alt then withAlt mods else mods )
+                                , k + 1 )
+                        end
+                end
+        end
+
+    (** One SS3 sequence: one final byte, no parameters. *)
+    fun stepSs3 (s, n, i, alt) =
+        if i + 2 >= n then NONE
+        else SOME ( KEY ( finalKey (byteAt (s, i + 2), 0, String.substring (s, i, i + 3))
+                        , if alt then withAlt noMods else noMods )
+                  , i + 3 )
+
+    (*---------------------------------  UTF-8 characters  ------------------------------*)
+
+    fun stepUtf8 (s, n, i, len, acc0, lo1, hi1) =
+        let fun go (j, acc) =
+                if j >= len then SOME (KEY_PRINT (String.strCode acc), i + len)
+                else if i + j >= n then NONE
+                else let val b  = byteAt (s, i + j)
+                         val lo = if j = 1 then lo1 else contLow
+                         val hi = if j = 1 then hi1 else contHigh
+                     in if b < lo orelse b > hi
+                        then SOME (KEY_UNKNOWN (byte1 (s, i)), i + 1)
+                        else go (j + 1, acc * contScale + (b - contLow))
+                     end
+        in go (1, acc0)
+        end
+
+    (*--------------------------------------  The scan  ---------------------------------*)
+
+    (** The non-escape key at `i`: a single byte or one UTF-8 character. `NONE` when a UTF-8
+     *  character has not finished arriving. *)
+    fun stepPlain (s, n, i) =
+        let val c = byteAt (s, i)
+        in      if c = byteCR orelse c = byteLF          then SOME (KEY_ENTER, i + 1)
+           else if c = byteTAB                           then SOME (KEY_TAB, i + 1)
+           else if c = byteBS orelse c = byteDEL         then SOME (KEY_BACKSPACE, i + 1)
+           else if c >= ctrlLow andalso c <= ctrlHigh
+                then SOME (KEY_CTRL (String.strCode (c + ctrlLetter)), i + 1)
+           else if c < printLow                          then SOME (KEY_UNKNOWN (byte1 (s, i)), i + 1)
+           else if c < printHigh                         then SOME (KEY_PRINT (byte1 (s, i)), i + 1)
+           else if c < lead2Low                          then SOME (KEY_UNKNOWN (byte1 (s, i)), i + 1)
+           else if c < lead3Low
+                then stepUtf8 (s, n, i, 2, c - lead2Base, contLow, contHigh)
+           else if c < lead4Low
+                then stepUtf8 ( s, n, i, 3, c - lead3Low
+                              , if c = leadE0 then leadE0Low  else contLow
+                              , if c = leadED then leadEDHigh else contHigh )
+           else if c <= lead4High
+                then stepUtf8 ( s, n, i, 4, c - lead4Low
+                              , if c = leadF0 then leadF0Low  else contLow
+                              , if c = leadF4 then leadF4High else contHigh )
+           else if c > byteHigh                          then SOME (KEY_PRINT (byte1 (s, i)), i + 1)
+           else SOME (KEY_UNKNOWN (byte1 (s, i)), i + 1)
+        end
+
+    (** Whatever the ESC at `i` begins. `depth2` marks that this ESC was itself preceded by
+     *  one (`ESC ESC ...`), which allows an Alt-modified sequence but no third prefix. *)
+    fun stepEsc (s, n, i, depth2) =
+        if i + 1 >= n then NONE
+        else let val c = byteAt (s, i + 1)
+             in      if c = byteLBRACKET then stepCsi (s, n, i, depth2)
+                else if c = byteOH       then stepSs3 (s, n, i, depth2)
+                else if c = byteESC andalso not depth2
+                then (case stepEsc (s, n, i + 1, true) of
+                           NONE   => NONE
+                         | SOME r => SOME r)
+                else if c = byteESC
+                then SOME (KEY (KEY_ESC, withAlt noMods), i + 1)
+                else case stepPlain (s, n, i + 1) of
+                          NONE           => NONE
+                        | SOME (k, next) => SOME (KEY (k, withAlt noMods), next)
+             end
+
+    fun step (s, n, i) =
+        if byteAt (s, i) = byteESC
+        then stepEsc (s, n, i, false)
+        else case stepPlain (s, n, i) of
+                  NONE           => NONE
+                | SOME (k, next) => SOME (plain k, next)
+
+    fun scan (s, n, i, acc) =
+        if i >= n then (List.reverse acc, "")
+        else case step (s, n, i) of
+                  SOME (ev, next) => scan (s, n, next, ev :: acc)
+                | NONE            => (List.reverse acc, String.substring (s, i, n))
+
+    (*------------------------------------  Interface  ----------------------------------*)
+
+    (** The events `bytes` decodes to, and the trailing bytes that could still grow into a
+     *  longer sequence. The caller prepends the remainder to the next chunk. *)
+    fun decode bytes = scan (bytes, String.size bytes, 0, [])
+
+    (** The events of `bytes` when no further byte will arrive. A remainder of exactly ESC
+     *  is the Esc key; an unterminated paste is a PASTE of what arrived; any other
+     *  remainder becomes one KEY_UNKNOWN holding its bytes. *)
+    fun flush bytes =
+        let val (events, rest) = decode bytes
+        in      if rest = ""        then events
+           else if rest = escString then List.append events [plain KEY_ESC]
+           else if String.startsWith pasteOpen rest
+           then List.append events
+                            [PASTE (String.substring (rest, String.size pasteOpen, String.size rest))]
+           else List.append events [plain (KEY_UNKNOWN rest)]
+        end
+
+in [ ("decode", decode)
+   , ("flush", flush)
+   , ("noMods", noMods)
+   ]
+end

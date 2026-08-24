@@ -1,0 +1,164 @@
+(* dash — the actor dashboard demonstrator: a worker pool reporting progress to a live
+ * dashboard with gauges and a throughput sparkline, refreshed on a timer.
+ *
+ *   ./local.sh examples/proscenium/dash.trp
+ *
+ * Four workers each burn compute in timed chunks and report ("APPMSG", ("wprog", i, done))
+ * to the UI; the UI ticks every 300 ms (Term's AFTER command), pushing the per-tick
+ * throughput onto the sparkline's history, and stops ticking once every worker has
+ * finished. The data source is cooperative reporting — Troupe has no primitive that
+ * enumerates OS processes, and the interesting monitor for Troupe is of its own actors.
+ *
+ * Each worker first receives ("START", ui) — sent by init, which is the first place the ui
+ * pid exists — and a kernel send carries the channel level as its presence, so the workers
+ * open confined ranged-receive regions and receive at [bot, channel level] for their whole
+ * lives (Term.trp, "WHO CAN RECEIVE FROM THE KERNEL").
+ *
+ * KEYS: q, Esc, or CTRL-c quits.
+ *)
+
+import String
+import List
+import Number
+import Option
+import IfcUtil
+import Tty
+import timeout
+import "./Term"
+import "./Key"
+import "./Image"
+import "./Style"
+import "./Widget"
+
+let val intDiv = Number.intDiv
+
+    fun imax (a, b) = if a > b then a else b
+
+    (*---------------------------------  Workers  ---------------------------------*)
+
+    (* The worker receives ("START", ui) from the kernel, and a kernel send carries the
+     * kernel's blocking label — the channel level — as its presence, which a plain receive
+     * (interval [pc, pc]) never sees (Term.trp, "WHO CAN RECEIVE FROM THE KERNEL"). So the
+     * worker opens the confined region and receives at [bot, channel level] for its whole
+     * life, the renderer's shape; its own timer ticks fall inside the interval too. *)
+    fun worker (lev, weak, i, total, chunk, period) =
+        let val (ok, cap) = enableRangedReceive (IfcUtil.bot, lev, weak)
+            val ui = rcv (IfcUtil.bot, lev, [hn ("START", u) => u])
+            fun burn k = if k <= 0 then () else burn (k - 1)
+            fun loop done =
+                if done >= total
+                then send (ui, ("APPMSG", ("wdone", i)))
+                else let val _ = timeout.timeout (self ()) "t" period
+                         val _ = rcv (IfcUtil.bot, lev, [hn "t" => ()])
+                         val _ = burn 60000
+                         val d = if done + chunk > total then total else done + chunk
+                         val _ = send (ui, ("APPMSG", ("wprog", i, d)))
+                     in loop d
+                     end
+            val _ = loop 0
+        in ()
+        end
+
+    (* (name, total, chunk, period): all finish in roughly six to seven seconds, out of
+     * step with one another so the gauges visibly diverge. *)
+    val workerSpecs =
+        [ ("parse",   100, 3, 180)
+        , ("compile", 100, 4, 260)
+        , ("link",    100, 5, 330)
+        , ("test",    100, 7, 420) ]
+
+    (*----------------------------------  Model  ----------------------------------*)
+
+    fun withW (m, ws, hist, lastSum, ticks, status) =
+        { cols = m.cols, rows = m.rows, th = m.th, pids = m.pids
+        , ws = ws, hist = hist, lastSum = lastSum, ticks = ticks, status = status }
+
+    fun init pids {cols, rows, ui, dark} =
+        let val _ = List.foldl (fn (p, _) => send (p, ("START", ui))) () pids
+            val ws = List.map (fn (n, total, c, per) =>
+                                   {name = n, done = 0, total = total, finished = false})
+                              workerSpecs
+        in ( { cols = cols, rows = rows, th = Widget.modern dark, pids = pids
+             , ws = ws, hist = [], lastSum = 0, ticks = 0, status = "running" }
+           , [AFTER (300, "tick")] )
+        end
+
+    fun setW (ws, i, f) = List.mapi (fn (j, w) => if j = i then f w else w) ws
+
+    fun update (ev, m) =
+        case ev of
+             RESIZED {cols, rows} =>
+                 ( { cols = cols, rows = rows, th = m.th, pids = m.pids
+                   , ws = m.ws, hist = m.hist, lastSum = m.lastSum, ticks = m.ticks
+                   , status = m.status }
+                 , [] )
+           | APP ("wprog", i, d) =>
+                 ( withW ( m
+                         , setW (m.ws, i, fn w => { name = w.name, done = d
+                                                  , total = w.total, finished = w.finished })
+                         , m.hist, m.lastSum, m.ticks, m.status )
+                 , [] )
+           | APP ("wdone", i) =>
+                 ( withW ( m
+                         , setW (m.ws, i, fn w => { name = w.name, done = w.total
+                                                  , total = w.total, finished = true })
+                         , m.hist, m.lastSum, m.ticks, m.status )
+                 , [] )
+           | APP "tick" =>
+                 let val sum = List.foldl (fn (w, a) => a + w.done) 0 m.ws
+                     val allDone = List.forall (fn w => w.finished) m.ws
+                     val m' = withW ( m, m.ws, (sum - m.lastSum) :: m.hist, sum
+                                    , m.ticks + 1
+                                    , if allDone then "all workers done" else "running" )
+                 in (m', if allDone then [] else [AFTER (300, "tick")])
+                 end
+           | EV (KEY (KEY_PRINT "q", _)) => (m, [QUIT])
+           | EV (KEY (KEY_ESC, _))       => (m, [QUIT])
+           | EV (KEY (KEY_CTRL "c", _))  => (m, [QUIT])
+           | _ => (m, [])
+
+    (*-----------------------------------  View  ----------------------------------*)
+
+    fun workerRow (th, w) =
+        Image.hcat
+            [ Image.text th.dlg (Widget.padTo (" " ^ w.name, 10))
+            , Widget.gauge (th, 40, w.done, w.total)
+            , Image.text th.dlg ("  " ^ Widget.padTo (toString w.done ^ "/" ^ toString w.total, 8))
+            , Image.text th.barSel (if w.finished then "✔" else " ") ]
+
+    fun view m =
+        let val th = m.th
+            val sum = List.foldl (fn (w, a) => a + w.done) 0 m.ws
+            val wRows = Image.vcat
+                (List.concat (List.map (fn w => [workerRow (th, w), Image.space (0, 1)]) m.ws))
+            val workersPane = Widget.paneOf (th, imax (m.cols, 40), 11, " Workers ",
+                                             Widget.B_ROUND, th.barSel, wRows)
+            val spark = Image.vcat
+                [ Widget.sparkline (th, m.hist, imax (m.cols - 8, 20))
+                , Image.space (0, 1)
+                , Image.text th.dlg ("  total " ^ toString sum ^ "   ticks " ^ toString m.ticks) ]
+            val sparkPane = Widget.paneOf (th, imax (m.cols, 40), 7, " Throughput per tick ",
+                                           Widget.B_ROUND, th.bar, spark)
+        in Image.vcat
+               [ Image.hcat [ Image.text th.title " ● dash"
+                            , Image.text th.bar "  a Troupe worker pool" ]
+               , Image.above workersPane sparkPane
+               , Image.stretch (0, 1) (Image.space (0, 0))
+               , Image.hcat [ Image.text th.barSel " q"
+                            , Image.text th.bar (" quit   " ^ m.status) ] ]
+        end
+
+    (*-----------------------------------  Main  ----------------------------------*)
+
+    val weak = attenuate (authority, IfcUtil.null)
+    val lev = Tty.level stdin
+    val pids = List.mapi (fn (i, (n, total, c, per)) =>
+                              spawn (fn () => worker (lev, weak, i, total, c, per)))
+                         workerSpecs
+
+    val opts = {depth = Style.TRUECOLOR, mouse = false, paste = false}
+
+    val code = Term.run (authority, opts, {init = init pids, update = update, view = view})
+
+in exit (authority, code)
+end

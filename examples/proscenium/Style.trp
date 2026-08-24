@@ -1,0 +1,142 @@
+(* Style — Proscenium's attribute model: colors, style flags, and their SGR encoding.
+ *
+ * A program-relative module of examples/proscenium. Pure: no descriptor, no process, no
+ * effect. Images carry attribute values (Image.trp); the renderer encodes an attribute to one
+ * SGR sequence at the moment a segment is written, so escapes never live inside image data.
+ *
+ * AN ATTRIBUTE is a record {fg, bg, bold, dim, italic, underline, reverse}. `default` is the
+ * terminal's own rendition; the with* functions replace one field, so call sites read as
+ * pipelines: `Style.withBold true (Style.withFg (Style.BASIC 4) Style.default)`.
+ *
+ * COLORS name three encodings: `BASIC n` (0..15, the named palette), `IDX n` (0..255), and
+ * `RGB (r, g, b)` (0..255 each). `DEFAULT` is the terminal's default color.
+ *
+ * DEPTH is a parameter of `encode`, not a global: Troupe has no environment-variable access,
+ * so the depth a terminal supports cannot be sniffed and must reach the library as a program
+ * option (the design record is _dev_planning/tui-library/research-findings.md, "Gaps"). A
+ * color above the encoding depth degrades: RGB to the nearest 256-palette entry (the 6x6x6
+ * cube or the grayscale ramp), a palette entry to the nearest of the 16 basic colors (an
+ * approximation by channel thresholds, documented at `idxToBasic`).
+ *
+ * `encode` RESETS FIRST: every sequence begins with parameter 0, so a segment's rendition
+ * depends only on its own attribute and never on what was written before it. The renderer
+ * therefore needs no rendition state. `reset` is the bare reset, written at the end of a row.
+ *)
+
+import Number
+
+infixl 1 |>
+
+datatype color = DEFAULT
+               | BASIC of int            (* 0..15: the named palette            *)
+               | IDX of int              (* 0..255                              *)
+               | RGB of int * int * int  (* 0..255 per channel                  *)
+
+datatype depth = COLORS16 | COLORS256 | TRUECOLOR
+
+let val intDiv = Number.intDiv
+
+    val default = { fg = DEFAULT, bg = DEFAULT
+                  , bold = false, dim = false, italic = false
+                  , underline = false, reverse = false }
+
+    (** The value pipe, for reading attribute construction left to right:
+     *  `Style.default |> Style.withFg (Style.BASIC 4) |> Style.withBold true`. The with*
+     *  functions take their attribute last so that this composes. *)
+    fun ( |> ) x f = f x
+
+    fun withFg c a        = { fg = c,    bg = a.bg, bold = a.bold, dim = a.dim, italic = a.italic, underline = a.underline, reverse = a.reverse }
+    fun withBg c a        = { fg = a.fg, bg = c,    bold = a.bold, dim = a.dim, italic = a.italic, underline = a.underline, reverse = a.reverse }
+    fun withBold v a      = { fg = a.fg, bg = a.bg, bold = v,      dim = a.dim, italic = a.italic, underline = a.underline, reverse = a.reverse }
+    fun withDim v a       = { fg = a.fg, bg = a.bg, bold = a.bold, dim = v,     italic = a.italic, underline = a.underline, reverse = a.reverse }
+    fun withItalic v a    = { fg = a.fg, bg = a.bg, bold = a.bold, dim = a.dim, italic = v,        underline = a.underline, reverse = a.reverse }
+    fun withUnderline v a = { fg = a.fg, bg = a.bg, bold = a.bold, dim = a.dim, italic = a.italic, underline = v,           reverse = a.reverse }
+    fun withReverse v a   = { fg = a.fg, bg = a.bg, bold = a.bold, dim = a.dim, italic = a.italic, underline = a.underline, reverse = v }
+
+    (*------------------------------  Degradation  ------------------------------*)
+
+    (** The 256-palette entry nearest an RGB color: the grayscale ramp (232..255) when the
+     *  channels are equal, otherwise the 6x6x6 cube (16..231). The channel quantization is
+     *  the standard one for cube levels 0, 95, 135, 175, 215, 255. *)
+    fun rgbToIdx (r, g, b) =
+        if r = g andalso g = b
+        then if r < 8 then 16
+             else if r > 248 then 231
+             else 232 + intDiv (r - 8) 10
+        else let fun q v = if v < 48 then 0 else if v < 115 then 1 else intDiv (v - 35) 40
+             in 16 + 36 * q r + 6 * q g + q b
+             end
+
+    (** The basic color nearest a 256-palette entry. An approximation: a cube channel at
+     *  level 3 or above sets that channel's bit (red 1, green 2, blue 4), and a channel at
+     *  level 5 makes the result bright; the grayscale ramp maps to black, the two grays, or
+     *  white by quarters. *)
+    fun idxToBasic n =
+        if n < 16 then n
+        else if n > 231
+        then (if n < 238 then 0 else if n < 244 then 8 else if n < 250 then 7 else 15)
+        else let val rl = intDiv (n - 16) 36
+                 val gl = (intDiv (n - 16) 6) mod 6
+                 val bl = (n - 16) mod 6
+                 val base = (if rl >= 3 then 1 else 0)
+                          + (if gl >= 3 then 2 else 0)
+                          + (if bl >= 3 then 4 else 0)
+                 val bright = rl = 5 orelse gl = 5 orelse bl = 5
+             in if bright then base + 8 else base
+             end
+
+    (*-------------------------------  Encoding  --------------------------------*)
+
+    (** The SGR parameters for a color at a depth, as a ";"-prefixed fragment; `isFg` selects
+     *  the foreground or background parameter space. `DEFAULT` contributes nothing: the
+     *  leading reset already selected the default rendition. *)
+    fun colorParams isFg depth c =
+        let fun basic n = let val code = if n < 8
+                                         then (if isFg then 30 else 40) + n
+                                         else (if isFg then 90 else 100) + (n - 8)
+                          in ";" ^ toString code
+                          end
+            fun idx n = ";" ^ (if isFg then "38" else "48") ^ ";5;" ^ toString n
+        in case (depth, c) of
+                (_, DEFAULT)                 => ""
+              | (_, BASIC n)                 => basic n
+              | (COLORS16, IDX n)            => basic (idxToBasic n)
+              | (COLORS16, RGB rgb)          => basic (idxToBasic (rgbToIdx rgb))
+              | (COLORS256, IDX n)           => idx n
+              | (COLORS256, RGB rgb)         => idx (rgbToIdx rgb)
+              | (TRUECOLOR, IDX n)           => idx n
+              | (TRUECOLOR, RGB (r, g, b))   =>
+                    ";" ^ (if isFg then "38" else "48") ^ ";2;"
+                        ^ toString r ^ ";" ^ toString g ^ ";" ^ toString b
+        end
+
+    (** One SGR sequence selecting exactly the rendition `a` describes, at `depth`. Begins
+     *  with a reset, so it is independent of anything written before it. *)
+    fun encode depth a =
+        "\x1b[0"
+      ^ (if a.bold      then ";1" else "")
+      ^ (if a.dim       then ";2" else "")
+      ^ (if a.italic    then ";3" else "")
+      ^ (if a.underline then ";4" else "")
+      ^ (if a.reverse   then ";7" else "")
+      ^ colorParams true  depth a.fg
+      ^ colorParams false depth a.bg
+      ^ "m"
+
+    val reset = "\x1b[0m"
+
+in [ ("default", default)
+   , ("|>", ( |> ))
+   , ("withFg", withFg)
+   , ("withBg", withBg)
+   , ("withBold", withBold)
+   , ("withDim", withDim)
+   , ("withItalic", withItalic)
+   , ("withUnderline", withUnderline)
+   , ("withReverse", withReverse)
+   , ("rgbToIdx", rgbToIdx)
+   , ("idxToBasic", idxToBasic)
+   , ("encode", encode)
+   , ("reset", reset)
+   ]
+end

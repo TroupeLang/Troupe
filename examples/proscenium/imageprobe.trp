@@ -1,0 +1,157 @@
+(* imageprobe — checks Image's algebra laws, rendering invariants, overlay, stretch, and
+ * region resolution, then renders a Turbo Vision-style dialog mock for eyeballing.
+ *
+ * Run: ./local.sh examples/proscenium/imageprobe.trp
+ *)
+
+import String
+import List
+import Number
+import Option
+import "./Image"
+import "./Style"
+
+let fun say s = fwrite (stdout, s)
+
+    fun check (name, ok) = say ((if ok then "PASS " else "FAIL ") ^ name ^ "\n")
+
+    val da = Style.default
+    val blue = Style.withBg (Style.BASIC 4) (Style.withFg (Style.BASIC 6) Style.default)
+    val gray = Style.withBg (Style.BASIC 7) (Style.withFg (Style.BASIC 0) Style.default)
+    val dark = Style.withBg (Style.BASIC 0) Style.default
+
+    fun segString sg = case sg of Image.SEG (a, s) => s
+                                | Image.GAP n      => String.repeat n " "
+
+    fun rowString segs = List.foldl (fn (sg, acc) => acc ^ segString sg) "" segs
+
+    fun plainRows (i, w, h) =
+        let val r = Image.renderAt (i, w, h)
+        in List.map rowString r.rows
+        end
+
+    (*----------------------------------  Laws  ----------------------------------*)
+
+    val t1 = Image.text da "hello"
+    val _ = check ("text dims", Image.width t1 = 5 andalso Image.height t1 = 1)
+
+    val t2 = Image.text da "ab\ncdef"
+    val _ = check ("newline splits", Image.width t2 = 4 andalso Image.height t2 = 2)
+
+    val bes = Image.beside t1 t2
+    val _ = check ("beside dims", Image.width bes = 9 andalso Image.height bes = 2)
+
+    val abo = Image.above t1 t2
+    val _ = check ("above dims", Image.width abo = 5 andalso Image.height abo = 3)
+
+    val _ = check ( "operators agree"
+                  , Image.width (Image.( <|> ) t1 t2) = 9
+                    andalso Image.height (Image.( <-> ) t1 t2) = 3 )
+
+    (*---------------------------  Rendering invariants  ---------------------------*)
+
+    fun coversExactly (i, w, h) =
+        let val r = Image.renderAt (i, w, h)
+        in List.length r.rows = h
+           andalso List.forall (fn row => Image.rowWidth row = w) r.rows
+        end
+
+    val sample = Image.above (Image.beside t1 (Image.pad (1, 1, 1, 1) t2))
+                             (Image.crop (0, 0, 20, 2) (Image.fillA blue "*"))
+    val _ = check ("rows cover natural size",   coversExactly (sample, Image.width sample, Image.height sample))
+    val _ = check ("rows cover stretched size", coversExactly (sample, 40, 9))
+    val _ = check ("rows cover shrunken size",  coversExactly (sample, 4, 2))
+
+    (*----------------------------------  Overlay  ---------------------------------*)
+
+    val bot = Image.crop (0, 0, 10, 3) (Image.fillA da ".")
+    val top = Image.shift (2, 1) (Image.text da "XX")
+    val ov  = Image.overlay top bot
+    val ovRows = plainRows (ov, 10, 3)
+    val _ = check ( "overlay splices"
+                  , ovRows = ["..........", "..XX......", ".........."] )
+
+    (*----------------------------------  Stretch  ---------------------------------*)
+
+    val spring = Image.region "l" (Image.stretch (1, 0) (Image.space (0, 1)))
+    val line   = Image.beside spring (Image.text da "abc")
+    val rr     = Image.renderAt (line, 10, 1)
+    val _ = check ( "stretch takes surplus"
+                  , List.exist (fn (tag, rect) => tag = "l" andalso rect.w = 7 andalso rect.x = 0)
+                               rr.regions )
+
+    (*----------------------------------  Padding  ---------------------------------*)
+
+    val padded = Image.pad (1, 1, 1, 1) (Image.text da "ab")
+    val _ = check ("pad dims", Image.width padded = 4 andalso Image.height padded = 3)
+    val _ = check ("pad rows", plainRows (padded, 4, 3) = ["    ", " ab ", "    "])
+
+    (*----------------------------------  Regions  ---------------------------------*)
+
+    val placed = Image.shift (3, 2) (Image.region "r" (Image.text da "z"))
+    val pr     = Image.renderAt (placed, 10, 5)
+    val _ = check ( "region tracks position"
+                  , List.exist (fn (tag, rect) => tag = "r" andalso rect.x = 3 andalso rect.y = 2
+                                                  andalso rect.w = 1 andalso rect.h = 1)
+                               pr.regions )
+
+    (*----------------------------------  Cursor  ----------------------------------*)
+
+    val curScene = Image.overlay
+                       (Image.shift (5, 3) (Image.cursor Image.CURSOR_BAR (Image.text da "x")))
+                       (Image.crop (0, 0, 20, 6) (Image.fillA da "."))
+    val cr = Image.renderAt (curScene, 20, 6)
+    val _ = check ( "cursor resolves to its cell"
+                  , cr.cursor = SOME {x = 5, y = 3, shape = Image.CURSOR_BAR} )
+
+    val plainScene = Image.crop (0, 0, 8, 2) (Image.fillA da ".")
+    val pr2 = Image.renderAt (plainScene, 8, 2)
+    val _ = check ("no marker, no cursor", pr2.cursor = NONE)
+
+    val topWins = Image.overlay
+                      (Image.shift (1, 1) (Image.cursor Image.CURSOR_BLOCK (Image.text da "t")))
+                      (Image.cursor Image.CURSOR_BAR (Image.text da "b"))
+    val tw = Image.renderAt (topWins, 10, 3)
+    val _ = check ( "topmost cursor wins"
+                  , tw.cursor = SOME {x = 1, y = 1, shape = Image.CURSOR_BLOCK} )
+
+    (*------------------------------  The dialog mock  ------------------------------*)
+
+    fun boxRow (l, m, r, w) = l ^ String.repeat (w - 2) m ^ r
+
+    fun dialogBox (w, h, title) =
+        let val topR = Image.text gray (boxRow ("╔", "═", "╗", w))
+            val botR = Image.text gray (boxRow ("╚", "═", "╝", w))
+            val midR = Image.text gray (boxRow ("║", " ", "║", w))
+            fun mids k = if k <= 0 then [] else midR :: mids (k - 1)
+            val body  = Image.vcat (topR :: List.append (mids (h - 2)) [botR])
+            val label = Image.shift (Number.intDiv (w - String.size title) 2, 0)
+                                    (Image.text gray title)
+        in Image.overlay label body
+        end
+
+    val desktop = Image.crop (0, 0, 44, 12) (Image.fillA blue "▒")
+    val dialog  = dialogBox (30, 7, " About ")
+    val button  = Image.shift (18, 5) (Image.text dark "[ OK ]")
+    val scene   = Image.overlay (Image.shift (7, 2) (Image.overlay button dialog))
+                  (Image.overlay (Image.shift (9, 3) (Image.crop (0, 0, 30, 7) (Image.fillA dark " ")))
+                                 desktop)
+
+    val sceneRows = plainRows (scene, 44, 12)
+    val _ = check ( "dialog sits on the desktop"
+                  , List.length sceneRows = 12
+                    andalso String.indexOf "╔" (List.nth sceneRows 2) = SOME 7 )
+
+    val _ = say "\n"
+    val enc = Style.encode Style.COLORS16
+    fun emitRow segs =
+        say (List.foldl (fn (sg, acc) =>
+                             acc ^ (case sg of Image.SEG (a, s) => enc a ^ s
+                                             | Image.GAP n      => Style.reset ^ String.repeat n " "))
+                        "" segs
+             ^ Style.reset ^ "\n")
+    val rScene = Image.renderAt (scene, 44, 12)
+    val _ = List.foldl (fn (row, _) => emitRow row) () rScene.rows
+
+in ()
+end

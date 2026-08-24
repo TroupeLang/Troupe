@@ -1,0 +1,175 @@
+(* Menu — the menu bar with drop-downs.
+ *
+ * A program-relative module of examples/proscenium. Pure. A menu is a value:
+ *
+ *   Menu.menu [ {title = "File", items = [{id = "exit", text = "Exit"}, ...]}, ... ]
+ *
+ * whose state is the menu list plus which drop-down is open (`NONE`, or the menu and item
+ * indices). `menuUpdate` folds one Term event into it and returns the next state and a
+ * result: MR_NONE, or MR_CHOSE id when an item was chosen (the drop-down closes itself).
+ *
+ * KEYS. Closed: F10 opens the first menu; Alt+letter opens the menu whose title starts with
+ * that letter. Open: Left/Right switch menus, Up/Down move along the items, Enter chooses,
+ * Esc closes, Alt+letter switches. Open-state keys are consumed here, so the application
+ * routes events to the menu only when no modal dialog is above it.
+ *
+ * MOUSE. The bar tags each title ("menu", i) and each drop-down row ("mitem", i, j): a press
+ * on a title opens that menu (or closes it when already open), a press on a row chooses it.
+ *
+ * VIEW. `viewBar` is the one-row bar for the top of the screen. `viewOpen` is the open
+ * drop-down — a single-bordered, shadowed box — as `SOME (x, image)` with the column it
+ * belongs at, for the application to `shift (x, 1)` and overlay; `NONE` when closed.
+ *)
+
+import List
+import String
+import Option
+import "./Image"
+import "./Widget"
+import "./Key"
+import "./Term"
+
+datatype menuResult = MR_NONE | MR_CHOSE of string
+
+let fun imax (a, b) = if a > b then a else b
+
+    fun menu menus = {menus = menus, open = NONE}
+
+    fun withOpen (st, o) = {menus = st.menus, open = o}
+
+    fun nmenus st = List.length st.menus
+
+    fun nthMenu (st, i) = List.nth st.menus i
+
+    (*-------------------------------  Geometry  -------------------------------*)
+
+    (** Each title occupies "  title  "; `titleX i` is the column its cell starts at. *)
+    fun cellText t = "  " ^ t ^ "  "
+
+    fun titleX (st, i) =
+        let fun go (_, [], _)         = 0
+              | go (k, m :: rest, x)  =
+                    if k = i then x else go (k + 1, rest, x + String.size (cellText m.title))
+        in go (0, st.menus, 0)
+        end
+
+    (*---------------------------------  Keys  ---------------------------------*)
+
+    (** The lowercase reading of a one-character string, for Alt+letter matching. *)
+    fun lower1 c =
+        let val n = String.subCode (c, 0)
+        in if n >= 0x41 andalso n <= 0x5a then String.strCode (n + 0x20) else c
+        end
+
+    fun titleMatches (m, c) =
+        String.size m.title > 0 andalso lower1 (String.substring (m.title, 0, 1)) = lower1 c
+
+    fun findByLetter (st, c) =
+        let fun go (_, [])        = NONE
+              | go (i, m :: rest) = if titleMatches (m, c) then SOME i else go (i + 1, rest)
+        in go (0, st.menus)
+        end
+
+    fun wrap (n, v) = ((v mod n) + n) mod n
+
+    fun choose (st, mi, sel) =
+        let val m = nthMenu (st, mi)
+        in case List.find (fn _ => true) (List.drop sel m.items) of
+                SOME it => (withOpen (st, NONE), MR_CHOSE it.id)
+              | NONE    => (withOpen (st, NONE), MR_NONE)
+        end
+
+    fun menuKey (k, mods, st) =
+        case st.open of
+             NONE =>
+                 (case k of
+                       KEY_F 10 => (withOpen (st, SOME {mi = 0, sel = 0}), MR_NONE)
+                     | KEY_PRINT c =>
+                           if mods.alt
+                           then (case findByLetter (st, c) of
+                                      SOME i => (withOpen (st, SOME {mi = i, sel = 0}), MR_NONE)
+                                    | NONE   => (st, MR_NONE))
+                           else (st, MR_NONE)
+                     | _ => (st, MR_NONE))
+           | SOME {mi, sel} =>
+                 let val m = nthMenu (st, mi)
+                     val items = List.length m.items
+                 in case k of
+                         KEY_LEFT  => (withOpen (st, SOME {mi = wrap (nmenus st, mi - 1), sel = 0}), MR_NONE)
+                       | KEY_RIGHT => (withOpen (st, SOME {mi = wrap (nmenus st, mi + 1), sel = 0}), MR_NONE)
+                       | KEY_UP    => (withOpen (st, SOME {mi = mi, sel = wrap (items, sel - 1)}), MR_NONE)
+                       | KEY_DOWN  => (withOpen (st, SOME {mi = mi, sel = wrap (items, sel + 1)}), MR_NONE)
+                       | KEY_ENTER => choose (st, mi, sel)
+                       | KEY_ESC   => (withOpen (st, NONE), MR_NONE)
+                       | KEY_PRINT c =>
+                             if mods.alt
+                             then (case findByLetter (st, c) of
+                                        SOME i => (withOpen (st, SOME {mi = i, sel = 0}), MR_NONE)
+                                      | NONE   => (st, MR_NONE))
+                             else (st, MR_NONE)
+                       | _ => (st, MR_NONE)
+                 end
+
+    fun menuHit (tag, st) =
+        case tag of
+             ("menu", i) =>
+                 (case st.open of
+                       SOME {mi, sel} =>
+                           if mi = i then (withOpen (st, NONE), MR_NONE)
+                           else (withOpen (st, SOME {mi = i, sel = 0}), MR_NONE)
+                     | NONE => (withOpen (st, SOME {mi = i, sel = 0}), MR_NONE))
+           | ("mitem", i, j) => choose (st, i, j)
+           | _ => (st, MR_NONE)
+
+    (** One Term event folded into the menu. *)
+    fun menuUpdate (tev, st) =
+        case tev of
+             EV (KEY (k, mods)) => menuKey (k, mods, st)
+           | HIT (tag, MOUSE m) =>
+                 (case m.kind of
+                       MOUSE_PRESS _ => menuHit (tag, st)
+                     | _             => (st, MR_NONE))
+           | _ => (st, MR_NONE)
+
+    (*---------------------------------  Views  --------------------------------*)
+
+    (** The one-row bar: each title in its cell, the open one highlighted. *)
+    fun viewBar (th, st) =
+        let val openMi = case st.open of SOME {mi, sel} => mi | NONE => 0 - 1
+            val cells = List.mapi (fn (i, m) =>
+                            Image.region ("menu", i)
+                                (Image.text (if i = openMi then th.barSel else th.bar)
+                                            (cellText m.title)))
+                        st.menus
+        in Image.stretch (1, 0)
+               (Image.overlay (Image.hcat cells) (Image.fillA th.bar " "))
+        end
+
+    (** The open drop-down as SOME (column, image) — a single-bordered shadowed box, one
+     *  tagged row per item — or NONE. The application overlays it at (column, 1). *)
+    fun viewOpen (th, st) =
+        case st.open of
+             NONE => NONE
+           | SOME {mi, sel} =>
+                 let val m = nthMenu (st, mi)
+                     val witems = List.foldl (fn (it, acc) => imax (String.size it.text, acc))
+                                             0 m.items
+                     val w = witems + 4
+                     val h = List.length m.items + 2
+                     val rows = List.mapi (fn (j, it) =>
+                                    Image.region ("mitem", mi, j)
+                                        (Image.text (if j = sel then th.barSel else th.dlg)
+                                                    (Widget.padTo (" " ^ it.text, w - 2))))
+                                m.items
+                     val body = Image.shift (1, 1) (Image.vcat rows)
+                     val img = Widget.withShadow ( th
+                                                 , Image.overlay body (Widget.box (th.dlg, w, h, false)) )
+                 in SOME (titleX (st, mi), img)
+                 end
+
+in [ ("menu", menu)
+   , ("menuUpdate", menuUpdate)
+   , ("viewBar", viewBar)
+   , ("viewOpen", viewOpen)
+   ]
+end

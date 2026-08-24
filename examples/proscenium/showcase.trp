@@ -1,0 +1,218 @@
+(* showcase — the Turbo Vision-style dialog showcase: menu bar with drop-downs, modal
+ * dialogs over the ▒ desktop, and every form control the widget layer has.
+ *
+ *   ./local.sh examples/proscenium/showcase.trp
+ *
+ * F10 or Alt+letter opens a menu; the items open dialogs. Settings is the form dialog
+ * (input, checkboxes, a radio group, OK/Cancel), Pick is the list box, About the message
+ * box; Exit — also Alt-x — asks for confirmation, and a Yes ends the session. Inside a
+ * dialog: Tab/Shift-Tab cycle focus, Enter presses the focused (else the first) button, Esc
+ * cancels. The mouse works everywhere: menu titles, drop-down rows, buttons, checkboxes,
+ * radio options, list rows. `q` on the desktop quits directly.
+ *
+ * MODALITY is routing: events go to the top dialog's form when the stack is non-empty, and
+ * to the menu otherwise; a closed dialog pops. Nothing else enforces it.
+ *)
+
+import String
+import List
+import Number
+import Option
+import "./Term"
+import "./Key"
+import "./Image"
+import "./Style"
+import "./Widget"
+import "./Menu"
+
+let val intDiv = Number.intDiv
+
+    (*----------------------------------  Menus  ----------------------------------*)
+
+    val menus =
+        [ {title = "File",    items = [ {id = "new",      text = "New"}
+                                      , {id = "exit",     text = "Exit"} ]}
+        , {title = "Edit",    items = [ {id = "settings", text = "Settings..."} ]}
+        , {title = "Dialogs", items = [ {id = "about",    text = "About..."}
+                                      , {id = "pick",     text = "Pick an item..."} ]}
+        , {title = "Help",    items = [ {id = "about",    text = "About Proscenium..."} ]}
+        ]
+
+    (*---------------------------------  Dialogs  ---------------------------------*)
+
+    fun aboutDialog () =
+        { kind = "about", title = " About ", w = 44, h = 10
+        , form = Widget.form
+              [ Widget.label "Proscenium"
+              , Widget.label "A terminal UI library written in Troupe."
+              , Widget.label ""
+              , Widget.label "Images, widgets, and an Elm-style runner"
+              , Widget.label "on the battallion process constellation."
+              , Widget.label ""
+              , Widget.buttons [("ok", "OK")] ] }
+
+    fun settingsDialog () =
+        { kind = "settings", title = " Settings ", w = 46, h = 16
+        , form = Widget.form
+              [ Widget.label "Name:"
+              , Widget.input ("name", "battallion", 32)
+              , Widget.label ""
+              , Widget.checkbox ("auto", "Autosave", true)
+              , Widget.checkbox ("wrap", "Wrap long lines", false)
+              , Widget.label ""
+              , Widget.label "Verbosity:"
+              , Widget.radio ("verb", ["quiet", "normal", "loud"], 1)
+              , Widget.label ""
+              , Widget.buttons [("ok", "OK"), ("cancel", "Cancel")] ] }
+
+    fun pickDialog () =
+        { kind = "pick", title = " Pick an item ", w = 40, h = 15
+        , form = Widget.form
+              [ Widget.label "A scrolling list:"
+              , Widget.listbox ( "items"
+                               , List.map (fn n => "Item " ^ toString n)
+                                          (List.map (fn n => n + 1) (List.range 20))
+                               , 8, 32 )
+              , Widget.label ""
+              , Widget.buttons [("ok", "OK"), ("cancel", "Cancel")] ] }
+
+    fun confirmDialog () =
+        { kind = "confirm", title = " Confirm ", w = 34, h = 7
+        , form = Widget.form
+              [ Widget.label "Really exit the showcase?"
+              , Widget.label ""
+              , Widget.buttons [("yes", "Yes"), ("no", "No")] ] }
+
+    fun dialogFor id =
+             if id = "about"    then [aboutDialog ()]
+        else if id = "settings" then [settingsDialog ()]
+        else if id = "pick"     then [pickDialog ()]
+        else if id = "exit"     then [confirmDialog ()]
+        else []
+
+    (*----------------------------------  Model  ----------------------------------*)
+
+    fun init {cols, rows, ui} =
+        ( { cols = cols, rows = rows, th = Widget.turbo ()
+          , menu = Menu.menu menus, dialogs = [], status = "ready" }
+        , [] )
+
+    fun withModel (m, menu, dialogs, status) =
+        { cols = m.cols, rows = m.rows, th = m.th
+        , menu = menu, dialogs = dialogs, status = status }
+
+    fun setTopForm (m, d, frm) =
+        let val d' = {kind = d.kind, title = d.title, w = d.w, h = d.h, form = frm}
+        in case m.dialogs of
+                _ :: rest => withModel (m, m.menu, d' :: rest, m.status)
+              | []        => m
+        end
+
+    fun pop m = case m.dialogs of
+                     _ :: rest => withModel (m, m.menu, rest, m.status)
+                   | []        => m
+
+    fun push (m, ds) = withModel (m, m.menu, List.append ds m.dialogs, m.status)
+
+    fun setStatus (m, s) = withModel (m, m.menu, m.dialogs, s)
+
+    (*--------------------------------  Summaries  --------------------------------*)
+
+    fun verbName i = case List.find (fn _ => true)
+                                    (List.drop i ["quiet", "normal", "loud"]) of
+                          SOME s => s
+                        | NONE   => "?"
+
+    (* toString is numeric-only; booleans need their own spelling. *)
+    fun onOff b = if b then "on" else "off"
+
+    fun settingsSummary frm =
+        "name='" ^ Widget.inputText (frm, "name")
+        ^ "' autosave=" ^ onOff (Widget.checkboxOn (frm, "auto"))
+        ^ " wrap=" ^ onOff (Widget.checkboxOn (frm, "wrap"))
+        ^ " verbosity=" ^ verbName (Widget.radioSel (frm, "verb"))
+
+    (*----------------------------------  Update  ---------------------------------*)
+
+    fun dialogResult (m, d, frm, res) =
+        case res of
+             FR_CANCELLED => (pop m, [])
+           | FR_PRESSED id =>
+                 (let val closed = pop m
+                  in      if d.kind = "confirm" andalso id = "yes" then (m, [QUIT])
+                     else if id = "cancel" orelse (d.kind = "confirm" andalso id = "no")
+                          then (closed, [])
+                     else if d.kind = "settings"
+                          then (setStatus (closed, settingsSummary frm), [])
+                     else if d.kind = "pick"
+                          then (setStatus (closed, "picked: " ^ Widget.listItem (frm, "items")), [])
+                     else (closed, [])
+                  end)
+           | _ => (setTopForm (m, d, frm), [])
+
+    fun update (ev, m) =
+        case ev of
+             RESIZED {cols, rows} =>
+                 ( { cols = cols, rows = rows, th = m.th
+                   , menu = m.menu, dialogs = m.dialogs, status = m.status }
+                 , [] )
+           | _ =>
+        (case m.dialogs of
+              d :: _ =>
+                  let val (frm', res) = Widget.formUpdate (ev, d.form)
+                  in dialogResult (setTopForm (m, d, frm'), d, frm', res)
+                  end
+            | [] =>
+                  (case ev of
+                        EV (KEY (KEY_PRINT "q", mods)) =>
+                            if mods.alt then (m, []) else (m, [QUIT])
+                      | EV (KEY (KEY_PRINT "x", mods)) =>
+                            if mods.alt then (push (m, [confirmDialog ()]), [])
+                            else (m, [])
+                      | EV (KEY (KEY_CTRL "c", _)) => (m, [QUIT])
+                      | _ =>
+                            let val (mn', res) = Menu.menuUpdate (ev, m.menu)
+                                val m' = withModel (m, mn', m.dialogs, m.status)
+                            in case res of
+                                    MR_CHOSE id =>
+                                        if id = "new"
+                                        then (setStatus (m', "new file"), [])
+                                        else (push (m', dialogFor id), [])
+                                  | MR_NONE => (m', [])
+                            end))
+
+    (*-----------------------------------  View  ----------------------------------*)
+
+    fun statusText m = "  F10 Menu   Alt-X Exit   q Quit   " ^ m.status
+
+    fun dialogImage (th, d) =
+        Widget.dialog (th, d.title, d.w, d.h, Widget.formView (th, d.w - 4, d.form))
+
+    (** Dialogs drawn bottom-first, each centered with a small cascade per depth. *)
+    fun overlayDialogs (th, cols, rows, ds, base) =
+        let fun go ([], _, acc)      = acc
+              | go (d :: rest, k, acc) =
+                    let val depth = k             (* 0 for the bottom dialog *)
+                        val (x, y) = Widget.centered (cols, rows, d.w, d.h)
+                        val img = Image.shift (x + depth * 2, y + depth) (dialogImage (th, d))
+                    in go (rest, k + 1, Image.overlay img acc)
+                    end
+        in go (List.reverse ds, 0, base)
+        end
+
+    fun view m =
+        let val th = m.th
+            val desktop = Image.fillA th.desktop "▒"
+            val base = Image.vcat [ Menu.viewBar (th, m.menu)
+                                  , desktop
+                                  , Widget.bar (th.bar, statusText m) ]
+            val withMenu = case Menu.viewOpen (th, m.menu) of
+                                SOME (x, img) => Image.overlay (Image.shift (x, 1) img) base
+                              | NONE          => base
+        in overlayDialogs (th, m.cols, m.rows, m.dialogs, withMenu)
+        end
+
+    val opts = {depth = Style.COLORS16, mouse = true, paste = false}
+
+in Term.run (authority, opts, {init = init, update = update, view = view})
+end

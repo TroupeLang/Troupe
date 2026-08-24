@@ -117,8 +117,14 @@ let val intDiv = Number.intDiv
         , barSel      = plain |> Style.withFg accent
         , dlg         = plain
         , title       = plain |> Style.withFg accent |> Style.withBold true
-        , input       = plain
-        , inputFocus  = plain
+          (* Input fields are underlined for their whole width: a bare field (huh's
+           * prefix-only style) is invisible while empty, and a tinted strip fights the
+           * terminal's unknown default foreground — on a light terminal the user types
+           * dark text over a dark band. The underline inherits the terminal's own
+           * contrast on either polarity; focus adds bold, and the cursor sits in the
+           * field. *)
+        , input       = plain |> Style.withUnderline true
+        , inputFocus  = plain |> Style.withUnderline true |> Style.withBold true
         , button      = Style.default |> Style.withFg (Style.IDX 252)
                                       |> Style.withBg (Style.IDX 237)
         , buttonFocus = plain |> Style.withFg inkOn |> Style.withBg accent

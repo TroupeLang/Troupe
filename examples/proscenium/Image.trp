@@ -1,0 +1,349 @@
+(* Image — Proscenium's view type: an immutable image algebra, and its rendering to rows of
+ * styled segments.
+ *
+ * A program-relative module of examples/proscenium. Pure: no descriptor, no process, no
+ * effect. The design follows notty's image algebra (composition nodes with their dimensions
+ * cached, so `width` and `height` are O(1)), extended with nottui-style stretch weights and
+ * with tagged regions for mouse hit-testing; the design record is
+ * _dev_planning/tui-library/step-image-algebra.md.
+ *
+ * AN IMAGE is a rectangle of styled text described by value, not drawn by effect. Leaves:
+ * `text a s` (one or more rows of styled text) and `fillA a cell` (an unbounded surface of
+ * one repeated character, taking whatever size layout assigns). Composition: `a <|> b`
+ * places b beside a, `a <-> b` places b below a, `a </> b` draws a over b. `crop` cuts a
+ * fixed window out of an image; `pad` and `shift` are crops with negative margins. `stretch`
+ * marks an image with weights; `region` wraps an image with a tag that rendering resolves
+ * to the rectangle the image was assigned.
+ *
+ * REPRESENTATION. An image is a record {w, h, sw, sh, node}: the natural size and the
+ * stretch weights on the record, the structure in `node`. Dimension reads during
+ * composition and layout are field accesses; constructor dispatch happens once per node in
+ * rendering. (An earlier representation cached dimensions inside every constructor payload
+ * and read them back through 9-way matches; the accessor matches dominated the build cost of
+ * a frame — measured in tests/_unautomated/claude/proscenium-render-profile.trp.) `stretch`
+ * rebuilds the record with new weights around the same node; there is no stretch node.
+ *
+ * TEXT POLICY. A newline in `text` splits the string into stacked rows. A tab becomes one
+ * space: terminal tab stops depend on the cursor column, which a value-level image does not
+ * know. Width is counted in UTF-16 code units, one column each — the same simplification as
+ * examples/battallion/Screen.trp and lib/Rope.trp: a double-width character is under-counted
+ * and an astral-plane character double-counted; the deferred width-table module
+ * (_dev_planning/tui-library/research-findings.md, "Gaps") is where that ends.
+ *
+ * LAYOUT. Rendering assigns every node a rectangle. A composition asked to render larger
+ * than its natural size distributes the surplus to its children in proportion to their
+ * stretch weights (a node with no stretch below it keeps its natural size and the surplus
+ * becomes blank space); asked to render smaller, it truncates — beside keeps its left child
+ * whole as long as it fits, above its top child. Weights compose as in nottui: beside sums
+ * its children's horizontal weights, above takes the maximum, and dually for vertical.
+ *
+ * RENDERING produces rows of segments. A segment is either styled text (`SEG (attr, s)`) or
+ * a transparent gap (`GAP n`). Gaps arise from padding and from `empty`; overlay lets the
+ * lower image show through them; final assembly (Term.trp) writes them as spaces in the
+ * terminal's default rendition. Every rendered row covers the assigned width exactly, and
+ * the row list has exactly the assigned height — the invariant the renderer's row diff
+ * depends on.
+ *
+ * LIMITATION: a region inside a crop reports its full assigned rectangle even where the crop
+ * cut it; hit-testing does not yet clip to the window that stayed visible.
+ *)
+
+import List
+import String
+import Number
+import Option
+
+infixl 6 <|>
+infixl 5 <->
+infixl 4 </>
+
+datatype 'a seg = SEG of 'a * string
+                | GAP of int
+
+(* 'i is the image record type {w, h, sw, sh, node}; payload types are identity-only. *)
+datatype ('a, 'b, 'i) node =
+      EMPTY
+    | TEXT   of {a : 'a, s : string}
+    | FILL   of {a : 'a, cell : string}
+    | HCAT   of {l : 'i, r : 'i}
+    | VCAT   of {t : 'i, b : 'i}
+    | OVER   of {top : 'i, bot : 'i}
+    | CROP   of {i : 'i, left : int, top : int}
+    | REGION of {tag : 'b, i : 'i}
+
+let val intDiv = Number.intDiv
+
+    fun imax (a, b) = if a > b then a else b
+    fun imin (a, b) = if a < b then a else b
+
+    fun width i   = i.w
+    fun height i  = i.h
+    fun hweight i = i.sw
+    fun vweight i = i.sh
+
+    (*------------------------------  Constructors  ------------------------------*)
+
+    val empty = {w = 0, h = 0, sw = 0, sh = 0, node = EMPTY}
+
+    (* The translate walk costs a closure call and an equality check per character, so it
+     * runs only when a scan (inside the JS engine) has found a tab; the same holds for the
+     * newline split below. *)
+    fun textRow a s =
+        let val s' = case String.indexOf "\x09" s of
+                          NONE   => s
+                        | SOME _ => String.translate (fn c => if c = "\x09" then " " else c) s
+        in {w = String.size s', h = 1, sw = 0, sh = 0, node = TEXT {a = a, s = s'}}
+        end
+
+    fun aboveRaw a b =
+        { w = imax (a.w, b.w), h = a.h + b.h
+        , sw = imax (a.sw, b.sw), sh = a.sh + b.sh
+        , node = VCAT {t = a, b = b} }
+
+    (** Styled text; a newline splits it into stacked rows, a tab becomes one space. *)
+    fun text a s =
+        case String.indexOf "\n" s of
+             NONE => textRow a s
+           | SOME _ =>
+                 (case String.lines s of
+                       []      => textRow a ""
+                     | l :: ls => List.foldl (fn (l', acc) => aboveRaw acc (textRow a l'))
+                                             (textRow a l) ls)
+
+    (** An unbounded surface of `cell` (one character), taking whatever size layout assigns;
+     *  natural size 0x0, stretch weight 1 on both axes. *)
+    fun fillA a cell =
+        {w = 0, h = 0, sw = 1, sh = 1, node = FILL {a = a, cell = if cell = "" then " " else cell}}
+
+    fun beside a b =
+        case (a.node, b.node) of
+             (EMPTY, _) => b
+           | (_, EMPTY) => a
+           | _ => { w = a.w + b.w, h = imax (a.h, b.h)
+                  , sw = a.sw + b.sw, sh = imax (a.sh, b.sh)
+                  , node = HCAT {l = a, r = b} }
+
+    fun above a b =
+        case (a.node, b.node) of
+             (EMPTY, _) => b
+           | (_, EMPTY) => a
+           | _ => aboveRaw a b
+
+    (** `overlay top bot`: top drawn over bot, top-left corners aligned; top renders at its
+     *  own natural size, clipped to the assigned rectangle. *)
+    fun overlay top bot =
+        { w = imax (top.w, bot.w), h = imax (top.h, bot.h)
+        , sw = imax (top.sw, bot.sw), sh = imax (top.sh, bot.sh)
+        , node = OVER {top = top, bot = bot} }
+
+    fun ( <|> ) a b = beside a b
+    fun ( <-> ) a b = above a b
+    fun ( </> ) a b = overlay a b
+
+    fun hcat is = List.foldl (fn (i, acc) => beside acc i) empty is
+    fun vcat is = List.foldl (fn (i, acc) => above acc i) empty is
+
+    (** The `(w, h)` window on `i` whose top-left corner sits at `(left, top)` of `i`'s own
+     *  coordinates; a negative `left`/`top` and a `w`/`h` beyond the content are blank. *)
+    fun crop (left, top, w, h) i =
+        { w = imax (w, 0), h = imax (h, 0), sw = 0, sh = 0
+        , node = CROP {i = i, left = left, top = top} }
+
+    fun pad (l, t, r, b) i =
+        crop (0 - l, 0 - t, i.w + l + r, i.h + t + b) i
+
+    fun shift (dx, dy) i = pad (dx, dy, 0, 0) i
+
+    (** Transparent blank space of a fixed size. *)
+    fun space (w, h) = crop (0, 0, w, h) empty
+
+    (** The same image, claiming surplus space with weights `(sw, sh)`. *)
+    fun stretch (sw, sh) i = {w = i.w, h = i.h, sw = sw, sh = sh, node = i.node}
+
+    fun region tag i =
+        {w = i.w, h = i.h, sw = i.sw, sh = i.sh, node = REGION {tag = tag, i = i}}
+
+    (*----------------------------  Row primitives  ------------------------------*)
+
+    fun segWidth (SEG (a, s)) = String.size s
+      | segWidth (GAP n)      = n
+
+    fun rowWidth segs = List.foldl (fn (sg, acc) => acc + segWidth sg) 0 segs
+
+    fun gapRow w = if w <= 0 then [] else [GAP w]
+
+    fun gapRows (w, h) = if h <= 0 then [] else gapRow w :: gapRows (w, h - 1)
+
+    (** The first `n` columns of a row, padded with a gap to exactly `n`. *)
+    fun takeCols (segs, n) =
+        if n <= 0 then []
+        else case segs of
+                  []                 => [GAP n]
+                | SEG (a, s) :: rest =>
+                      let val k = String.size s
+                      in if k <= n then SEG (a, s) :: takeCols (rest, n - k)
+                         else [SEG (a, String.substring (s, 0, n))]
+                      end
+                | GAP m :: rest      =>
+                      if m <= n then GAP m :: takeCols (rest, n - m)
+                      else [GAP n]
+
+    fun dropCols (segs, n) =
+        if n <= 0 then segs
+        else case segs of
+                  []                 => []
+                | SEG (a, s) :: rest =>
+                      let val k = String.size s
+                      in if k <= n then dropCols (rest, n - k)
+                         else SEG (a, String.substring (s, n, k)) :: rest
+                      end
+                | GAP m :: rest      =>
+                      if m <= n then dropCols (rest, n - m)
+                      else GAP (m - n) :: rest
+
+    fun sliceCols (segs, from, n) = takeCols (dropCols (segs, from), n)
+
+    (** `top` drawn over `bot`: an opaque segment of `top` wins, a gap of `top` reveals the
+     *  same columns of `bot`, and `bot` continues where `top` ends. *)
+    fun spliceRow (bot, top) =
+        let fun go ([], c, acc)                = List.revAppend acc (dropCols (bot, c))
+              | go (GAP n :: rest, c, acc)     =
+                    go (rest, c + n, List.revAppend (sliceCols (bot, c, n)) acc)
+              | go (SEG (a, s) :: rest, c, acc) =
+                    go (rest, c + String.size s, SEG (a, s) :: acc)
+        in go (top, 0, [])
+        end
+
+    (*--------------------------------  Rendering  --------------------------------*)
+
+    (** One child's assigned length on an axis: the pair's natural lengths are `na`/`nb`, the
+     *  weights `wa`/`wb`, the assigned total `total`; returns a's share. Shrink truncates b
+     *  first; surplus splits by weight, all of it staying unassigned when no weight claims
+     *  it (the caller pads). *)
+    fun share (total, na, nb, wa, wb) =
+        if total <= na then total
+        else if total <= na + nb then na
+        else if wa + wb = 0 then na
+        else na + intDiv ((total - na - nb) * wa) (wa + wb)
+
+    fun zipRows (xs, ys) =
+        case (xs, ys) of
+             ([], _) => []
+           | (_, []) => []
+           | (x :: xs', y :: ys') => List.append x y :: zipRows (xs', ys')
+
+    (** Render `i` into the rectangle at `(x, y)` (screen coordinates, for regions) of size
+     *  `(w, h)`. Returns the rows — exactly `h` of them, each covering exactly `w` columns —
+     *  and the region list grown from `acc`. *)
+    fun go (i, x, y, w, h, acc) =
+        if w <= 0 orelse h <= 0 then (gapRows (w, h), acc)
+        else case i.node of
+             EMPTY => (gapRows (w, h), acc)
+           | TEXT {a, s} =>
+                 let val k   = String.size s
+                     val row = if k >= w then [SEG (a, String.substring (s, 0, w))]
+                               else if k = 0 then gapRow w
+                               else SEG (a, s) :: gapRow (w - k)
+                 in (row :: gapRows (w, h - 1), acc)
+                 end
+           | FILL {a, cell} =>
+                 let val row = [SEG (a, String.substring (String.repeat w cell, 0, w))]
+                     fun rows k = if k <= 0 then [] else row :: rows (k - 1)
+                 in (rows h, acc)
+                 end
+           | HCAT {l, r} =>
+                 let val al = share (w, l.w, r.w, l.sw, r.sw)
+                     val ar = imin (w - al, if r.sw = 0 then r.w else w - al)
+                     val (rowsL, acc1) = go (l, x, y, al, h, acc)
+                     val (rowsR, acc2) = go (r, x + al, y, ar, h, acc1)
+                     val joined = zipRows (rowsL, rowsR)
+                     val deficit = w - al - ar
+                 in ( if deficit > 0
+                      then List.map (fn row => List.append row (gapRow deficit)) joined
+                      else joined
+                    , acc2 )
+                 end
+           | VCAT {t, b} =>
+                 let val at = share (h, t.h, b.h, t.sh, b.sh)
+                     val ab = imin (h - at, if b.sh = 0 then b.h else h - at)
+                     val (rowsT, acc1) = go (t, x, y, w, at, acc)
+                     val (rowsB, acc2) = go (b, x, y + at, w, ab, acc1)
+                     val deficit = h - at - ab
+                 in ( List.append rowsT (List.append rowsB (gapRows (w, deficit)))
+                    , acc2 )
+                 end
+           | OVER {top, bot} =>
+                 let val (rowsB, acc1) = go (bot, x, y, w, h, acc)
+                     val tw = imin (top.w, w)
+                     val th = imin (top.h, h)
+                     val (rowsT, acc2) = go (top, x, y, tw, th, acc1)
+                     fun lay ([], bs)             = bs
+                       | lay (_, [])              = []
+                       | lay (t' :: ts, b' :: bs) = spliceRow (b', t') :: lay (ts, bs)
+                 in (lay (rowsT, rowsB), acc2)
+                 end
+           | CROP {i = inner, left, top} =>
+                 let val vw = imin (i.w, w)
+                     val vh = imin (i.h, h)
+                     (* The interior renders at whichever is larger, its natural size or the
+                      * window's extent, so a stretchy interior (a bare FILL, natural 0x0)
+                      * fills the window. *)
+                     val iw = imax (inner.w, left + vw)
+                     val ih = imax (inner.h, top + vh)
+                     val (innerRows, acc1) = go (inner, x - left, y - top, iw, ih, acc)
+                     val rowsAvail =
+                         if top >= 0 then List.drop top innerRows
+                         else List.append (gapRows (iw, 0 - top)) innerRows
+                     fun colWindow row =
+                         if left >= 0 then sliceCols (row, left, vw)
+                         else List.append (gapRow (imin (0 - left, vw)))
+                                          (takeCols (row, vw + left))
+                     fun window (rows, k) =
+                         if k <= 0 then []
+                         else case rows of
+                                   []        => gapRows (vw, k)
+                                 | r :: rest => colWindow r :: window (rest, k - 1)
+                     val cropped = window (rowsAvail, vh)
+                     val padded  = if w > vw
+                                   then List.map (fn row => List.append row (gapRow (w - vw))) cropped
+                                   else cropped
+                 in (List.append padded (gapRows (w, h - vh)), acc1)
+                 end
+           | REGION {tag, i = inner} =>
+                 let val (rows, acc1) = go (inner, x, y, w, h, acc)
+                 in (rows, (tag, {x = x, y = y, w = w, h = h}) :: acc1)
+                 end
+
+    (** Render `i` at size `(w, h)`: exactly `h` rows of exactly `w` columns, and the list of
+     *  region rectangles in screen coordinates. *)
+    fun renderAt (i, w, h) =
+        let val (rows, regions) = go (i, 0, 0, w, h, [])
+        in {rows = rows, regions = regions}
+        end
+
+in [ ("empty", empty)
+   , ("text", text)
+   , ("fillA", fillA)
+   , ("beside", beside)
+   , ("above", above)
+   , ("overlay", overlay)
+   , ("<|>", ( <|> ))
+   , ("<->", ( <-> ))
+   , ("</>", ( </> ))
+   , ("hcat", hcat)
+   , ("vcat", vcat)
+   , ("crop", crop)
+   , ("pad", pad)
+   , ("shift", shift)
+   , ("space", space)
+   , ("stretch", stretch)
+   , ("region", region)
+   , ("width", width)
+   , ("height", height)
+   , ("hweight", hweight)
+   , ("vweight", vweight)
+   , ("segWidth", segWidth)
+   , ("rowWidth", rowWidth)
+   , ("renderAt", renderAt)
+   ]
+end

@@ -1,0 +1,84 @@
+(* testcard — checks Style's SGR encodings against expected sequences, then draws a color and
+ * style card for eyeballing in a terminal.
+ *
+ * Run: ./local.sh examples/proscenium/testcard.trp
+ *
+ * The checks print PASS/FAIL lines (escapes shown as \e on failure); the card after them is
+ * the visual half: the 16 basic colors as background blocks, a 256-cube ramp, an RGB ramp at
+ * each depth (the three rows should look alike in a truecolor terminal, coarser at 16), and
+ * the style flags.
+ *)
+
+import String
+import List
+import "./Ansi"
+import "./Style"
+
+let fun say s = fwrite (stdout, s)
+
+    fun vis s = String.translate (fn c => if c = "\x1b" then "\\e" else c) s
+
+    fun check (name, got, want) =
+        if got = want
+        then say ("PASS " ^ name ^ "\n")
+        else say ("FAIL " ^ name ^ ": got " ^ vis got ^ ", want " ^ vis want ^ "\n")
+
+    val fg  = fn c => Style.withFg c Style.default
+    val bg  = fn c => Style.withBg c Style.default
+
+    val _ = check ( "bold red 16"
+                  , Style.encode Style.COLORS16 (Style.withBold true (fg (Style.BASIC 1)))
+                  , "\x1b[0;1;31m" )
+    val _ = check ( "bright fg 16"
+                  , Style.encode Style.COLORS16 (fg (Style.BASIC 9))
+                  , "\x1b[0;91m" )
+    val _ = check ( "bright bg 16"
+                  , Style.encode Style.COLORS16 (bg (Style.BASIC 9))
+                  , "\x1b[0;101m" )
+    val _ = check ( "idx 256"
+                  , Style.encode Style.COLORS256 (fg (Style.IDX 208))
+                  , "\x1b[0;38;5;208m" )
+    val _ = check ( "rgb degrades to cube entry"
+                  , Style.encode Style.COLORS256 (fg (Style.RGB (255, 135, 0)))
+                  , "\x1b[0;38;5;208m" )
+    val _ = check ( "rgb truecolor"
+                  , Style.encode Style.TRUECOLOR (fg (Style.RGB (255, 135, 0)))
+                  , "\x1b[0;38;2;255;135;0m" )
+    val _ = check ( "cube 196 degrades to bright red"
+                  , Style.encode Style.COLORS16 (fg (Style.IDX 196))
+                  , "\x1b[0;91m" )
+    val _ = check ( "mid gray degrades to white"
+                  , Style.encode Style.COLORS16 (fg (Style.RGB (128, 128, 128)))
+                  , "\x1b[0;37m" )
+    val _ = check ("cursorTo zero-based", Ansi.cursorTo (0, 0), "\x1b[1;1H")
+    val _ = check ("sync brackets", Ansi.sync "x", "\x1b[?2026hx\x1b[?2026l")
+
+    (*----------------------------------  The card  ----------------------------------*)
+
+    fun swatch depth c = Style.encode depth (Style.withBg c Style.default) ^ "  " ^ Style.reset
+
+    fun range (lo, hi) = if lo > hi then [] else lo :: range (lo + 1, hi)
+
+    val _ = say "\nbasic 16:  "
+    val _ = List.foldl (fn (n, _) => say (swatch Style.COLORS16 (Style.BASIC n))) () (range (0, 15))
+
+    val _ = say "\ncube ramp: "
+    val _ = List.foldl (fn (n, _) => say (swatch Style.COLORS256 (Style.IDX n))) () (range (196, 226))
+
+    fun rgbRamp depth =
+        List.foldl (fn (i, _) => say (swatch depth (Style.RGB (255 - 8 * i, 8 * i, 40)))) ()
+                   (range (0, 30))
+
+    val _ = say "\nrgb @16:   "  val _ = rgbRamp Style.COLORS16
+    val _ = say "\nrgb @256:  "  val _ = rgbRamp Style.COLORS256
+    val _ = say "\nrgb @true: "  val _ = rgbRamp Style.TRUECOLOR
+
+    val _ = say ( "\nstyles:    "
+                ^ Style.encode Style.TRUECOLOR (Style.withBold true Style.default) ^ "bold" ^ Style.reset ^ " "
+                ^ Style.encode Style.TRUECOLOR (Style.withDim true Style.default) ^ "dim" ^ Style.reset ^ " "
+                ^ Style.encode Style.TRUECOLOR (Style.withItalic true Style.default) ^ "italic" ^ Style.reset ^ " "
+                ^ Style.encode Style.TRUECOLOR (Style.withUnderline true Style.default) ^ "underline" ^ Style.reset ^ " "
+                ^ Style.encode Style.TRUECOLOR (Style.withReverse true Style.default) ^ "reverse" ^ Style.reset
+                ^ "\n" )
+in ()
+end

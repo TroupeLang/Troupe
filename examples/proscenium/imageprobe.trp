@@ -95,6 +95,26 @@ let fun say s = fwrite (stdout, s)
                                                   andalso rect.w = 1 andalso rect.h = 1)
                                pr.regions )
 
+    (*----------------------------------  Cursor  ----------------------------------*)
+
+    val curScene = Image.overlay
+                       (Image.shift (5, 3) (Image.cursor Image.CURSOR_BAR (Image.text da "x")))
+                       (Image.crop (0, 0, 20, 6) (Image.fillA da "."))
+    val cr = Image.renderAt (curScene, 20, 6)
+    val _ = check ( "cursor resolves to its cell"
+                  , cr.cursor = SOME {x = 5, y = 3, shape = Image.CURSOR_BAR} )
+
+    val plainScene = Image.crop (0, 0, 8, 2) (Image.fillA da ".")
+    val pr2 = Image.renderAt (plainScene, 8, 2)
+    val _ = check ("no marker, no cursor", pr2.cursor = NONE)
+
+    val topWins = Image.overlay
+                      (Image.shift (1, 1) (Image.cursor Image.CURSOR_BLOCK (Image.text da "t")))
+                      (Image.cursor Image.CURSOR_BAR (Image.text da "b"))
+    val tw = Image.renderAt (topWins, 10, 3)
+    val _ = check ( "topmost cursor wins"
+                  , tw.cursor = SOME {x = 1, y = 1, shape = Image.CURSOR_BLOCK} )
+
     (*------------------------------  The dialog mock  ------------------------------*)
 
     fun boxRow (l, m, r, w) = l ^ String.repeat (w - 2) m ^ r

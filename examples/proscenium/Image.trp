@@ -60,6 +60,8 @@ infixl 4 </>
 datatype 'a seg = SEG of 'a * string
                 | GAP of int
 
+datatype cursorShape = CURSOR_DEFAULT | CURSOR_BLOCK | CURSOR_UNDER | CURSOR_BAR
+
 (* 'i is the image record type {w, h, sw, sh, node}; payload types are identity-only. *)
 datatype ('a, 'b, 'i) node =
       EMPTY
@@ -70,6 +72,7 @@ datatype ('a, 'b, 'i) node =
     | OVER   of {top : 'i, bot : 'i}
     | CROP   of {i : 'i, left : int, top : int}
     | REGION of {tag : 'b, i : 'i}
+    | CURSOR of {shape : cursorShape, i : 'i}
 
 let val intDiv = Number.intDiv
 
@@ -162,6 +165,13 @@ let val intDiv = Number.intDiv
 
     fun region tag i =
         {w = i.w, h = i.h, sw = i.sw, sh = i.sh, node = REGION {tag = tag, i = i}}
+
+    (** The same image, with the terminal cursor at its top-left corner in the given shape.
+     *  Rendering resolves the marker to screen coordinates the way it resolves regions;
+     *  when several cursors survive to the rendered frame, the one drawn last — the topmost
+     *  of an overlay — wins. A frame with no marker leaves the cursor hidden. *)
+    fun cursor shape i =
+        {w = i.w, h = i.h, sw = i.sw, sh = i.sh, node = CURSOR {shape = shape, i = i}}
 
     (*----------------------------  Row primitives  ------------------------------*)
 
@@ -311,14 +321,18 @@ let val intDiv = Number.intDiv
                  end
            | REGION {tag, i = inner} =>
                  let val (rows, acc1) = go (inner, x, y, w, h, acc)
-                 in (rows, (tag, {x = x, y = y, w = w, h = h}) :: acc1)
+                 in (rows, {regs = (tag, {x = x, y = y, w = w, h = h}) :: acc1.regs, cur = acc1.cur})
+                 end
+           | CURSOR {shape, i = inner} =>
+                 let val (rows, acc1) = go (inner, x, y, w, h, acc)
+                 in (rows, {regs = acc1.regs, cur = SOME {x = x, y = y, shape = shape}})
                  end
 
-    (** Render `i` at size `(w, h)`: exactly `h` rows of exactly `w` columns, and the list of
-     *  region rectangles in screen coordinates. *)
+    (** Render `i` at size `(w, h)`: exactly `h` rows of exactly `w` columns, the region
+     *  rectangles in screen coordinates, and the cursor marker that won (or NONE). *)
     fun renderAt (i, w, h) =
-        let val (rows, regions) = go (i, 0, 0, w, h, [])
-        in {rows = rows, regions = regions}
+        let val (rows, acc) = go (i, 0, 0, w, h, {regs = [], cur = NONE})
+        in {rows = rows, regions = acc.regs, cursor = acc.cur}
         end
 
 in [ ("empty", empty)
@@ -338,6 +352,7 @@ in [ ("empty", empty)
    , ("space", space)
    , ("stretch", stretch)
    , ("region", region)
+   , ("cursor", cursor)
    , ("width", width)
    , ("height", height)
    , ("hweight", hweight)

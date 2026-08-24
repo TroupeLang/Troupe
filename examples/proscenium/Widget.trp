@@ -79,9 +79,6 @@ let val intDiv = Number.intDiv
 
     fun attr (f, b) = Style.withBg (Style.BASIC b) (Style.withFg (Style.BASIC f) Style.default)
 
-    fun reversed a = { fg = a.fg, bg = a.bg, bold = a.bold, dim = a.dim
-                     , italic = a.italic, underline = a.underline, reverse = true }
-
     (** The Turbo Vision palette on the basic 16 colors. *)
     fun turbo () =
         { desktop     = attr (6, 4)      (* cyan on blue, under the ▒ fill        *)
@@ -413,6 +410,9 @@ let val intDiv = Number.intDiv
     fun padTo (s, w) = if String.size s >= w then String.substring (s, 0, w)
                        else s ^ String.repeat (w - String.size s) " "
 
+    (* The focused input places the real terminal cursor (a bar, insert-style) on its cell
+     * via the view's cursor marker; the renderer draws it, so the cell itself keeps its
+     * ordinary rendition. *)
     fun inputView (th, i, r, foc) =
         let val a = if foc then th.inputFocus else th.input
             val visible = padTo (String.substring (r.text, r.scroll, r.scroll + r.width), r.width)
@@ -424,7 +424,7 @@ let val intDiv = Number.intDiv
                                    then String.substring (visible, cc, cc + 1) else " "
                          val post = String.substring (visible, cc + 1, String.size visible)
                      in Image.hcat [ Image.text a pre
-                                   , Image.text (reversed a) cur
+                                   , Image.cursor CURSOR_BAR (Image.text a cur)
                                    , Image.text a post ]
                      end
                 else Image.text a visible

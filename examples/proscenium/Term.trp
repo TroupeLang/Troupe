@@ -79,9 +79,12 @@
  *     main program before `run`, exchanging with each other and their own timers
  *     (chat.trp's bots).
  *
- * THE CURSOR IS HIDDEN FOR THE SESSION: no `app.view` can place a terminal cursor yet. A
- * widget that needs one (an input line) draws its own cell in reverse video; a real
- * cursor-position channel is future work, recorded in the design plan.
+ * THE CURSOR IS PART OF THE VIEW: `Image.cursor shape img` marks img's top-left corner, the
+ * marker resolves to screen coordinates during rendering exactly as regions do (the topmost
+ * of an overlay wins), and the renderer places the terminal cursor there after the rows —
+ * hidden while rows are rewritten, shape selected with DECSCUSR, restored to the terminal's
+ * default at teardown. A frame with no marker leaves the cursor hidden, which is what every
+ * view without an input focus wants.
  *
  * NOT YET HERE, deliberately: a supervisor-request protocol in battallion's WRITE shape, by
  * which an application asks the supervisor to exercise the root authority (file writes for
@@ -161,18 +164,44 @@ let (** How long the supervisor waits for the kernel before calling it wedged; b
 
     (*=============================  The renderer process  =============================*)
 
+    fun shapeCode s = case s of
+                           CURSOR_DEFAULT => 0
+                         | CURSOR_BLOCK   => 2
+                         | CURSOR_UNDER   => 4
+                         | CURSOR_BAR     => 6
+
+    (** What the cursor requires this frame, given the previous cursor state, the new one,
+     *  and whether rows are being rewritten. A visible cursor is re-positioned whenever
+     *  anything else was written — the row writes leave the terminal's cursor wherever the
+     *  last one ended — and hidden while they are written; a frame that changes nothing and
+     *  moves no cursor writes nothing. *)
+    fun cursorPlan (prevCur, cur, dirty) =
+        case cur of
+             NONE =>
+                 (case prevCur of
+                       NONE   => ("", "")
+                     | SOME _ => ("", Ansi.hideCursor ^ Ansi.cursorStyle 0))
+           | SOME c =>
+                 if not dirty andalso prevCur = cur then ("", "")
+                 else ( Ansi.hideCursor
+                      , Ansi.cursorTo (c.y, c.x) ^ Ansi.cursorStyle (shapeCode c.shape)
+                        ^ Ansi.showCursor )
+
     (** Write frames until told to stop, answering each with "RENDERED". `prev` is the
-     *  previous frame's assembled rows; an unchanged frame writes nothing. *)
-    fun rendererLoop (out, lev, prev) =
+     *  previous frame's assembled rows, `prevCur` the cursor last placed; a frame that
+     *  changes neither writes nothing. *)
+    fun rendererLoop (out, lev, prev, prevCur) =
         let val m = rcv ( IfcUtil.bot, lev
-                        , [ hn ("FRAME", from, rows) => ("FRAME", from, rows)
-                          , hn "STOP"                => "STOP" ])
+                        , [ hn ("FRAME", from, rows, cur) => ("FRAME", from, rows, cur)
+                          , hn "STOP"                     => "STOP" ])
         in case m of
-                ("FRAME", from, rows) =>
-                    let val payload = diffFrame (prev, rows)
+                ("FRAME", from, rows, cur) =>
+                    let val diff = diffFrame (prev, rows)
+                        val (before, after) = cursorPlan (prevCur, cur, diff <> "")
+                        val payload = before ^ diff ^ after
                         val _ = if payload = "" then () else fwrite (out, Ansi.sync payload)
                         val _ = send (from, "RENDERED")
-                    in rendererLoop (out, lev, rows)
+                    in rendererLoop (out, lev, rows, cur)
                     end
               | _ => ()
         end
@@ -182,19 +211,20 @@ let (** How long the supervisor waits for the kernel before calling it wedged; b
      *  a tail call (Session.trp cites the measurement). *)
     fun renderer (out, lev, weak) =
         let val (ok, cap) = enableRangedReceive (IfcUtil.bot, lev, weak)
-            val _ = rendererLoop (out, lev, [])
+            val _ = rendererLoop (out, lev, [], NONE)
         in ()
         end
 
     (*==============================  The kernel process  ==============================*)
 
     (** Hand the renderer a frame of `model` and wait until it is written; returns the
-     *  region rectangles of the rendered view, for mouse hit-testing. *)
+     *  region rectangles of the rendered view, for mouse hit-testing. The frame carries the
+     *  view's cursor marker (Image.cursor), which the renderer places last. *)
     fun draw (rend, lev, depth, app, model, size) =
         let val img = app.view model
             val r   = Image.renderAt (img, size.cols, size.rows)
             val rows = List.map (fn segs => assembleRow depth segs) r.rows
-            val _ = send (rend, ("FRAME", self (), rows))
+            val _ = send (rend, ("FRAME", self (), rows, r.cursor))
             val _ = rcv (IfcUtil.bot, lev, [ hn "RENDERED" => () ])
         in r.regions
         end
@@ -421,7 +451,7 @@ let (** How long the supervisor waits for the kernel before calling it wedged; b
                   Session.trp argues for. ---*)
             val _ = Tty.rawMode (i, false)
             val _ = fwrite ( out
-                           , Ansi.showCursor
+                           , Ansi.showCursor ^ Ansi.cursorStyle 0
                              ^ (if opts.mouse then Ansi.disableMouse else "")
                              ^ (if opts.paste then Ansi.disablePaste else "")
                              ^ Ansi.enableWrap ^ Ansi.leaveAlt )

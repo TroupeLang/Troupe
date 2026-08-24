@@ -60,6 +60,11 @@ let val esc = "\x1b"
     val eraseBelow  = csi ^ "J"
     val eraseScreen = csi ^ "2J"
 
+    (** DECSCUSR: select the cursor's shape. 0 is the terminal's default; 2, 4, 6 are the
+     *  steady block, underline, and bar. The space before the final byte is part of the
+     *  sequence. *)
+    fun cursorStyle n = csi ^ toString n ^ " q"
+
 in [ ("enterAlt", enterAlt)
    , ("leaveAlt", leaveAlt)
    , ("disableWrap", disableWrap)
@@ -74,6 +79,7 @@ in [ ("enterAlt", enterAlt)
    , ("endSync", endSync)
    , ("sync", sync)
    , ("cursorTo", cursorTo)
+   , ("cursorStyle", cursorStyle)
    , ("home", home)
    , ("eraseLine", eraseLine)
    , ("eraseBelow", eraseBelow)

@@ -269,12 +269,6 @@ let val intDiv = Number.intDiv
 
     (*-----------------------------------  View  ----------------------------------*)
 
-    fun pane (th, w, h, title, focused, content) =
-        let val lbl = Image.shift (2, 0) (Image.text th.title title)
-            val inner = Image.shift (2, 1) (Image.crop (0, 0, w - 4, h - 2) content)
-        in lbl </> inner </> Widget.box (th.dlg, w, h, focused)
-        end
-
     fun calCell (th, m, focused, day, valid, hasEvents) =
         if not valid then Image.text th.dlg "    "
         else
@@ -354,13 +348,13 @@ let val intDiv = Number.intDiv
             val rightW = imax (m.cols - calW, 20)
             val agendaH = imax (intDiv midH 2, 4)
             val tasksH = imax (midH - agendaH, 4)
-            val calPane = pane (th, calW, calH, " Calendar ", calFocused,
+            val calPane = Widget.pane (th, calW, calH, " Calendar ", calFocused,
                                 calendarContent (th, m, calFocused, calW - 4))
             val left = calPane <-> Image.crop (0, 0, calW, imax (midH - calH, 0))
                                               (Image.fillA th.desktop "▒")
-            val agenda = pane (th, rightW, agendaH, " Agenda — " ^ dateKey m.sel ^ " ", false,
+            val agenda = Widget.pane (th, rightW, agendaH, " Agenda — " ^ dateKey m.sel ^ " ", false,
                                agendaContent (th, m))
-            val tasks = pane (th, rightW, tasksH, " Tasks ", not calFocused,
+            val tasks = Widget.pane (th, rightW, tasksH, " Tasks ", not calFocused,
                               tasksContent (th, m, not calFocused))
             val middle = left <|> (agenda <-> tasks)
             val base = Image.vcat

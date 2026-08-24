@@ -139,6 +139,34 @@ let val intDiv = Number.intDiv
     (** The top-left corner that centers a `(w, h)` box on a `(cols, rows)` screen. *)
     fun centered (cols, rows, w, h) = (intDiv (cols - w) 2, intDiv (rows - h) 2)
 
+    (** A titled pane: a box of `(w, h)` (double borders when `dbl` — the focused-pane
+     *  marking), the title in the top border, `content` inside the borders and clipped to
+     *  them. *)
+    fun pane (th, w, h, title, dbl, content) =
+        let val lbl = Image.shift (2, 0) (Image.text th.title title)
+            val inner = Image.shift (2, 1) (Image.crop (0, 0, w - 4, h - 2) content)
+        in Image.overlay lbl (Image.overlay inner (box (th.dlg, w, h, dbl)))
+        end
+
+    (** A `w`-cell progress bar showing `done` of `total`. *)
+    fun gauge (th, w, done, total) =
+        let val t = imax (total, 1)
+            val filled = imin (intDiv (done * w) t, w)
+        in Image.beside (Image.text th.selFocus (String.repeat filled "█"))
+                        (Image.text th.dlg (String.repeat (w - filled) "░"))
+        end
+
+    (** The last `w` of `values` (newest first) as one row of eighth-block bars, scaled to
+     *  the largest shown value. *)
+    fun sparkline (th, values, w) =
+        let val shown = List.reverse (List.take w values)
+            val top = imax (List.foldl (fn (v, a) => imax (v, a)) 0 shown, 1)
+            val glyphs = ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"]
+            fun cell v = List.nth glyphs (imin (intDiv (v * 8) top, 7))
+        in Image.text th.selFocus
+                      (List.foldl (fn (v, acc) => acc ^ cell v) "" shown)
+        end
+
     (*-------------------------------  Constructors  -------------------------------*)
 
     fun label s = LABEL s
@@ -470,6 +498,9 @@ in [ ("turbo", turbo)
    , ("withShadow", withShadow)
    , ("dialog", dialog)
    , ("centered", centered)
+   , ("pane", pane)
+   , ("gauge", gauge)
+   , ("sparkline", sparkline)
    , ("label", label)
    , ("input", input)
    , ("checkbox", checkbox)

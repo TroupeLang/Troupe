@@ -46,7 +46,8 @@
  * shift, bit 2 alt, bit 4 ctrl.
  *
  * FUNCTION KEYS: SS3 P Q R S and CSI P Q R S are F1..F4; CSI 11~..15~ are F1..F5,
- * 17~..21~ F6..F10, 23~ and 24~ F11 and F12. CSI 2~ is Insert.
+ * 17~..21~ F6..F10, 23~ and 24~ F11 and F12. CSI 2~ is Insert. CSI Z (Backtab) is Tab with
+ * shift set.
  *
  * SINGLE-BYTE DECISIONS carry over from battallion verbatim: LF and CR are Enter, BS and DEL
  * are Backspace, Tab is Tab; 0x00 and 0x1c..0x1f are KEY_UNKNOWN; UTF-8 leads assemble one
@@ -216,6 +217,7 @@ let val intDiv = Number.intDiv
         else if f = 0x51 then KEY_F 2
         else if f = 0x52 then KEY_F 3
         else if f = 0x53 then KEY_F 4
+        else if f = 0x5a then KEY_TAB    (* CSI Z, Backtab: shift is forced at the CSI site *)
         else if f = 0x7e then tildeKey (m, raw)
         else KEY_UNKNOWN raw
 
@@ -267,7 +269,12 @@ let val intDiv = Number.intDiv
                                                , k + 1 + j + String.size pasteClose )
                         end
                    else let val (m1, m2) = twoParams p
-                            val mods     = modsOf m2
+                            val mods0    = modsOf m2
+                            (* CSI Z is the terminal's spelling of Shift-Tab; the shift is in
+                             * the final byte, not in a parameter. *)
+                            val mods     = if f = 0x5a
+                                           then {alt = mods0.alt, ctrl = mods0.ctrl, shift = true}
+                                           else mods0
                         in SOME ( KEY ( finalKey (f, m1, raw)
                                       , if alt then withAlt mods else mods )
                                 , k + 1 )

@@ -32,6 +32,8 @@ let fun say s = fwrite (stdout, s)
     val _ = check ("alt delete",   decEq ("\x1b[3;3~", [KEY (KEY_DELETE, am)]))
     val _ = check ("insert",       decEq ("\x1b[2~", [KEY (KEY_INSERT, nm)]))
     val _ = check ("ctrl letter",  decEq ("\x01", [KEY (KEY_CTRL "a", nm)]))
+    val _ = check ( "backtab"
+                  , decEq ("\x1b[Z", [KEY (KEY_TAB, {alt = false, ctrl = false, shift = true})]) )
     val _ = check ( "alt-modified sequence"
                   , decEq ("\x1b\x1b[A", [KEY (KEY_UP, am)]) )
 

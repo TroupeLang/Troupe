@@ -24,7 +24,22 @@
  *
  * COMMANDS are data returned by `init` and `update`: `QUIT` ends the session, `AFTER (ms, m)`
  * delivers `APP m` to `update` after `ms` milliseconds (the lib/timeout.trp idiom; timers are
- * never cancelled — a stale one is told by the application in its own `m` if it needs to).
+ * never cancelled — a stale one is told by the application in its own `m` if it needs to),
+ * and `ASK r` sends the request `r` to the supervisor, whose answer returns to `update` as
+ * `REPLY`.
+ *
+ * THE REQUEST PROTOCOL is battallion's WRITE round trip generalized (Session.trp, "WHO
+ * WRITES THE FILE"): the root authority never leaves the supervisor, so an application that
+ * needs it — a file write, a file read — describes the operation as a request value and runs
+ * `runServed (auth, opts, serve, app)`, where `serve : (authority, request) -> reply` runs
+ * in the supervisor. `ASK r` is asynchronous: the kernel sends it and keeps folding events;
+ * the supervisor serves requests whether it is waiting for the kernel's answer or idle in
+ * its event receive, and the reply arrives as one `REPLY` event, drawing without answering
+ * like a timer message. The request travels from tainted kernel state and the write or read
+ * happens under the supervisor's authority with no confidentiality check between them —
+ * exactly battallion's protocol; what a request may name is bounded by what `serve` agrees
+ * to do and by `--io-root`. `run` is `runServed` with a serve function that answers every
+ * request `("unserved", r)`.
  *
  * THE RENDERER holds the previous frame as one assembled string per row and diffs against
  * it: a frame with the same row count writes only the rows whose strings changed, each as a
@@ -69,13 +84,15 @@ import "./Style"
 import "./Image"
 import "./Key"
 
-datatype ('t, 'm) tevent = EV      of event
-                         | HIT     of 't * event
-                         | RESIZED of {cols : int, rows : int}
-                         | APP     of 'm
+datatype ('t, 'm, 'r) tevent = EV      of event
+                             | HIT     of 't * event
+                             | RESIZED of {cols : int, rows : int}
+                             | APP     of 'm
+                             | REPLY   of 'r
 
-datatype 'm cmd = QUIT
-                | AFTER of int * 'm
+datatype ('m, 'r) cmd = QUIT
+                      | AFTER of int * 'm
+                      | ASK   of 'r
 
 let (** How long the supervisor waits for the kernel before calling it wedged; battallion's
      *  constant, for battallion's reasons. *)
@@ -167,12 +184,15 @@ let (** How long the supervisor waits for the kernel before calling it wedged; b
         end
 
     (** Run a command list; true when one of them was QUIT. *)
-    fun runCmds cs =
+    fun runCmds (sup, cs) =
         List.foldl (fn (c, q) =>
                         case c of
                              QUIT          => true
                            | AFTER (ms, m) =>
                                  let val _ = timeout.timeout (self ()) ("APPMSG", m) ms
+                                 in q end
+                           | ASK r =>
+                                 let val _ = send (sup, ("REQ", r))
                                  in q end)
                    false cs
 
@@ -191,12 +211,12 @@ let (** How long the supervisor waits for the kernel before calling it wedged; b
            | _       => EV ev
 
     (** `update` folded over decoded events, stopping at the first QUIT. *)
-    fun foldEvents (app, regions, model, evs) =
+    fun foldEvents (sup, app, regions, model, evs) =
         let fun go ([], m, q) = (m, q)
               | go (ev :: rest, m, q) =
                     if q then (m, q)
                     else let val (m', cs) = app.update (toTevent (regions, ev), m)
-                         in go (rest, m', runCmds cs)
+                         in go (rest, m', runCmds (sup, cs))
                          end
         in go (evs, model, false)
         end
@@ -216,29 +236,34 @@ let (** How long the supervisor waits for the kernel before calling it wedged; b
                         , [ hn ("KEY", bytes)        => ("KEY", bytes)
                           , hn ("RESIZE", c, r)      => ("RESIZE", c, r)
                           , hn ("ESCWAIT", n)        => ("ESCWAIT", n)
-                          , hn ("APPMSG", am)        => ("APPMSG", am) ])
+                          , hn ("APPMSG", am)        => ("APPMSG", am)
+                          , hn ("REPLY", rep)        => ("REPLY", rep) ])
             val (model1, size1, keptCarry, nonce1, quit, redraw, answer) =
                     case m of
                          ("KEY", bytes) =>
                              let val (evs, carry') = Key.decode (carry ^ bytes)
-                                 val (m', q) = foldEvents (app, regions, model, evs)
+                                 val (m', q) = foldEvents (sup, app, regions, model, evs)
                                  val n' = if carry' <> "" then armEscape () else nonce
                              in (m', size, carry', n', q, true, true)
                              end
                        | ("RESIZE", c, r) =>
                              let val size' = {cols = c, rows = r}
                                  val (m', cs) = app.update (RESIZED size', model)
-                             in (m', size', carry, nonce, runCmds cs, true, true)
+                             in (m', size', carry, nonce, runCmds (sup, cs), true, true)
                              end
                        | ("ESCWAIT", n) =>
                              if n = nonce andalso carry <> ""
-                             then let val (m', q) = foldEvents (app, regions, model, Key.flush carry)
+                             then let val (m', q) = foldEvents (sup, app, regions, model, Key.flush carry)
                                   in (m', size, "", nonce, q, true, false)
                                   end
                              else (model, size, carry, nonce, false, false, false)
                        | ("APPMSG", am) =>
                              let val (m', cs) = app.update (APP am, model)
-                             in (m', size, carry, nonce, runCmds cs, true, false)
+                             in (m', size, carry, nonce, runCmds (sup, cs), true, false)
+                             end
+                       | ("REPLY", rep) =>
+                             let val (m', cs) = app.update (REPLY rep, model)
+                             in (m', size, carry, nonce, runCmds (sup, cs), true, false)
                              end
                        | _ => (model, size, carry, nonce, false, false, false)
         in if quit
@@ -256,7 +281,7 @@ let (** How long the supervisor waits for the kernel before calling it wedged; b
     fun kernel (sup, rend, lev, weak, depth, app, size) =
         let val (ok, cap) = enableRangedReceive (IfcUtil.bot, lev, weak)
             val (m0, cs0) = app.init {cols = size.cols, rows = size.rows, ui = self ()}
-            val quit0 = runCmds cs0
+            val quit0 = runCmds (sup, cs0)
             val regions = draw (rend, lev, depth, app, m0, size)
             val _ = send (sup, "READY")
             val _ = if quit0
@@ -276,18 +301,33 @@ let (** How long the supervisor waits for the kernel before calling it wedged; b
                  , hn "ACK"                                => "ack"
                  , hn "QUIT"                               => "quit"
                  , hn "SIGTERM"                            => "sigterm"
+                 , hn ("REQ", r)                           => ("req", r)
                  , hn ("DONE", r, p, reason) when r = kref => "dead"
                  , hn ("WATCHDOG", n) when n = nonce       => "hung" ])
+        end
+
+    (** Wait for the kernel's next word, carrying out the requests it sends on the way: each
+     *  is answered through `srv` under `auth` — the effect happening after the receive has
+     *  returned — and the wait resumes. Returns the first word that is not a request. *)
+    fun serveKernel (auth, srv, me, kern, lev, kref) =
+        let val a = awaitKernel (me, lev, kref)
+        in case a of
+                ("req", r) =>
+                    let val _ = send (kern, ("REPLY", srv (auth, r)))
+                    in serveKernel (auth, srv, me, kern, lev, kref)
+                    end
+              | other => other
         end
 
     (** The event loop: one terminal event at a time, forwarded and answered before the next
      *  is taken. The extra handlers pick up SIGTERM, an unsolicited "QUIT" (a kernel that
      *  quit on a timer or application message, with no answer outstanding), the kernel's
      *  death, and the spent watchdog timers of events answered in time. *)
-    fun eventLoop (me, kern, lev, kref) =
+    fun eventLoop (auth, srv, me, kern, lev, kref) =
         let val ev = Tty.nextEventWith ( lev
                                        , [ hn "SIGTERM"            => "sigterm"
                                          , hn "QUIT"               => "unquit"
+                                         , hn ("REQ", r)           => ("req", r)
                                          , hn ("WATCHDOG", _)      => "stale"
                                          , hn ("DONE", r, p, reason) => "dead" ])
             val (forward, msg) =
@@ -297,31 +337,38 @@ let (** How long the supervisor waits for the kernel before calling it wedged; b
                              | other                   => (false, other)
             val answer = if forward
                          then let val _ = send (kern, msg)
-                              in awaitKernel (me, lev, kref)
+                              in serveKernel (auth, srv, me, kern, lev, kref)
                               end
                          else if msg = "sigterm" orelse msg = "unquit" then "quit"
                          else msg
-        in      if answer = "ack"   then eventLoop (me, kern, lev, kref)
-           else if answer = "stale" then eventLoop (me, kern, lev, kref)
-           else if answer = "dead"  then exitKernelLost
-           else if answer = "hung"  then exitKernelHung
-           else exitOk
+        in case answer of
+                ("req", r) =>
+                    let val _ = send (kern, ("REPLY", srv (auth, r)))
+                    in eventLoop (auth, srv, me, kern, lev, kref)
+                    end
+              | _ =>
+                        if answer = "ack"   then eventLoop (auth, srv, me, kern, lev, kref)
+                   else if answer = "stale" then eventLoop (auth, srv, me, kern, lev, kref)
+                   else if answer = "dead"  then exitKernelLost
+                   else if answer = "hung"  then exitKernelHung
+                   else exitOk
         end
 
     fun terminalSize out =
         case Tty.size out of OK s  => (s.cols, s.rows)
                            | ERR _ => (fallbackCols, fallbackRows)
 
-    fun sessionCode (me, kern, lev, kref, first) =
-             if first = "ready" then eventLoop (me, kern, lev, kref)
+    fun sessionCode (auth, srv, me, kern, lev, kref, first) =
+             if first = "ready" then eventLoop (auth, srv, me, kern, lev, kref)
         else if first = "dead"  then exitKernelLost
         else if first = "hung"  then exitKernelHung
         else exitOk
 
-    (** Run `app` as a full-screen session and return an exit code. `auth` must be the root
-     *  authority: subscribing, raw mode, the SIGTERM trap, and the certified receive region
-     *  need it; the kernel and the renderer get a null-attenuated one. *)
-    fun run (auth, opts, app) =
+    (** Run `app` as a full-screen session with `srv` serving its requests, and return an
+     *  exit code. `auth` must be the root authority: subscribing, raw mode, the SIGTERM
+     *  trap, the certified receive region, and whatever `srv` does with it; the kernel and
+     *  the renderer get a null-attenuated one. *)
+    fun runServed (auth, opts, srv, app) =
         let val i    = stdin
             val out  = stdout
             val weak = attenuate (auth, IfcUtil.null)
@@ -350,8 +397,8 @@ let (** How long the supervisor waits for the kernel before calling it wedged; b
                   shape Session.trp pins. ---*)
             val (ok, cap) = Tty.listen (i, auth)
             val unlisten = if ok then (fn () => Tty.unlisten cap) else (fn () => ())
-            val first = awaitKernel (me, lev, kref)
-            val code = sessionCode (me, kern, lev, kref, first)
+            val first = serveKernel (auth, srv, me, kern, lev, kref)
+            val code = sessionCode (auth, srv, me, kern, lev, kref, first)
             val _ = unlisten ()
 
             (*--- Give the terminal back: cooked mode first, then the escapes, in the order
@@ -368,7 +415,12 @@ let (** How long the supervisor waits for the kernel before calling it wedged; b
         in code
         end
 
+    (** `runServed` with a serve function that answers every request `("unserved", r)`. *)
+    fun run (auth, opts, app) =
+        runServed (auth, opts, fn (a, r) => ("unserved", r), app)
+
 in [ ("run", run)
+   , ("runServed", runServed)
    , ("defaultOpts", defaultOpts)
    , ("exitOk", exitOk)
    , ("exitKernelLost", exitKernelLost)

@@ -25,6 +25,8 @@
 
 import Number
 
+infixl 1 |>
+
 datatype color = DEFAULT
                | BASIC of int            (* 0..15: the named palette            *)
                | IDX of int              (* 0..255                              *)
@@ -37,6 +39,11 @@ let val intDiv = Number.intDiv
     val default = { fg = DEFAULT, bg = DEFAULT
                   , bold = false, dim = false, italic = false
                   , underline = false, reverse = false }
+
+    (** The value pipe, for reading attribute construction left to right:
+     *  `Style.default |> Style.withFg (Style.BASIC 4) |> Style.withBold true`. The with*
+     *  functions take their attribute last so that this composes. *)
+    fun ( |> ) x f = f x
 
     fun withFg c a        = { fg = c,    bg = a.bg, bold = a.bold, dim = a.dim, italic = a.italic, underline = a.underline, reverse = a.reverse }
     fun withBg c a        = { fg = a.fg, bg = c,    bold = a.bold, dim = a.dim, italic = a.italic, underline = a.underline, reverse = a.reverse }
@@ -119,6 +126,7 @@ let val intDiv = Number.intDiv
     val reset = "\x1b[0m"
 
 in [ ("default", default)
+   , ("|>", ( |> ))
    , ("withFg", withFg)
    , ("withBg", withBg)
    , ("withBold", withBold)

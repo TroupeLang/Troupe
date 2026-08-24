@@ -1,0 +1,9 @@
+{
+  "deps": [
+    {"path": "Ansi", "hash": "4mtebggltejv0kmfptpb8e3r7o894m2pbk5ciqp6rq53g6imu0a0", "name": "Ansi"},
+    {"path": "Image", "hash": "5nqajc9odjninuj73b5t1tra3jbc01edqe4mg1r0jc1gm4ic215g", "name": "Image"},
+    {"path": "Key", "hash": "t2e5lkj5ttpqlrp4iqc6tpdoua0cngjnufp1abkt8ojmj2bgnvlg", "name": "Key"},
+    {"path": "Style", "hash": "688le02ibhgl2e5bp740vha4t8557giv2btm9rg852tn7d2r0mo0", "name": "Style"},
+    {"path": "Term", "hash": "cfqvvai5qhviik9offlinl6jm5hs4pcosapoiud5iof7la2vb0n0", "name": "Term"}
+  ]
+}

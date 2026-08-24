@@ -10,6 +10,11 @@
  * changes — a remote member's ("APPMSG", ...) send lands in the kernel's receive exactly
  * like a local one, which is the point of the demonstrator.
  *
+ * LOOK. The modern skin (`Widget.modern dark`, truecolor): rounded panes on the terminal's
+ * own background, the Chat log's border in the accent and the Members border dim, an accent
+ * header line, sender names in the accent with the message text in the terminal's own
+ * foreground, and an underlined input field behind a dim `you ▸` prefix.
+ *
  * KEYS. Type into the input line and Enter sends; Esc or CTRL-c quits. The log shows the
  * newest messages that fit; there is no scrollback navigation yet.
  *
@@ -111,7 +116,7 @@ let val intDiv = Number.intDiv
 
     fun init rm {cols, rows, ui, dark} =
         let val _ = send (rm, ("JOIN", ui, myName))
-        in ( { cols = cols, rows = rows, th = Widget.turbo (), room = rm
+        in ( { cols = cols, rows = rows, th = Widget.modern dark, room = rm
              , log = [], members = [], form = freshInput (), status = "connected (local room)" }
            , [] )
         end
@@ -146,31 +151,35 @@ let val intDiv = Number.intDiv
 
     (*-----------------------------------  View  ----------------------------------*)
 
+    (** A log line: the sender in the accent and the message in the terminal's own
+     *  foreground, a system line dim throughout. *)
     fun logRow (th, entry) =
         case entry of
-             ("m", n, t) => Image.beside (Image.text th.title ("<" ^ n ^ "> "))
-                                         (Image.text th.dlg t)
-           | (_, _, t)   => Image.text th.sel ("· " ^ t)
+             ("m", n, t) => Image.beside (Image.text th.barSel ("<" ^ n ^ "> "))
+                                         (Image.text Style.default t)
+           | (_, _, t)   => Image.text th.bar ("· " ^ t)
 
     fun view m =
         let val th = m.th
             val memberW = 16
-            val midH = imax (m.rows - 3, 3)
+            val midH = imax (m.rows - 2, 3)
             val logW = imax (m.cols - memberW, 20)
             val shown = List.reverse (List.take (midH - 2) m.log)
             val logImg = Image.vcat (List.map (fn e => logRow (th, e)) shown)
-            val logPane = Widget.pane (th, logW, midH, " Chat ", false, logImg)
-            val memImg = Image.vcat (List.map (fn n => Image.text th.dlg (" " ^ n)) m.members)
-            val memPane = Widget.pane (th, memberW, midH, " Members ", false, memImg)
-            val inputRow =
-                Image.stretch (1, 0)
-                    (Image.overlay
-                         (Image.beside (Image.text th.bar (" " ^ myName ^ " ▸ "))
-                                       (Widget.formView (th, 64, m.form)))
-                         (Image.fillA th.bar " "))
+            val logPane = Widget.paneOf (th, logW, midH, " Chat ", Widget.B_ROUND,
+                                         th.barSel, logImg)
+            val memImg = Image.vcat (List.map (fn n => Image.text Style.default (" " ^ n))
+                                              m.members)
+            val memPane = Widget.paneOf (th, memberW, midH, " Members ", Widget.B_ROUND,
+                                         th.bar, memImg)
+            (* The input field is the theme's underlined one, on the terminal's own
+             * background; formView keeps the cursor in it. *)
+            val inputRow = Image.hcat [ Image.text th.bar (" " ^ myName ^ " ▸ ")
+                                      , Widget.formView (th, 64, m.form) ]
         in Image.vcat
-               [ Widget.bar (th.bar, "  Proscenium Chat — Enter sends, Esc quits   " ^ m.status)
-               , Image.overlay (Image.beside logPane memPane) (Image.fillA th.desktop "▒")
+               [ Image.hcat [ Image.text th.title " ● chat"
+                            , Image.text th.bar ("  Enter sends, Esc quits   " ^ m.status) ]
+               , Image.beside logPane memPane
                , inputRow ]
         end
 
@@ -190,7 +199,7 @@ let val intDiv = Number.intDiv
     val _ = List.foldl (fn ((n, p, ls), _) => let val _ = spawn (fn () => bot (rm, n, p, ls))
                                               in () end)
                        () botSpecs
-    val opts = {depth = Style.COLORS16, mouse = false, paste = false}
+    val opts = {depth = Style.TRUECOLOR, mouse = false, paste = false}
 
     val code = Term.run (authority, opts, {init = init rm, update = update, view = view})
 

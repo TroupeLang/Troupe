@@ -63,6 +63,22 @@
  * open (Session.trp cites the measurement), and the region's open and close sit in
  * straight-line code.
  *
+ * WHO CAN RECEIVE FROM THE KERNEL. A message's presence carries the sender's blocking
+ * label, and a plain `receive` (interval [pc, pc]) never sees presence above the receiver's
+ * pc — it skips silently, with no diagnostic. The kernel's blocking label is the channel
+ * level from birth: the supervisor's rose when it branched on the terminal size, and spawn
+ * passes the blocking label on (measured: debugpc() in `init` shows PC {} and BL {#ROOT},
+ * and tests/_unautomated/claude/send-presence-probe.trp separates the three sender cases —
+ * a clean sender and a merely region-enabled sender reach a plain receiver, a sender whose
+ * blocking label rose does not). Two consequences for application processes:
+ *
+ *   - a process that receives anything from the kernel — including the `ui` pid handed out
+ *     through a message — must open a confined region and receive at [bot, channel level]
+ *     for its whole life, exactly as the renderer does (dash.trp's workers);
+ *   - plain receives are for processes that hear only from clean peers: spawned from the
+ *     main program before `run`, exchanging with each other and their own timers
+ *     (chat.trp's bots).
+ *
  * THE CURSOR IS HIDDEN FOR THE SESSION: no `app.view` can place a terminal cursor yet. A
  * widget that needs one (an input line) draws its own cell in reverse video; a real
  * cursor-position channel is future work, recorded in the design plan.

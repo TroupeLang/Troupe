@@ -117,9 +117,9 @@ let val intDiv = Number.intDiv
 
     (*----------------------------------  Init  -----------------------------------*)
 
-    fun init path {cols, rows, ui} =
+    fun init path {cols, rows, ui, dark} =
         let val today = Time.dateToday ()
-        in ( { cols = cols, rows = rows, th = Widget.modern (), path = path
+        in ( { cols = cols, rows = rows, th = Widget.modern dark, path = path
              , today = today, sel = today, events = [], tasks = []
              , pane = "cal", taskSel = 0, dialogs = [], status = "loading..." }
            , [ASK ("load", path)] )
@@ -328,8 +328,8 @@ let val intDiv = Number.intDiv
         then Image.text th.dlg "no tasks — press t"
         else Image.vcat (List.mapi (fn (i, t) => taskRow (th, m, focused, i, t)) m.tasks)
 
-    (** The backdrop under an open dialog: the whole scene in one faint gray. *)
-    fun dimAll a = Style.default |> Style.withFg (Style.IDX 238)
+    (** The backdrop under an open dialog: the terminal's own faint rendition. *)
+    fun dimAll a = Style.default |> Style.withDim true
 
     fun overlayDialogs (th, cols, rows, ds, base) =
         let fun go ([], acc) = acc

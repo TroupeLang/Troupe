@@ -85,7 +85,7 @@ let val intDiv = Number.intDiv
 
     (*------------------------------------  App  ------------------------------------*)
 
-    fun init {cols, rows, ui} = ({cols = cols, rows = rows, dx = 0, dy = 0}, [])
+    fun init {cols, rows, ui, dark} = ({cols = cols, rows = rows, dx = 0, dy = 0}, [])
 
     fun moved (m, dx, dy) = {cols = m.cols, rows = m.rows, dx = m.dx + dx, dy = m.dy + dy}
 

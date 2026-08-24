@@ -73,12 +73,12 @@ let val intDiv = Number.intDiv
         { cols = m.cols, rows = m.rows, th = m.th, pids = m.pids
         , ws = ws, hist = hist, lastSum = lastSum, ticks = ticks, status = status }
 
-    fun init pids {cols, rows, ui} =
+    fun init pids {cols, rows, ui, dark} =
         let val _ = List.foldl (fn (p, _) => send (p, ("START", ui))) () pids
             val ws = List.map (fn (n, total, c, per) =>
                                    {name = n, done = 0, total = total, finished = false})
                               workerSpecs
-        in ( { cols = cols, rows = rows, th = Widget.modern (), pids = pids
+        in ( { cols = cols, rows = rows, th = Widget.modern dark, pids = pids
              , ws = ws, hist = [], lastSum = 0, ticks = 0, status = "running" }
            , [AFTER (300, "tick")] )
         end

@@ -109,7 +109,7 @@ let val intDiv = Number.intDiv
 
     fun freshInput () = Widget.form [Widget.input ("say", "", 64)]
 
-    fun init rm {cols, rows, ui} =
+    fun init rm {cols, rows, ui, dark} =
         let val _ = send (rm, ("JOIN", ui, myName))
         in ( { cols = cols, rows = rows, th = Widget.turbo (), room = rm
              , log = [], members = [], form = freshInput (), status = "connected (local room)" }

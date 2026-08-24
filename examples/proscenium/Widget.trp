@@ -106,31 +106,50 @@ let val intDiv = Number.intDiv
      *  option), a gray ramp for secondary text, huh-style buttons whose focus is an accent
      *  background fill, ●/○ radios and ◼/◻ checkboxes. Pair it with rounded borders
      *  (`paneOf`/`boxOf` with B_ROUND), the accent on the focused border only. *)
-    fun modern () =
-        let val accent  = Style.RGB (203, 166, 247)
-            val inkOn   = Style.RGB (30, 30, 46)
-            val fgDim   = Style.default |> Style.withFg (Style.IDX 243)
-            val plain   = Style.default
+    (* CLOSED PALETTES. A terminal offers two self-consistent design systems: the user's
+     * base-16 palette, and a fully self-painted palette whose contrast the theme controls.
+     * Every readability defect this skin shipped came from mixing systems inside one cell —
+     * a fixed background under the terminal's foreground, a fixed foreground on the
+     * terminal's background, reverse video building bands from the user's colors. The rule:
+     * every attribute that carries a background is an explicit fg+bg pair from the
+     * variant's own ramp; attributes on the terminal-default background carry only a
+     * foreground tuned to the detected polarity, or a style (underline, bold, dim).
+     * Term.run detects the polarity with the OSC 11 background query (fallback: light) and
+     * hands it to init as `dark`; the application passes it here. *)
+
+    (** The modern skin as a light/dark pair of closed palettes: Catppuccin Latte mauve and
+     *  a light-gray ramp on a light terminal, Mocha mauve and a dark-gray ramp on a dark
+     *  one. Selections are subtle explicit tint pairs; input fields are underlined;
+     *  huh-style buttons fill with the accent under focus. Pair it with rounded borders
+     *  (`paneOf`/`boxOf` with B_ROUND), the accent on the focused border only. *)
+    fun modern dark =
+        let val accent = if dark then Style.RGB (203, 166, 247)   (* Mocha mauve *)
+                         else Style.RGB (136, 57, 239)            (* Latte mauve *)
+            val plain  = Style.default
+            fun fg n   = plain |> Style.withFg (Style.IDX n)
+            fun pair (f, b) = plain |> Style.withFg (Style.IDX f) |> Style.withBg (Style.IDX b)
         in
         { desktop     = plain
-        , bar         = fgDim                                     (* footers: dim text     *)
+        , bar         = if dark then fg 245 else fg 243           (* secondary text        *)
         , barSel      = plain |> Style.withFg accent
         , dlg         = plain
         , title       = plain |> Style.withFg accent |> Style.withBold true
-          (* Input fields are underlined for their whole width: a bare field (huh's
-           * prefix-only style) is invisible while empty, and a tinted strip fights the
-           * terminal's unknown default foreground — on a light terminal the user types
-           * dark text over a dark band. The underline inherits the terminal's own
-           * contrast on either polarity; focus adds bold, and the cursor sits in the
-           * field. *)
+          (* Input fields are underlined for their whole width: a bare field is invisible
+           * while empty, and any tinted strip fights one polarity or the other. The
+           * underline inherits the terminal's contrast; the cursor sitting in the field is
+           * the focus cue — bold was tried and read as noise. *)
         , input       = plain |> Style.withUnderline true
-        , inputFocus  = plain |> Style.withUnderline true |> Style.withBold true
-        , button      = Style.default |> Style.withFg (Style.IDX 252)
-                                      |> Style.withBg (Style.IDX 237)
-        , buttonFocus = plain |> Style.withFg inkOn |> Style.withBg accent
-        , sel         = plain |> Style.withBg (Style.IDX 237)
-        , selFocus    = plain |> Style.withFg accent |> Style.withBg (Style.IDX 237)
-        , shadow      = fgDim
+        , inputFocus  = plain |> Style.withUnderline true
+        , button      = if dark then pair (252, 237) else pair (236, 252)
+        , buttonFocus = (if dark then plain |> Style.withFg (Style.RGB (30, 30, 46))
+                         else plain |> Style.withFg (Style.RGB (252, 250, 255)))
+                        |> Style.withBg accent
+          (* Selection tints: barely-raised explicit pairs from the variant's ramp — the
+           * focused one a step stronger; the pointer and pane marker carry focus, so the
+           * tints stay quiet. *)
+        , sel         = if dark then pair (250, 236) else pair (240, 254)
+        , selFocus    = if dark then pair (254, 238) else pair (232, 252)
+        , shadow      = if dark then fg 245 else fg 243
         , checkOn     = "◼ ",     checkOff = "◻ "
         , radioOn     = "● ",     radioOff = "○ "
         , btnL        = "  ",     btnR     = "  "
@@ -197,12 +216,13 @@ let val intDiv = Number.intDiv
     fun pane (th, w, h, title, dbl, content) =
         paneOf (th, w, h, title, if dbl then B_DOUBLE else B_SINGLE, th.dlg, content)
 
-    (** A `w`-cell progress bar showing `done` of `total`. *)
+    (** A `w`-cell progress bar showing `done` of `total`. The fill paints glyphs, so it
+     *  uses the accent foreground (`th.barSel`), not the reverse-video selection. *)
     fun gauge (th, w, done, total) =
         let val t = imax (total, 1)
             val filled = imin (intDiv (done * w) t, w)
-        in Image.beside (Image.text th.selFocus (String.repeat filled "█"))
-                        (Image.text th.dlg (String.repeat (w - filled) "░"))
+        in Image.beside (Image.text th.barSel (String.repeat filled "█"))
+                        (Image.text th.bar (String.repeat (w - filled) "░"))
         end
 
     (** The last `w` of `values` (newest first) as one row of eighth-block bars, scaled to
@@ -212,7 +232,7 @@ let val intDiv = Number.intDiv
             val top = imax (List.foldl (fn (v, a) => imax (v, a)) 0 shown, 1)
             val glyphs = ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"]
             fun cell v = List.nth glyphs (imin (intDiv (v * 8) top, 7))
-        in Image.text th.selFocus
+        in Image.text th.barSel
                       (List.foldl (fn (v, acc) => acc ^ cell v) "" shown)
         end
 

@@ -39,8 +39,9 @@ let val intDiv = Number.intDiv
     fun mkAttrs () =
         { ta = { text      = Style.default
                , gutter    = Style.default |> Style.withFg (Style.BASIC 8)
-               , gutterCur = Style.default |> Style.withFg (Style.BASIC 11)
-                                           |> Style.withBold true }
+                 (* bold in the terminal's own foreground: yellow was unreadable on a
+                  * light terminal *)
+               , gutterCur = Style.default |> Style.withBold true }
         , bar = Style.withBg (Style.BASIC 7) (Style.withFg (Style.BASIC 0) Style.default)
         , divider = Style.withFg (Style.BASIC 8) Style.default }
 
@@ -73,7 +74,7 @@ let val intDiv = Number.intDiv
                                 else v)
                   m.views
 
-    fun init path {cols, rows, ui} =
+    fun init path {cols, rows, ui, dark} =
         ( { cols = cols, rows = rows, at = mkAttrs (), path = path
           , views = [TextView.tvInit [""]], focus = 0, dirty = false, status = "loading..." }
         , [ASK ("load", path)] )

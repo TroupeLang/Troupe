@@ -6,9 +6,16 @@
  * whose header records the reasons); what battallion runs as an editor kernel, this module
  * generalizes to an application record:
  *
- *   app = { init   : {cols, rows, ui} -> (model, cmd list)
- *         , update : (tevent, model)  -> (model, cmd list)
- *         , view   : model            -> image }
+ *   app = { init   : {cols, rows, ui, dark} -> (model, cmd list)
+ *         , update : (tevent, model)          -> (model, cmd list)
+ *         , view   : model                    -> image }
+ *
+ * `dark` is the detected polarity of the terminal's background: `run` asks with the OSC 11
+ * query while still on the main screen and reads the reply off the same stdin subscription
+ * (`parseBg`); with no answer within 200 ms — a pipe, a detached multiplexer, an emulator
+ * without OSC 11 — the fallback is LIGHT, because this repository's primary terminal is
+ * light-themed and a wrong dark guess there is the harder failure. Applications pass `dark`
+ * to `Widget.modern`, whose light and dark variants are closed palettes.
  *
  * `Term.run (auth, opts, app)` is the whole session: it acquires the terminal, spawns the
  * kernel and the renderer, forwards events, and restores the terminal before returning an
@@ -85,14 +92,11 @@
  * hidden while rows are rewritten, shape selected with DECSCUSR, restored to the terminal's
  * default at teardown. A frame with no marker leaves the cursor hidden, which is what every
  * view without an input focus wants.
- *
- * NOT YET HERE, deliberately: a supervisor-request protocol in battallion's WRITE shape, by
- * which an application asks the supervisor to exercise the root authority (file writes for
- * the calendar demonstrator). It lands with the demonstrator that needs it.
  *)
 
 import List
 import String
+import Number
 import Option
 import Outcome
 import IfcUtil
@@ -113,7 +117,9 @@ datatype ('m, 'r) cmd = QUIT
                       | AFTER of int * 'm
                       | ASK   of 'r
 
-let (** How long the supervisor waits for the kernel before calling it wedged; battallion's
+let val intDiv = Number.intDiv
+
+    (** How long the supervisor waits for the kernel before calling it wedged; battallion's
      *  constant, for battallion's reasons. *)
     val watchdogMs = 2000
 
@@ -324,9 +330,10 @@ let (** How long the supervisor waits for the kernel before calling it wedged; b
 
     (** Initialize the application, draw the first frame, tell the supervisor the session is
      *  on the screen, then loop. Result bound, for the reason given at `renderer`. *)
-    fun kernel (sup, rend, lev, weak, depth, app, size) =
+    fun kernel (sup, rend, lev, weak, depth, app, size, dark) =
         let val (ok, cap) = enableRangedReceive (IfcUtil.bot, lev, weak)
-            val (m0, cs0) = app.init {cols = size.cols, rows = size.rows, ui = self ()}
+            val (m0, cs0) = app.init { cols = size.cols, rows = size.rows, ui = self ()
+                                     , dark = dark }
             val quit0 = runCmds (sup, cs0)
             val regions = draw (rend, lev, depth, app, m0, size)
             val _ = send (sup, "READY")
@@ -375,6 +382,7 @@ let (** How long the supervisor waits for the kernel before calling it wedged; b
                                          , hn "QUIT"               => "unquit"
                                          , hn ("REQ", r)           => ("req", r)
                                          , hn ("WATCHDOG", _)      => "stale"
+                                         , hn ("BGQ", _)           => "stale"
                                          , hn ("DONE", r, p, reason) => "dead" ])
             val (forward, msg) =
                     case ev of TTY_DATA b              => (true, ("KEY", b))
@@ -404,6 +412,89 @@ let (** How long the supervisor waits for the kernel before calling it wedged; b
         case Tty.size out of OK s  => (s.cols, s.rows)
                            | ERR _ => (fallbackCols, fallbackRows)
 
+    (*==========================  Background detection  ==========================*)
+
+    (** How long to wait for the terminal's OSC 11 reply. Real emulators answer within a
+     *  few milliseconds; a pipe or a detached multiplexer never answers. *)
+    val bgQueryMs = 200
+
+    fun hexVal c =      if c >= 0x30 andalso c <= 0x39 then c - 0x30
+                   else if c >= 0x61 andalso c <= 0x66 then c - 0x61 + 10
+                   else if c >= 0x41 andalso c <= 0x46 then c - 0x41 + 10
+                   else 0 - 1
+
+    (** The buffer's OSC 11 reply, parsed: SOME {dark, residual} once the terminator has
+     *  arrived — `dark` from the reported color's luminance, `residual` the bytes around
+     *  the reply (early keystrokes), in order — or NONE while the reply is absent or
+     *  unfinished. The reply shape is `ESC ] 11 ; rgb : RRRR / GGGG / BBBB` terminated by
+     *  BEL or ESC backslash, with one to four hex digits per channel. *)
+    fun parseBg buf =
+        case String.indexOf "\x1b]11;" buf of
+             NONE => NONE
+           | SOME i =>
+                 let val n = String.size buf
+                     val start = i + 5
+                     fun findEnd j =
+                         if j >= n then NONE
+                         else if String.subCode (buf, j) = 0x07 then SOME (j, j + 1)
+                         else if String.subCode (buf, j) = 0x1b andalso j + 1 < n
+                                 andalso String.subCode (buf, j + 1) = 0x5c
+                         then SOME (j, j + 2)
+                         else findEnd (j + 1)
+                 in case findEnd start of
+                         NONE => NONE
+                       | SOME (e, after) =>
+                             let val spec = String.substring (buf, start, e)
+                                 fun channels (j, cur, ndig, acc) =
+                                     if j >= String.size spec
+                                     then List.reverse (if ndig > 0 then cur :: acc else acc)
+                                     else let val c = String.subCode (spec, j)
+                                              val h = hexVal c
+                                          in if h >= 0
+                                             then channels ( j + 1
+                                                           , if ndig = 0 then h * 16
+                                                             else if ndig = 1 then cur + h
+                                                             else cur
+                                                           , ndig + 1, acc )
+                                             else if c = 0x2f
+                                             then channels (j + 1, 0, 0, cur :: acc)
+                                             else channels (j + 1, cur, ndig, acc)
+                                          end
+                                 val chs = channels (0, 0, 0, [])
+                                 val (r, g, b) =
+                                     case chs of
+                                          rr :: gg :: bb :: _ => (rr, gg, bb)
+                                        | _ => (0, 0, 0)
+                                 val lum = intDiv (2126 * r + 7152 * g + 722 * b) 10000
+                                 val residual = String.substring (buf, 0, i)
+                                                ^ String.substring (buf, after, n)
+                             in SOME {dark = lum < 128, residual = residual}
+                             end
+                 end
+
+    (** Ask the terminal for its background color and wait briefly for the answer; returns
+     *  `(dark, residual)`. With no answer — a pipe, a detached multiplexer, an emulator
+     *  that does not implement OSC 11 — the fallback is LIGHT: this repository's primary
+     *  terminal is light-themed, and a wrong dark guess there is the harder failure. Runs
+     *  in the supervisor, inside its receive region, before the alternate screen. *)
+    fun detectDark (out, me, lev) =
+        let val _ = fwrite (out, "\x1b]11;?\x1b\x5c")
+            val nonce = mkuuid ()
+            val _ = timeout.timeout me ("BGQ", nonce) bgQueryMs
+            fun wait buf =
+                case parseBg buf of
+                     SOME r => (r.dark, r.residual)
+                   | NONE =>
+                         let val m = rcv ( IfcUtil.bot, lev
+                                         , [ hn ("TTYDATA", b) => ("data", b)
+                                           , hn ("BGQ", n) when n = nonce => ("deadline", "") ])
+                         in case m of
+                                 ("data", b) => wait (buf ^ b)
+                               | _           => (false, buf)
+                         end
+        in wait ""
+        end
+
     fun sessionCode (auth, srv, me, kern, lev, kref, first) =
              if first = "ready" then eventLoop (auth, srv, me, kern, lev, kref)
         else if first = "dead"  then exitKernelLost
@@ -427,6 +518,18 @@ let (** How long the supervisor waits for the kernel before calling it wedged; b
             val _ = trapSigterm (auth, me)
             val _ = Tty.subscribe (i, me)
             val _ = Tty.rawMode (i, true)
+
+            (*--- The region, opened and closed in straight-line code; a confined region
+                  (certification refused) is left open and the branch selects a closure, the
+                  shape Session.trp pins. It opens before the constellation because the
+                  background detection below already receives. ---*)
+            val (ok, cap) = Tty.listen (i, auth)
+            val unlisten = if ok then (fn () => Tty.unlisten cap) else (fn () => ())
+
+            (*--- Ask the terminal its background while still on the main screen; bytes
+                  around the reply are early keystrokes and go to the kernel below. ---*)
+            val (dark, residual) = detectDark (out, me, lev)
+
             val _ = fwrite ( out
                            , Ansi.enterAlt ^ Ansi.disableWrap ^ Ansi.hideCursor
                              ^ (if opts.mouse then Ansi.enableMouse else "")
@@ -435,14 +538,9 @@ let (** How long the supervisor waits for the kernel before calling it wedged; b
             (*--- The constellation. ---*)
             val rend = spawn (fn () => renderer (out, lev, weak))
             val kern = spawn (fn () => kernel ( me, rend, lev, weak, opts.depth, app
-                                              , {cols = cols, rows = rows} ))
+                                              , {cols = cols, rows = rows}, dark ))
             val kref = monitorlocal kern
-
-            (*--- The region, opened and closed in straight-line code; a confined region
-                  (certification refused) is left open and the branch selects a closure, the
-                  shape Session.trp pins. ---*)
-            val (ok, cap) = Tty.listen (i, auth)
-            val unlisten = if ok then (fn () => Tty.unlisten cap) else (fn () => ())
+            val _ = if residual = "" then () else send (kern, ("KEY", residual))
             val first = serveKernel (auth, srv, me, kern, lev, kref)
             val code = sessionCode (auth, srv, me, kern, lev, kref, first)
             val _ = unlisten ()
@@ -466,6 +564,7 @@ let (** How long the supervisor waits for the kernel before calling it wedged; b
         runServed (auth, opts, fn (a, r) => ("unserved", r), app)
 
 in [ ("run", run)
+   , ("parseBg", parseBg)
    , ("runServed", runServed)
    , ("defaultOpts", defaultOpts)
    , ("exitOk", exitOk)

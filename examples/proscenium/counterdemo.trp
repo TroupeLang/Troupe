@@ -23,7 +23,7 @@ let val plain = Style.default
 
     fun withCount (m, c) = {count = c, cols = m.cols, rows = m.rows, ticks = m.ticks}
 
-    fun init {cols, rows, ui} =
+    fun init {cols, rows, ui, dark} =
         ({count = 0, cols = cols, rows = rows, ticks = 0}, [AFTER (100, "tick")])
 
     fun update (ev, m) =

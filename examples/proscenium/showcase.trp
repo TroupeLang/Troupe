@@ -92,7 +92,7 @@ let val intDiv = Number.intDiv
 
     (*----------------------------------  Model  ----------------------------------*)
 
-    fun init {cols, rows, ui} =
+    fun init {cols, rows, ui, dark} =
         ( { cols = cols, rows = rows, th = Widget.turbo ()
           , menu = Menu.menu menus, dialogs = [], status = "ready" }
         , [] )

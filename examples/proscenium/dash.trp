@@ -78,7 +78,7 @@ let val intDiv = Number.intDiv
             val ws = List.map (fn (n, total, c, per) =>
                                    {name = n, done = 0, total = total, finished = false})
                               workerSpecs
-        in ( { cols = cols, rows = rows, th = Widget.turbo (), pids = pids
+        in ( { cols = cols, rows = rows, th = Widget.modern (), pids = pids
              , ws = ws, hist = [], lastSum = 0, ticks = 0, status = "running" }
            , [AFTER (300, "tick")] )
         end
@@ -124,24 +124,28 @@ let val intDiv = Number.intDiv
             [ Image.text th.dlg (Widget.padTo (" " ^ w.name, 10))
             , Widget.gauge (th, 40, w.done, w.total)
             , Image.text th.dlg ("  " ^ Widget.padTo (toString w.done ^ "/" ^ toString w.total, 8))
-            , Image.text th.selFocus (if w.finished then "✔" else " ") ]
+            , Image.text th.barSel (if w.finished then "✔" else " ") ]
 
     fun view m =
         let val th = m.th
             val sum = List.foldl (fn (w, a) => a + w.done) 0 m.ws
             val wRows = Image.vcat
                 (List.concat (List.map (fn w => [workerRow (th, w), Image.space (0, 1)]) m.ws))
-            val workersPane = Widget.pane (th, imax (m.cols, 40), 11, " Workers ", false, wRows)
+            val workersPane = Widget.paneOf (th, imax (m.cols, 40), 11, " Workers ",
+                                             Widget.B_ROUND, th.barSel, wRows)
             val spark = Image.vcat
                 [ Widget.sparkline (th, m.hist, imax (m.cols - 8, 20))
                 , Image.space (0, 1)
                 , Image.text th.dlg ("  total " ^ toString sum ^ "   ticks " ^ toString m.ticks) ]
-            val sparkPane = Widget.pane (th, imax (m.cols, 40), 7, " Throughput per tick ", false, spark)
+            val sparkPane = Widget.paneOf (th, imax (m.cols, 40), 7, " Throughput per tick ",
+                                           Widget.B_ROUND, th.bar, spark)
         in Image.vcat
-               [ Widget.bar (th.bar, "  Proscenium Dashboard — a Troupe worker pool   q quits")
-               , Image.overlay (Image.above workersPane sparkPane)
-                               (Image.fillA th.desktop "▒")
-               , Widget.bar (th.bar, "  " ^ m.status) ]
+               [ Image.hcat [ Image.text th.title " ● dash"
+                            , Image.text th.bar "  a Troupe worker pool" ]
+               , Image.above workersPane sparkPane
+               , Image.stretch (0, 1) (Image.space (0, 0))
+               , Image.hcat [ Image.text th.barSel " q"
+                            , Image.text th.bar (" quit   " ^ m.status) ] ]
         end
 
     (*-----------------------------------  Main  ----------------------------------*)
@@ -152,7 +156,7 @@ let val intDiv = Number.intDiv
                               spawn (fn () => worker (lev, weak, i, total, c, per)))
                          workerSpecs
 
-    val opts = {depth = Style.COLORS16, mouse = false, paste = false}
+    val opts = {depth = Style.TRUECOLOR, mouse = false, paste = false}
 
     val code = Term.run (authority, opts, {init = init pids, update = update, view = view})
 

@@ -118,7 +118,7 @@ let val intDiv = Number.intDiv
 
     fun init path {cols, rows, ui} =
         let val today = Time.dateToday ()
-        in ( { cols = cols, rows = rows, th = Widget.turbo (), path = path
+        in ( { cols = cols, rows = rows, th = Widget.modern (), path = path
              , today = today, sel = today, events = [], tasks = []
              , pane = "cal", taskSel = 0, dialogs = [], status = "loading..." }
            , [ASK ("load", path)] )
@@ -318,7 +318,7 @@ let val intDiv = Number.intDiv
         let val a = if i = m.taskSel then (if focused then th.selFocus else th.sel) else th.dlg
             val pri = if t.pri = 2 then "! " else if t.pri = 0 then "- " else "  "
             val due = if t.due = "" then "" else "  (" ^ t.due ^ ")"
-            val txt = (if t.done then "[X] " else "[ ] ") ^ pri ^ t.title ^ due
+            val txt = (if t.done then th.checkOn else th.checkOff) ^ pri ^ t.title ^ due
         in Image.region ("task", i) (Image.text a txt)
         end
 
@@ -327,16 +327,22 @@ let val intDiv = Number.intDiv
         then Image.text th.dlg "no tasks — press t"
         else Image.vcat (List.mapi (fn (i, t) => taskRow (th, m, focused, i, t)) m.tasks)
 
+    (** The backdrop under an open dialog: the whole scene in one faint gray. *)
+    fun dimAll a = Style.default |> Style.withFg (Style.IDX 238)
+
     fun overlayDialogs (th, cols, rows, ds, base) =
         let fun go ([], acc) = acc
               | go (d :: rest, acc) =
                     let val (x, y) = Widget.centered (cols, rows, d.w, d.h)
                         val img = Image.shift (x, y)
-                                      (Widget.dialog (th, d.title, d.w, d.h,
+                                      (Widget.paneOf (th, d.w, d.h, d.title, Widget.B_ROUND,
+                                                      th.barSel,
                                                       Widget.formView (th, d.w - 4, d.form)))
                     in go (rest, img </> acc)
                     end
-        in go (List.reverse ds, base)
+        in case ds of
+                [] => base
+              | _  => go (List.reverse ds, Image.mapAttrs dimAll base)
         end
 
     fun view m =
@@ -348,20 +354,23 @@ let val intDiv = Number.intDiv
             val rightW = imax (m.cols - calW, 20)
             val agendaH = imax (intDiv midH 2, 4)
             val tasksH = imax (midH - agendaH, 4)
-            val calPane = Widget.pane (th, calW, calH, " Calendar ", calFocused,
+            val calPane = Widget.paneOf (th, calW, calH, " Calendar ", Widget.B_ROUND,
+                                if calFocused then th.barSel else th.bar,
                                 calendarContent (th, m, calFocused, calW - 4))
-            val left = calPane <-> Image.crop (0, 0, calW, imax (midH - calH, 0))
-                                              (Image.fillA th.desktop "▒")
-            val agenda = Widget.pane (th, rightW, agendaH, " Agenda — " ^ dateKey m.sel ^ " ", false,
-                               agendaContent (th, m))
-            val tasks = Widget.pane (th, rightW, tasksH, " Tasks ", not calFocused,
+            val left = calPane <-> Image.space (calW, imax (midH - calH, 0))
+            val agenda = Widget.paneOf (th, rightW, agendaH, " Agenda — " ^ dateKey m.sel ^ " ",
+                               Widget.B_ROUND, th.bar, agendaContent (th, m))
+            val tasks = Widget.paneOf (th, rightW, tasksH, " Tasks ", Widget.B_ROUND,
+                              if calFocused then th.bar else th.barSel,
                               tasksContent (th, m, not calFocused))
             val middle = left <|> (agenda <-> tasks)
             val base = Image.vcat
-                [ Widget.bar (th.bar, "  Proscenium PIM — " ^ m.path)
-                , middle </> Image.fillA th.desktop "▒"
-
-                , Widget.bar (th.bar, "  Tab pane  n event  t task  Space done  x delete  q quit   " ^ m.status) ]
+                [ Image.hcat [ Image.text th.title " ● pim"
+                             , Image.text th.bar ("  " ^ m.path) ]
+                , middle
+                , Image.hcat
+                      [ Image.text th.bar "  Tab pane  n event  t task  Space done  x delete  q quit   "
+                      , Image.text th.barSel m.status ] ]
         in overlayDialogs (th, m.cols, m.rows, m.dialogs, base)
         end
 
@@ -383,7 +392,7 @@ let val intDiv = Number.intDiv
 
     val args = getCliArgs authority
     val path = case args of p :: _ => p | [] => "pim.json"
-    val opts = {depth = Style.COLORS16, mouse = true, paste = false}
+    val opts = {depth = Style.TRUECOLOR, mouse = true, paste = false}
 
 in Term.runServed (authority, opts, serve, {init = init path, update = update, view = view})
 end

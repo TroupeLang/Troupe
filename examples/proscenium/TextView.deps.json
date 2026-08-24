@@ -1,6 +1,7 @@
 {
   "deps": [
     {"path": "Image", "hash": "p7mvjgi0k70jscndnqfcur8uqinl5sie3bh84ev8dc6j4jr5fg6g", "name": "Image"},
+    {"path": "Key", "hash": "t93u5gtdr744r05vrpj49n1raeuno6vo4dmfpdbmguv16vlmr1eg", "name": "Key"},
     {"path": "Style", "hash": "5jrgulnqcubrdhujjkoon4i88bcamgo7ft9bhkppss69jgrhqhrg", "name": "Style"}
   ]
 }

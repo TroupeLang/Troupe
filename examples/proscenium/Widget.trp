@@ -69,6 +69,8 @@ datatype formResult = FR_NONE
                     | FR_CHANGED of string
                     | FR_CANCELLED
 
+datatype borderKind = B_SINGLE | B_DOUBLE | B_ROUND
+
 let val intDiv = Number.intDiv
 
     fun imax (a, b) = if a > b then a else b
@@ -79,7 +81,7 @@ let val intDiv = Number.intDiv
 
     fun attr (f, b) = Style.withBg (Style.BASIC b) (Style.withFg (Style.BASIC f) Style.default)
 
-    (** The Turbo Vision palette on the basic 16 colors. *)
+    (** The Turbo Vision palette on the basic 16 colors, with its glyph decorations. *)
     fun turbo () =
         { desktop     = attr (6, 4)      (* cyan on blue, under the ▒ fill        *)
         , bar         = attr (0, 7)      (* menu and status bars: black on gray   *)
@@ -93,7 +95,42 @@ let val intDiv = Number.intDiv
         , sel         = attr (0, 6)      (* selection, unfocused: black on cyan   *)
         , selFocus    = attr (0, 2)      (* selection, focused: black on green    *)
         , shadow      = attr (7, 0)      (* the black offset shadow               *)
+        , checkOn     = "[X] ",   checkOff = "[ ] "
+        , radioOn     = "(•) ",   radioOff = "( ) "
+        , btnL        = "[ ",     btnR     = " ]"
+        , btnFocusL   = "▶ ",     btnFocusR = " ◀"
         }
+
+    (** The modern skin, per the 2022–2026 survey in the design plan: terminal-default
+     *  background everywhere, one accent (Catppuccin mauve, degrading with the depth
+     *  option), a gray ramp for secondary text, huh-style buttons whose focus is an accent
+     *  background fill, ●/○ radios and ◼/◻ checkboxes. Pair it with rounded borders
+     *  (`paneOf`/`boxOf` with B_ROUND), the accent on the focused border only. *)
+    fun modern () =
+        let val accent  = Style.RGB (203, 166, 247)
+            val inkOn   = Style.RGB (30, 30, 46)
+            val fgDim   = Style.default |> Style.withFg (Style.IDX 243)
+            val plain   = Style.default
+        in
+        { desktop     = plain
+        , bar         = fgDim                                     (* footers: dim text     *)
+        , barSel      = plain |> Style.withFg accent
+        , dlg         = plain
+        , title       = plain |> Style.withFg accent |> Style.withBold true
+        , input       = plain
+        , inputFocus  = plain
+        , button      = Style.default |> Style.withFg (Style.IDX 252)
+                                      |> Style.withBg (Style.IDX 237)
+        , buttonFocus = plain |> Style.withFg inkOn |> Style.withBg accent
+        , sel         = plain |> Style.withBg (Style.IDX 237)
+        , selFocus    = plain |> Style.withFg accent |> Style.withBg (Style.IDX 237)
+        , shadow      = fgDim
+        , checkOn     = "◼ ",     checkOff = "◻ "
+        , radioOn     = "● ",     radioOff = "○ "
+        , btnL        = "  ",     btnR     = "  "
+        , btnFocusL   = "  ",     btnFocusR = "  "
+        }
+        end
 
     (*----------------------------------  Chrome  ----------------------------------*)
 
@@ -105,17 +142,22 @@ let val intDiv = Number.intDiv
 
     fun boxRow (l, m, r, w) = l ^ String.repeat (w - 2) m ^ r
 
-    (** A bordered box of `(w, h)` in attribute `a`: double borders when `dbl`. *)
-    fun box (a, w, h, dbl) =
+    (** A bordered box of `(w, h)` in attribute `a`, with the border kind's glyph set —
+     *  B_ROUND is the modern rounded set. *)
+    fun boxOf (a, w, h, kind) =
         let val (tl, hz, tr, vt, bl, br) =
-                if dbl then ("╔", "═", "╗", "║", "╚", "╝")
-                else        ("┌", "─", "┐", "│", "└", "┘")
+                case kind of
+                     B_DOUBLE => ("╔", "═", "╗", "║", "╚", "╝")
+                   | B_ROUND  => ("╭", "─", "╮", "│", "╰", "╯")
+                   | _        => ("┌", "─", "┐", "│", "└", "┘")
             val topR = Image.text a (boxRow (tl, hz, tr, w))
             val botR = Image.text a (boxRow (bl, hz, br, w))
             val midR = Image.text a (boxRow (vt, " ", vt, w))
             fun mids k = if k <= 0 then [] else midR :: mids (k - 1)
         in Image.vcat (topR :: List.append (mids (h - 2)) [botR])
         end
+
+    fun box (a, w, h, dbl) = boxOf (a, w, h, if dbl then B_DOUBLE else B_SINGLE)
 
     (** `d` with its shadow: the silhouette of `d`'s exact size in the shadow rendition,
      *  offset one row down and two columns right, under it. *)
@@ -136,14 +178,18 @@ let val intDiv = Number.intDiv
     (** The top-left corner that centers a `(w, h)` box on a `(cols, rows)` screen. *)
     fun centered (cols, rows, w, h) = (intDiv (cols - w) 2, intDiv (rows - h) 2)
 
-    (** A titled pane: a box of `(w, h)` (double borders when `dbl` — the focused-pane
-     *  marking), the title in the top border, `content` inside the borders and clipped to
-     *  them. *)
-    fun pane (th, w, h, title, dbl, content) =
+    (** A titled pane with a chosen border kind and border attribute — the modern shape:
+     *  rounded borders, the accent attribute on the focused pane's border, the title
+     *  embedded in the top border line. `content` sits inside the borders, clipped. *)
+    fun paneOf (th, w, h, title, kind, borderA, content) =
         let val lbl = Image.shift (2, 0) (Image.text th.title title)
             val inner = Image.shift (2, 1) (Image.crop (0, 0, w - 4, h - 2) content)
-        in Image.overlay lbl (Image.overlay inner (box (th.dlg, w, h, dbl)))
+        in Image.overlay lbl (Image.overlay inner (boxOf (borderA, w, h, kind)))
         end
+
+    (** The Turbo Vision pane: single borders, double when `dbl` marks it focused. *)
+    fun pane (th, w, h, title, dbl, content) =
+        paneOf (th, w, h, title, if dbl then B_DOUBLE else B_SINGLE, th.dlg, content)
 
     (** A `w`-cell progress bar showing `done` of `total`. *)
     fun gauge (th, w, done, total) =
@@ -452,8 +498,8 @@ let val intDiv = Number.intDiv
         let val imgs = List.mapi (fn (j, b) =>
                            Image.region ("ctl", i, j)
                                (if j = focJ
-                                then Image.text th.buttonFocus ("▶ " ^ b.text ^ " ◀")
-                                else Image.text th.button ("[ " ^ b.text ^ " ]")))
+                                then Image.text th.buttonFocus (th.btnFocusL ^ b.text ^ th.btnFocusR)
+                                else Image.text th.button (th.btnL ^ b.text ^ th.btnR)))
                        bs
             fun gap imgs' = case imgs' of
                                  []        => []
@@ -472,13 +518,13 @@ let val intDiv = Number.intDiv
            | CHECKBOX r =>
                  Image.region ("ctl", i, 0)
                      (Image.text (if foc >= 0 then th.selFocus else th.dlg)
-                                 ((if r.on then "[X] " else "[ ] ") ^ r.text))
+                                 ((if r.on then th.checkOn else th.checkOff) ^ r.text))
            | RADIO r =>
                  Image.vcat (List.mapi (fn (j, l) =>
                      Image.region ("opt", i, j)
                          (Image.text (if foc >= 0 andalso j = r.sel then th.selFocus
                                       else th.dlg)
-                                     ((if j = r.sel then "(•) " else "( ) ") ^ l)))
+                                     ((if j = r.sel then th.radioOn else th.radioOff) ^ l)))
                      r.labels)
            | LISTBOX r => listView (th, i, r, foc >= 0)
            | BUTTONS {buttons} => buttonRowView (th, w, i, buttons, foc)
@@ -492,9 +538,12 @@ let val intDiv = Number.intDiv
         end
 
 in [ ("turbo", turbo)
+   , ("modern", modern)
    , ("padTo", padTo)
    , ("bar", bar)
    , ("box", box)
+   , ("boxOf", boxOf)
+   , ("paneOf", paneOf)
    , ("withShadow", withShadow)
    , ("dialog", dialog)
    , ("centered", centered)

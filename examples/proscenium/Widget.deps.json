@@ -1,9 +1,9 @@
 {
   "deps": [
     {"path": "Ansi", "hash": "9vrb4ti2hssdjorne9q0n3cise4oc20240f8a3cn1mim12ecar40", "name": "Ansi"},
-    {"path": "Image", "hash": "nklo9s64s2jdvb5dcv0su8pp6jgtvvi274u518k346glal7tghtg", "name": "Image"},
+    {"path": "Image", "hash": "p7mvjgi0k70jscndnqfcur8uqinl5sie3bh84ev8dc6j4jr5fg6g", "name": "Image"},
     {"path": "Key", "hash": "t93u5gtdr744r05vrpj49n1raeuno6vo4dmfpdbmguv16vlmr1eg", "name": "Key"},
     {"path": "Style", "hash": "5jrgulnqcubrdhujjkoon4i88bcamgo7ft9bhkppss69jgrhqhrg", "name": "Style"},
-    {"path": "Term", "hash": "cc9rcq4c6ikdtjuoi5rbc9r2smpepuuhdt84vreadb9hq1mvmh20", "name": "Term"}
+    {"path": "Term", "hash": "3hjcpp1jlqb7usrf8ec6qqpmm5vsgv4nei7tuppgk509ugb4bodg", "name": "Term"}
   ]
 }

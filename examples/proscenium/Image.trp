@@ -328,6 +328,26 @@ let val intDiv = Number.intDiv
                  in (rows, {regs = acc1.regs, cur = SOME {x = x, y = y, shape = shape}})
                  end
 
+    (** The same image with every attribute rewritten by `f`; layout is unchanged, an
+     *  attribute never affecting dimensions. The backdrop device: a scene under a modal,
+     *  rendered through `mapAttrs` with a constant dim attribute, reads as dimmed — the
+     *  terminal-cell analog of a compositor's backdrop blend. *)
+    fun mapAttrs f i =
+        let val node' =
+                case i.node of
+                     EMPTY => EMPTY
+                   | TEXT {a, s} => TEXT {a = f a, s = s}
+                   | FILL {a, cell} => FILL {a = f a, cell = cell}
+                   | HCAT {l, r} => HCAT {l = mapAttrs f l, r = mapAttrs f r}
+                   | VCAT {t, b} => VCAT {t = mapAttrs f t, b = mapAttrs f b}
+                   | OVER {top, bot} => OVER {top = mapAttrs f top, bot = mapAttrs f bot}
+                   | CROP {i = inner, left, top} =>
+                         CROP {i = mapAttrs f inner, left = left, top = top}
+                   | REGION {tag, i = inner} => REGION {tag = tag, i = mapAttrs f inner}
+                   | CURSOR {shape, i = inner} => CURSOR {shape = shape, i = mapAttrs f inner}
+        in {w = i.w, h = i.h, sw = i.sw, sh = i.sh, node = node'}
+        end
+
     (** Render `i` at size `(w, h)`: exactly `h` rows of exactly `w` columns, the region
      *  rectangles in screen coordinates, and the cursor marker that won (or NONE). *)
     fun renderAt (i, w, h) =
@@ -353,6 +373,7 @@ in [ ("empty", empty)
    , ("stretch", stretch)
    , ("region", region)
    , ("cursor", cursor)
+   , ("mapAttrs", mapAttrs)
    , ("width", width)
    , ("height", height)
    , ("hweight", hweight)

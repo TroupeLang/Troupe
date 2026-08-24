@@ -1,0 +1,242 @@
+(* TextView — a multi-line text viewport: buffer editing, cursor motion, scrolling that
+ * follows the cursor, a line-number gutter with ~ past the end, and the real terminal
+ * cursor via the view's cursor marker.
+ *
+ * A program-relative module of examples/proscenium. Pure: the state is a value and every
+ * operation returns the next one. The buffer is a list of lines — right for a demonstrator
+ * and for files of a few thousand lines; the battallion port swaps in lib/Rope behind the
+ * same operations when buffers grow teeth.
+ *
+ * STATE: {lines, cur = {row, col}, top, left}. `lines` is never empty ([""] is the empty
+ * buffer); `cur` is in buffer coordinates, col in UTF-16 code units (the width policy of
+ * Image.trp's header); `top`/`left` are the viewport origin, moved only by `ensureVisible`,
+ * which every key operation ends with.
+ *
+ * KEYS (`tvKey (k, st, w, h)` — the viewport size decides paging and visibility): printable
+ * characters insert, Enter splits, Backspace and Delete remove and join across line ends,
+ * arrows, Home/End, PageUp/PageDown move. The result carries whether the buffer changed
+ * (`edited`), for the caller's dirty tracking; pure motion reports false.
+ *
+ * VIEW (`tvView (ta, w, h, st)`): `ta` is {text, gutter, gutterCur} attributes. The gutter
+ * is wide enough for the last line number plus one space; rows past the buffer show ~ in
+ * the gutter and nothing else. Each visible row's text carries the region tag
+ * ("ln", bufferRow), and `tvClick (st, w, h, bufferRow, screenCol)` turns a click into a
+ * cursor position, so the caller wires HIT events straight through.
+ *)
+
+import String
+import List
+import Number
+import Option
+import "./Image"
+import "./Style"
+import "./Key"
+
+let val intDiv = Number.intDiv
+
+    fun imax (a, b) = if a > b then a else b
+    fun imin (a, b) = if a < b then a else b
+    fun clamp (lo, hi, v) = if v < lo then lo else if v > hi then hi else v
+
+    (*---------------------------------  Buffer  ---------------------------------*)
+
+    fun tvInit lines =
+        { lines = (case lines of [] => [""] | _ => lines)
+        , cur = {row = 0, col = 0}, top = 0, left = 0 }
+
+    fun lineAt (lines, j) =
+        case List.find (fn _ => true) (List.drop j lines) of
+             SOME l => l
+           | NONE   => ""
+
+    fun nLines st = List.length st.lines
+
+    fun curLine st = lineAt (st.lines, st.cur.row)
+
+    fun replaceAt (lines, j, l') = List.mapi (fn (k, l) => if k = j then l' else l) lines
+
+    (** The buffer as one string, LF line endings. *)
+    fun tvText st = String.concatWith "\n" st.lines
+
+    (*------------------------------  Geometry  ----------------------------------*)
+
+    fun digits n = if n < 10 then 1 else 1 + digits (intDiv n 10)
+
+    (** Gutter columns: the last line number right-aligned, plus one space. *)
+    fun gutterW st = imax (digits (nLines st), 3) + 1
+
+    fun withSt (st, lines, row, col, top, left) =
+        {lines = lines, cur = {row = row, col = col}, top = top, left = left}
+
+    (** Scroll so the cursor is inside the `(w, h)` viewport; every operation ends here. *)
+    fun ensureVisible (st, w, h) =
+        let val textW = imax (w - gutterW st, 1)
+            val top = if st.cur.row < st.top then st.cur.row
+                      else if st.cur.row >= st.top + h then st.cur.row - h + 1
+                      else st.top
+            val left = if st.cur.col < st.left then st.cur.col
+                       else if st.cur.col >= st.left + textW then st.cur.col - textW + 1
+                       else st.left
+        in withSt (st, st.lines, st.cur.row, st.cur.col, top, left)
+        end
+
+    (*--------------------------------  Editing  ---------------------------------*)
+
+    fun moveTo (st, row, col) =
+        let val row' = clamp (0, nLines st - 1, row)
+            val col' = clamp (0, String.size (lineAt (st.lines, row')), col)
+        in withSt (st, st.lines, row', col', st.top, st.left)
+        end
+
+    fun insert (st, s) =
+        let val l = curLine st
+            val n = String.size l
+            val l' = String.substring (l, 0, st.cur.col) ^ s
+                     ^ String.substring (l, st.cur.col, n)
+        in withSt ( st, replaceAt (st.lines, st.cur.row, l')
+                  , st.cur.row, st.cur.col + String.size s, st.top, st.left )
+        end
+
+    fun splitLine st =
+        let val l = curLine st
+            val n = String.size l
+            val before = String.substring (l, 0, st.cur.col)
+            val after  = String.substring (l, st.cur.col, n)
+            val lines' = List.concat [ List.take st.cur.row st.lines
+                                     , [before, after]
+                                     , List.drop (st.cur.row + 1) st.lines ]
+        in withSt (st, lines', st.cur.row + 1, 0, st.top, st.left)
+        end
+
+    fun joinWithPrevious st =
+        let val prev = lineAt (st.lines, st.cur.row - 1)
+            val here = curLine st
+            val lines' = List.concat [ List.take (st.cur.row - 1) st.lines
+                                     , [prev ^ here]
+                                     , List.drop (st.cur.row + 1) st.lines ]
+        in withSt (st, lines', st.cur.row - 1, String.size prev, st.top, st.left)
+        end
+
+    fun backspace st =
+        if st.cur.col > 0
+        then let val l = curLine st
+                 val l' = String.substring (l, 0, st.cur.col - 1)
+                          ^ String.substring (l, st.cur.col, String.size l)
+             in withSt ( st, replaceAt (st.lines, st.cur.row, l')
+                       , st.cur.row, st.cur.col - 1, st.top, st.left )
+             end
+        else if st.cur.row > 0 then joinWithPrevious st
+        else st
+
+    fun deleteAt st =
+        let val l = curLine st
+            val n = String.size l
+        in if st.cur.col < n
+           then withSt ( st
+                       , replaceAt ( st.lines, st.cur.row
+                                   , String.substring (l, 0, st.cur.col)
+                                     ^ String.substring (l, st.cur.col + 1, n) )
+                       , st.cur.row, st.cur.col, st.top, st.left )
+           else if st.cur.row < nLines st - 1
+           then let val next = lineAt (st.lines, st.cur.row + 1)
+                    val lines' = List.concat [ List.take st.cur.row st.lines
+                                             , [l ^ next]
+                                             , List.drop (st.cur.row + 2) st.lines ]
+                in withSt (st, lines', st.cur.row, st.cur.col, st.top, st.left)
+                end
+           else st
+        end
+
+    (*----------------------------------  Keys  ----------------------------------*)
+
+    (** One key folded into the state; `(st', edited)`, with the viewport following the
+     *  cursor. *)
+    fun tvKey (k, st, w, h) =
+        let val (st1, edited) =
+                case k of
+                     KEY_PRINT c    => (insert (st, c), true)
+                   | KEY_ENTER      => (splitLine st, true)
+                   | KEY_BACKSPACE  => (backspace st, true)
+                   | KEY_DELETE     => (deleteAt st, true)
+                   | KEY_LEFT       => ( if st.cur.col > 0 then moveTo (st, st.cur.row, st.cur.col - 1)
+                                         else if st.cur.row > 0
+                                         then moveTo (st, st.cur.row - 1,
+                                                      String.size (lineAt (st.lines, st.cur.row - 1)))
+                                         else st
+                                       , false )
+                   | KEY_RIGHT      => ( if st.cur.col < String.size (curLine st)
+                                         then moveTo (st, st.cur.row, st.cur.col + 1)
+                                         else if st.cur.row < nLines st - 1
+                                         then moveTo (st, st.cur.row + 1, 0)
+                                         else st
+                                       , false )
+                   | KEY_UP         => (moveTo (st, st.cur.row - 1, st.cur.col), false)
+                   | KEY_DOWN       => (moveTo (st, st.cur.row + 1, st.cur.col), false)
+                   | KEY_HOME       => (moveTo (st, st.cur.row, 0), false)
+                   | KEY_END        => (moveTo (st, st.cur.row, String.size (curLine st)), false)
+                   | KEY_PAGEUP     => (moveTo (st, st.cur.row - h, st.cur.col), false)
+                   | KEY_PAGEDOWN   => (moveTo (st, st.cur.row + h, st.cur.col), false)
+                   | KEY_TAB        => (insert (st, "    "), true)
+                   | _              => (st, false)
+        in (ensureVisible (st1, w, h), edited)
+        end
+
+    (** Scroll by `d` rows without moving the cursor further than the buffer allows. *)
+    fun tvScroll (st, w, h, d) =
+        let val top' = clamp (0, imax (nLines st - 1, 0), st.top + d)
+            val row' = clamp (top', top' + h - 1, st.cur.row)
+        in ensureVisible (withSt (st, st.lines, row', st.cur.col, top', st.left), w, h)
+        end
+
+    (** A click at buffer row `j`, screen column `sx` of the view's left edge. *)
+    fun tvClick (st, w, h, j, sx) =
+        ensureVisible (moveTo (st, j, sx - gutterW st + st.left), w, h)
+
+    (** Another view of the same buffer brought up to date after an edit in `src`: `dst`
+     *  keeps its own viewport and cursor, clamped to the buffer that now exists. *)
+    fun tvSync (src, dst) =
+        moveTo ( withSt (dst, src.lines, dst.cur.row, dst.cur.col, dst.top, dst.left)
+               , dst.cur.row, dst.cur.col )
+
+    (*----------------------------------  View  ----------------------------------*)
+
+    (** The view: `vid` names this view in its row tags (("ln", vid, bufferRow)), so several
+     *  views of one buffer stay distinguishable to the mouse; the cursor marker is placed
+     *  only when `focused`, so exactly one view of a split owns the terminal cursor. *)
+    fun tvView (ta, vid, w, h, focused, st) =
+        let val gw = gutterW st
+            val textW = imax (w - gw, 1)
+            val n = nLines st
+            fun row j =
+                if j >= n
+                then Image.text ta.gutter "~"
+                else
+                let val num = String.padLeft (gw - 1) " " (toString (j + 1)) ^ " "
+                    val ga = if j = st.cur.row then ta.gutterCur else ta.gutter
+                    val l = lineAt (st.lines, j)
+                    (* padded to the text width so a click right of the text still lands in
+                     * the row's region *)
+                    val visible = String.padRight textW " "
+                                      (String.substring (l, st.left, st.left + textW))
+                in Image.beside (Image.text ga num)
+                                (Image.region ("ln", vid, j) (Image.text ta.text visible))
+                end
+            fun rows (j, k) = if k <= 0 then [] else row j :: rows (j + 1, k - 1)
+            val body = Image.vcat (rows (st.top, h))
+            val marker = Image.shift (gw + st.cur.col - st.left, st.cur.row - st.top)
+                                     (Image.cursor Image.CURSOR_BAR (Image.space (1, 1)))
+        in if focused then Image.overlay marker body else body
+        end
+
+in [ ("tvInit", tvInit)
+   , ("tvText", tvText)
+   , ("tvKey", tvKey)
+   , ("tvScroll", tvScroll)
+   , ("tvClick", tvClick)
+   , ("tvSync", tvSync)
+   , ("tvView", tvView)
+   , ("gutterW", gutterW)
+   , ("lineAt", lineAt)
+   , ("nLines", nLines)
+   ]
+end

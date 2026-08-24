@@ -22,8 +22,10 @@
  *   - plain mode (`plain = true`) writes each update as its own complete line. Correct in a
  *     file.
  *
- * Neither the terminal width nor whether stdout is a terminal can be queried from Troupe, so
- * both are caller-supplied: the bar width is an option field, and the caller selects the mode.
+ * Both are caller-supplied: the bar width is an option field, and the caller selects the mode.
+ * A caller that wants them to track the terminal can query `Tty.size` and `Tty.isTty`
+ * (lib/Tty); this module itself queries nothing, so it works unchanged with no terminal
+ * attached.
  *)
 
 import String

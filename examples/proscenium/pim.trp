@@ -10,8 +10,9 @@
  * the serve function runs SimpleFileIO under the supervisor's root authority (Term.trp, "THE
  * REQUEST PROTOCOL").
  *
- * KEYS. Tab switches the focused pane (calendar or tasks; the focused pane has the double
- * border). Calendar: arrows move by day and week, PageUp/PageDown by month, Home returns to
+ * KEYS. Tab switches the focused pane (calendar or tasks; the focused pane carries the
+ * accent border and the ◆ marker in its title — the marker is the cue that survives
+ * without color). Calendar: arrows move by day and week, PageUp/PageDown by month, Home returns to
  * today (underlined; a day with events carries a •), x deletes the selected day's events.
  * Tasks: Up/Down select, Space toggles done, x deletes. Anywhere: n opens the new-event
  * dialog, t the new-task dialog, q or CTRL-c quits. The mouse selects days and tasks and
@@ -351,19 +352,23 @@ let val intDiv = Number.intDiv
             val midH = imax (m.rows - 2, 4)
             val calW = 33
             val calH = 11
-            val rightW = imax (m.cols - calW, 20)
+            val rightW = imax (m.cols - calW - 1, 20)
             val agendaH = imax (intDiv midH 2, 4)
             val tasksH = imax (midH - agendaH, 4)
-            val calPane = Widget.paneOf (th, calW, calH, " Calendar ", Widget.B_ROUND,
+            val calPane = Widget.paneOf (th, calW, calH,
+                                (if calFocused then " ◆ Calendar " else " Calendar "),
+                                Widget.B_ROUND,
                                 if calFocused then th.barSel else th.bar,
                                 calendarContent (th, m, calFocused, calW - 4))
             val left = calPane <-> Image.space (calW, imax (midH - calH, 0))
             val agenda = Widget.paneOf (th, rightW, agendaH, " Agenda — " ^ dateKey m.sel ^ " ",
                                Widget.B_ROUND, th.bar, agendaContent (th, m))
-            val tasks = Widget.paneOf (th, rightW, tasksH, " Tasks ", Widget.B_ROUND,
+            val tasks = Widget.paneOf (th, rightW, tasksH,
+                              (if calFocused then " Tasks " else " ◆ Tasks "),
+                              Widget.B_ROUND,
                               if calFocused then th.bar else th.barSel,
                               tasksContent (th, m, not calFocused))
-            val middle = left <|> (agenda <-> tasks)
+            val middle = left <|> Image.space (1, 1) <|> (agenda <-> tasks)
             val base = Image.vcat
                 [ Image.hcat [ Image.text th.title " ● pim"
                              , Image.text th.bar ("  " ^ m.path) ]

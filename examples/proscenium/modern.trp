@@ -118,7 +118,7 @@ let val intDiv = Number.intDiv
 
     fun confirmForm m =
         Widget.form [ Widget.label ("Delete '" ^ selName m ^ "'?")
-                    , Widget.label "This cannot be undone. (It also will not happen.)"
+                    , Widget.label "This cannot be undone. (It will not, anyway.)"
                     , Widget.label ""
                     , Widget.buttons [("del", "Delete"), ("keep", "Cancel")] ]
 

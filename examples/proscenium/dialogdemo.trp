@@ -24,7 +24,6 @@ let val intDiv = Number.intDiv
 
     val desktopA = Style.withBg (Style.BASIC 4) (Style.withFg (Style.BASIC 6) Style.default)
     val barA     = Style.withBg (Style.BASIC 7) (Style.withFg (Style.BASIC 0) Style.default)
-    val hotA     = Style.withBg (Style.BASIC 7) (Style.withFg (Style.BASIC 1) Style.default)
     val dialogA  = Style.withBg (Style.BASIC 7) (Style.withFg (Style.BASIC 0) Style.default)
     val titleA   = Style.withBg (Style.BASIC 7) (Style.withFg (Style.BASIC 4) Style.default)
     val buttonA  = Style.withBg (Style.BASIC 2) (Style.withFg (Style.BASIC 0) Style.default)

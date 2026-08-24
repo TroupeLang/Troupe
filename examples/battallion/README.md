@@ -17,8 +17,8 @@ file commands and help page are plugins behind a published interface.
 | `CursorStyle.trp` | Plugin: the seam for the cursor's appearance; inert, the terminal's own cursor stands |
 | `FileOps.trp`     | Plugin: what a command word means — `:w`, `:q`, a line number, `:help`                |
 | `Help.trp`        | Plugin: lays the `:help` page out from the sections the other plugins export          |
-| `Screen.trp`      | The terminal escapes and the assembly of one frame                                    |
-| `Key.trp`         | Decodes terminal input bytes into `key` values, with a carry across chunk boundaries  |
+| `Screen.trp`      | The assembly of one frame and its tab stops, over `../proscenium/Ansi`'s escapes      |
+| `Key.trp`         | Adapts `../proscenium/Key`'s decoder to this key set, with a carry across chunks      |
 | `keydemo.trp`     | Runs `Key.decode` over a recorded byte stream and prints the keys                     |
 | `helpdemo.trp`    | Draws the `:help` page at several terminal sizes and prints it                        |
 | `crashprobe.trp`  | The editor with a keymap that kills the kernel, for the supervisor's restore check    |

@@ -8,7 +8,10 @@
  *     setup and teardown, which the supervisor owns;
  *   - the renderer writes `frame`, the whole visible screen, on every redraw.
  *
- * ESCAPES. `\x1b[?1049h` / `\x1b[?1049l` are the xterm private mode that switches to the
+ * ESCAPES COME FROM `../proscenium/Ansi`, which holds the same sequences as the escape vocabulary
+ * of the Proscenium terminal library; this module re-exports the six mode strings and `cursorTo`
+ * under the names its callers already use, and writes `Ansi.home` and `Ansi.eraseLine` inside
+ * `frame`. `\x1b[?1049h` / `\x1b[?1049l` are the xterm private mode that switches to the
  * alternate screen buffer and back, so the shell's scrollback is untouched by the session.
  * `\x1b[?7l` / `\x1b[?7h` clear and set DECAWM, the terminal's automatic wrap. `\x1b[?25l` /
  * `\x1b[?25h` hide and show the cursor. `\x1b[H` homes the cursor, `\x1b[2K` erases the whole
@@ -71,33 +74,31 @@
  *)
 
 import String
+import qualified "../proscenium/Ansi" as Ansi
 
-let val esc = "\x1b"
-
-    (*------------------------------  Terminal mode  ------------------------------*)
+let (*------------------------------  Terminal mode  ------------------------------*)
 
     (** Switch to the alternate screen buffer. *)
-    val enterAlt = esc ^ "[?1049h"
+    val enterAlt = Ansi.enterAlt
 
     (** Switch back to the normal screen buffer. *)
-    val leaveAlt = esc ^ "[?1049l"
+    val leaveAlt = Ansi.leaveAlt
 
     (** Clear DECAWM: a character written past the right edge is dropped rather than continued on
      *  the next physical row. *)
-    val disableWrap = esc ^ "[?7l"
+    val disableWrap = Ansi.disableWrap
 
     (** Set DECAWM again, which is how a terminal is normally found. *)
-    val enableWrap = esc ^ "[?7h"
+    val enableWrap = Ansi.enableWrap
 
-    val hideCursor = esc ^ "[?25l"
-    val showCursor = esc ^ "[?25h"
+    val hideCursor = Ansi.hideCursor
+    val showCursor = Ansi.showCursor
 
     (*---------------------------------  Frames  ----------------------------------*)
 
     (** Move the cursor to `(row, col)`, both counting from zero here and emitted counting from
      *  one, which is what the terminal expects. *)
-    fun cursorTo (row, col) =
-        esc ^ "[" ^ toString (row + 1) ^ ";" ^ toString (col + 1) ^ "H"
+    fun cursorTo (row, col) = Ansi.cursorTo (row, col)
 
     (*----------------------------  Columns and tab stops  ----------------------------*)
 
@@ -164,9 +165,9 @@ let val esc = "\x1b"
      *  force by the time the cursor is on the screen. *)
     fun frame (lines, width, curRow, curCol, tail) =
         let fun go ([], acc)      = acc
-              | go ([l], acc)     = acc ^ esc ^ "[2K" ^ truncate (l, width)
-              | go (l :: ls, acc) = go (ls, acc ^ esc ^ "[2K" ^ truncate (l, width) ^ "\r\n")
-        in hideCursor ^ go (lines, esc ^ "[H") ^ cursorTo (curRow, curCol) ^ tail ^ showCursor
+              | go ([l], acc)     = acc ^ Ansi.eraseLine ^ truncate (l, width)
+              | go (l :: ls, acc) = go (ls, acc ^ Ansi.eraseLine ^ truncate (l, width) ^ "\r\n")
+        in hideCursor ^ go (lines, Ansi.home) ^ cursorTo (curRow, curCol) ^ tail ^ showCursor
         end
 
 in [ ("enterAlt", enterAlt)

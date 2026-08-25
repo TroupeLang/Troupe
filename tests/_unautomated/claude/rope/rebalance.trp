@@ -1,0 +1,118 @@
+(* rebalance — lib/Rope.trp's depth bound under adversarial edit patterns.
+ *
+ * With edge.trp and random.trp this is the safety net for changes to Rope's
+ * representation or policy; this file is the one that exercises the balancing
+ * rule. Thousands of one-character inserts at a fixed point are the shape that
+ * turns a rope into a list, since every edit adds a node in the same place. Each
+ * case asserts that the depth never passes the bound, that `Rope.validate`
+ * accepts the result, and that the text and line queries still agree with a
+ * plain-string reference.
+ *
+ *   ./local.sh tests/_unautomated/claude/rope/rebalance.trp
+ *
+ * One PASS/FAIL line per case, then a summary line. Every count is a constant
+ * below; the bound under test is Rope's own exported depthLimit.
+ *)
+
+import List
+import String
+import Rope
+
+let val edits     = 5000     (* inserts into a rope grown from nothing *)
+    val bigEdits  = 2000     (* inserts into a rope that already has many leaves *)
+    val bigLines  = 1600     (* lines of the large fixture *)
+    val bound     = Rope.depthLimit      (* the invariant under test *)
+
+    (* Lehmer's minimal standard generator; see random.trp. *)
+    val lcgMultiplier = 48271
+    val lcgModulus    = 2147483647
+
+    val newlineCode = 10
+
+    (* Every `newlineEvery`th inserted character is a newline, so the inserts
+     * exercise line addressing as well as the tree shape. *)
+    val alphabet     = "abcdefghij"
+    val newlineEvery = 10
+
+    fun say s = fwrite (stdout, s ^ "\n")
+
+    fun next seed = (seed * lcgMultiplier) mod lcgModulus
+
+    fun charOf i =
+        if (i mod newlineEvery) = 0 then "\n"
+        else String.substring (alphabet, i mod newlineEvery, (i mod newlineEvery) + 1)
+
+    (* (rope, model, deepest depth seen) after `count` inserts placed by `place`,
+     * which is given the step, a fresh random number and the current length. *)
+    fun growFrom (place, seed0, r0, m0, count) =
+        let fun go (i, seed, r, m, worst) =
+                if i >= count then (r, m, worst)
+                else let val c  = charOf i
+                         val s  = next seed
+                         val n  = strlen m
+                         val at = place (i, s, n)
+                         val r' = Rope.insert (r, at, c)
+                         val m' = String.substring (m, 0, at) ^ c
+                                  ^ String.substring (m, at, n)
+                         val d  = Rope.depth r'
+                     in go (i + 1, s, r', m', if d > worst then d else worst)
+                     end
+        in go (0, seed0, r0, m0, Rope.depth r0) end
+
+    fun grow (place, seed0) = growFrom (place, seed0, Rope.empty, "", edits)
+
+    fun countNewlines s =
+        let val n = strlen s
+            fun go (i, k) = if i >= n then k
+                            else go (i + 1, if charCodeAtWithDefault (s, i, 0) = newlineCode
+                                            then k + 1 else k)
+        in go (0, 0) end
+
+    (* Every check a grown rope has to pass against its reference. *)
+    fun verify label (r, m, worst) =
+        let val lines = String.lines m
+            val cnt   = List.length lines
+            val cases =
+                [ ("deepest depth " ^ intToString worst ^ " is within "
+                   ^ intToString bound, worst <= bound)
+                , ("representation: " ^ Rope.validate r, Rope.validate r = "")
+                , ("length", Rope.length r = strlen m)
+                , ("text", Rope.text r = m)
+                , ("lineCount", Rope.lineCount r = countNewlines m + 1)
+                , ("every line agrees with the model",
+                   List.forall (fn k => Rope.lineAt (r, k) = List.nth lines k)
+                               (List.range cnt))
+                , ("every line start agrees with the model",
+                   List.forall (fn k =>
+                       let val (l, c) = Rope.offsetToPosition (r, Rope.offsetOfLine (r, k))
+                       in l = k andalso c = 0 end)
+                     (List.range cnt))
+                ]
+            val _ = List.map (fn (name, ok) =>
+                        say ((if ok then "PASS " else "FAIL ") ^ label ^ ": " ^ name)) cases
+        in cases end
+
+    val front  = verify "insert at 0" (grow (fn (_, _, _) => 0, 1))
+    val middle = verify "insert at the middle" (grow (fn (_, _, n) => n div 2, 2))
+    val spread = verify "insert at random" (grow (fn (_, s, n) => s mod (n + 1), 3))
+    val tail   = verify "append at the end" (grow (fn (_, _, n) => n, 4))
+
+    (* The same patterns applied to a rope that already has many leaves, where an
+     * edit rebuilds a spine instead of extending one leaf. *)
+    val bigText = String.repeat bigLines
+                    "0123456789012345678901234567890123456789012345678901234567890\n"
+    val bigRope = Rope.fromString bigText
+    val label   = intToString bigLines ^ " lines, "
+
+    val bigFront  = verify (label ^ "insert at 0")
+                      (growFrom (fn (_, _, _) => 0, 5, bigRope, bigText, bigEdits))
+    val bigSpread = verify (label ^ "insert at random")
+                      (growFrom (fn (_, s, n) => s mod (n + 1), 6, bigRope, bigText, bigEdits))
+
+    val cases = List.concat [front, middle, spread, tail, bigFront, bigSpread]
+    val bad   = List.length (List.filter (fn (_, ok) => not ok) cases)
+    val n     = List.length cases
+
+in if bad = 0 then say ("ALL " ^ intToString n ^ " PASSED")
+   else say (intToString bad ^ " FAILED of " ^ intToString n)
+end

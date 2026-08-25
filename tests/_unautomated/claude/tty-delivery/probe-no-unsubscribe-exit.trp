@@ -1,0 +1,11 @@
+(* Probe: a program that subscribes and never unsubscribes still exits.
+   The listener and the resumed stream hold an event-loop reference; the
+   cleanup hook detaches and pauses, which is what releases it. *)
+require native Tty
+
+let val i = stdin
+    val me = self ()
+    val _ = ttySubscribe (i, me)
+    val _ = print "subscribed, halting without unsubscribing"
+in ()
+end

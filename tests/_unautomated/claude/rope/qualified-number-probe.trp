@@ -1,0 +1,10 @@
+(* Probe: a qualified import of Number must leave the builtin `toString`
+ * untouched, unlike `import Number`, which shadows it program-wide (see
+ * _dev_planning/text-editor/rope-benchmarks.md). When this probe was written,
+ * `print` went through `toString` and showed the shadowing too; `print` has
+ * since become its own builtin and no longer does.
+ *)
+
+import qualified Number as N
+
+print "hello"

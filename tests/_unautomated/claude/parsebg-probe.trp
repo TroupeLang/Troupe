@@ -1,0 +1,20 @@
+(* parsebg-probe — Term.parseBg against the reply shapes real terminals send. *)
+import Option
+import String
+import "../../../examples/proscenium/Term"
+let fun say s = fwrite (stdout, s ^ "\n")
+    fun check (name, ok) = say ((if ok then "PASS " else "FAIL ") ^ name)
+    val esc = "\x1b"
+    val st = esc ^ "\x5c"
+    val darkReply  = esc ^ "]11;rgb:1e1e/1e1e/2e2e" ^ st
+    val lightReply = esc ^ "]11;rgb:ffff/fdfd/f5f5" ^ "\x07"
+    val shortForm  = esc ^ "]11;rgb:20/20/20" ^ "\x07"
+    val _ = check ("dark 4-digit ST",   Term.parseBg darkReply  = SOME {dark = true,  residual = ""})
+    val _ = check ("light 4-digit BEL", Term.parseBg lightReply = SOME {dark = false, residual = ""})
+    val _ = check ("dark 2-digit",      Term.parseBg shortForm  = SOME {dark = true,  residual = ""})
+    val _ = check ("residual kept",     Term.parseBg ("ab" ^ darkReply ^ "cd")
+                                        = SOME {dark = true, residual = "abcd"})
+    val _ = check ("unfinished is NONE", Term.parseBg (esc ^ "]11;rgb:1e1e/1e") = NONE)
+    val _ = check ("absent is NONE",     Term.parseBg "hello" = NONE)
+in exit (authority, 0)
+end

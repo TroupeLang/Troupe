@@ -1,0 +1,33 @@
+(* Probe: re-subscribing replaces the subscriber.
+
+   Main subscribes itself and then, straight-line, subscribes the child. Only
+   the child receives: it accumulates every TTYDATA payload and prints at
+   TTYEOF. Main never receives and runs to completion; the runtime stops when
+   the child is done. *)
+import IfcUtil
+require native Tty
+
+let val a = authority
+    val i = stdin
+    val me = self ()
+    fun child () =
+        let val (ok, cap) = enableRangedReceive (IfcUtil.bot, ttyLevel i, a)
+            fun loop acc =
+                let val (more, b) =
+                        rcv (IfcUtil.bot, ttyLevel i,
+                             [ hn ("TTYDATA", bytes) => (true, bytes)
+                             , hn ("TTYEOF") => (false, "") ])
+                in if more then loop (acc ^ b) else acc
+                end
+            val acc = loop ""
+            val _ = ttyUnsubscribe i
+            val _ = disableRangedReceive cap
+            val _ = print ("child received: " ^ acc)
+        in ()
+        end
+    val c = spawn child
+    val _ = ttySubscribe (i, me)
+    val _ = ttySubscribe (i, c)
+    val _ = print "main: handed the subscription to the child"
+in ()
+end

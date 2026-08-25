@@ -1,0 +1,36 @@
+(* Pty case 2: Ctrl-C in raw mode is a byte, not a signal.
+
+   With the line discipline in raw mode ISIG is off, so 0x03 is delivered to
+   the subscriber as an ordinary TTYDATA byte and the runtime keeps running.
+   The program reports the code it received and then exits on its own. *)
+import IfcUtil
+import String
+require native Tty
+
+let val a = authority
+    val i = stdin
+    val me = self ()
+
+    fun codes s =
+        let fun go (j, acc) =
+                if j >= String.size s then acc
+                else go (j + 1, acc ^ " " ^ toString (String.subCode (s, j)))
+        in go (0, "")
+        end
+
+    val _ = ttyRawMode (i, true)
+    val _ = ttySubscribe (i, me)
+    val (ok, cap) = enableRangedReceive (IfcUtil.bot, ttyLevel i, a)
+    val _ = print "READY"
+
+    val bytes = rcv (IfcUtil.bot, ttyLevel i,
+                     [ hn ("TTYDATA", b) => b
+                     , hn ("TTYEOF") => "" ])
+    val _ = print ("GOT:" ^ codes bytes)
+    val _ = print "STILL-RUNNING"
+    val _ = ttyUnsubscribe i
+    val _ = disableRangedReceive cap
+    val _ = ttyRawMode (i, false)
+    val _ = print "DONE"
+in ()
+end

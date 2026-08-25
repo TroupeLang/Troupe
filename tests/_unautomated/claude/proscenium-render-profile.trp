@@ -1,0 +1,69 @@
+(* proscenium-render-profile — splits the segment-row frame cost into stages: image build,
+ * renderAt, assembly, and the text-constructor overhead in isolation.
+ *
+ * Run: ./local.sh tests/_unautomated/claude/proscenium-render-profile.trp
+ *)
+
+import String
+import List
+import "../../../examples/proscenium/Image"
+import "../../../examples/proscenium/Style"
+import "../../../examples/proscenium/Ansi"
+
+let fun say s = fwrite (stdout, s)
+
+    val enc = Style.encode Style.COLORS256
+
+    fun attrOf n = Style.withFg (Style.BASIC (n mod 8)) Style.default
+
+    fun cellText (frame, r, c, w) =
+        String.repeat (w - 1) "x" ^ toString ((frame + r + c) mod 10)
+
+    fun rowImg (frame, r, segs, segW) =
+        Image.hcat (List.tabulate segs (fn c => Image.text (attrOf (r + c))
+                                                           (cellText (frame, r, c, segW))))
+
+    fun frameImg (frame, rows, segs, segW) =
+        Image.vcat (List.tabulate rows (fn r => rowImg (frame, r, segs, segW)))
+
+    fun assembleRow segs =
+        List.foldl (fn (sg, acc) =>
+                        acc ^ (case sg of Image.SEG (a, s) => enc a ^ s
+                                        | Image.GAP n      => Style.reset ^ String.repeat n " "))
+                   Ansi.eraseLine segs
+
+    fun assemble rows =
+        Ansi.hideCursor
+      ^ List.foldl (fn (row, acc) => acc ^ assembleRow row ^ "\r\n") Ansi.home rows
+      ^ Ansi.showCursor
+
+    fun bench (name, n, f) =
+        let val t0 = getTime ()
+            fun go (i, acc) = if i >= n then acc else go (i + 1, acc + f i)
+            val checksum = go (0, 0)
+            val t1 = getTime ()
+            val ms = t1 - t0
+        in say ( name ^ ": " ^ toString ms ^ " ms / " ^ toString n ^ " = "
+               ^ toString (ms / n) ^ " ms each (checksum " ^ toString checksum ^ ")\n" )
+        end
+
+    val R = 24  val S = 8  val W = 10  val COLS = 80
+
+    val builtImage = frameImg (0, R, S, W)
+    val builtRows  = let val r = Image.renderAt (builtImage, COLS, R) in r.rows end
+
+    val _ = bench ("build only          ", 500, fn i => Image.width (frameImg (i, R, S, W)))
+    val _ = bench ("renderAt only       ", 500, fn i =>
+                       let val r = Image.renderAt (builtImage, COLS, R)
+                       in List.length r.rows end)
+    val _ = bench ("assemble only       ", 500, fn i => String.size (assemble builtRows))
+    val _ = bench ("text leaf x192      ", 500, fn i =>
+                       let fun go (k, acc) = if k >= 192 then acc
+                                             else go (k + 1, acc + Image.width (Image.text (attrOf k) "xxxxxxxxx0"))
+                       in go (0, 0) end)
+    val _ = bench ("encode x192         ", 500, fn i =>
+                       let fun go (k, acc) = if k >= 192 then acc
+                                             else go (k + 1, acc + String.size (enc (attrOf k)))
+                       in go (0, 0) end)
+in ()
+end

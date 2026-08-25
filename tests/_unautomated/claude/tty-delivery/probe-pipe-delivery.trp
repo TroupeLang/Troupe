@@ -1,0 +1,41 @@
+(* Probe: the whole delivery path over a pipe.
+
+   Subscribe self, open a ranged-receive region at [bot, ttyLevel stdin],
+   accumulate every TTYDATA payload until TTYEOF, then unsubscribe, close the
+   region and print. Accumulating to EOF makes the result independent of how
+   the pipe chunks the input.
+
+   Questions this probe answers:
+     - do the events arrive at all, and with the shapes the runtime builds?
+     - does the bare string "TTYEOF" match `hn ("TTYEOF")`?
+     - what is the level of a payload, and the pc/bl of the subscriber?
+     - does disableRangedReceive still succeed after the loop, whose recursion
+       sits inside a branch on a channel-labelled value? *)
+import IfcUtil
+require native Tty
+
+let val a = authority
+    val i = stdin
+    val me = self ()
+    val _ = print ("subscribe: " ^ toString (ttySubscribe (i, me)))
+    val (ok, cap) = enableRangedReceive (IfcUtil.bot, ttyLevel i, a)
+    val _ = print ("region ok: " ^ toString ok)
+
+    fun loop acc =
+        let val (more, b) =
+                rcv (IfcUtil.bot, ttyLevel i,
+                     [ hn ("TTYDATA", bytes) => (true, bytes)
+                     , hn ("TTYEOF") => (false, "") ])
+        in if more then loop (acc ^ b) else acc
+        end
+
+    val acc = loop ""
+    val _ = print "pc/bl after the loop:"
+    val _ = debugpc ()
+    val _ = print ("levelOf acc = " ^ toString (levelOf acc))
+    val _ = print ("unsubscribe: " ^ toString (ttyUnsubscribe i))
+    val _ = disableRangedReceive cap
+    val _ = print "region closed"
+    val _ = print ("received: " ^ acc)
+in ()
+end

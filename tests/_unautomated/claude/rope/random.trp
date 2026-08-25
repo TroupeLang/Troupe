@@ -1,0 +1,234 @@
+(* random — a randomized differential test of lib/Rope.trp against a plain string.
+ *
+ * With edge.trp and rebalance.trp this is the safety net for changes to Rope's
+ * representation or policy: a run applies random edits to a rope and to a
+ * reference string in lockstep, checks the cheap queries after every step, and
+ * every `fullEvery` steps compares the whole text and calls `Rope.validate`,
+ * which recomputes every cached field. A run stops at its first disagreement and
+ * names the step and the operation that caused it.
+ *
+ *   ./local.sh tests/_unautomated/claude/rope/random.trp
+ *
+ * One PASS/FAIL line per run, then a summary line. Every size, count and seed is
+ * a constant below, so the run can be scaled without reading the body.
+ *)
+
+import List
+import Option
+import String
+import Rope
+
+let (*--- what a run does ---*)
+
+    val steps     = 1200          (* edits per run *)
+    val fullEvery = 60            (* steps between whole-text comparisons *)
+    val initLen   = 3000          (* characters of random text a run starts from *)
+    val chunkLen  = 137           (* chunk size of the append-built rope *)
+    val seeds     = [12345, 777771, 20260730]
+
+    val maxInsert = 6             (* longest string an edit inserts *)
+    val maxDelete = 8             (* longest range an edit deletes *)
+    val opKinds   = 5             (* insert, insert, delete, split/concat, replace *)
+
+    (* Lehmer's minimal standard generator (Park & Miller 1988): x' = 48271x mod
+     * (2^31-1). Both constants are that generator's, not tuning parameters. The
+     * products stay below 2^53, so Troupe's numbers hold them exactly. *)
+    val lcgMultiplier = 48271
+    val lcgModulus    = 2147483647
+
+    (* Characters an edit draws from; two of the twelve are newlines. *)
+    val alpha     = "abcde\nfg\nhij"
+    val alphaSize = 12
+
+    val newlineCode = 10
+
+    fun say s = fwrite (stdout, s ^ "\n")
+
+    (*--- generator ---*)
+
+    fun next seed = (seed * lcgMultiplier) mod lcgModulus
+
+    (* (new seed, value in [0, n)) *)
+    fun rand (seed, n) =
+        let val s = next seed
+        in if n <= 0 then (s, 0) else (s, s mod n) end
+
+    fun randStr (seed, k, acc) =
+        if k <= 0 then (seed, acc)
+        else let val (s, i) = rand (seed, alphaSize)
+             in randStr (s, k - 1, acc ^ String.substring (alpha, i, i + 1))
+             end
+
+    (*--- the reference model: a string and its newline count ---*)
+
+    fun countNewlines s =
+        let val n = strlen s
+            fun go (i, k) = if i >= n then k
+                            else go (i + 1, if charCodeAtWithDefault (s, i, 0) = newlineCode
+                                            then k + 1 else k)
+        in go (0, 0) end
+
+    (* The offset just after the last newline of `s`. *)
+    fun lastLineStart s =
+        let val n = strlen s
+            fun go (i, at) = if i >= n then at
+                             else go (i + 1, if charCodeAtWithDefault (s, i, 0) = newlineCode
+                                             then i + 1 else at)
+        in go (0, 0) end
+
+    fun modelInsert (m, i, t) =
+        String.substring (m, 0, i) ^ t ^ String.substring (m, i, strlen m)
+
+    fun modelDelete (m, i, k) =
+        String.substring (m, 0, i) ^ String.substring (m, i + k, strlen m)
+
+    (*--- checks ---*)
+
+    (* The name of the first check that failed, or "" if none did. *)
+    fun firstErr cases =
+        case List.find (fn (_, ok) => not ok) cases of
+          SOME (name, _) => name
+        | NONE           => ""
+
+    (* The queries compared after every step. *)
+    fun cheapChecks (r, m, nl, seed) =
+        let val n = strlen m
+            val (s1, i)  = rand (seed, n + 2)
+            val (s2, j)  = rand (s1, n + 2)
+            val (lo, hi) = if i <= j then (i, j) else (j, i)
+            val (s3, p)  = rand (s2, n + 1)
+            val (line, col) = Rope.offsetToPosition (r, p)
+            val err =
+                firstErr
+                  [ ("length", Rope.length r = n)
+                  , ("lineCount", Rope.lineCount r = nl + 1)
+                  , ("charAt " ^ intToString i,
+                     Rope.charAt (r, i) = (if i >= n then "" else String.substring (m, i, i + 1)))
+                  , ("slice " ^ intToString lo ^ ".." ^ intToString hi,
+                     Rope.slice (r, lo, hi) = String.substring (m, lo, hi))
+                  , ("position round trip at " ^ intToString p,
+                     Rope.positionToOffset (r, line, col) = p)
+                  , ("column of " ^ intToString p, col >= 0)
+                  ]
+        in (s3, err) end
+
+    (* The comparisons made every `fullEvery` steps. *)
+    fun fullChecks (r, m, seed) =
+        let val lines   = String.lines m
+            val cnt     = List.length lines
+            val (s1, k) = rand (seed, cnt)
+            val (s2, p) = rand (s1, strlen m + 1)
+            (* the model's line and column for offset p *)
+            val before  = String.substring (m, 0, p)
+            val mline   = countNewlines before
+            val mcol    = p - lastLineStart before
+            val err =
+                firstErr
+                  [ ("representation: " ^ Rope.validate r, Rope.validate r = "")
+                  , ("whole text", Rope.text r = m)
+                  , ("lineCount", Rope.lineCount r = cnt)
+                  , ("lineAt " ^ intToString k, Rope.lineAt (r, k) = List.nth lines k)
+                  , ("offsetToPosition " ^ intToString p,
+                     Rope.offsetToPosition (r, p) = (mline, mcol))
+                  , ("offsetOfLine " ^ intToString k ^ " starts its line",
+                     Rope.slice (r, Rope.offsetOfLine (r, k),
+                                 Rope.offsetOfLine (r, k) + strlen (List.nth lines k))
+                     = List.nth lines k)
+                  ]
+        in (s2, err) end
+
+    (*--- one run ---*)
+
+    (* One random edit applied to both rope and model. Returns the new seed, the
+     * rope, the model, its newline count, and what the edit was. *)
+    fun edit (kind, r, m, nl, seed) =
+        let val n = strlen m
+        in if kind <= 1
+           then let val (s1, k) = rand (seed, maxInsert)
+                    val (s2, t) = randStr (s1, k + 1, "")
+                    val (s3, i) = rand (s2, n + 1)
+                in (s3, Rope.insert (r, i, t), modelInsert (m, i, t),
+                    nl + countNewlines t,
+                    "insert " ^ intToString (strlen t) ^ " at " ^ intToString i)
+                end
+           else if kind = 2
+           then let val (s1, i)  = rand (seed, n + 1)
+                    val (s2, k0) = rand (s1, maxDelete + 1)
+                    val k = if i + k0 > n then n - i else k0
+                in (s2, Rope.delete (r, i, k), modelDelete (m, i, k),
+                    nl - countNewlines (String.substring (m, i, i + k)),
+                    "delete " ^ intToString k ^ " at " ^ intToString i)
+                end
+           else if kind = 3
+           then let val (s1, i) = rand (seed, n + 1)
+                    val (a, b) = Rope.splitAt (r, i)
+                in (s1, Rope.concat (a, b), m, nl,
+                    "split/concat at " ^ intToString i)
+                end
+           else let val (s1, i)  = rand (seed, n + 1)
+                    val (s2, k0) = rand (s1, maxDelete + 1)
+                    val k = if i + k0 > n then n - i else k0
+                    val (s3, t) = randStr (s2, maxInsert div 2, "")
+                    val m' = modelInsert (modelDelete (m, i, k), i, t)
+                    val r' = Rope.insert (Rope.delete (r, i, k), i, t)
+                in (s3, r', m',
+                    nl - countNewlines (String.substring (m, i, i + k)) + countNewlines t,
+                    "replace " ^ intToString k ^ " at " ^ intToString i)
+                end
+        end
+
+    fun runFrom (r0, m0, seed0, label) =
+        let fun loop (i, seed, r, m, nl, checks) =
+                if i >= steps then ("", checks)
+                else let val (s1, kind) = rand (seed, opKinds)
+                         val (s2, r', m', nl', what) = edit (kind, r, m, nl, s1)
+                         val (s3, err) = cheapChecks (r', m', nl', s2)
+                         val full = err = "" andalso (i mod fullEvery) = 0
+                         val (s4, err2) =
+                             if full then fullChecks (r', m', s3) else (s3, err)
+                     in if err2 = ""
+                        then loop (i + 1, s4, r', m', nl',
+                                   checks + 6 + (if full then 6 else 0))
+                        else ("step " ^ intToString i ^ " (" ^ what ^ "): " ^ err2, checks)
+                     end
+            val (err, checks) = loop (0, seed0, r0, m0, countNewlines m0, 0)
+        in if err = ""
+           then (say ("PASS " ^ label ^ " -- " ^ intToString steps ^ " edits, "
+                      ^ intToString checks ^ " checks"); true)
+           else (say ("FAIL " ^ label ^ " -- " ^ err); false)
+        end
+
+    (*--- the initial texts and the two ways of building a rope ---*)
+
+    fun initialText seed =
+        let fun go (k, s, acc) =
+                if k <= 0 then acc
+                else let val (s1, i) = rand (s, alphaSize)
+                     in go (k - 1, s1, acc ^ String.substring (alpha, i, i + 1))
+                     end
+        in go (initLen, seed, "") end
+
+    fun byChunks s =
+        let val n = strlen s
+            fun go (i, r) =
+                if i >= n then r
+                else go (i + chunkLen,
+                         Rope.insert (r, Rope.length r,
+                                      String.substring (s, i, i + chunkLen)))
+        in go (0, Rope.empty) end
+
+    fun bothWays seed =
+        let val m = initialText seed
+            val tag = intToString seed
+        in [ runFrom (Rope.fromString m, m, seed, "seed " ^ tag ^ " fromString")
+           , runFrom (byChunks m, m, seed, "seed " ^ tag ^ " built by inserts")
+           ]
+        end
+
+    val outcomes = List.concat (List.map bothWays seeds)
+    val bad = List.length (List.filter (fn ok => not ok) outcomes)
+    val n   = List.length outcomes
+
+in if bad = 0 then say ("ALL " ^ intToString n ^ " PASSED")
+   else say (intToString bad ^ " FAILED of " ^ intToString n)
+end

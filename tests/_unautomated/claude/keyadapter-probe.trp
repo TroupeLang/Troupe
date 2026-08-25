@@ -1,0 +1,74 @@
+(* Probe: the battallion key adapter over the Proscenium decoder — the readings the editor
+ * depends on, and the ones that changed. *)
+
+import String
+import List
+import "../../../examples/battallion/Key"
+
+let fun name (KEY_PRINT c)   = "print " ^ c
+      | name KEY_ENTER       = "enter"
+      | name KEY_TAB         = "tab"
+      | name KEY_BACKSPACE   = "backspace"
+      | name KEY_DELETE      = "delete"
+      | name KEY_ESC         = "esc"
+      | name KEY_UP          = "up"
+      | name KEY_DOWN        = "down"
+      | name KEY_LEFT        = "left"
+      | name KEY_RIGHT       = "right"
+      | name KEY_HOME        = "home"
+      | name KEY_END         = "end"
+      | name KEY_PAGEUP      = "pageup"
+      | name KEY_PAGEDOWN    = "pagedown"
+      | name (KEY_CTRL c)    = "ctrl-" ^ c
+      | name (KEY_UNKNOWN b) = "unknown[" ^ b ^ "]"
+
+    fun names ks = String.concatWith ", " (List.map name ks)
+
+    fun show (label, s) =
+        let val (ks, rest) = Key.decode s
+        in print (label ^ ": decode = " ^ names ks
+                        ^ " | rest " ^ toString (String.size rest)
+                        ^ " | flush = " ^ names (Key.flush s))
+        end
+
+    (* The Esc-then-key path, in one chunk and across two. *)
+    val _ = show ("esc then i", "\x1bi")
+    val _ = show ("esc then colon", "\x1b:")
+    val _ = show ("esc alone", "\x1b")
+    val _ = show ("esc esc", "\x1b\x1b")
+    val _ = show ("esc esc esc", "\x1b\x1b\x1b")
+    val _ = show ("esc esc x", "\x1b\x1bx")
+    val _ = show ("esc then csi up", "\x1b\x1b[A")
+
+    (* Motions, modified and not. *)
+    val _ = show ("csi up", "\x1b[A")
+    val _ = show ("ctrl-up (1;5A)", "\x1b[1;5A")
+    val _ = show ("shift-end (1;2F)", "\x1b[1;2F")
+    val _ = show ("alt-up (1;3A)", "\x1b[1;3A")
+    val _ = show ("home 1~", "\x1b[1~")
+    val _ = show ("pagedown 6~", "\x1b[6~")
+
+    (* What battallion has no key for. *)
+    val _ = show ("insert 2~", "\x1b[2~")
+    val _ = show ("f5 15~", "\x1b[15~")
+    val _ = show ("ss3 f1", "\x1bOP")
+    val _ = show ("backtab csi Z", "\x1b[Z")
+    val _ = show ("mouse press", "\x1b[<0;10;5M")
+    val _ = show ("paste", "\x1b[200~hi\x1b[201~")
+
+    (* Carrying, the way the kernel loop does it. *)
+    fun perByte s =
+        let val n = String.size s
+            fun go (i, carry, acc) =
+                if i >= n then (acc, carry)
+                else let val (ks, carry') = Key.decode (carry ^ String.sub (s, i))
+                     in go (i + 1, carry', List.append acc ks)
+                     end
+        in go (0, "", [])
+        end
+    val burst = "hi" ^ "\x1b[D" ^ "x" ^ "\x1b[C" ^ "\x0d" ^ "\x1bOA" ^ "\xc3\xa9" ^ "\x1bi"
+    val (kb, rb) = perByte burst
+    val _ = print ("burst per byte: " ^ names kb ^ " | rest " ^ toString (String.size rb))
+    val _ = print ("burst same as whole: " ^ toString ((kb, rb) = Key.decode burst))
+in ()
+end

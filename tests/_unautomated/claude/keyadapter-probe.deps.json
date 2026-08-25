@@ -1,0 +1,6 @@
+{
+  "deps": [
+    {"path": "../../../examples/battallion/Key", "hash": "pulh2blak00itnh0m6l9p8f36c0otm0p5nu0cuj39sqoceck2ie0", "name": "../../../examples/battallion/Key"},
+    {"path": "../../../examples/proscenium/Key", "hash": "t93u5gtdr744r05vrpj49n1raeuno6vo4dmfpdbmguv16vlmr1eg", "name": "../../../examples/proscenium/Key"}
+  ]
+}

@@ -1,0 +1,212 @@
+(* edge — named boundary and clamping checks for lib/Rope.trp.
+ *
+ * This file and its neighbours (random.trp, rebalance.trp) are the safety net
+ * for changes to Rope's representation or policy: run all three after changing
+ * the leaf size, the balancing rule, the clamping rule or the node layout.
+ * Nothing here is a golden test, so the files can be run in any order and read
+ * on their own output.
+ *
+ *   ./local.sh tests/_unautomated/claude/rope/edge.trp
+ *
+ * One PASS/FAIL line per case, then a summary line. Sizes are derived from
+ * Rope.leafSize, so the leaf-boundary cases keep testing leaf boundaries if
+ * that constant changes.
+ *)
+
+import List
+import String
+import Rope
+
+let (*--- fixture sizes ---*)
+
+    val lineWidth    = 16                                (* incl. the newline *)
+    val linesPerLeaf = Rope.leafSize div lineWidth
+    val leaves       = 4                                 (* leaves in `blocky` *)
+    val pageLines    = 100                               (* lines in `page` *)
+    val longLen      = 5000                              (* > leafLimit, no newline *)
+
+    fun say s = fwrite (stdout, s ^ "\n")
+
+    (* A case is (name, ok, what it gave, what it should have given). *)
+    fun eq (name, actual, expect) = (name, actual = expect, actual, expect)
+
+    fun report rows =
+        let fun line (name, ok, actual, expect) =
+                if ok then say ("PASS " ^ name)
+                else say ("FAIL " ^ name ^ " -- got " ^ toString actual
+                          ^ ", want " ^ toString expect)
+            val _   = List.map line rows
+            val bad = List.length (List.filter (fn (_, ok, _, _) => not ok) rows)
+            val n   = List.length rows
+        in if bad = 0 then say ("ALL " ^ intToString n ^ " PASSED")
+           else say (intToString bad ^ " FAILED of " ^ intToString n)
+        end
+
+    (*--- fixtures ---*)
+
+    val e    = Rope.empty
+    val one  = Rope.fromString "hello"
+    val two  = Rope.fromString "hello\nworld\n"
+    val bare = Rope.fromString "a\nbb\nccc"          (* no trailing newline *)
+    val runs = Rope.fromString "a\n\n\nb"            (* consecutive newlines *)
+    val long = Rope.fromString (String.repeat (longLen div 10) "0123456789")
+
+    (* one short line, then a run longer than leafLimit with no newline in it *)
+    val mixedText = "a\n" ^ String.repeat (longLen div 10) "0123456789"
+    val mixed     = Rope.fromString mixedText
+
+    val row  = "0123456789012345678901234567890123456789012345678901234567890"
+    val page = String.repeat pageLines (row ^ "\n")
+    val big  = Rope.fromString page
+    val rowStride = strlen row + 1
+
+    (* Lines short enough that leaves land exactly on multiples of leafSize. *)
+    val block  = String.repeat (leaves * linesPerLeaf) "xxxxxxxxxxxxxxx\n"
+    val blocky = Rope.fromString block
+    val edge   = Rope.leafSize                      (* a leaf boundary offset *)
+
+    fun leftOf (r, i)  = let val (a, _) = Rope.splitAt (r, i) in a end
+    fun rightOf (r, i) = let val (_, b) = Rope.splitAt (r, i) in b end
+
+    val rows =
+      [ (*--- the empty rope ---*)
+        eq ("empty length", Rope.length e, 0)
+      , eq ("empty lineCount", Rope.lineCount e, 1)
+      , eq ("empty text", Rope.text e, "")
+      , eq ("empty charAt 0", Rope.charAt (e, 0), "")
+      , eq ("empty lineAt 0", Rope.lineAt (e, 0), "")
+      , eq ("empty slice", Rope.slice (e, 0, 5), "")
+      , eq ("empty offsetOfLine 0", Rope.offsetOfLine (e, 0), 0)
+      , eq ("empty offsetToPosition", Rope.offsetToPosition (e, 0), (0, 0))
+      , eq ("empty positionToOffset", Rope.positionToOffset (e, 0, 0), 0)
+      , eq ("empty depth", Rope.depth e, 0)
+      , eq ("empty validates", Rope.validate e, "")
+
+        (*--- inserting nothing, and at the ends ---*)
+      , eq ("insert empty string", Rope.text (Rope.insert (one, 2, "")), "hello")
+      , eq ("insert at 0", Rope.text (Rope.insert (one, 0, "X")), "Xhello")
+      , eq ("insert at length", Rope.text (Rope.insert (one, 5, "X")), "helloX")
+      , eq ("insert past length clamps", Rope.text (Rope.insert (one, 99, "X")), "helloX")
+      , eq ("insert at negative clamps", Rope.text (Rope.insert (one, 0 - 3, "X")), "Xhello")
+      , eq ("insert into the empty rope", Rope.text (Rope.insert (e, 0, "abc")), "abc")
+      , eq ("insert a newline splits a line",
+            Rope.lineCount (Rope.insert (one, 2, "\n")), 2)
+
+        (*--- deleting nothing, to the end, and out of range ---*)
+      , eq ("delete length 0", Rope.text (Rope.delete (one, 2, 0)), "hello")
+      , eq ("delete negative length", Rope.text (Rope.delete (one, 2, 0 - 4)), "hello")
+      , eq ("delete to end", Rope.text (Rope.delete (one, 2, 3)), "he")
+      , eq ("delete past end clamps", Rope.text (Rope.delete (one, 2, 99)), "he")
+      , eq ("delete everything", Rope.text (Rope.delete (one, 0, 5)), "")
+      , eq ("delete at negative clamps", Rope.text (Rope.delete (one, 0 - 2, 2)), "llo")
+      , eq ("delete from the empty rope", Rope.text (Rope.delete (e, 0, 3)), "")
+      , eq ("delete a newline joins lines", Rope.lineCount (Rope.delete (two, 5, 1)), 2)
+      , eq ("deleting everything validates", Rope.validate (Rope.delete (one, 0, 5)), "")
+
+        (*--- lines when the text does not end in a newline ---*)
+      , eq ("bare lineCount", Rope.lineCount bare, 3)
+      , eq ("bare first line", Rope.lineAt (bare, 0), "a")
+      , eq ("bare last line", Rope.lineAt (bare, 2), "ccc")
+      , eq ("bare offsetOfLine 2", Rope.offsetOfLine (bare, 2), 5)
+      , eq ("bare line past the end clamps", Rope.lineAt (bare, 9), "ccc")
+
+        (*--- a trailing newline gives a final empty line ---*)
+      , eq ("two lineCount", Rope.lineCount two, 3)
+      , eq ("two last line", Rope.lineAt (two, 2), "")
+      , eq ("two offsetOfLine 2", Rope.offsetOfLine (two, 2), 12)
+
+        (*--- consecutive newlines ---*)
+      , eq ("runs lineCount", Rope.lineCount runs, 4)
+      , eq ("runs line 1", Rope.lineAt (runs, 1), "")
+      , eq ("runs line 2", Rope.lineAt (runs, 2), "")
+      , eq ("runs line 3", Rope.lineAt (runs, 3), "b")
+      , eq ("runs offsetOfLine 2", Rope.offsetOfLine (runs, 2), 3)
+      , eq ("runs position of offset 2", Rope.offsetToPosition (runs, 2), (1, 0))
+
+        (*--- a line longer than a leaf ---*)
+      , eq ("long length", Rope.length long, longLen)
+      , eq ("long lineCount", Rope.lineCount long, 1)
+      , eq ("long lineAt 0 is all of it", Rope.lineAt (long, 0), Rope.text long)
+      , eq ("long charAt at the end", Rope.charAt (long, longLen - 1), "9")
+      , eq ("long slice across leaves", Rope.slice (long, edge - 4, edge + 6), "0123456789")
+      , eq ("long position at the end", Rope.offsetToPosition (long, longLen), (0, longLen))
+      , eq ("long validates", Rope.validate long, "")
+
+        (*--- a long run without newlines, after a line that has one: the cut
+              that fromString makes mid-run while it is holding newline offsets
+              for the leaf it is closing ---*)
+      , eq ("mixed lineCount", Rope.lineCount mixed, 2)
+      , eq ("mixed text", Rope.text mixed, mixedText)
+      , eq ("mixed validates", Rope.validate mixed, "")
+      , eq ("mixed first line", Rope.lineAt (mixed, 0), "a")
+      , eq ("mixed second line length", strlen (Rope.lineAt (mixed, 1)), longLen)
+
+        (*--- exactly on leaf boundaries ---*)
+      , eq ("blocky length", Rope.length blocky, leaves * Rope.leafSize)
+      , eq ("blocky lineCount", Rope.lineCount blocky, leaves * linesPerLeaf + 1)
+      , eq ("blocky text", Rope.text blocky, block)
+      , eq ("blocky validates", Rope.validate blocky, "")
+      , eq ("leaf boundary is a line start", Rope.offsetOfLine (blocky, linesPerLeaf), edge)
+      , eq ("split on a leaf boundary, left", Rope.length (leftOf (blocky, edge)), edge)
+      , eq ("split on a leaf boundary, right",
+            Rope.length (rightOf (blocky, edge)), (leaves - 1) * Rope.leafSize)
+      , eq ("split on a leaf boundary keeps the text",
+            Rope.text (Rope.concat (leftOf (blocky, edge), rightOf (blocky, edge))), block)
+      , eq ("split on a leaf boundary validates",
+            Rope.validate (rightOf (blocky, edge)), "")
+      , eq ("insert on a leaf boundary",
+            Rope.length (Rope.insert (blocky, edge, "|")), leaves * Rope.leafSize + 1)
+      , eq ("insert on a leaf boundary lands there",
+            Rope.charAt (Rope.insert (blocky, edge, "|"), edge), "|")
+      , eq ("charAt on a leaf boundary", Rope.charAt (blocky, edge), "x")
+      , eq ("slice across a leaf boundary", Rope.slice (blocky, edge - 2, edge + 2), "x\nxx")
+      , eq ("delete across a leaf boundary",
+            Rope.length (Rope.delete (blocky, edge - 4, 8)), leaves * Rope.leafSize - 8)
+      , eq ("delete across a leaf boundary validates",
+            Rope.validate (Rope.delete (blocky, edge - 4, 8)), "")
+
+        (*--- clamping of every index-taking operation ---*)
+      , eq ("charAt before the start", Rope.charAt (two, 0 - 1), "")
+      , eq ("charAt at the length", Rope.charAt (two, 12), "")
+      , eq ("slice clamps both ends", Rope.slice (two, 0 - 5, 999), Rope.text two)
+      , eq ("slice of an inverted range", Rope.slice (two, 8, 3), "")
+      , eq ("offsetOfLine negative", Rope.offsetOfLine (two, 0 - 2), 0)
+      , eq ("offsetOfLine past the end", Rope.offsetOfLine (two, 99), 12)
+      , eq ("offsetToPosition negative", Rope.offsetToPosition (two, 0 - 9), (0, 0))
+      , eq ("offsetToPosition past the end", Rope.offsetToPosition (two, 99), (2, 0))
+      , eq ("positionToOffset past the last line", Rope.positionToOffset (two, 99, 0), 12)
+      , eq ("positionToOffset past the line end", Rope.positionToOffset (two, 0, 99), 5)
+      , eq ("positionToOffset negative column", Rope.positionToOffset (two, 1, 0 - 4), 6)
+
+        (*--- concat, splitAt and their round trips ---*)
+      , eq ("concat with empty on the left", Rope.text (Rope.concat (e, one)), "hello")
+      , eq ("concat with empty on the right", Rope.text (Rope.concat (one, e)), "hello")
+      , eq ("concat with empty builds no node", Rope.depth (Rope.concat (e, one)), 0)
+      , eq ("concat of two ropes", Rope.text (Rope.concat (one, two)), "hellohello\nworld\n")
+      , eq ("concat adds the newline counts", Rope.lineCount (Rope.concat (two, two)), 5)
+      , eq ("split at 0 keeps the whole rope on the right",
+            Rope.text (rightOf (two, 0)), Rope.text two)
+      , eq ("split at 0 leaves nothing on the left", Rope.length (leftOf (two, 0)), 0)
+      , eq ("split at the length leaves nothing on the right",
+            Rope.length (rightOf (two, 12)), 0)
+      , eq ("split past the length clamps", Rope.text (leftOf (two, 99)), Rope.text two)
+
+        (*--- the page fixture: every line, and the line/offset round trip ---*)
+      , eq ("page lineCount", Rope.lineCount big, pageLines + 1)
+      , eq ("page first line", Rope.lineAt (big, 0), row)
+      , eq ("page last line", Rope.lineAt (big, pageLines), "")
+      , eq ("page text round trip", Rope.text big, page)
+      , eq ("page validates", Rope.validate big, "")
+      , eq ("every line matches the model",
+            List.forall (fn i => Rope.lineAt (big, i) = row) (List.range pageLines), true)
+      , eq ("offset -> position -> offset",
+            List.forall (fn k =>
+                let val i = k * rowStride
+                    val (l, c) = Rope.offsetToPosition (big, i)
+                in Rope.positionToOffset (big, l, c) = i andalso l = k andalso c = 0
+                end) (List.range pageLines), true)
+      , eq ("an offset inside a line", Rope.offsetToPosition (big, rowStride * 40 + 7), (40, 7))
+      ]
+
+in report rows
+end

@@ -1,0 +1,43 @@
+(* Pty case 1: raw mode plus a subscription — injected keystrokes arrive as
+   TTYDATA events and are not echoed.
+
+   The program prints the received bytes as decimal codes, never the bytes
+   themselves, so any occurrence of the injected text in the pty's output would
+   be the line discipline echoing it. *)
+import IfcUtil
+import String
+require native Tty
+
+let val a = authority
+    val i = stdin
+    val me = self ()
+
+    fun codes s =
+        let fun go (j, acc) =
+                if j >= String.size s then acc
+                else go (j + 1, acc ^ " " ^ toString (String.subCode (s, j)))
+        in go (0, "")
+        end
+
+    val _ = ttyRawMode (i, true)
+    val _ = ttySubscribe (i, me)
+    val (ok, cap) = enableRangedReceive (IfcUtil.bot, ttyLevel i, a)
+    val _ = print "READY"
+
+    fun loop acc =
+        let val (more, bytes) =
+                rcv (IfcUtil.bot, ttyLevel i,
+                     [ hn ("TTYDATA", b) => (true, b)
+                     , hn ("TTYEOF") => (false, "") ])
+            val acc2 = acc ^ bytes
+        in if more andalso String.size acc2 < 6 then loop acc2 else acc2
+        end
+
+    val got = loop ""
+    val _ = print ("GOT:" ^ codes got)
+    val _ = ttyUnsubscribe i
+    val _ = disableRangedReceive cap
+    val _ = ttyRawMode (i, false)
+    val _ = print "DONE"
+in ()
+end

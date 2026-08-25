@@ -1,0 +1,184 @@
+(* bench — what each lib/Rope.trp operation costs on an editor-sized buffer.
+ *
+ * The corpus is 61-character lines with a newline, so a megabyte is about 16000
+ * lines. Every row is the best of `reps` timed batches after one untimed warmup,
+ * timed with Bench.time at millisecond resolution, and reported as the cost of
+ * one operation. The "plain string" rows are the same edit performed on an
+ * immutable string with substring and ^, which is what the rope is competing
+ * with; the second table is how the two scale with the size of the buffer.
+ *
+ * Run alone on the machine, and record the output in
+ * _dev_planning/text-editor/rope-benchmarks.md:
+ *
+ *   ./local.sh tests/_unautomated/claude/rope/bench.trp
+ *)
+
+import List
+import String
+import Bench
+import Rope
+
+let (*--- what is measured ---*)
+
+    val reps      = 3        (* timed batches per row; the best is reported *)
+    val edits     = 2000     (* edits per rope batch *)
+    val plainEdits = 400     (* edits per plain-string batch, which are slower *)
+    val viewports = 20       (* screenfuls per lineAt batch *)
+    val viewLines = 50       (* lines in a screenful *)
+
+    val row      = "0123456789012345678901234567890123456789012345678901234567890\n"
+    val rows100k = 1613      (* 100006 characters *)
+    val rows1m   = 16130     (* 1000060 characters *)
+    val rows4m   = 64516     (* 4000 kilobytes *)
+
+    (* Lehmer's minimal standard generator; see random.trp. *)
+    val lcgMultiplier = 48271
+    val lcgModulus    = 2147483647
+    val seed0         = 7
+
+    fun say s = fwrite (stdout, s ^ "\n")
+    fun next seed = (seed * lcgMultiplier) mod lcgModulus
+
+    (*--- the corpus ---*)
+
+    val text100k = String.repeat rows100k row
+    val text1m   = String.repeat rows1m row
+    val rope1m   = Rope.fromString text1m
+    val lines1m  = Rope.lineCount rope1m
+
+    (*--- timing ---*)
+
+    fun bestOf f =
+        let fun go (0, best) = best
+              | go (i, best) =
+                  let val (_, ms) = Bench.time f
+                  in go (i - 1, if ms < best then ms else best) end
+            val _ = f ()
+        in go (reps, lcgModulus) end
+
+    (* One markdown row: the operation, the batch, and the per-operation cost. *)
+    fun report (name, count, unit, ms) =
+        say ("| " ^ name ^ " | " ^ toString ms ^ " | " ^ intToString count ^ " | "
+             ^ toString (1000 * ms / count) ^ " " ^ unit ^ " |")
+
+    (*--- the workloads ---*)
+
+    fun insertLoop (r0, n) =
+        let fun go (i, seed, r) =
+                if i >= n then r
+                else let val s = next seed
+                     in go (i + 1, s, Rope.insert (r, s mod (Rope.length r + 1), "x"))
+                     end
+        in go (0, seed0, r0) end
+
+    (* An edit followed by the read an editor makes to redraw the line. *)
+    fun insertAndReadLoop (r0, n) =
+        let fun go (i, seed, r) =
+                if i >= n then r
+                else let val s = next seed
+                         val at = s mod (Rope.length r + 1)
+                         val r' = Rope.insert (r, at, "x")
+                         val (line, _) = Rope.offsetToPosition (r', at)
+                         val _ = Rope.lineAt (r', line)
+                     in go (i + 1, s, r') end
+        in go (0, seed0, r0) end
+
+    val deleteLen = 5
+
+    fun deleteLoop (r0, n) =
+        let fun go (i, seed, r) =
+                if i >= n then r
+                else let val s = next seed
+                     in go (i + 1, s,
+                            Rope.delete (r, s mod (Rope.length r - deleteLen), deleteLen))
+                     end
+        in go (0, 11, r0) end
+
+    fun lineLoop r =
+        List.foldl (fn (i, acc) => acc + strlen (Rope.lineAt (r, i))) 0
+                   (List.range lines1m)
+
+    fun viewportLoop r =
+        List.map (fn v => List.map (fn i => Rope.lineAt (r, viewLines * v + i))
+                                   (List.range viewLines))
+                 (List.range viewports)
+
+    (* The same single-character insert on a plain immutable string. *)
+    fun stringInsertLoop (s0, n) =
+        let fun go (i, seed, s) =
+                if i >= n then s
+                else let val k = next seed
+                         val at = k mod (strlen s + 1)
+                     in go (i + 1, k,
+                            String.substring (s, 0, at) ^ "x"
+                            ^ String.substring (s, at, strlen s))
+                     end
+        in go (0, seed0, s0) end
+
+    (* The same, reading one character back after each edit, which forces the
+     * engine to materialize the string it has been building lazily. *)
+    fun stringInsertAndReadLoop (s0, n) =
+        let fun go (i, seed, s) =
+                if i >= n then s
+                else let val k = next seed
+                         val at = k mod (strlen s + 1)
+                         val s' = String.substring (s, 0, at) ^ "x"
+                                  ^ String.substring (s, at, strlen s)
+                         val _ = charCodeAtWithDefault (s', at, 0)
+                     in go (i + 1, k, s') end
+        in go (0, seed0, s0) end
+
+    (*--- the report ---*)
+
+    val _ = say ("corpus: " ^ intToString (strlen text1m) ^ " characters, "
+                 ^ intToString lines1m ^ " lines; leaf size "
+                 ^ intToString Rope.leafSize ^ "; depth of the 1MB rope "
+                 ^ intToString (Rope.depth rope1m))
+    val _ = say ""
+    val _ = say "| operation | best batch (ms) | operations | per operation |"
+    val _ = say "|---|---|---|---|"
+
+    val _ = report ("Rope.fromString, 100KB", strlen text100k, "us/char",
+                    bestOf (fn () => Rope.fromString text100k))
+    val _ = report ("Rope.fromString, 1MB", strlen text1m, "us/char",
+                    bestOf (fn () => Rope.fromString text1m))
+    val _ = report ("Rope.text, 1MB", strlen text1m, "us/char",
+                    bestOf (fn () => Rope.text rope1m))
+    val _ = report ("Rope.text then read one character, 1MB", strlen text1m, "us/char",
+                    bestOf (fn () =>
+                        charCodeAtWithDefault (Rope.text rope1m, strlen text1m - 1, 0)))
+    val _ = report ("Rope.lineAt, 50-line viewports of 1MB", viewports * viewLines,
+                    "us/line", bestOf (fn () => viewportLoop rope1m))
+    val _ = report ("Rope.lineAt, every line of 1MB", lines1m, "us/line",
+                    bestOf (fn () => lineLoop rope1m))
+    val _ = report ("Rope.insert one character, 1MB", edits, "us/edit",
+                    bestOf (fn () => insertLoop (rope1m, edits)))
+    val _ = report ("Rope.insert one character then read its line, 1MB", edits, "us/edit",
+                    bestOf (fn () => insertAndReadLoop (rope1m, edits)))
+    val _ = report ("Rope.delete five characters, 1MB", edits, "us/edit",
+                    bestOf (fn () => deleteLoop (rope1m, edits)))
+    val _ = report ("plain string, insert one character, 1MB", plainEdits, "us/edit",
+                    bestOf (fn () => stringInsertLoop (text1m, plainEdits)))
+    val _ = report ("plain string, insert one character then read it back, 1MB",
+                    plainEdits, "us/edit",
+                    bestOf (fn () => stringInsertAndReadLoop (text1m, plainEdits)))
+
+    (*--- how the two scale with the size of the buffer ---*)
+
+    fun scaling (name, s) =
+        let val r = Rope.fromString s
+            val ropeMs  = bestOf (fn () => insertLoop (r, edits))
+            val plainMs = bestOf (fn () => stringInsertAndReadLoop (s, plainEdits))
+        in say ("| " ^ name ^ " | " ^ toString (1000 * ropeMs / edits)
+                ^ " | " ^ toString (1000 * plainMs / plainEdits) ^ " |")
+        end
+
+    val _ = say ""
+    val _ = say "| buffer | Rope.insert (us/edit) | plain string insert (us/edit) |"
+    val _ = say "|---|---|---|"
+    val _ = scaling ("100KB", text100k)
+    val _ = scaling ("1MB", text1m)
+    val _ = scaling ("4MB", String.repeat rows4m row)
+
+in ()
+end

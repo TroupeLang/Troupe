@@ -1,0 +1,39 @@
+(* Pty case 4: the liveness net.
+
+   Main puts the terminal into raw mode and hands the subscription to a child
+   that dies immediately. Nothing in the program notices; the next event to
+   arrive finds the subscriber dead, tears the subscription down and leaves raw
+   mode. The harness injects that event and reads the pty's termios while main
+   is still running — the net acts without the program's help.
+
+   Main then re-subscribes to show the teardown left the stream in a state a
+   later subscription can use. *)
+import IfcUtil
+require native Tty
+
+let val a = authority
+    val i = stdin
+    val _ = ttyRawMode (i, true)
+
+    fun child () = let val _ = ttySubscribe (i, self ()) in () end
+    val c = spawn child
+    val _ = sleep 600
+    val _ = print "SUBSCRIBER-DEAD"
+
+    (* the harness injects a byte during this sleep: the net fires here *)
+    val _ = sleep 3000
+    val _ = print "MAIN-ALIVE"
+
+    val me = self ()
+    val _ = ttySubscribe (i, me)
+    val (ok, cap) = enableRangedReceive (IfcUtil.bot, ttyLevel i, a)
+    val _ = print "REARMED"
+    val _ = rcv (IfcUtil.bot, ttyLevel i,
+                 [ hn ("TTYDATA", b) => ()
+                 , hn ("TTYEOF") => () ])
+    val _ = print "GOT-AGAIN"
+    val _ = ttyUnsubscribe i
+    val _ = disableRangedReceive cap
+    val _ = print "DONE"
+in ()
+end

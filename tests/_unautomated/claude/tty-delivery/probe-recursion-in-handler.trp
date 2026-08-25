@@ -1,0 +1,20 @@
+(* Does a recursive rcv inside a handler body still work under the
+   Troupe-level rcv? The actor corpus does this everywhere with plain
+   receive; check the interval form inside a region. *)
+import IfcUtil
+require native Tty
+
+let val a = authority
+    val i = stdin
+    val me = self ()
+    val _ = ttySubscribe (i, me)
+    val (ok, cap) = enableRangedReceive (IfcUtil.bot, ttyLevel i, a)
+    fun loop acc =
+        rcv (IfcUtil.bot, ttyLevel i,
+             [ hn ("TTYDATA", b) => loop (acc ^ b)
+             , hn ("TTYEOF") => acc ])
+    val acc = loop ""
+    val _ = ttyUnsubscribe i
+    val _ = disableRangedReceive cap
+in print acc
+end

@@ -1,0 +1,89 @@
+(* proscenium-render-bench — the segment-row counterpart of tui-render-bench.trp: per-frame
+ * cost of building a styled view through Image's algebra, rendering it with renderAt, and
+ * assembling the escape string, at the same sizes as the string-row baseline (1.1 ms at
+ * 80x24, 4.7 ms at 200x50). Also measures row diffing on segment rows.
+ *
+ * Run: ./local.sh tests/_unautomated/claude/proscenium-render-bench.trp
+ *)
+
+import String
+import List
+import "../../../examples/proscenium/Image"
+import "../../../examples/proscenium/Style"
+import "../../../examples/proscenium/Ansi"
+
+let fun say s = fwrite (stdout, s)
+
+    val enc = Style.encode Style.COLORS256
+
+    fun attrOf n = Style.withFg (Style.BASIC (n mod 8)) Style.default
+
+    fun cellText (frame, r, c, w) =
+        String.repeat (w - 1) "x" ^ toString ((frame + r + c) mod 10)
+
+    fun rowImg (frame, r, segs, segW) =
+        Image.hcat (List.tabulate segs (fn c => Image.text (attrOf (r + c))
+                                                           (cellText (frame, r, c, segW))))
+
+    fun frameImg (frame, rows, segs, segW) =
+        Image.vcat (List.tabulate rows (fn r => rowImg (frame, r, segs, segW)))
+
+    fun assembleRow segs =
+        List.foldl (fn (sg, acc) =>
+                        acc ^ (case sg of Image.SEG (a, s) => enc a ^ s
+                                        | Image.GAP n      => Style.reset ^ String.repeat n " "))
+                   Ansi.eraseLine segs
+
+    fun assemble rows =
+        Ansi.hideCursor
+      ^ List.foldl (fn (row, acc) => acc ^ assembleRow row ^ "\r\n") Ansi.home rows
+      ^ Ansi.showCursor
+
+    fun oneFrame (frame, rows, segs, segW, w) =
+        let val r = Image.renderAt (frameImg (frame, rows, segs, segW), w, rows)
+        in String.size (assemble r.rows)
+        end
+
+    fun diffEmit (prev, cur) =
+        let fun go ([], [], _, acc)                   = acc
+              | go (p :: ps, c :: cs, rIdx, acc)      =
+                    if p = c then go (ps, cs, rIdx + 1, acc)
+                    else go (ps, cs, rIdx + 1, acc ^ Ansi.cursorTo (rIdx, 0) ^ assembleRow c)
+              | go (_, _, _, acc)                     = acc
+        in go (prev, cur, 0, "")
+        end
+
+    fun bench (name, n, f) =
+        let val t0 = getTime ()
+            fun go (i, acc) = if i >= n then acc else go (i + 1, acc + f i)
+            val checksum = go (0, 0)
+            val t1 = getTime ()
+            val ms = t1 - t0
+        in say ( name ^ ": " ^ toString n ^ " frames, " ^ toString ms ^ " ms, "
+               ^ toString (ms / n) ^ " ms/frame (checksum " ^ toString checksum ^ ")\n" )
+        end
+
+    val _ = oneFrame (0, 24, 8, 10, 80)
+    val _ = oneFrame (0, 50, 16, 12, 200)
+
+    val _ = bench ("A image+render+assemble 80x24 ", 500, fn i => oneFrame (i, 24, 8, 10, 80))
+    val _ = bench ("B image+render+assemble 200x50", 200, fn i => oneFrame (i, 50, 16, 12, 200))
+
+    fun rowsOf frame = let val r = Image.renderAt (frameImg (frame, 50, 16, 12), 200, 50)
+                       in r.rows end
+
+    val prevRows = rowsOf 0
+    val curRows  =
+        let fun replace ([], _) = []
+              | replace (x :: rest, r) =
+                    if r = 10 orelse r = 30
+                    then case Image.renderAt (rowImg (1, r, 16, 12), 200, 1) of
+                              rr => List.append rr.rows (replace (rest, r + 1))
+                    else x :: replace (rest, r + 1)
+        in replace (prevRows, 0)
+        end
+
+    val _ = bench ("C rowdiff+emit 200x50         ", 2000, fn _ => String.size (diffEmit (prevRows, curRows)))
+
+in ()
+end

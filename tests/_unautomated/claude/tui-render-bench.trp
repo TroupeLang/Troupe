@@ -1,0 +1,111 @@
+(* tui-render-bench — measures the per-frame cost of a notty-style TUI pipeline in pure Troupe.
+ *
+ * Three measurements, none of which writes to the terminal (string construction only):
+ *
+ *   A. image+assemble 80x24   — build an image tree (24 rows x 8 styled segments), render it
+ *                               to rows, assemble a battallion-style full-redraw frame string.
+ *   B. image+assemble 200x50  — the same at 200 columns x 50 rows x 16 segments.
+ *   C. rowdiff 200x50         — given two rendered frames differing in 2 rows, compare all
+ *                               rows and emit cursor-move + erase + text for the changed ones.
+ *
+ * Reported as ms/frame. A TUI is comfortable under ~5 ms/frame; battallion redraws one full
+ * frame per keystroke with no diffing.
+ *)
+
+import String
+import List
+
+datatype img = TXT of string * string      (* SGR prefix, text *)
+             | HCAT of img * img
+             | VCAT of img * img
+
+let val esc   = "\x1b"
+    val reset = esc ^ "[0m"
+
+    (* render : img -> (string * int) list — rows paired with their display width.
+     * The probe's HCATs are all height-1, so ragged-height padding is not exercised. *)
+    fun render (TXT (sgr, s)) = [(sgr ^ s ^ reset, String.size s)]
+      | render (HCAT (a, b)) =
+          let fun hjoin ([], rb) = rb
+                | hjoin (ra, []) = ra
+                | hjoin ((sa, wa) :: ra, (sb, wb) :: rb) = (sa ^ sb, wa + wb) :: hjoin (ra, rb)
+          in hjoin (render a, render b) end
+      | render (VCAT (a, b)) = List.append (render a) (render b)
+
+    fun sgrOf n = esc ^ "[3" ^ toString (n mod 8) ^ "m"
+
+    fun cellText (frame, r, c, w) =
+        String.repeat (w - 1) "x" ^ toString ((frame + r + c) mod 10)
+
+    fun rowImg (frame, r, segs, segW) =
+        let fun go (c, acc) =
+                if c < 0 then acc
+                else go (c - 1, HCAT (TXT (sgrOf (r + c), cellText (frame, r, c, segW)), acc))
+        in go (segs - 2, TXT (sgrOf (r + segs - 1), cellText (frame, r, segs - 1, segW)))
+        end
+
+    fun frameImg (frame, rows, segs, segW) =
+        let fun go (r, acc) =
+                if r < 0 then acc
+                else go (r - 1, VCAT (rowImg (frame, r, segs, segW), acc))
+        in go (rows - 2, rowImg (frame, rows - 1, segs, segW))
+        end
+
+    fun cursorTo (row, col) = esc ^ "[" ^ toString (row + 1) ^ ";" ^ toString (col + 1) ^ "H"
+
+    (* assemble — battallion Screen.frame shape: hide cursor, home, per-row erase + text,
+     * position cursor, show cursor. *)
+    fun assemble rows =
+        let fun go ([], acc)             = acc
+              | go ([(s, _)], acc)       = acc ^ esc ^ "[2K" ^ s
+              | go ((s, _) :: rest, acc) = go (rest, acc ^ esc ^ "[2K" ^ s ^ "\r\n")
+        in esc ^ "[?25l" ^ go (rows, esc ^ "[H") ^ cursorTo (0, 0) ^ esc ^ "[?25h"
+        end
+
+    fun oneFrame (frame, rows, segs, segW) =
+        String.size (assemble (render (frameImg (frame, rows, segs, segW))))
+
+    (* diffEmit — emit only rows whose strings differ. *)
+    fun diffEmit (prev, cur) =
+        let fun go ([], [], _, acc) = acc
+              | go ((sp, _) :: rp, (sc, _) :: rc, r, acc) =
+                    if sp = sc then go (rp, rc, r + 1, acc)
+                    else go (rp, rc, r + 1, acc ^ cursorTo (r, 0) ^ esc ^ "[2K" ^ sc)
+              | go (_, _, _, acc) = acc
+        in esc ^ "[?25l" ^ go (prev, cur, 0, "") ^ esc ^ "[?25h"
+        end
+
+    fun bench (name, n, f) =
+        let val t0 = getTime ()
+            fun go (i, acc) = if i >= n then acc else go (i + 1, acc + f i)
+            val checksum = go (0, 0)
+            val t1 = getTime ()
+            val ms = t1 - t0
+        in fwrite ( stdout
+                  , name ^ ": " ^ toString n ^ " frames, " ^ toString ms ^ " ms, "
+                    ^ toString (ms / n) ^ " ms/frame (checksum " ^ toString checksum ^ ")\n" )
+        end
+
+    (* warmup *)
+    val _ = oneFrame (0, 24, 8, 10)
+    val _ = oneFrame (0, 50, 16, 12)
+
+    val _ = bench ("A image+assemble 80x24 ", 500, fn i => oneFrame (i, 24, 8, 10))
+    val _ = bench ("B image+assemble 200x50", 200, fn i => oneFrame (i, 50, 16, 12))
+
+    (* curRows: prevRows with exactly rows 10 and 30 replaced by a changed rendering. *)
+    fun withChangedRows (rows, segs, segW) =
+        let fun go ([], _) = []
+              | go (x :: rest, r) =
+                    if r = 10 orelse r = 30
+                    then case render (rowImg (1, r, segs, segW)) of
+                              [row] => row :: go (rest, r + 1)
+                    else x :: go (rest, r + 1)
+        in go (rows, 0) end
+
+    val prevRows = render (frameImg (0, 50, 16, 12))
+    val curRows  = withChangedRows (prevRows, 16, 12)
+    val _ = bench ("C rowdiff 200x50       ", 2000, fn _ => String.size (diffEmit (prevRows, curRows)))
+
+in ()
+end

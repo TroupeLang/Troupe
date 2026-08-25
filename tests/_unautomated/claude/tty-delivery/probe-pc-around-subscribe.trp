@@ -1,0 +1,27 @@
+(* Probe for design §5.6's one unverified IFC claim: the pc/bl of a process
+   that calls ttySubscribe and later receives events.
+
+   Three readings — before the subscribe, after it, and after one received
+   event — with the pid raised to a non-bottom level in a second reading so the
+   spawn-style pc raise by the argument levels is visible. *)
+import IfcUtil
+require native Tty
+
+let val a = authority
+    val i = stdin
+    val me = self ()
+    val _ = print "before subscribe:"
+    val _ = debugpc ()
+    val _ = ttySubscribe (i, me)
+    val _ = print "after subscribe with a public pid:"
+    val _ = debugpc ()
+
+    val (ok, cap) = enableRangedReceive (IfcUtil.bot, ttyLevel i, a)
+    val m = rcv (IfcUtil.bot, ttyLevel i, [ hn x => x ])
+    val _ = print "after one event:"
+    val _ = debugpc ()
+    val _ = print ("levelOf event = " ^ toString (levelOf m))
+    val _ = ttyUnsubscribe i
+    val _ = disableRangedReceive cap
+in ()
+end

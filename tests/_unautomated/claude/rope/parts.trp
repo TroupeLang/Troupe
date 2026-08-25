@@ -1,0 +1,79 @@
+(* parts — where the cost of one lib/Rope.trp edit goes.
+ *
+ * Each row is the same loop over random positions in a 1MB rope doing one more
+ * thing than the row above it, so the rows subtract: the first row is the loop
+ * itself, and the difference between two rows is what the added operation costs.
+ * Used to attribute the per-edit cost in
+ * _dev_planning/text-editor/rope-benchmarks.md.
+ *
+ *   ./local.sh tests/_unautomated/claude/rope/parts.trp
+ *)
+
+import List
+import String
+import Bench
+import Rope
+
+let val reps   = 3        (* timed batches per row; the best is reported *)
+    val ops    = 2000     (* operations per batch *)
+    val rows1m = 16130    (* lines of the corpus: 1000060 characters *)
+
+    (* Lehmer's minimal standard generator; see random.trp. *)
+    val lcgMultiplier = 48271
+    val lcgModulus    = 2147483647
+    val seed0         = 7
+
+    fun say s = fwrite (stdout, s ^ "\n")
+    fun next seed = (seed * lcgMultiplier) mod lcgModulus
+
+    val row    = "0123456789012345678901234567890123456789012345678901234567890\n"
+    val text1m = String.repeat rows1m row
+    val rope1m = Rope.fromString text1m
+    val len    = Rope.length rope1m
+
+    fun bestOf f =
+        let fun go (0, best) = best
+              | go (i, best) = let val (_, ms) = Bench.time f
+                               in go (i - 1, if ms < best then ms else best) end
+            val _ = f ()
+        in go (reps, lcgModulus) end
+
+    fun report (name, ms) =
+        say ("| " ^ name ^ " | " ^ toString (1000 * ms / ops) ^ " us |")
+
+    (* Every row runs this loop; `f` is given a random offset and the running
+     * accumulator, which keeps the work from being optimized away. *)
+    fun loop f =
+        let fun go (i, seed, acc) =
+                if i >= ops then acc
+                else let val s = next seed in go (i + 1, s, f (s mod len, acc)) end
+        in go (0, seed0, 0) end
+
+    val _ = say "| step | per operation |"
+    val _ = say "|---|---|"
+    val _ = report ("empty loop (random position only)",
+                    bestOf (fn () => loop (fn (_, acc) => acc)))
+    val _ = report ("charAt (one descent)",
+                    bestOf (fn () => loop (fn (i, acc) => acc + strlen (Rope.charAt (rope1m, i)))))
+    val _ = report ("offsetToPosition",
+                    bestOf (fn () => loop (fn (i, acc) =>
+                        let val (l, _) = Rope.offsetToPosition (rope1m, i) in acc + l end)))
+    val _ = report ("splitAt",
+                    bestOf (fn () => loop (fn (i, acc) =>
+                        let val (a, _) = Rope.splitAt (rope1m, i) in acc + Rope.depth a end)))
+    val _ = report ("splitAt then concat back",
+                    bestOf (fn () => loop (fn (i, acc) =>
+                        let val (a, b) = Rope.splitAt (rope1m, i)
+                        in acc + Rope.depth (Rope.concat (a, b)) end)))
+    val _ = report ("fromString of one character",
+                    bestOf (fn () => loop (fn (_, acc) => acc + Rope.length (Rope.fromString "x"))))
+    val _ = report ("insert one character",
+                    bestOf (fn () => loop (fn (i, acc) =>
+                        acc + Rope.depth (Rope.insert (rope1m, i, "x")))))
+    val _ = report ("lineAt of the line at that offset",
+                    bestOf (fn () => loop (fn (i, acc) =>
+                        let val (l, _) = Rope.offsetToPosition (rope1m, i)
+                        in acc + strlen (Rope.lineAt (rope1m, l)) end)))
+
+in ()
+end

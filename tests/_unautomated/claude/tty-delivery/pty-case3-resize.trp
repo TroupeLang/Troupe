@@ -1,0 +1,35 @@
+(* Pty case 3: a window-size change reaches the subscriber as TTYRESIZE.
+
+   The harness sets the pty's window size with ioctl(TIOCSWINSZ) while the
+   program runs; Node raises 'resize' on process.stdout and the handler
+   delivers the new dimensions. The program loops until it sees one, ignoring
+   any keystroke that arrives meanwhile. *)
+import IfcUtil
+require native Tty
+
+let val a = authority
+    val i = stdin
+    val o = stdout
+    val me = self ()
+    val _ = print ("SIZE-BEFORE:" ^ toString (ttySize o))
+    val _ = ttySubscribe (i, me)
+    val (ok, cap) = enableRangedReceive (IfcUtil.bot, ttyLevel i, a)
+    val _ = print "READY"
+
+    fun loop () =
+        let val (resized, c, r) =
+                rcv (IfcUtil.bot, ttyLevel i,
+                     [ hn ("TTYRESIZE", cols, rows) => (true, cols, rows)
+                     , hn ("TTYDATA", b) => (false, 0, 0)
+                     , hn ("TTYEOF") => (false, 0, 0) ])
+        in if resized then (c, r) else loop ()
+        end
+
+    val (c, r) = loop ()
+    val _ = print ("RESIZE:" ^ toString c ^ "x" ^ toString r)
+    val _ = print ("SIZE-AFTER:" ^ toString (ttySize o))
+    val _ = ttyUnsubscribe i
+    val _ = disableRangedReceive cap
+    val _ = print "DONE"
+in ()
+end

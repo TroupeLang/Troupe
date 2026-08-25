@@ -1,0 +1,15 @@
+(* Probe: unsubscribe with nothing subscribed, re-subscription replacing the
+   pid, and the process still exiting on its own after an unsubscribe. *)
+import IfcUtil
+require native Tty
+
+let val i = stdin
+    val me = self ()
+    val _ = print ("unsubscribe with nothing subscribed: "
+                   ^ toString (ttyUnsubscribe i))
+    val _ = print ("subscribe once: " ^ toString (ttySubscribe (i, me)))
+    val _ = print ("subscribe again: " ^ toString (ttySubscribe (i, me)))
+    val _ = print ("unsubscribe: " ^ toString (ttyUnsubscribe i))
+    val _ = print ("unsubscribe again: " ^ toString (ttyUnsubscribe i))
+in ()
+end

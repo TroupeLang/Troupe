@@ -1,0 +1,55 @@
+(* send-presence-probe — whether a message sent from inside an enabled ranged-receive region
+ * carries the region's ceiling as its presence level. Receiver A gets "PING" from a clean
+ * sender; receiver B gets "PING" from a sender that first enabled [bot, ROOT]. Both
+ * receivers do a plain receive and report; a missing report marks the blocked side. *)
+import timeout
+import IfcUtil
+import Outcome
+import Tty
+let val lev = Tty.level stdin
+    val weak = attenuate (authority, IfcUtil.null)
+
+    fun receiver (name, main) =
+        let val _ = receive [hn "PING" => ()]
+        in send (main, ("GOT", name))
+        end
+
+    fun cleanSender r = send (r, "PING")
+
+    fun regionSender r =
+        let val (ok, cap) = enableRangedReceive (IfcUtil.bot, lev, weak)
+            val _ = send (r, "PING")
+            val _ = receive [hn "never" => ()]   (* park forever; region stays open *)
+        in ()
+        end
+
+    (** A sender whose blocking label was raised by branching on a channel-level value
+     *  (Tty.size's result is at the channel level) before the send. *)
+    fun taintedSender r =
+        let val n = case Tty.size stdout of OK s => s.cols | ERR _ => 0
+            val _ = debugpc ()
+            val _ = send (r, "PING")
+        in ()
+        end
+
+    val me = self ()
+    val (mok, mcap) = enableRangedReceive (IfcUtil.bot, lev, weak)
+    val ra = spawn (fn () => receiver ("A-clean-sender", me))
+    val rb = spawn (fn () => receiver ("B-region-sender", me))
+    val rc = spawn (fn () => receiver ("C-tainted-sender", me))
+    val _ = spawn (fn () => cleanSender ra)
+    val _ = spawn (fn () => regionSender rb)
+    val _ = spawn (fn () => taintedSender rc)
+    val _ = timeout.timeout me "deadline" 2000
+    fun collect acc =
+        let val r = rcv ( IfcUtil.bot, lev
+                        , [ hn ("GOT", n)   => ("got", n)
+                          , hn "deadline"   => ("deadline", "") ])
+        in case r of
+                ("got", n)      => collect (acc ^ " " ^ n)
+              | _               => acc
+        end
+    val got = collect ""
+    val _ = fwrite (stdout, "reported:" ^ got ^ "\n")
+in exit (authority, 0)
+end

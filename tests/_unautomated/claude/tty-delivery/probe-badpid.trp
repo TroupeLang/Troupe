@@ -1,0 +1,8 @@
+(* Probe: a second argument that is not a process id is a programming error and
+   kills the thread, as the wrong descriptor does. *)
+require native Tty
+
+let val i = stdin
+    val _ = ttySubscribe (i, 42)
+in ()
+end

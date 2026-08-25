@@ -1,0 +1,62 @@
+(* tune — one line of numbers for lib/Rope.trp's current constants.
+ *
+ * How the leaf size and the depth limit were chosen: rebuild the library with
+ * different values of leafSize, leafLimit and depthLimit and re-run this. The
+ * results that set the shipped values are in
+ * _dev_planning/text-editor/rope-benchmarks.md.
+ *
+ *   ./local.sh tests/_unautomated/claude/rope/tune.trp
+ *)
+
+import List
+import String
+import Bench
+import Rope
+
+let val reps   = 3        (* timed batches per number; the best is reported *)
+    val edits  = 2000     (* one-character inserts per batch *)
+    val rows1m = 16130    (* lines of the corpus: 1000060 characters *)
+
+    (* Lehmer's minimal standard generator; see random.trp. *)
+    val lcgMultiplier = 48271
+    val lcgModulus    = 2147483647
+    val seed0         = 7
+
+    fun say s = fwrite (stdout, s ^ "\n")
+    fun next seed = (seed * lcgMultiplier) mod lcgModulus
+
+    val row    = "0123456789012345678901234567890123456789012345678901234567890\n"
+    val text1m = String.repeat rows1m row
+    val rope1m = Rope.fromString text1m
+    val lines  = Rope.lineCount rope1m
+
+    fun bestOf f =
+        let fun go (0, best) = best
+              | go (i, best) = let val (_, ms) = Bench.time f
+                               in go (i - 1, if ms < best then ms else best) end
+            val _ = f ()
+        in go (reps, lcgModulus) end
+
+    fun insertLoop (r0, n) =
+        let fun go (i, seed, r) =
+                if i >= n then r
+                else let val s = next seed
+                     in go (i + 1, s, Rope.insert (r, s mod (Rope.length r + 1), "x")) end
+        in go (0, seed0, r0) end
+
+    fun lineLoop r =
+        List.foldl (fn (i, acc) => acc + strlen (Rope.lineAt (r, i))) 0
+                   (List.range lines)
+
+    val fromMs   = bestOf (fn () => Rope.fromString text1m)
+    val insertMs = bestOf (fn () => insertLoop (rope1m, edits))
+    val lineMs   = bestOf (fn () => lineLoop rope1m)
+    val worst    = Rope.depth (insertLoop (rope1m, edits))
+
+in say ("leafSize=" ^ intToString Rope.leafSize
+        ^ " depth=" ^ intToString (Rope.depth rope1m)
+        ^ " depthAfterEdits=" ^ intToString worst
+        ^ " fromString1MB_ms=" ^ toString fromMs
+        ^ " insert_us=" ^ toString (1000 * insertMs / edits)
+        ^ " lineAt_us=" ^ toString (1000 * lineMs / lines))
+end

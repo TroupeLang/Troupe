@@ -1,0 +1,41 @@
+(* Probe: ttySubscribe raises the caller's pc by the argument levels, as spawn
+   does with the closure it spawns — which process receives keystrokes is a
+   decision, and a decision must be visible in the pc. The pid here is raised
+   to {alice}; the pc after the call must carry it.
+
+   Run with the channel at {alice}:
+
+     ./local.sh tests/_unautomated/claude/tty-delivery/probe-pc-raise-by-pid.trp \
+       --stdiolev '{alice}'
+
+   The subscription is an effect on the stdio channel and carries the sink
+   check, so an {alice}-raised pid at the default channel level ({#ROOT}) is
+   refused before the pc is ever read. The flag puts the channel where the
+   effect is admissible; the reading below is unchanged by it. *)
+require native Tty
+
+let val i = stdin
+    val me = self ()
+    val hi = me raisedTo `{alice}`
+    val _ = print "before:"
+    val _ = debugpc ()
+    val _ = ttySubscribe (i, hi)
+    val _ = print "after subscribe with an {alice}-raised pid:"
+    val _ = debugpc ()
+    val _ = ttyUnsubscribe i
+in ()
+end
+
+(* Actual (2026-07-31): before pc = {}, bl = {}; after pc = {}, bl = {alice}.
+   The pc is restored when the call returns, as it is for every builtin, and
+   the raise's lasting evidence is the blocking label.
+
+   The same program with `spawn` in place of `ttySubscribe` and an
+   {alice}-raised closure reports exactly the same pair, so the shape is
+   spawn's (spawn.mts).
+
+   The rise is the pc raise and not the argument assertion: `ttyLevel` handed
+   an {alice}-raised descriptor — a builtin that asserts but does not raise the
+   pc — leaves bl = {}, because `raisedTo` raises the value level and not the
+   type level the assertions fold in. With a public pid, ttySubscribe likewise
+   leaves bl = {} (probe-pc-around-subscribe.trp). *)

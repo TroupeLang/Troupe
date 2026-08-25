@@ -2,14 +2,14 @@
 
 How to drive, observe, and pin the behaviour of a terminal program that cannot be debugged by
 reading its stdout: the tool layers, when to use which, and the traps. Commands are written for
-this checkout's root; the test tooling lives in `tests/_unautomated/claude/` (git-ignored — local
-tooling, not part of the corpus).
+this checkout's root; the tooling lives in `examples/battallion/testing/` and is part of the
+battallion example.
 
 None of it needs a human at the keyboard. Every layer is a programmatic interface, so the whole
 loop — reproduce, minimise, fix, pin — runs from a symptom described in words. A human enters
 where perception is the instrument (does it *feel* right, does a real emulator render it right),
 or to watch any tmux session live (`tmux attach`) while the automation drives it;
-`tests/_unautomated/claude/battallion-drive/bt-tmux.sh` wraps a session into
+`examples/battallion/testing/drive/bt-tmux.sh` wraps a session into
 start / type / keys / snap / attach / stop for that kind of poking.
 
 ## The layers
@@ -18,9 +18,10 @@ start / type / keys / snap / attach / stop for that kind of poking.
 |----------------------|-------------------------------------------------------------------|-------|
 | One-shot run         | Startup behaviour: arguments, refusals, exit codes, stderr       | `./local.sh` |
 | tmux session         | Interactive debugging, by hand or scripted — and watchable live  | `tmux` |
-| File-driven session  | Scripted sessions with screen snapshots as files                 | `battallion-drive/driver.py` |
-| Scripted harnesses   | Pinning a behaviour so it stays fixed                            | `battallion-{viewer,editor,plugins,cli}/harness.py` |
-| Session simulator    | Finding what no scripted case thought to try                     | `battallion-sim/` |
+| File-driven session  | Scripted sessions with screen snapshots as files                 | `testing/drive/driver.py` |
+| Scripted harnesses   | Pinning a behaviour so it stays fixed                            | `testing/{viewer,editor,plugins,cli}/harness.py` |
+| Decoder pin suite    | 160 assertions over Key.decode/flush                             | `testing/key/KeyTest.trp` |
+| Session simulator    | Finding what no scripted case thought to try                     | `testing/sim/` |
 
 ## One-shot runs
 
@@ -76,12 +77,12 @@ command separator (send `\;`); `capture-pane` drops trailing blank rows (pad if 
 
 ## The file-driven session (no tmux needed)
 
-`tests/_unautomated/claude/battallion-drive/driver.py` holds the editor on a pty, renders its
+`examples/battallion/testing/drive/driver.py` holds the editor on a pty, renders its
 output through a screen model covering the escapes `Screen.trp` documents, and is controlled
 entirely through files — usable from any tool that can append to a file and read one back.
 
 ```sh
-python3 tests/_unautomated/claude/battallion-drive/driver.py \
+python3 examples/battallion/testing/drive/driver.py \
         "$PWD" /tmp/session /tmp/bt.js /tmp/w notes.txt 24 80 &   # rows cols
 
 printf 'text:jjj\n'      >> /tmp/session/cmd.txt   # then read the next /tmp/session/snap-NNN.txt
@@ -103,7 +104,7 @@ screen model is simpler than tmux's — prefer tmux when the escapes in play mig
 
 Four python pty harnesses cover startup, motions, editing/saving/undo, the plugin frame shape,
 and the invocation/path/content edges. Run any of them as
-`python3 tests/_unautomated/claude/battallion-<name>/harness.py "$PWD"`.
+`python3 examples/battallion/testing/<name>/harness.py "$PWD"`.
 
 The discipline for a new case: reproduce the behaviour by hand first (tmux or the driver), then
 assert exactly what was observed — never write the expectation from belief. On darwin the pty is
@@ -112,16 +113,16 @@ is alive; a post-mortem read sees the reset default.
 
 ## Finding the unknown: the simulator
 
-`tests/_unautomated/claude/battallion-sim/` generates seeded sessions of realistic activity and
+`examples/battallion/testing/sim/` generates seeded sessions of realistic activity and
 checks every action against a shadow model of the editor's documented semantics — screen, cursor,
 status fields, and the saved file byte-for-byte. When it disagrees, it saves a replay log and
 minimises the failing prefix automatically.
 
 ```sh
-cd tests/_unautomated/claude/battallion-sim
+cd examples/battallion/testing/sim
 python3 simulate.py run --seed 3 --file large --actions 400
 python3 simulate.py replay <runs>/<tag>/replay.jsonl --upto N     # reproduce, step-bounded
-bash campaign.sh par                                              # the full nine-run campaign
+bash campaign.sh par                                              # the full eleven-run campaign
 python3 report.py                                                 # counts, latency percentiles
 ```
 
@@ -129,9 +130,10 @@ It also measures keystroke→stable-frame latency (first campaign: p50 22 ms, p9
 cites the source line for every rule it implements, so when the editor and the model disagree,
 the citation says which one is wrong.
 
-The simulator runs a `.js` it does not compile — `<scratch>/bt-current.js`, the path
-`tmuxdrv.py` and `campaign.sh` name. After an edit to an editor source, recompile it
-(`bin/troupec examples/battallion/bt.trp -m --output=<scratch>/bt-current.js`) or the run reports
+The simulator runs a `.js` it does not compile — `/tmp/battallion-sim/bt-current.js`, or
+`$BT_SCRATCH/bt-current.js` where that variable is set (`tmuxdrv.py`, `campaign.sh`). After an
+edit to an editor source, recompile it into that path
+(`bin/troupec examples/battallion/bt.trp -m --output=<that path>`) or the run reports
 `DIVERGENCE at action 0 (startup): editor exited`; the reason is in the run's `stderr.log`, and
 for a stale build it is the module-pin refusal `cannot link module <hash>: it is not among this
 program's dependencies`.

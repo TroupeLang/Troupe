@@ -1,0 +1,65 @@
+(* Probe 7 — a module reached through `../` cannot use program-relative modules of its own.
+ *
+ * The crash-restore check needs a second program built on the same modules as
+ * examples/battallion/bt.trp, and its natural home is beside the harness that drives it. Written
+ * there, it imports the modules as `../../…` — a path form
+ * docs/MODULES.md:37,148 provides for — and it cannot be loaded.
+ *
+ *   ./bin/troupec --update-deps examples/battallion/testing/viewer/probe-parent-relative-pins.trp
+ *   ./local.sh examples/battallion/testing/viewer/probe-parent-relative-pins.trp
+ *
+ * OBSERVED 2026-08-01 (dev-text-editor, 00e1cc67 plus this stage's work).
+ *
+ * THE PIN PATHS ARE MEASURED FROM TWO DIFFERENT PLACES. This program imports
+ * `../../Session`, which imports `./Screen`, `./Editor` and `./Key`.
+ * `troupec --update-deps` writes:
+ *
+ *   {"path": "../../Session", ...}   <- relative to this program
+ *   {"path": "../../Editor",  ...}   <- relative to this program
+ *   {"path": "examples/battallion/Editor",              ...}   <- relative to the working directory
+ *   {"path": "examples/battallion/Key",                 ...}   <- relative to the working directory
+ *   {"path": "examples/battallion/Screen",              ...}   <- relative to the working directory
+ *
+ * The direct imports are pinned relative to the main program, as docs/MODULES.md describes. The
+ * imports *inside* a module reached through `../` are pinned relative to the working directory
+ * instead. Pin paths are resolved against the directory holding the dependencies file
+ * (`resolveModuleFile`, rt/src/moduleResolver.mts:46-53:
+ * `path.join(useRoot, dirname(entry.path), "out", basename(entry.path) + ".js")`), so the second
+ * group names files that do not exist.
+ *
+ * AND THE TWO SPELLINGS COLLIDE. The resolver is keyed by hash
+ * (rt/src/moduleResolver.mts:33-34) and a later entry overwrites an earlier one, so where a
+ * program pins the same module under both spellings the correct pin is silently replaced by the
+ * wrong one. Running this program dies with
+ *
+ *   Error: ENOENT: no such file or directory, open
+ *   '<this program's directory>/examples/battallion/out/Editor.js'
+ *
+ * Compiled with a main program that sits beside the modules — examples/battallion/bt.trp — the
+ * same imports are pinned as `Editor`, `Key`, `Screen` and resolve correctly. This is why
+ * examples/battallion/crashprobe.trp lives beside the modules it imports rather than beside the
+ * harness that runs it.
+ *
+ * WHY NO EXISTING PROGRAM SHOWED THIS. Every parent-relative import in the repository at the time
+ * named a module with no program-relative imports of its own — `examples/savina/SavinaReport`,
+ * `examples/awfy/Awfy`, `examples/progress/Progress` — so the transitive case had no coverage.
+ *
+ * NO LONGER REPRODUCED, 2026-08-25 (dev, 45fbbeb4). `troupec --update-deps` now writes every
+ * transitive pin relative to the main program — `../../Api`, `../../Editor`, `../../Session` and
+ * the rest — so there is one spelling per module, nothing collides, and this program runs and
+ * prints its line. The same holds at the depth the probe was written for: run from a directory
+ * four levels down the pins come out as `../../../../examples/battallion/…` throughout. The probe
+ * is kept as the regression case for the two-spelling collision.
+ *)
+
+import Rope
+import "../../Session"
+import "../../Editor"
+
+(* Session imports `./Editor`, and this program imports the same module through `../`. The two
+   spellings collide on one hash, and calling into Editor is what makes the loader read the pin
+   that won. *)
+let val st = Editor.init (Rope.fromString "one\ntwo\n", "f", 80, 24)
+    val _ = print ("the viewer's first line: " ^ toString st.line)
+in ()
+end

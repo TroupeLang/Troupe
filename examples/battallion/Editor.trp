@@ -31,7 +31,7 @@
  * Api.trp's header says what the pinning means for recompilation).
  *
  * THE HOOKS ARE NOT WRAPPED IN `guard`, and the reason is measured rather than assumed
- * (tests/_unautomated/claude/battallion-plugins/probe-guard-hook.trp, run where the kernel runs:
+ * (examples/battallion/testing/plugins/probe-guard-hook.trp, run where the kernel runs:
  * a confined ranged-receive region at [bot, channel level] with state that came out of it).
  *
  *   - `guard`'s taint ceiling is vacuous here. The limit it enforces is the *join* of the

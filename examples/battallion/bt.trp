@@ -64,7 +64,7 @@
  * it — which the supervisor may not be at when it opens its receive region, because a region can
  * only be closed from its floor. So the branches below produce values and nothing else, and the
  * session is started after them. The measurements are in
- * tests/_unautomated/claude/battallion-viewer/probe-pc-and-unlisten.trp.
+ * examples/battallion/testing/viewer/probe-pc-and-unlisten.trp.
  *)
 
 import Rope

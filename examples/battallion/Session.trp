@@ -31,7 +31,7 @@
  * inside the same receives as everything else, needing no declassification and no helper process
  * — its presence level is the dying kernel's pc, which is bot, and every receive here runs at
  * [bot, channel level]; the measurement, for both an orderly and an error termination, is in
- * tests/_unautomated/claude/battallion-editor/probe-done-level.trp. What monitoring cannot see is
+ * examples/battallion/testing/editor/probe-done-level.trp. What monitoring cannot see is
  * a kernel that is alive and no longer answering — one blocked on a renderer that died, say — so
  * every wait for the kernel still carries a watchdog timer (the `lib/timeout.trp` idiom, whose
  * message is matched inside the same ranged-receive region — probe-timer-level.trp), and a wait
@@ -75,7 +75,7 @@
  * loop between them. That extends to `run`'s caller: a region can only be closed from its floor,
  * and code inside a branch on a channel-level value runs above it, so `Session.run` must itself
  * be called from straight-line code. bt.trp's header says how, and
- * tests/_unautomated/claude/battallion-viewer/probe-pc-and-unlisten.trp measures it.
+ * examples/battallion/testing/viewer/probe-pc-and-unlisten.trp measures it.
  *)
 
 import IfcUtil
@@ -138,7 +138,7 @@ let (** How long the supervisor waits for the kernel before calling it wedged. T
      *  position: the region opened above is never closed, and a frame that opened one must not
      *  end in a tail call — the loop's eventual return would then unwind past this frame into a
      *  caller's, where the mailbox-clearance balance check refuses the mismatch. The measurement
-     *  is in tests/_unautomated/claude/battallion-viewer/probe-region-tail-call.trp. *)
+     *  is in examples/battallion/testing/viewer/probe-region-tail-call.trp. *)
     fun renderer (out, lev, weak) =
         let val (ok, cap) = enableRangedReceive (IfcUtil.bot, lev, weak)
             val _ = rendererLoop (out, lev)

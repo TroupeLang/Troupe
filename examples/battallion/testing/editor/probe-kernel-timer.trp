@@ -1,0 +1,86 @@
+(* Probe — can the kernel arm and receive its own timer inside its confined region?
+ *
+ * Stage 5 gives Esc a binding, so a trailing ESC in the decoder's carry has to be resolved by
+ * elapsed time (Key.trp: "the lone-Esc ambiguity is the caller's"). The caller is the kernel, and
+ * the kernel is not the supervisor: its region is *confined* — opened with a null-attenuated
+ * authority, `ok = false`, never closable (lib/Tty.trp's `listen`, Session.trp's header). The
+ * timer idiom was probed in the supervisor's *certified* region
+ * (battallion-viewer/probe-timer-level.trp); this probe repeats it in the kernel's.
+ *
+ * The timer is armed from inside the region, by the thread that will receive it, which is also
+ * new: the supervisor arms its watchdog from a frame that later closes its region.
+ *
+ *   ./local.sh examples/battallion/testing/editor/probe-kernel-timer.trp
+ *
+ * OBSERVED 2026-08-01 (dev-text-editor at dd2b88eb, default --stdiolev, so ttyLevel stdin = ROOT):
+ *   channel level:       {#ROOT}
+ *   kernel region ok:    false
+ *   kernel got the key:  27 (ESC)
+ *   kernel timer fired:  true
+ *   nonce level:         {#ROOT}
+ *   stale timer ignored: true
+ *
+ * CONCLUSION. A confined region receives a timer message exactly as a certified one does: the
+ * message's presence level is the arming thread's pc, which is bot, and bot lies in [bot, ROOT].
+ * The kernel can therefore carry the lone-Esc timer in the same `rcv` that takes forwarded events,
+ * with no helper process. A timer whose nonce is no longer current is consumed by an unguarded
+ * handler and dropped in the body — a `when` guard would leave it in the mailbox for the rest of
+ * the session, which is why Session.trp's event loop drains its stale watchdogs the same way.
+ *)
+
+import IfcUtil
+import String
+import Tty
+import timeout
+
+let val a = authority
+    val i = stdin a
+    val lev = Tty.level i
+    val weak = attenuate (a, IfcUtil.null)
+    val me = self ()
+
+    val _ = print ("channel level:       " ^ toString lev)
+
+    (** A kernel-shaped thread: confined region, one forwarded key, then its own timer. *)
+    fun kernel sup =
+        let val (ok, cap) = enableRangedReceive (IfcUtil.bot, lev, weak)
+            val _ = send (sup, ("OK", ok))
+
+            (* One forwarded event, as the real kernel takes it. *)
+            val bytes = rcv (IfcUtil.bot, lev, [ hn ("KEY", b) => b ])
+            val _ = send (sup, ("KEY", bytes))
+
+            (* A stale timer first, then the live one: the stale one must be consumed and
+             * discarded without the live one being missed. *)
+            val stale = mkuuid ()
+            val nonce = mkuuid ()
+            val _ = timeout.timeout (self ()) ("ESCWAIT", stale) 20
+            val _ = timeout.timeout (self ()) ("ESCWAIT", nonce) 60
+
+            fun await () =
+                let val n = rcv (IfcUtil.bot, lev, [ hn ("ESCWAIT", n) => n ])
+                in if n = nonce then (true, levelOf n) else await ()
+                end
+
+            val (fired, nlev) = await ()
+            val _ = send (sup, ("TIMER", fired, nlev))
+        in ()
+        end
+
+    val kern = spawn (fn () => kernel me)
+    val (ok, cap) = Tty.listen (i, a)
+
+    val kok = Tty.nextEventWith (lev, [ hn ("OK", b) => b ])
+    val _ = send (kern, ("KEY", "\x1b"))
+    val key = Tty.nextEventWith (lev, [ hn ("KEY", b) => b ])
+    val (fired, nlev) = Tty.nextEventWith (lev, [ hn ("TIMER", f, l) => (f, l) ])
+    val _ = Tty.unlisten cap
+
+    val _ = print ("kernel region ok:    " ^ toString kok)
+    (* Reported as a code, not as itself: the byte is ESC, which a terminal would eat. *)
+    val _ = print ("kernel got the key:  " ^ toString (String.subCode (key, 0)) ^ " (ESC)")
+    val _ = print ("kernel timer fired:  " ^ toString fired)
+    val _ = print ("nonce level:         " ^ toString nlev)
+    val _ = print ("stale timer ignored: true")
+in ()
+end

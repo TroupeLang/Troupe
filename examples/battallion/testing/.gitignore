@@ -1,0 +1,11 @@
+# Scratch the tools in this directory write.
+#
+# out/          compiler output: troupec puts a program's .js and, under -v, its
+#               stage dumps in an out/ beside the program (key/, viewer/)
+# __pycache__/  python bytecode; simulate.py imports btmodel and tmuxdrv
+#
+# The rest of the scratch lands outside the checkout: each harness works in
+# /tmp/battallion-<name>, the simulator in $BT_SCRATCH (default
+# /tmp/battallion-sim), and driver.py in the session directory it is given.
+out/
+__pycache__/

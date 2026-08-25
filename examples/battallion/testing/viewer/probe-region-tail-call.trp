@@ -1,0 +1,85 @@
+(* Probe 6 — a frame that opens a receive region must not end in a tail call.
+ *
+ * The kernel and the renderer of examples/battallion/Session.trp open a confined ranged-receive
+ * region and never close it: they receive for their whole lives, which lib/Tty.trp names as the
+ * case a confined region is for. They do eventually return, though — the renderer when it is
+ * told to stop, the kernel when the session quits — and how they were called decides whether
+ * that return is accepted.
+ *
+ * Written the natural way, with the loop in tail position after the open,
+ *
+ *     val r = spawn (fn () =>
+ *         let val (ok, cap) = enableRangedReceive (IfcUtil.bot, IfcUtil.root, weak)
+ *         in loop ()
+ *         end)
+ *
+ * the loop's return dies with
+ *
+ *     >> Mailbox clearance label is not restorted after being raised in a branch; stack depth = 5
+ *
+ * (rt/src/Thread.mts:843, the branch-balance check in `returnImmediate`: a call made in a branch
+ * context must come back with the mailbox clearance it was made with). Binding the loop's result
+ * instead of tail-calling it —
+ *
+ *     val _ = loop ()
+ *     in ()
+ *
+ * — is accepted, because the loop then returns into the frame that opened the region rather than
+ * unwinding past it into a caller's.
+ *
+ *   ./local.sh examples/battallion/testing/viewer/probe-region-tail-call.trp
+ *
+ * OBSERVED 2026-08-01 (dev-text-editor, default --stdiolev):
+ *   bound   got one / loop returned / no error
+ *   tail    got one / Mailbox clearance label is not restorted after being raised in a branch
+ *
+ * The same failure appears wherever the returning frame is not the one that opened the region:
+ * an `enableRangedReceive` in a helper function called from the spawned closure fails the same
+ * way, whether the loop is defined beside it or at the module's top level. What matters is that
+ * the return lands in the opening frame.
+ *
+ * NOTE ON THE DIAGNOSTIC. Neither shape contains a branch. The message names the mechanism —
+ * frames carry a branch flag and a saved clearance — rather than anything the program did, which
+ * is why finding the rule took a bisection rather than a reading.
+ *)
+
+import IfcUtil
+
+let val a = authority
+    val weak = attenuate (a, IfcUtil.null)
+    val out = stdout a
+
+    fun loop (label, n) =
+        let val m = rcv ( IfcUtil.bot, IfcUtil.root
+                        , [ hn ("FRAME", t) => t
+                          , hn "STOP"       => "" ])
+        in if m = "" then n
+           else let val _ = fwrite (out, label ^ ": got " ^ m ^ "\n")
+                in loop (label, n + 1)
+                end
+        end
+
+    (* Bound: the loop returns into the frame that opened the region. *)
+    val bound = spawn (fn () =>
+        let val (ok, cap) = enableRangedReceive (IfcUtil.bot, IfcUtil.root, weak)
+            val n = loop ("bound", 0)
+            val _ = fwrite (out, "bound: loop returned after " ^ toString n ^ " frame(s)\n")
+        in ()
+        end)
+
+    val _ = send (bound, ("FRAME", "one" raisedTo IfcUtil.root))
+    val _ = send (bound, "STOP")
+    val _ = sleep 400
+
+    (* Tail: the loop's return unwinds past that frame. *)
+    val tail = spawn (fn () =>
+        let val (ok, cap) = enableRangedReceive (IfcUtil.bot, IfcUtil.root, weak)
+        in loop ("tail", 0)
+        end)
+
+    val _ = send (tail, ("FRAME", "one" raisedTo IfcUtil.root))
+    val _ = send (tail, "STOP")
+    val _ = sleep 400
+    val _ = fwrite (out, "(the thread error above is the tail case)\n")
+in ()
+end

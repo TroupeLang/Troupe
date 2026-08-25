@@ -1,0 +1,220 @@
+(* Probe — what does `guard` buy a plugin hook that runs where battallion's kernel runs?
+ *
+ * The architecture document (editor-architecture-kernel-and-plugins.md, "Bounding plugin
+ * execution") says pure plugin hooks run under `guard (f, taintLimit, default)`. The kernel is a
+ * process whose whole state came from the terminal, so it runs permanently tainted by the channel
+ * level and receives for its whole life inside a confined ranged-receive region opened at
+ * [bot, channel level] (Session.trp's header). A hook is handed that tainted state and returns a
+ * value derived from it, so the taint limit cannot be lower than the channel level — which is the
+ * question this probe answers: at that limit, what is left of the ceiling, and what else does
+ * `guard` still enforce?
+ *
+ * The process below is the kernel's situation reproduced: a confined region at [bot, channel
+ * level] opened with a null-attenuated authority, a state value that came out of a receive at
+ * that interval, and hooks called on it.
+ *
+ *   ./local.sh examples/battallion/testing/plugins/probe-guard-hook.trp --localonly
+ *
+ * OBSERVED 2026-08-01 (dev-text-editor at 7c0e0699 plus the stage-6 extraction, default
+ * --stdio-model, so the channel level is ROOT). The runtime's own "Warning: runtime exception in
+ * the handler or sandbox: …" lines are interleaved and quoted here beside the reading they explain:
+ *
+ *   channel level:            {#ROOT}
+ *   region ok (confined):     false
+ *   bl at the spawn:          {}
+ *   0 untainted process, bl:  {}
+ *     taint raised, limit=bot: -1        <- "guard violation"
+ *     taint raised, limit=chan:42
+ *   state col level:          {#ROOT}
+ *   pc before any guard:      {}
+ *   bl before any guard:      {#ROOT}
+ *   1 pure hook, limit=chan:  col=4  level={#ROOT}
+ *     pc after:               {}
+ *     bl after:               {#ROOT}
+ *   2 pure hook, limit=bot:   col=4
+ *   3 send in a hook:         col=-1     <- "invalid handler state in send"
+ *   4 fwrite in a hook:       col=-1     <- "invalid handler state in fwrite"
+ *   5 rcv in a hook:          col=-1     <- "invalid handler state in rcv"
+ *   6 spawn in a hook:        col=-1     <- "invalid handler state in spawn"
+ *   7 crashing hook:          col=-1     <- "value \"boom\" is not a number"
+ *   8 receive after guards:   7
+ *     pc at the end:          {}
+ *     bl at the end:          {#ROOT}
+ *   9 frame sent after guard: 4
+ *   10 fresh process, bl:     {#ROOT}
+ *      record out, limit=bot:  col=4
+ *      number out, limit=bot:  4
+ *      number out, limit=chan: 4
+ *
+ * CONCLUSION.
+ *
+ * THE TAINT CEILING IS VACUOUS WHERE THE KERNEL SITS. The limit `guard` enforces is not the
+ * argument but the *join* of the argument with the thread's blocking label at entry
+ * (rt/src/builtins/receive.mts:298-311: the pc is raised by the argument first, and the limit is
+ * read off `theThread.bl` afterwards). The kernel's blocking label is the channel level for the
+ * whole session — it receives at [bot, channel level] and never stops — so reading 2 is the
+ * measurement that matters: a hook called with a limit of *bot* returned the tainted result
+ * untouched, exactly as the one called with the channel level did. Reading 0 is the contrast: in a
+ * process that has received nothing and been handed nothing tainted, the same limit of bot traps
+ * and the default comes back. Handing a tainted value to a fresh process is enough to lose the
+ * distinction again — reading 10's process starts at {#ROOT} because the state travelled in its
+ * spawn closure.
+ *
+ * WHAT `guard` DOES ENFORCE IS THE HANDLER STATE, and that part is exactly the confinement the
+ * architecture document asks for: `send`, `fwrite`, `rcv` and `spawn` inside a hook were each
+ * refused and the default returned instead (readings 3-6; the check is
+ * rt/src/Asserts.mts:332-336, reached from every effectful builtin). A hook cannot touch the
+ * mailbox, the terminal, the process table or the filesystem even if its code tries to.
+ *
+ * IT ALSO TRAPS A HOOK'S RUNTIME ERROR (reading 7): the dynamic type error that
+ * examples/battallion/crashprobe.trp raises inside a keymap came back as the default rather than
+ * killing the thread. For the mvp's *bundled* keymap that is the wrong trade — crashprobe exists
+ * to kill the kernel from inside a keymap, and the supervisor exists to restore the terminal when
+ * it does, so a wrapped keymap would silently defeat the one supervision path the editor has.
+ *
+ * NOTHING ELSE ABOUT THE KERNEL CHANGES: the pc is back where it was after each guard (readings 1
+ * and 8), the blocking label is unmoved, and the region goes on receiving and sending afterwards
+ * (readings 8 and 9).
+ *
+ * SO the mvp's plugins are not wrapped, and the confinement they do have is the one modules give
+ * for free: a library-mode module binds no `authority` and gets no ambient wrappers, so it cannot
+ * reach stdout, stdin, the filesystem or `exit` at all (docs/MODULES.md). `guard` earns its place
+ * at the moment plugin code arrives as a delivered closure rather than as a compiled-in import —
+ * and it will need a visible failure channel then, or a trapped hook is a silent one.
+ *)
+
+import IfcUtil
+import Tty
+
+let val a = authority
+    val i = stdin a
+    val out = stdout a
+    val weak = attenuate (a, IfcUtil.null)
+    val me = self ()
+    val lev = Tty.level i
+
+    fun say s = fwrite (out, s ^ "\n")
+
+    (*--- The hooks. Each has the shape of a keymap hook: state in, state out. ---*)
+
+    (** Pure: what every mvp plugin hook is. *)
+    fun bump st = { st with col = st.col + 1 }
+
+    (** A hook that tries to talk to another process. *)
+    fun sending st = let val _ = send (me, "SNEAK") in { st with col = 91 } end
+
+    (** A hook that tries to write to the terminal. *)
+    fun writing (fd, st) = let val _ = fwrite (fd, "SNEAK") in { st with col = 92 } end
+
+    (** A hook that tries to read the mailbox. *)
+    fun reading st =
+        let val _ = rcv (IfcUtil.bot, lev, [ hn "SNEAK" => () ])
+        in { st with col = 93 }
+        end
+
+    (** A hook that tries to spawn. *)
+    fun spawning st = let val _ = spawn (fn () => ()) in { st with col = 94 } end
+
+    (** A hook with a bug in it: the same dynamic type error crashprobe.trp's keymap raises. *)
+    fun crashing st = { st with col = "boom" + 1 }
+
+    val _ = say ("channel level:            " ^ toString lev)
+
+    (*--- 0. The ceiling where it is not vacuous, measured first because a thread spawned later
+             inherits the spawning thread's blocking label. This process has neither received
+             anything nor been handed a tainted value; it raises the taint inside the hook itself,
+             which is the situation the guard goldens are written in
+             (tests/rt/pos/ifc/sandbox/guard02.trp) and the one the kernel is never in. ---*)
+    fun clean (fd, parent) =
+        let fun tell s = fwrite (fd, s ^ "\n")
+            val _ = tell ("0 untainted process, bl:  " ^ toString (_bl ()))
+            val x = guard (fn () => 42 raisedTo lev, IfcUtil.bot, 0 - 1)
+            val _ = tell ("  taint raised, limit=bot: " ^ toString x)
+            val y = guard (fn () => 42 raisedTo lev, lev, 0 - 1)
+            val _ = tell ("  taint raised, limit=chan:" ^ toString y)
+            val _ = send (parent, "CLEANDONE")
+        in ()
+        end
+
+    (*--- The kernel's region. It is opened before the untainted process is spawned and before
+          anything is received, because the answer the untainted process sends comes back tainted
+          — it raised the taint — and a receive that takes it needs the region's ceiling. ---*)
+    val (ok, cap) = enableRangedReceive (IfcUtil.bot, lev, weak)
+    val _ = say ("region ok (confined):     " ^ toString ok)
+    val _ = say ("bl at the spawn:          " ^ toString (_bl ()))
+
+    val _ = spawn (fn () => clean (out, me))
+    val _ = rcv (IfcUtil.bot, lev, [ hn "CLEANDONE" => () ])
+
+    (*--- A state that came out of the region, which is where the kernel's state comes from. ---*)
+    val _ = send (me, ("STATE", 3))
+
+    val c = rcv (IfcUtil.bot, lev, [ hn ("STATE", n) => n ])
+    val st = { line = 0, col = c, cols = 80 }
+    val dflt = { line = 0, col = 0 - 1, cols = 80 }
+    val _ = say ("state col level:          " ^ toString (levelOf st.col))
+    val _ = say ("pc before any guard:      " ^ toString (_pc ()))
+    val _ = say ("bl before any guard:      " ^ toString (_bl ()))
+
+    (*--- 1. A pure hook at the channel level: does the real result come back? ---*)
+    val r1 = guard (fn () => bump st, lev, dflt)
+    val _ = say ("1 pure hook, limit=chan:  col=" ^ toString r1.col
+                 ^ "  level=" ^ toString (levelOf r1.col))
+    val _ = say ("  pc after:               " ^ toString (_pc ()))
+    val _ = say ("  bl after:               " ^ toString (_bl ()))
+
+    (*--- 2. The same hook with the limit at bot: does the ceiling bite where the kernel sits? ---*)
+    val r2 = guard (fn () => bump st, IfcUtil.bot, dflt)
+    val _ = say ("2 pure hook, limit=bot:   col=" ^ toString r2.col)
+
+    (*--- 3-6. Effects, at the limit that lets the pure hook through. ---*)
+    val r3 = guard (fn () => sending st, lev, dflt)
+    val _ = say ("3 send in a hook:         col=" ^ toString r3.col)
+
+    val r4 = guard (fn () => writing (out, st), lev, dflt)
+    val _ = say ("4 fwrite in a hook:       col=" ^ toString r4.col)
+
+    val r5 = guard (fn () => reading st, lev, dflt)
+    val _ = say ("5 rcv in a hook:          col=" ^ toString r5.col)
+
+    val r6 = guard (fn () => spawning st, lev, dflt)
+    val _ = say ("6 spawn in a hook:        col=" ^ toString r6.col)
+
+    (*--- 7. A hook that crashes: does the kernel survive it? ---*)
+    val r7 = guard (fn () => crashing st, lev, dflt)
+    val _ = say ("7 crashing hook:          col=" ^ toString r7.col)
+
+    (*--- 8. The kernel goes on: the region still receives after all of that. ---*)
+    val _ = send (me, ("AFTER", 7))
+    val d = rcv (IfcUtil.bot, lev, [ hn ("AFTER", n) => n ])
+    val _ = say ("8 receive after guards:   " ^ toString d)
+    val _ = say ("  pc at the end:          " ^ toString (_pc ()))
+    val _ = say ("  bl at the end:          " ^ toString (_bl ()))
+
+    (*--- 9. What the kernel does after a hook: send a frame and answer. ---*)
+    val _ = send (me, ("FRAME", r1.col))
+    val f = rcv (IfcUtil.bot, lev, [ hn ("FRAME", n) => n ])
+    val _ = say ("9 frame sent after guard: " ^ toString f)
+
+    (*--- 10. The same ceiling in a process that has not received anything, so that what the
+             kernel's own blocking label costs is visible: the limit `guard` enforces is the join
+             of the argument with the blocking label at entry. The state handed to this process is
+             the same tainted one, carried in the closure. ---*)
+    fun child (fd, parent, st, dflt) =
+        let fun tell s = fwrite (fd, s ^ "\n")
+            val _ = tell ("10 fresh process, bl:     " ^ toString (_bl ()))
+            val r = guard (fn () => bump st, IfcUtil.bot, dflt)
+            val _ = tell ("   record out, limit=bot:  col=" ^ toString r.col)
+            val n = guard (fn () => st.col + 1, IfcUtil.bot, 0 - 1)
+            val _ = tell ("   number out, limit=bot:  " ^ toString n)
+            val m = guard (fn () => st.col + 1, lev, 0 - 1)
+            val _ = tell ("   number out, limit=chan: " ^ toString m)
+            val _ = send (parent, "CHILDDONE")
+        in ()
+        end
+
+    val _ = spawn (fn () => child (out, me, st, dflt))
+    val _ = rcv (IfcUtil.bot, lev, [ hn "CHILDDONE" => () ])
+
+in ()
+end

@@ -1,0 +1,75 @@
+(* Probe 2 — does a trapped SIGTERM reach the same receive as the terminal events?
+ *
+ * The supervisor of examples/battallion/bt.trp holds the terminal and must hear about SIGTERM
+ * while it is inside its event receive. The signal arrives as the bare string "SIGTERM" with
+ * presence ROOT (rt/src/builtins/signals.mts), which is inside the interval
+ * [bot, ttyLevel stdin] a `Tty.listen` region opens at the default channel level. This probe
+ * checks that claim rather than assuming it, alongside a live subscription so that the terminal
+ * handlers and the extra handler compete in one receive.
+ *
+ * A terminal is needed, so it is driven by the small pty driver beside it:
+ *
+ *   python3 examples/battallion/testing/viewer/run-pty-probe.py "$PWD" \
+ *       examples/battallion/testing/viewer/probe-sigterm-in-region.trp
+ *
+ * which writes "a" to the pty, waits for the EVENT line, then sends SIGTERM.
+ *
+ * OBSERVED 2026-08-01 (dev-text-editor, default --stdiolev, pty):
+ *   CHANLEV:{#ROOT}
+ *   REGION:true
+ *   READY
+ *   EVENT:data-a lev={#ROOT} pc={}
+ *   EVENT:sigterm lev={#ROOT} pc={#ROOT}
+ *   PC-AFTER:{} BL-AFTER:{#ROOT}
+ *   DONE
+ * So "SIGTERM" matches an extra handler inside the region, at the same interval and carrying the
+ * same level as a terminal event: no separate receive and no helper process are needed. The pc
+ * is back at bot once the receive returns; only the blocking label stays at the ceiling.
+ *
+ * Without the raw-mode call below the keystroke never arrives at all — the terminal holds the
+ * byte until a newline in canonical mode — while SIGTERM still does, which is the first thing
+ * this probe measured.
+ *)
+
+import IfcUtil
+import Tty
+
+let val a = authority
+    val i = stdin a
+    val me = self ()
+
+    val lev = Tty.level i
+    val _ = printString ("CHANLEV:" ^ toString lev)
+
+    val _ = trapSigterm (a, me)
+    val _ = Tty.subscribe (i, me)
+    (* Raw mode, so that one keystroke is one event: in canonical mode the terminal holds the
+       byte until a newline and no TTY_DATA arrives at all. *)
+    val _ = Tty.rawMode (i, true)
+    val (ok, cap) = Tty.listen (i, a)
+    val _ = printString ("REGION:" ^ toString ok)
+    val _ = printString "READY"
+
+    (* One receive, three sources: terminal data, terminal end, and the signal. The extra
+       handler returns a string, which no `ttyEvent` pattern matches, so the catch-all below
+       picks it up. *)
+    fun loop () =
+        let val ev = Tty.nextEventWith (lev, [ hn "SIGTERM" => "sigterm" ])
+            val (tag, lv) = case ev of TTY_DATA b   => ("data-" ^ b, levelOf b)
+                                     | TTY_RESIZE _ => ("resize", levelOf ev)
+                                     | TTY_EOF      => ("eof", levelOf ev)
+                                     | s            => (s, levelOf s)
+            val _ = printString ("EVENT:" ^ tag ^ " lev=" ^ toString lv
+                                 ^ " pc=" ^ toString (_pc ()))
+        in if tag = "sigterm" orelse tag = "eof" then () else loop ()
+        end
+
+    val _ = loop ()
+    val _ = printString ("PC-AFTER:" ^ toString (_pc ()) ^ " BL-AFTER:" ^ toString (_bl ()))
+    val _ = Tty.unlisten cap
+    val _ = Tty.rawMode (i, false)
+    val _ = Tty.unsubscribe i
+    val _ = untrapSigterm a
+    val _ = printString "DONE"
+in exit (a, 0)
+end

@@ -1,0 +1,16 @@
+{
+  "deps": [
+    {"path": "../../../proscenium/Ansi", "hash": "9vrb4ti2hssdjorne9q0n3cise4oc20240f8a3cn1mim12ecar40", "name": "../../../proscenium/Ansi"},
+    {"path": "../../../proscenium/Key", "hash": "t93u5gtdr744r05vrpj49n1raeuno6vo4dmfpdbmguv16vlmr1eg", "name": "../../../proscenium/Key"},
+    {"path": "../../Api", "hash": "5qgtvb4r9pcf588hv9p2b43golo8ffm9qfa4eev169a13n71lggg", "name": "../../Api"},
+    {"path": "../../CursorStyle", "hash": "q9opdofp92s1ig6mndvn47cg10gj1pfvbsbt0em9p6fatmfacvn0", "name": "../../CursorStyle"},
+    {"path": "../../Editor", "hash": "9n5mrf41iam4e8q03j2n4l27k5h5kv90i3n30us5rqdj2is41l50", "name": "../../Editor"},
+    {"path": "../../FileOps", "hash": "ah8flo58p8kqjob8jls55mjcnv8ei8utnjqi6kkdckksvr59vr90", "name": "../../FileOps"},
+    {"path": "../../Help", "hash": "k7ajt7v06qa2lhgjhfhmqpj0f8qq9c939285duiam7al0gf6eeu0", "name": "../../Help"},
+    {"path": "../../Key", "hash": "pulh2blak00itnh0m6l9p8f36c0otm0p5nu0cuj39sqoceck2ie0", "name": "../../Key"},
+    {"path": "../../Screen", "hash": "8hp7mab9vsntrrredrgn32riarka0vj8qg18rktotdgleg2o84rg", "name": "../../Screen"},
+    {"path": "../../Session", "hash": "cffd99bad0k8vldi9hgfjtq0m6kqnabsavm5ett474gtaikateng", "name": "../../Session"},
+    {"path": "../../StatusLine", "hash": "m9qubbjaecpsobotb5nfqmb23lt8q9825n3e9hrffdjh1oi02uv0", "name": "../../StatusLine"},
+    {"path": "../../VimMotions", "hash": "okr0ii427a6dk6552iqd1qvf2lhnjrc1jm6huvnn16uo9fjun5fg", "name": "../../VimMotions"}
+  ]
+}

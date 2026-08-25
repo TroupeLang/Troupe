@@ -1,0 +1,123 @@
+(* Probe — is a monitor's ("DONE", ref, pid, reason) visible inside the supervisor's receive
+ * region, and at what level does it arrive?
+ *
+ * Stage 5 replaces the battallion supervisor's watchdog-as-supervision with real supervision: the
+ * supervisor `monitorlocal`s the kernel and reads a ("DONE", …) arriving in its event loop as a
+ * lost kernel. That loop is `Tty.nextEventWith (lev, extra)`, a receive at the interval
+ * [bot, ttyLevel stdin], so the notification is only visible there if its *presence* level lies
+ * in the interval.
+ *
+ * The notification is not sent by `send`. `Scheduler.notifyMonitors` (rt/src/Scheduler.mts:106-121)
+ * calls `sendMessageNoChecks (toPid, message, undefined, false)`; the `undefined` is the quarantine
+ * authority, not the pc. `rt_sendMessageNochecks` (rt/src/runtimeMonitored.mts:329-333) then calls
+ * `__theMailbox.addMessage (…, message, $t().pc)`, and `MailboxProcessor.createMessage`
+ * (rt/src/MailboxProcessor.mts:33-44) stores that pc as the message's presence level
+ * (`new MbVal (tuple, pc)`), which `findFrom` (:107-110) is what tests against the interval. So the
+ * presence level of a DONE notification is *the dying thread's pc at the moment it died*, and the
+ * question this probe answers is what that is for a battallion kernel: a thread that opened a
+ * confined region up to the channel level and died after a receive returned.
+ *
+ *   ./local.sh examples/battallion/testing/editor/probe-done-level.trp
+ *
+ * Both terminations are exercised in one run, orderly first, and both victims are shaped like the
+ * kernel: each opens a confined [bot, lev] region with a null-attenuated authority, receives a
+ * message at that interval, and only then terminates — so the pc, the blocking label and the
+ * region state at the moment of death are the kernel's, not a bare thread's.
+ *
+ * OBSERVED 2026-08-01 (dev-text-editor at dd2b88eb, default --stdiolev, so ttyLevel stdin = ROOT):
+ *   channel level:            {#ROOT}
+ *   region ok:                true
+ *   -- orderly termination --
+ *   DONE matched:             true
+ *   reason:                   0
+ *   ref level:                {#ROOT}
+ *   pid level:                {#ROOT}
+ *   reason level:             {#ROOT}
+ *   pc in the handler:        {#ROOT}
+ *   pc after the rcv:         {}
+ *   bl after the rcv:         {#ROOT}
+ *   -- error termination --
+ *   DONE matched:             true
+ *   status:                   1
+ *   message:                  "value () is not a number"
+ *   reason level:             {#ROOT}
+ *   pc after the rcv:         {}
+ *   bl after the rcv:         {#ROOT}
+ *
+ * CONCLUSION. A DONE notification is delivered to a receive at [bot, ROOT] alongside terminal
+ * events: `Tty.nextEventWith (lev, [hn ("DONE", r, p, reason) => …])` matches it. The presence
+ * level is the dying kernel's pc, which is bot — a kernel's pc is back at bot once its `rcv`
+ * returns (probe-timer-level.trp records the same for the timer) — and bot lies in [bot, ROOT].
+ * The bound values come out at the region's ceiling, exactly as the timer's nonce does and for the
+ * same reason: which message matched is itself an observation up to the ceiling. So the DONE path
+ * needs no declassification and no extra process, and it composes with the terminal handlers in
+ * the one receive the supervisor already runs.
+ *)
+
+import IfcUtil
+import Tty
+
+let val a = authority
+    val i = stdin a
+    val lev = Tty.level i
+    val weak = attenuate (a, IfcUtil.null)
+    val me = self ()
+
+    val _ = print ("channel level:            " ^ toString lev)
+
+    (** A victim shaped like the battallion kernel: a confined region up to the channel level, one
+     *  receive at that interval, then termination — orderly when the message is "STOP", by a
+     *  dynamic type error when it is anything else. *)
+    fun victim (sup, boom) =
+        let val (ok, cap) = enableRangedReceive (IfcUtil.bot, lev, weak)
+            val m = rcv (IfcUtil.bot, lev, [ hn "GO" => "GO" ])
+            val _ = if boom then let val _ = () + 1 in () end else ()
+        in ()
+        end
+
+    val (ok, cap) = Tty.listen (i, a)
+    val _ = print ("region ok:                " ^ toString ok)
+
+    (*--- Orderly termination. ---*)
+    val v1 = spawn (fn () => victim (me, false))
+    val r1 = monitorlocal v1
+    val _ = send (v1, "GO")
+    val (m1, rl1, pl1, ql1, hpc1) =
+            Tty.nextEventWith
+              ( lev
+              , [ hn ("DONE", r, p, reason) =>
+                    (reason, levelOf r, levelOf p, levelOf reason, _pc ()) ])
+    val pc1 = _pc ()
+    val bl1 = _bl ()
+
+    (*--- Error termination. ---*)
+    val v2 = spawn (fn () => victim (me, true))
+    val r2 = monitorlocal v2
+    val _ = send (v2, "GO")
+    val (st2, msg2, ql2) =
+            Tty.nextEventWith
+              ( lev
+              , [ hn ("DONE", r, p, (st, msg)) => (st, msg, levelOf st) ])
+    val pc2 = _pc ()
+    val bl2 = _bl ()
+
+    val _ = Tty.unlisten cap
+
+    val _ = print "-- orderly termination --"
+    val _ = print ("DONE matched:             true")
+    val _ = print ("reason:                   " ^ toString m1)
+    val _ = print ("ref level:                " ^ toString rl1)
+    val _ = print ("pid level:                " ^ toString pl1)
+    val _ = print ("reason level:             " ^ toString ql1)
+    val _ = print ("pc in the handler:        " ^ toString hpc1)
+    val _ = print ("pc after the rcv:         " ^ toString pc1)
+    val _ = print ("bl after the rcv:         " ^ toString bl1)
+    val _ = print "-- error termination --"
+    val _ = print ("DONE matched:             true")
+    val _ = print ("status:                   " ^ toString st2)
+    val _ = print ("message:                  " ^ toString msg2)
+    val _ = print ("reason level:             " ^ toString ql2)
+    val _ = print ("pc after the rcv:         " ^ toString pc2)
+    val _ = print ("bl after the rcv:         " ^ toString bl2)
+in ()
+end

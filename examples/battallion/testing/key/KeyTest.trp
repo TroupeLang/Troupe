@@ -1,0 +1,279 @@
+(* KeyTest — the decoder in examples/battallion/Key.trp.
+ *
+ *   ./local.sh examples/battallion/testing/key/KeyTest.trp --localonly
+ *
+ * The decoder is pure, so nothing here touches a terminal: every input is written as the bytes a
+ * terminal would have sent. Byte literals use "\xNN", which the compiler passes through to the
+ * emitted JavaScript, giving one code unit per byte exactly as `chunk.toString('latin1')` does in
+ * the runtime.
+ *
+ * The split sweep is what the chunking guarantee rests on. For each multi-byte input it cuts the
+ * input at every position, feeds the two pieces through `decode` with the remainder carried
+ * between them, and asserts the keys and the final remainder match decoding the whole input at
+ * once. A separate check feeds the same inputs one byte per chunk, which exercises chunkings into
+ * more than two pieces.
+ *)
+
+import Unit
+import List
+import String
+import "../../Key"
+
+let (*--------------------------------  Bytes under test  -------------------------------*)
+
+    val esc  = "\x1b"
+    val csi  = "\x1b["
+    val ss3  = "\x1bO"
+
+    val eAcute = String.strCode 0xe9      (* U+00E9, two UTF-8 bytes                     *)
+    val euro   = String.strCode 0x20ac    (* U+20AC, three                               *)
+    val clef   = String.strCode 0x1d11e   (* U+1D11E, four; a surrogate pair as a string *)
+
+    val u8_eAcute = "\xc3\xa9"
+    val u8_euro   = "\xe2\x82\xac"
+    val u8_clef   = "\xf0\x9d\x84\x9e"
+
+    (*----------------------------------  Test helpers  ---------------------------------*)
+
+    (** The keys of a decode, dropping the remainder. *)
+    fun keysOf s = let val (ks, _) = Key.decode s in ks end
+
+    (** The remainder of a decode, dropping the keys. *)
+    fun restOf s = let val (_, r) = Key.decode s in r end
+
+    (** The printable keys for each character of `s`. *)
+    fun prints s = List.map (fn c => KEY_PRINT c) (String.explode s)
+
+    (** Decoding `s` in two chunks cut at `p`, carrying the remainder, agrees with decoding it
+     *  whole -- both in the keys and in the final remainder. *)
+    fun splitAgrees (s, p) =
+        let val n = String.size s
+            val (kWhole, rWhole) = Key.decode s
+            val (k1, r1) = Key.decode (String.substring (s, 0, p))
+            val (k2, r2) = Key.decode (r1 ^ String.substring (s, p, n))
+        in List.append k1 k2 = kWhole andalso r2 = rWhole
+        end
+
+    (** Decoding `s` one byte per chunk, carrying the remainder. *)
+    fun perByte s =
+        let val n = String.size s
+            fun go (i, carry, acc) =
+                if i >= n then (acc, carry)
+                else let val (ks, carry') = Key.decode (carry ^ String.sub (s, i))
+                     in go (i + 1, carry', List.append acc ks)
+                     end
+        in go (0, "", [])
+        end
+
+    fun perByteAgrees s = perByte s = Key.decode s
+
+    (** One assertion per cut position of `s`, zero through its length inclusive. *)
+    fun sweep (label, s) =
+        Unit.group (label ^ " (" ^ toString (String.size s) ^ " bytes)")
+                   (List.map (fn p => Unit.it ("cut at " ^ toString p)
+                                              (Unit.isTrueValue (splitAgrees (s, p))))
+                             (List.range (String.size s + 1)))
+
+    (*-------------------------------  The mixed burst  ---------------------------------*)
+
+    (* Paste-like: text, a left arrow, more text, a right arrow, Enter, an application-mode up
+     * arrow and a two-byte character. *)
+    val burst = "hi" ^ csi ^ "D" ^ "x" ^ csi ^ "C" ^ "\x0d" ^ ss3 ^ "A" ^ u8_eAcute
+    val burstExpected = List.append (prints "hi")
+                       (List.append [KEY_LEFT]
+                       (List.append (prints "x")
+                                    [KEY_RIGHT, KEY_ENTER, KEY_UP, KEY_PRINT eAcute]))
+
+    (* Every input whose decoding spans more than one byte, so cutting it anywhere is meaningful. *)
+    val sweepInputs = [ ("csi arrow",        csi ^ "A")
+                      , ("csi tilde",        csi ^ "3~")
+                      , ("csi with params",  csi ^ "1;5A")
+                      , ("ss3 arrow",        ss3 ^ "A")
+                      , ("esc then letter",  esc ^ "a")
+                      , ("aborted csi",      csi ^ "1\x0d")
+                      , ("two-byte utf-8",   u8_eAcute)
+                      , ("three-byte utf-8", u8_euro)
+                      , ("four-byte utf-8",  u8_clef)
+                      , ("sequences in a row", csi ^ "A" ^ csi ^ "B" ^ ss3 ^ "C" ^ csi ^ "3~")
+                      , ("mixed burst",      burst)
+                      ]
+
+    val sweepSize = List.foldl (fn ((_, s), acc) => acc + String.size s + 1) 0 sweepInputs
+
+    (*---------------------------------------  Suite  -----------------------------------*)
+
+    val tests = Unit.group "Key" [
+
+        Unit.group "printable ASCII" [
+            Unit.it "a letter"          (Unit.isEq [KEY_PRINT "a"] (keysOf "a"))
+          , Unit.it "a space"           (Unit.isEq [KEY_PRINT " "] (keysOf " "))
+          , Unit.it "the last printable, 0x7e"
+                                        (Unit.isEq [KEY_PRINT "~"] (keysOf "~"))
+          , Unit.it "a run of letters"  (Unit.isEq (prints "abc") (keysOf "abc"))
+          , Unit.it "nothing decodes to nothing" (Unit.isEq [] (keysOf ""))
+          , Unit.it "a printable leaves no remainder" (Unit.isEq "" (restOf "abc"))
+        ],
+
+        Unit.group "single-byte keys" [
+            Unit.it "0x0d is Enter"       (Unit.isEq [KEY_ENTER] (keysOf "\x0d"))
+          , Unit.it "0x0a is Enter too"   (Unit.isEq [KEY_ENTER] (keysOf "\x0a"))
+          , Unit.it "0x09 is Tab"         (Unit.isEq [KEY_TAB] (keysOf "\x09"))
+          , Unit.it "0x7f is Backspace"   (Unit.isEq [KEY_BACKSPACE] (keysOf "\x7f"))
+          , Unit.it "0x08 is Backspace too"
+                                          (Unit.isEq [KEY_BACKSPACE] (keysOf "\x08"))
+        ],
+
+        Unit.group "control chords" [
+            Unit.it "0x01 is ctrl-a"   (Unit.isEq [KEY_CTRL "a"] (keysOf "\x01"))
+          , Unit.it "0x03 is ctrl-c"   (Unit.isEq [KEY_CTRL "c"] (keysOf "\x03"))
+          , Unit.it "0x17 is ctrl-w"   (Unit.isEq [KEY_CTRL "w"] (keysOf "\x17"))
+          , Unit.it "0x1a is ctrl-z"   (Unit.isEq [KEY_CTRL "z"] (keysOf "\x1a"))
+          , Unit.it "0x00 carries no letter, so it is unknown"
+                                       (Unit.isEq [KEY_UNKNOWN "\x00"] (keysOf "\x00"))
+          , Unit.it "0x1c carries no letter either"
+                                       (Unit.isEq [KEY_UNKNOWN "\x1c"] (keysOf "\x1c"))
+          , Unit.it "0x1f likewise"    (Unit.isEq [KEY_UNKNOWN "\x1f"] (keysOf "\x1f"))
+        ],
+
+        Unit.group "CSI sequences" [
+            Unit.it "up"        (Unit.isEq [KEY_UP]    (keysOf (csi ^ "A")))
+          , Unit.it "down"      (Unit.isEq [KEY_DOWN]  (keysOf (csi ^ "B")))
+          , Unit.it "right"     (Unit.isEq [KEY_RIGHT] (keysOf (csi ^ "C")))
+          , Unit.it "left"      (Unit.isEq [KEY_LEFT]  (keysOf (csi ^ "D")))
+          , Unit.it "home"      (Unit.isEq [KEY_HOME]  (keysOf (csi ^ "H")))
+          , Unit.it "end"       (Unit.isEq [KEY_END]   (keysOf (csi ^ "F")))
+          , Unit.it "1~ is home"     (Unit.isEq [KEY_HOME]     (keysOf (csi ^ "1~")))
+          , Unit.it "7~ is home"     (Unit.isEq [KEY_HOME]     (keysOf (csi ^ "7~")))
+          , Unit.it "4~ is end"      (Unit.isEq [KEY_END]      (keysOf (csi ^ "4~")))
+          , Unit.it "8~ is end"      (Unit.isEq [KEY_END]      (keysOf (csi ^ "8~")))
+          , Unit.it "5~ is page up"  (Unit.isEq [KEY_PAGEUP]   (keysOf (csi ^ "5~")))
+          , Unit.it "6~ is page down"(Unit.isEq [KEY_PAGEDOWN] (keysOf (csi ^ "6~")))
+          , Unit.it "3~ is delete"   (Unit.isEq [KEY_DELETE]   (keysOf (csi ^ "3~")))
+          , Unit.it "a modifier parameter is discarded: 1;5A is up"
+                                     (Unit.isEq [KEY_UP]  (keysOf (csi ^ "1;5A")))
+          , Unit.it "1;2F is end"    (Unit.isEq [KEY_END] (keysOf (csi ^ "1;2F")))
+          , Unit.it "CSI Z is Shift-Tab, which battallion does not have: unknown, named"
+                                     (Unit.isEq [KEY_UNKNOWN "shift-tab"] (keysOf (csi ^ "Z")))
+          , Unit.it "2~ is Insert, which battallion does not have: unknown, named"
+                                     (Unit.isEq [KEY_UNKNOWN "insert"] (keysOf (csi ^ "2~")))
+          , Unit.it "a bare tilde is unknown"
+                                     (Unit.isEq [KEY_UNKNOWN (csi ^ "~")] (keysOf (csi ^ "~")))
+          , Unit.it "an aborting byte ends the sequence and is decoded on its own"
+                                     (Unit.isEq [KEY_UNKNOWN (csi ^ "1"), KEY_ENTER]
+                                                (keysOf (csi ^ "1\x0d")))
+        ],
+
+        Unit.group "SS3 sequences (application cursor mode)" [
+            Unit.it "up"    (Unit.isEq [KEY_UP]    (keysOf (ss3 ^ "A")))
+          , Unit.it "down"  (Unit.isEq [KEY_DOWN]  (keysOf (ss3 ^ "B")))
+          , Unit.it "right" (Unit.isEq [KEY_RIGHT] (keysOf (ss3 ^ "C")))
+          , Unit.it "left"  (Unit.isEq [KEY_LEFT]  (keysOf (ss3 ^ "D")))
+          , Unit.it "home"  (Unit.isEq [KEY_HOME]  (keysOf (ss3 ^ "H")))
+          , Unit.it "end"   (Unit.isEq [KEY_END]   (keysOf (ss3 ^ "F")))
+          , Unit.it "F1 is not in the key set, so it is unknown, named"
+                            (Unit.isEq [KEY_UNKNOWN "f1"] (keysOf (ss3 ^ "P")))
+        ],
+
+        Unit.group "sequences back to back in one chunk" [
+            Unit.it "four sequences"
+                    (Unit.isEq [KEY_UP, KEY_DOWN, KEY_RIGHT, KEY_DELETE]
+                               (keysOf (csi ^ "A" ^ csi ^ "B" ^ ss3 ^ "C" ^ csi ^ "3~")))
+          , Unit.it "arrows around text"
+                    (Unit.isEq (List.append [KEY_LEFT] (List.append (prints "ab") [KEY_RIGHT]))
+                               (keysOf (csi ^ "D" ^ "ab" ^ csi ^ "C")))
+          , Unit.it "no remainder is left behind"
+                    (Unit.isEq "" (restOf (csi ^ "A" ^ ss3 ^ "F" ^ csi ^ "6~")))
+        ],
+
+        Unit.group "ESC" [
+            Unit.it "a lone ESC stays in the remainder"
+                    (Unit.isEq esc (restOf esc))
+          , Unit.it "a lone ESC decodes to no key"
+                    (Unit.isEq [] (keysOf esc))
+          , Unit.it "ESC then a printable is Esc, then that printable"
+                    (Unit.isEq [KEY_ESC, KEY_PRINT "a"] (keysOf (esc ^ "a")))
+          , Unit.it "ESC ESC is held whole, and flushes to two Esc keys"
+                    [ Unit.isEq ([], esc ^ esc) (Key.decode (esc ^ esc))
+                    , Unit.isEq [KEY_ESC, KEY_ESC] (Key.flush (esc ^ esc)) ]
+          , Unit.it "ESC then a sequence is that sequence"
+                    (Unit.isEq [KEY_ESC, KEY_UP] (keysOf (esc ^ esc ^ "[A")))
+          , Unit.it "an unfinished CSI stays in the remainder whole"
+                    (Unit.isEq (csi ^ "1;") (restOf (csi ^ "1;")))
+          , Unit.it "an unfinished SS3 stays in the remainder whole"
+                    (Unit.isEq ss3 (restOf ss3))
+          , Unit.it "keys before an unfinished sequence are still decoded"
+                    (Unit.isEq (prints "ab") (keysOf ("ab" ^ csi)))
+        ],
+
+        Unit.group "flush" [
+            Unit.it "an empty remainder flushes to nothing"
+                    (Unit.isEq [] (Key.flush ""))
+          , Unit.it "a lone ESC flushes to the Esc key"
+                    (Unit.isEq [KEY_ESC] (Key.flush esc))
+          , Unit.it "keys before a lone ESC come out first"
+                    (Unit.isEq (List.append (prints "ab") [KEY_ESC]) (Key.flush ("ab" ^ esc)))
+          , Unit.it "an unfinished CSI flushes to one unknown holding its bytes"
+                    (Unit.isEq [KEY_UNKNOWN (csi ^ "1;")] (Key.flush (csi ^ "1;")))
+          , Unit.it "an unfinished SS3 flushes to one unknown"
+                    (Unit.isEq [KEY_UNKNOWN ss3] (Key.flush ss3))
+          , Unit.it "a truncated character flushes to one unknown"
+                    (Unit.isEq [KEY_UNKNOWN "\xe2\x82"] (Key.flush "\xe2\x82"))
+          , Unit.it "flush agrees with decode on a complete input"
+                    (Unit.isEq (keysOf (csi ^ "A" ^ "x")) (Key.flush (csi ^ "A" ^ "x")))
+        ],
+
+        Unit.group "UTF-8" [
+            Unit.it "a two-byte character"
+                    (Unit.isEq [KEY_PRINT eAcute] (keysOf u8_eAcute))
+          , Unit.it "a three-byte character"
+                    (Unit.isEq [KEY_PRINT euro] (keysOf u8_euro))
+          , Unit.it "a four-byte character, as a surrogate pair"
+                    (Unit.isEq [KEY_PRINT clef] (keysOf u8_clef))
+          , Unit.it "a four-byte character is two code units long"
+                    (Unit.isEq 2 (String.size clef))
+          , Unit.it "characters back to back"
+                    (Unit.isEq [KEY_PRINT eAcute, KEY_PRINT euro, KEY_PRINT clef]
+                               (keysOf (u8_eAcute ^ u8_euro ^ u8_clef)))
+          , Unit.it "a truncated character is held back whole"
+                    (Unit.isEq ([], "\xf0\x9d\x84") (Key.decode "\xf0\x9d\x84"))
+          , Unit.it "a stray continuation byte is unknown"
+                    (Unit.isEq [KEY_UNKNOWN "\x80"] (keysOf "\x80"))
+          , Unit.it "an overlong two-byte form is two unknowns, not a character"
+                    (Unit.isEq [KEY_UNKNOWN "\xc0", KEY_UNKNOWN "\xaf"] (keysOf "\xc0\xaf"))
+          , Unit.it "an overlong three-byte form is rejected at its lead"
+                    (Unit.isEq [KEY_UNKNOWN "\xe0", KEY_UNKNOWN "\x80", KEY_UNKNOWN "\xaf"]
+                               (keysOf "\xe0\x80\xaf"))
+          , Unit.it "a surrogate code point is rejected at its lead"
+                    (Unit.isEq [KEY_UNKNOWN "\xed", KEY_UNKNOWN "\xa0", KEY_UNKNOWN "\x80"]
+                               (keysOf "\xed\xa0\x80"))
+          , Unit.it "a code point above U+10FFFF is rejected at its lead"
+                    (Unit.isEq [KEY_UNKNOWN "\xf4", KEY_UNKNOWN "\x90",
+                                KEY_UNKNOWN "\x80", KEY_UNKNOWN "\x80"]
+                               (keysOf "\xf4\x90\x80\x80"))
+          , Unit.it "0xf5 is not a lead byte"
+                    (Unit.isEq [KEY_UNKNOWN "\xf5"] (keysOf "\xf5"))
+          , Unit.it "a lead byte followed by a printable loses only the lead"
+                    (Unit.isEq [KEY_UNKNOWN "\xe2", KEY_PRINT "a"] (keysOf "\xe2a"))
+          , Unit.it "decoding resumes after a bad byte"
+                    (Unit.isEq [KEY_PRINT "a", KEY_UNKNOWN "\x80", KEY_PRINT eAcute]
+                               (keysOf ("a" ^ "\x80" ^ u8_eAcute)))
+        ],
+
+        Unit.group "the mixed burst" [
+            Unit.it "as one chunk"     (Unit.isEq burstExpected (keysOf burst))
+          , Unit.it "leaves no remainder" (Unit.isEq "" (restOf burst))
+          , Unit.it "one byte per chunk gives the same keys"
+                    (Unit.isEq (burstExpected, "") (perByte burst))
+        ],
+
+        Unit.group "split sweep" (List.map sweep sweepInputs),
+
+        Unit.group "one byte per chunk"
+                   (List.map (fn (label, s) => Unit.it label (Unit.isTrueValue (perByteAgrees s)))
+                             sweepInputs)
+    ]
+
+    val _ = fwrite (stdout, "split sweep cut positions: " ^ toString sweepSize ^ "\n")
+
+in Unit.run tests
+end

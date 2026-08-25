@@ -1,0 +1,86 @@
+(* Probe 3 — can a renderer process receive a terminal-tainted frame and write it?
+ *
+ * The architecture puts the stdout descriptor in a renderer process of its own. Everything the
+ * kernel computes from a keystroke carries the channel level, so the frame the kernel sends is
+ * labelled: a renderer doing a plain `receive` (interval [pc, pc]) would never bind it, and per
+ * lib/Tty.trp's header the handler is skipped with no diagnostic. This probe checks the
+ * arrangement that avoids that with no declassification and no authority of the renderer's own —
+ * it opens a ranged-receive region for its whole life, certified by a null-attenuated authority,
+ * which lib/Tty.trp calls a confined region.
+ *
+ *   ./local.sh examples/battallion/testing/viewer/probe-render-path.trp
+ *
+ * OBSERVED 2026-08-01 (dev-text-editor, default --stdiolev):
+ *   region ok (null authority):     false
+ *   frame written by the renderer:  [rendered] line@ROOT
+ *   renderer pc after the receive:  {#ROOT}
+ *   frame level:                    {#ROOT}
+ *   (the same three lines for a second frame)
+ *   frames: 2
+ * A confined region is enough: the renderer binds a ROOT-labelled payload and writes it while
+ * running at pc {#ROOT} — the level the comparison `frame = ""` on a labelled string raises the
+ * pc to — which the stdout sink accepts at the default channel level. Nothing has to be
+ * declassified and the renderer holds no authority beyond the null-attenuated one the region is
+ * opened with.
+ *
+ * FINDING — AN EFFECT INSIDE AN `hn` BODY IS REFUSED WHILE A REGION IS OPEN.
+ * The first shape of this probe wrote the frame from inside the handler:
+ *
+ *     rcv (IfcUtil.bot, IfcUtil.root,
+ *          [ hn ("FRAME", t) => let val _ = fwrite (o, t) in true end
+ *          , hn "STOP" => false ])
+ *
+ * and died with
+ *
+ *     >> Mailbox clearance label is not restorted after being raised in a branch; stack depth = 5
+ *
+ * reported against the `rcv` call site (rt/src/Thread.mts:843, the branch-balance check in
+ * `returnImmediate`). The same handler body is accepted when the receive is a plain `receive`
+ * with no region open, and a *pure* call in the handler body is accepted with the region open —
+ * so it is the combination of an open region and an effect inside a handler that is refused,
+ * and the diagnostic names a branch that the program does not contain. The working discipline is
+ * the one tests/rt/pos/tty/delivery-over-a-pipe.trp already recommends: handlers project, and
+ * every effect happens after the receive has returned. examples/battallion/bt.trp follows it
+ * throughout.
+ *)
+
+import IfcUtil
+
+let val a = authority
+    val weak = attenuate (a, IfcUtil.null)
+    val o = stdout a
+
+    (*--- The renderer: holds the stdout descriptor, receives frames, writes them. ---*)
+    val renderer =
+        spawn (fn () =>
+            let val (ok, cap) = enableRangedReceive (IfcUtil.bot, IfcUtil.root, weak)
+                val _ = fwrite (o, "region ok (null authority):     " ^ toString ok ^ "\n")
+
+                (* Handlers project only; the write happens after the receive returned. *)
+                fun loop n =
+                    let val frame = rcv (IfcUtil.bot, IfcUtil.root,
+                                         [ hn ("FRAME", text) => text
+                                         , hn "STOP"          => "" ])
+                    in if frame = "" then n
+                       else let val _ = fwrite (o, "frame written by the renderer:  "
+                                                   ^ frame ^ "\n")
+                                val _ = fwrite (o, "renderer pc after the receive:  "
+                                                   ^ toString (_pc ()) ^ "\n")
+                                val _ = fwrite (o, "frame level:                    "
+                                                   ^ toString (levelOf frame) ^ "\n")
+                            in loop (n + 1)
+                            end
+                    end
+
+                val n = loop 0
+                val _ = fwrite (o, "frames: " ^ toString n ^ "\n")
+            in ()
+            end)
+
+    (* Frames at the channel level, as ones computed from a keystroke would be. *)
+    val _ = send (renderer, ("FRAME", "[rendered] line@ROOT" raisedTo IfcUtil.root))
+    val _ = send (renderer, ("FRAME", "[rendered] second@ROOT" raisedTo IfcUtil.root))
+    val _ = send (renderer, "STOP")
+    val _ = sleep 500
+in ()
+end

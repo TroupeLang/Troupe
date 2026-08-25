@@ -1,0 +1,128 @@
+(* Probe — can the supervisor write a file with terminal-tainted contents from inside its open
+ * receive region, and does the region still close afterwards?
+ *
+ * Stage 5's `:w` is the one effect battallion performs that leaves the terminal loop. The text to
+ * write is whatever the user typed, so it carries the channel level, and the write must happen
+ * where the ROOT authority is — in the supervisor, between `Tty.listen` and `Tty.unlisten`. Two
+ * things could go wrong there and neither is decidable by reading the write's signature:
+ *
+ *   1. `writeFile` opens with `raiseCurrentThreadPC (larg.lev)` (rt/src/builtins/simplefileio.mts:186).
+ *      If the argument tuple's level were the level of the tainted contents rather than the pc the
+ *      tuple was built at, the write would leave the supervisor's pc above the region's floor, and
+ *      a region can only be closed from its floor — `Tty.unlisten` would then refuse and the
+ *      terminal would never be given back.
+ *   2. A confidentiality check on the contents would refuse the write outright.
+ *
+ * This probe answers both. The tainted string is obtained the way the supervisor obtains one: from
+ * a message received at the region's interval, so it comes out at the ceiling (probe-done-level.trp
+ * and probe-timer-level.trp record the same for their payloads).
+ *
+ *   mkdir -p /tmp/battallion-probe
+ *   ./local.sh examples/battallion/testing/editor/probe-write-level.trp \
+ *              --io-root /tmp/battallion-probe
+ *
+ * OBSERVED 2026-08-01 (dev-text-editor at dd2b88eb, default --stdiolev, so ttyLevel stdin = ROOT):
+ *   channel level:       {#ROOT}
+ *   region ok:           true
+ *   pc before the write: {}
+ *   tainted text level:  {#ROOT}
+ *   path level:          {#ROOT}
+ *   tag level:           {#ROOT}
+ *   write outcome:       ok
+ *   pc after the write:  {}
+ *   bl after the write:  {#ROOT}
+ *   write in a branch:   ok
+ *   pc inside the branch:{#ROOT}
+ *   pc after the branch: {}
+ *   unlisten returned:   ()
+ *   pc after unlisten:   {}
+ *   read back:           "tainted contents\n"
+ *   read-back level:     {#ROOT}
+ *   outside io-root:     err: path escapes the io-root sandbox
+ *
+ * CONCLUSION. The write goes through with no declassification: `writeFile` requires ROOT authority
+ * and performs no confidentiality check on its contents (the builtin's header states the check is
+ * deferred, not that it passes). Neither the tainted contents nor the tainted path move the pc:
+ * the argument tuple is built at the caller's pc and it is the *tuple's* level the builtin raises
+ * to. The write in the branch is the shape the supervisor uses — the pc there is the ceiling,
+ * because the branch tests a tag that came out of the receive — and the raise does not outlive the
+ * call: the pc is back at bot on return, so the region still closes and the terminal is still
+ * given back. `--io-root` is what bounds the write, and it is a runtime bound, not a label one.
+ *
+ * A write whose path lies outside `--io-root` comes back `ERR`, not as a crash; the last section
+ * below shows it, so the status-line path for a refused write is exercised here too.
+ *)
+
+import IfcUtil
+import Outcome
+import SimpleFileIO
+import Tty
+import timeout
+
+let val a = authority
+    val i = stdin a
+    val lev = Tty.level i
+    val me = self ()
+
+    val _ = print ("channel level:       " ^ toString lev)
+
+    (* A string at the channel level, arriving the way the supervisor's does. *)
+    val nonce = mkuuid ()
+    val _ = timeout.timeout me ("TEXT", nonce) 50
+
+    val (ok, cap) = Tty.listen (i, a)
+    val _ = print ("region ok:           " ^ toString ok)
+
+    (* Both the path and the contents are tainted: battallion's path comes from `getCliArgs`, which
+     * is no less labelled than the keystrokes are. *)
+    val (tag, path, text) =
+            Tty.nextEventWith
+              ( lev
+              , [ hn ("TEXT", n) when n = nonce =>
+                    ("write", "probe-written.txt", "tainted contents\n") ])
+    val _ = print ("pc before the write: " ^ toString (_pc ()))
+    val _ = print ("tainted text level:  " ^ toString (levelOf text))
+    val _ = print ("path level:          " ^ toString (levelOf path))
+    val _ = print ("tag level:           " ^ toString (levelOf tag))
+
+    val out = SimpleFileIO.writeFile (a, path, text)
+    val outcome = case out of OK _  => "ok"
+                            | ERR e => "err: " ^ e.reason
+    val _ = print ("write outcome:       " ^ outcome)
+    val _ = print ("pc after the write:  " ^ toString (_pc ()))
+    val _ = print ("bl after the write:  " ^ toString (_bl ()))
+
+    (* The shape the supervisor actually writes in: not straight-line code but inside a branch on
+     * a tag that came out of the receive at the region's ceiling, so the write runs at a pc of
+     * ROOT rather than bot. `writeFile` raises the pc again from inside that branch; what has to
+     * hold is that the raise does not outlive the call, or the region will not close. *)
+    fun served (tag, contents) =
+        if tag = "write"
+        then let val r = SimpleFileIO.writeFile (a, "probe-served.txt", contents)
+                 val outcome = case r of OK _  => "ok"
+                                       | ERR e => "err: " ^ e.reason
+             in (outcome, _pc ())
+             end
+        else ("not asked", _pc ())
+
+    val (servedOutcome, servedPc) = served (tag, text)
+    val _ = print ("write in a branch:   " ^ servedOutcome)
+    val _ = print ("pc inside the branch:" ^ toString servedPc)
+    val _ = print ("pc after the branch: " ^ toString (_pc ()))
+
+    val closed = Tty.unlisten cap
+    val _ = print ("unlisten returned:   " ^ toString closed)
+    val _ = print ("pc after unlisten:   " ^ toString (_pc ()))
+
+    val back = case SimpleFileIO.readFile (a, path) of OK s  => s
+                                                     | ERR e => "err: " ^ e.reason
+    val _ = print ("read back:           " ^ toString back)
+    val _ = print ("read-back level:     " ^ toString (levelOf back))
+
+    (* A refused write: the status line has to show this rather than the session crashing. *)
+    val bad = SimpleFileIO.writeFile (a, "../escaped.txt", text)
+    val badOutcome = case bad of OK _  => "ok"
+                               | ERR e => "err: " ^ e.reason
+    val _ = print ("outside io-root:     " ^ badOutcome)
+in ()
+end

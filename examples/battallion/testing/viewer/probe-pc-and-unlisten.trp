@@ -1,0 +1,89 @@
+(* Probe 5 — what a supervisor must avoid before it opens a receive region.
+ *
+ * `Tty.unlisten` closes a region only from the region's floor: the occurrence check is
+ * `pc ⊔ label(cap) ⊑ lo` (rt/src/Thread.mts:1351), and the capability's label is the pc at the
+ * open (`capLabel`, rt/src/Thread.mts:1305). A `Tty.listen` region has floor `bot`, so a
+ * supervisor must be at bot both when it opens the region and when it closes it. The first
+ * version of examples/battallion/bt.trp was not, and died on the way out with
+ *
+ *     >> Ranged-receive disable occurrence check failed: the capability's context is more
+ *        sensitive than the region's floor
+ *     | pc level          : {#ROOT}
+ *     | capability label  : {#ROOT}
+ *     | region floor (lo) : {}
+ *
+ * because it called the whole session from inside a `case` branch on the file-read outcome.
+ * This probe measures which constructs leave the pc raised, so the rule bt.trp and Session.trp
+ * follow is a measurement rather than a guess.
+ *
+ *   ./local.sh examples/battallion/testing/viewer/probe-pc-and-unlisten.trp
+ *
+ * OBSERVED 2026-08-01 (dev-text-editor, default --stdiolev):
+ *   1 pc at the start                            {}
+ *   2 unlisten from the floor                    closed
+ *   3 pc inside a branch on a labelled value     {#ROOT}
+ *   4 pc after that `case`, as an expression     {}
+ *   5 pc after a direct `fwrite`                 {}
+ *   6 pc after an `fwrite` made inside a call    {}
+ *   7 unlisten from inside a branch              Ranged-receive disable occurrence check failed:
+ *                                                the capability's context is more sensitive than
+ *                                                the region's floor
+ *
+ * THE RULE THIS GIVES. A `case` puts the pc back when it finishes (4), but its branches run at
+ * the raised pc (3), and a region opened or closed there carries that pc (7). So what has to be
+ * kept out of a branch is not the inspection, it is the *work*: bind what the branches produce,
+ * and do the work after. examples/battallion/bt.trp reads the argument list and the file in two
+ * functions and calls `Session.run` in straight-line code with their results.
+ *
+ * What is NOT a hazard, measured here because it was suspected of being one: writing. `fwrite`
+ * raises the pc to the blocking label (`checkChannelEffect`, rt/src/builtins/stdio.mts:88), but
+ * the blocking label is still at the floor after an inspection has finished (5, 6), so a write
+ * in straight-line startup code does not lift the pc and needs no wrapping.
+ *)
+
+import IfcUtil
+import Tty
+import Outcome
+
+let val a = authority
+    val i = stdin a
+    val out = stdout a
+
+    (* Reporting through a call keeps the report from raising the pc it reports. *)
+    fun say s = fwrite (out, s ^ "\n")
+    fun report (n, what) = say (n ^ " " ^ what ^ toString (_pc ()))
+
+    (* A value at the channel level to inspect: a terminal query's own result. *)
+    val probeValue = Tty.size out
+
+    fun openAndClose () =
+        let val (ok, cap) = Tty.listen (i, a)
+            val _ = Tty.unlisten cap
+        in "closed"
+        end
+
+    val _ = report ("1", "pc at the start                            ")
+
+    (* From the floor, before anything has been inspected or written. *)
+    val closedAtFloor = openAndClose ()
+    val _ = say ("2 unlisten from the floor                    " ^ closedAtFloor)
+
+    (* Inside a branch, and then after the whole `case`. *)
+    val inBranch = case probeValue of
+                        OK s  => report ("3", "pc inside a branch on a labelled value    ")
+                      | ERR _ => report ("3", "pc inside a branch on a labelled value    ")
+    val _ = report ("4", "pc after that `case`, as an expression     ")
+
+    (* A direct write, once the blocking label has been lifted by the inspection above. *)
+    val _ = fwrite (out, "")
+    val _ = report ("5", "pc after a direct `fwrite`                 ")
+    val _ = say ""
+    val _ = report ("6", "pc after an `fwrite` made inside a call    ")
+
+    (* The same close from inside a branch. This stops the thread; nothing after it runs. *)
+    val _ = say "7 unlisten from inside a branch              (thread error below)"
+    val closedInBranch = case probeValue of
+                              OK _  => openAndClose ()
+                            | ERR _ => openAndClose ()
+in say ("7 unlisten from inside a branch              " ^ closedInBranch)
+end

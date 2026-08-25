@@ -191,10 +191,10 @@ The editor is interactive, so it is checked under a pseudo-terminal rather than 
 runner:
 
 ```
-python3 tests/_unautomated/claude/battallion-viewer/harness.py "$PWD"
-python3 tests/_unautomated/claude/battallion-editor/harness.py "$PWD"
-python3 tests/_unautomated/claude/battallion-plugins/harness.py "$PWD"
-python3 tests/_unautomated/claude/battallion-cli/harness.py "$PWD"
+python3 examples/battallion/testing/viewer/harness.py "$PWD"
+python3 examples/battallion/testing/editor/harness.py "$PWD"
+python3 examples/battallion/testing/plugins/harness.py "$PWD"
+python3 examples/battallion/testing/cli/harness.py "$PWD"
 ```
 
 The first opens a file taller than the terminal, injects motions and reads the cursor-position
@@ -210,5 +210,5 @@ the file opened, the file-content policy, a terminal of one row, and a `:wq` the
 refuses. The label questions the design rests on are measured by the probe programs in the same
 directories.
 
-`tests/_unautomated/claude/battallion-drive/driver.py` holds a session open on a pty and renders
+`examples/battallion/testing/drive/driver.py` holds a session open on a pty and renders
 its output through a screen model, for driving the editor by hand from a shell.

@@ -1,0 +1,47 @@
+(* Probe 4 — `monitorlocal` notification is broken in the runtime.
+ *
+ * The architecture has the supervisor `monitorlocal` the kernel and restore the terminal on
+ * ("DONE", ref, pid, reason). That message is never delivered: the moment a monitored thread
+ * terminates — orderly or with an error — the whole node dies with a host TypeError.
+ *
+ *   ./local.sh examples/battallion/testing/viewer/probe-monitor-defect.trp
+ *
+ * OBSERVED 2026-08-01 (dev-text-editor, 00e1cc67; also on the repo's own
+ * tests/_old_tests/monitors/mon01.trp and mon02.trp, so this is long-standing and not specific
+ * to this branch):
+ *
+ *   file:///.../rt/built/Thread.mjs:934
+ *           return new LVal(x, this.pc, this.pc);
+ *                                   ^
+ *   TypeError: Cannot read properties of undefined (reading 'pc')
+ *       at mkVal (file:///.../rt/built/Thread.mjs:934:33)
+ *       at Scheduler.notifyMonitors (file:///.../rt/built/Scheduler.mjs:96:42)
+ *       at Scheduler.done (file:///.../rt/built/Scheduler.mjs:67:14)
+ *
+ * CAUSE. `Scheduler.notifyMonitors` (rt/src/Scheduler.mts:106-121) opens with
+ *
+ *     let mkVal = this.__currentThread.mkVal
+ *
+ * which detaches the prototype method `Thread.mkVal` (rt/src/Thread.mts:1135,
+ * `return new LVal(x, this.pc, this.pc)`). The later calls `mkVal("DONE")`, `mkVal(errstr)` and
+ * `mkVal(mkTuple(...))` therefore run with `this === undefined`. Only `statusVal` uses the bound
+ * form `this.__currentThread.mkVal(status)`, which is why the failure is total rather than
+ * error-path-only. The line is untouched since 56b33de1 (2026-01-29).
+ *
+ * CONSEQUENCE FOR THIS STAGE. The supervisor of examples/battallion/bt.trp cannot learn that the
+ * kernel died the way the architecture prescribes, so it detects a dead kernel with the timer
+ * idiom instead — see the header of bt.trp. This is reported rather than patched: the stage
+ * carries a no-runtime-changes constraint.
+ *)
+
+let val a = authority
+
+    (* Orderly termination of a monitored thread. This alone brings the node down; the crash case
+       below is unreachable in the same run. *)
+    val victim = spawn (fn () => let val _ = sleep 100 in () end)
+    val r = monitorlocal victim
+    val _ = print "monitor installed; waiting for DONE"
+    val reason = receive [ hn ("DONE", ref, pid, reason) when ref = r => reason ]
+    val _ = print ("DONE reason: " ^ toString reason)
+in ()
+end

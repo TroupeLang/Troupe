@@ -15,16 +15,16 @@
  * WHY THE KEYMAP IS NOT RUN UNDER `guard`. It would trap exactly this crash and return the
  * unchanged state, and the supervision path this program exists to exercise would never be taken.
  * The measurement behind that statement is
- * tests/_unautomated/claude/battallion-plugins/probe-guard-hook.trp; Editor.trp's header states
+ * examples/battallion/testing/plugins/probe-guard-hook.trp; Editor.trp's header states
  * the decision.
  *
  * WHY IT LIVES HERE AND NOT BESIDE THE HARNESS. It was written in
- * tests/_unautomated/claude/battallion-viewer/, importing these modules as `../../../../…`, and
+ * examples/battallion/testing/viewer/, importing these modules parent-relatively, and
  * could not be loaded: a module reached through a parent-relative import has its *own*
  * program-relative imports pinned under a key relative to the working directory rather than to
  * the main program, and the runtime then resolves that key against the main program's directory
  * and reads a path that does not exist. The measurement and the exact paths are in
- * tests/_unautomated/claude/battallion-viewer/probe-parent-relative-pins.trp. Sitting beside the
+ * examples/battallion/testing/viewer/probe-parent-relative-pins.trp. Sitting beside the
  * modules it imports keeps every pin single-spelled.
  *
  * WHAT THE SUPERVISOR SHOULD DO. It monitors the kernel, so the runtime tells it the moment the

@@ -1,0 +1,63 @@
+(* Probe 1 — can lib/timeout's message be received inside the Tty listen region?
+ *
+ * The supervisor of examples/battallion/bt.trp waits on terminal events and on a watchdog timer
+ * in one receive: `Tty.nextEventWith (lev, [hn ("WATCHDOG", n) when n = nonce => ...])`. That
+ * receive has the interval [bot, ttyLevel stdin], so the timer message is only visible there if
+ * its presence lies in the interval and its payload does not exceed the taint limit the handler
+ * runs under.
+ *
+ * This probe answers both, with no subscription and no terminal involved: the only message in
+ * the mailbox is the timer's. It is sent through `lib/timeout.trp` unchanged — that module's
+ * `timeout who nonce duration` sends `nonce` as the whole message, so passing a tuple is how the
+ * message gets a tag, and a tag is what lets a spent timer be told from a live one when the
+ * supervisor's event loop drains it.
+ *
+ *   ./local.sh examples/battallion/testing/viewer/probe-timer-level.trp
+ *
+ * OBSERVED 2026-08-01 (dev-text-editor, default --stdiolev, so ttyLevel stdin = ROOT):
+ *   channel level:       {#ROOT}
+ *   pc before the timer: {}
+ *   region ok:           true
+ *   timer matched:       true
+ *   nonce level:         {#ROOT}
+ *   pc in the handler:   {#ROOT}
+ *   pc after the rcv:    {}
+ *   bl after the rcv:    {#ROOT}
+ *
+ * So the timer message is matched by an extra handler inside the region: no helper process and
+ * no second receive are needed, and `Tty.nextEventWith` composes with the timer idiom directly.
+ * The message comes out at the region's ceiling rather than at the pc the timer was spawned from
+ * — everything received at the interval [bot, ROOT] does, because which message matched is
+ * itself an observation up to the ceiling — and the pc is back at bot once the receive returns,
+ * with only the blocking label left raised.
+ *)
+
+import IfcUtil
+import Tty
+import timeout
+
+let val a = authority
+    val i = stdin a
+    val lev = Tty.level i
+
+    val _ = print ("channel level:       " ^ toString lev)
+    val _ = print ("pc before the timer: " ^ toString (_pc ()))
+
+    val nonce = mkuuid ()
+    val _ = timeout.timeout (self ()) ("WATCHDOG", nonce) 50
+
+    val (ok, cap) = Tty.listen (i, a)
+    val _ = print ("region ok:           " ^ toString ok)
+
+    (* The supervisor's receive shape: the terminal handlers plus the timer's. *)
+    val (matched, nlev, hpc) =
+        Tty.nextEventWith (lev, [ hn ("WATCHDOG", n) when n = nonce => (true, levelOf n, _pc ()) ])
+
+    val _ = Tty.unlisten cap
+    val _ = print ("timer matched:       " ^ toString matched)
+    val _ = print ("nonce level:         " ^ toString nlev)
+    val _ = print ("pc in the handler:   " ^ toString hpc)
+    val _ = print ("pc after the rcv:    " ^ toString (_pc ()))
+    val _ = print ("bl after the rcv:    " ^ toString (_bl ()))
+in ()
+end

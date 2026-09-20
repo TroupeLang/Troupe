@@ -9,7 +9,7 @@ let (* set secret to 0 or 1 *)
 
     fun leak i = 
           let 
-              val c = pinipush authority
+              val entryBl = _bl ()
               val (g1, g2) = 
                     if ( (secret > 0) andalso (i = 1))
                     orelse ( (secret <= 0 ) andalso (i = 2))
@@ -18,7 +18,7 @@ let (* set secret to 0 or 1 *)
               val (_, t) = enableRangedReceive (`<;#root-integrity>`, `<secret;#root-integrity>`, authority)
               val _ = rcv (`{}`, `<secret;#root-integrity>`, [g1])
               val _ = disableRangedReceive t
-              val _ = pinipop c
+              val _ = blockdownto (authority, entryBl)
 
               
               val _ = adv i

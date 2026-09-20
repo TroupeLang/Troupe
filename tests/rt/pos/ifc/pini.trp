@@ -1,9 +1,9 @@
 let val secret = 1 raisedTo `<alice;#root-integrity>`
     val aliceAuth = attenuate (authority, `<alice;#root-integrity>`)
     (* val t = if secret > 0 then (1,2) else (3,4)  *)
-    val c = pinipush (aliceAuth)
+    val entryBl = _bl ()
     val (a,b) = if secret > 0 then (1,2) else (3,4) 
-    val _ = pinipop c 
+    val _ = blockdownto (aliceAuth, entryBl) 
 in 
     adv 0
 end

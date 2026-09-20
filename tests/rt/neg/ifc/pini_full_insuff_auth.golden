@@ -1,11 +1,11 @@
-2026-01-06T14:33:32.530Z [RTM] [32minfo[39m: Skipping network creation. Observe that all external IO operations will yield a runtime error.
-PID:6e59593b-224c-49c0-a85c-31ddba8187ed@{}%{}     PC:{}                BL:<alice&bob;#root-integrity> HNNORMAL             _sp:16               
-Runtime error in thread 6e59593b-224c-49c0-a85c-31ddba8187ed@{}%{}
+2026-09-20T08:02:49.626Z [RTM] [32minfo[39m: Skipping network creation. Observe that all network operations will yield a runtime error.
+PID:7f41d511-8f7a-4fc2-919e-b07ab884dbcc@{}%{}     PC:{}                BL:<alice&bob;#root-integrity> HNNORMAL             
+Runtime error in thread 7f41d511-8f7a-4fc2-919e-b07ab884dbcc@{}%{}
 
-  5 |     val _ = pinipop (c)
+  5 |     val _ = blockdownto (a_, target)
     |             ^
 
->> Not enough authority for pini downgrading
+>> Not enough authority for blocking level downgrade
  | from level of the blocking level: <alice&bob;#root-integrity>
  | level of the authority: <alice;#root-integrity>
  | to level of the blocking level: <alice;#root-integrity>

@@ -2,7 +2,7 @@ import {UserRuntimeZero, Constructor, mkBase} from './UserRuntimeZero.mjs'
 import { assertIsAuthority, assertIsNTuple, assertIsLevel } from '../Asserts.mjs'
 
 
-export function BuiltinPini <TBase extends Constructor<UserRuntimeZero>> (Base:TBase) {
+export function BuiltinBlockingLabel <TBase extends Constructor<UserRuntimeZero>> (Base:TBase) {
     
     
     return class extends Base {

@@ -16,13 +16,13 @@ export function formatConfidentialityMismatchMsg(operationDescription: string, d
            ` | confidentiality level of the target: ${targetLevel.confidentiality.stringRep(DC_CONF_LITERALS)}`;
 }
 
-export function formatPiniBlockingLevelMismatchMsg(operationDescription: string, currentBlockingLevel: Level, targetBlockingLevel: Level): string {
+export function formatBlockingLevelMismatchMsg(operationDescription: string, currentBlockingLevel: Level, targetBlockingLevel: Level): string {
     return `Current blocking level does not flow to the target level of the ${operationDescription}\n` +
            ` | current blocking level: ${currentBlockingLevel.stringRep()}\n` +
            ` | target blocking level: ${targetBlockingLevel.stringRep()}`;
 }
 
-export function formatPiniInsufficientAuthorityMsg(operationDescription: string, fromBlockingLevel: Level, authorityValLevel: Level, toBlockingLevel: Level): string {
+export function formatBlockingInsufficientAuthorityMsg(operationDescription: string, fromBlockingLevel: Level, authorityValLevel: Level, toBlockingLevel: Level): string {
     return `Not enough authority for ${operationDescription}\n` +
            ` | from level of the blocking level: ${fromBlockingLevel.stringRep()}\n` +
            ` | level of the authority: ${authorityValLevel.stringRep()}\n`  +
@@ -100,8 +100,8 @@ function getBlockDowngradeErrorMessageForReason(
     switch (reason) {
         case DowngradeErrorReason.INTEGRITY_MISMATCH: return formatIntegrityMismatchMsg(operationDescription, levFrom, levTo);
         case DowngradeErrorReason.CONFIDENTIALITY_MISMATCH: return formatConfidentialityMismatchMsg(operationDescription, levFrom, levTo);
-        case DowngradeErrorReason.BLOCKING_LEVEL_MISMATCH: return formatPiniBlockingLevelMismatchMsg(operationDescription, levFrom, levTo);
-        case DowngradeErrorReason.INSUFFICIENT_AUTHORITY: return formatPiniInsufficientAuthorityMsg(operationDescription, levFrom, authorityLevel, levTo);
+        case DowngradeErrorReason.BLOCKING_LEVEL_MISMATCH: return formatBlockingLevelMismatchMsg(operationDescription, levFrom, levTo);
+        case DowngradeErrorReason.INSUFFICIENT_AUTHORITY: return formatBlockingInsufficientAuthorityMsg(operationDescription, levFrom, authorityLevel, levTo);
         case DowngradeErrorReason.ROBUSTNESS_VIOLATION:
             if (!pcLevel) throw new ImplementationError("pcLevel required for ROBUSTNESS_VIOLATION");
             return formatRobustnessViolationMsg(operationDescription, levFrom, levTo, pcLevel, DowngradeKind.BLOCKING);
@@ -160,7 +160,7 @@ function getValueDowngradeErrorMessageForReason(
         case DowngradeErrorReason.INTEGRITY_MISMATCH: return formatIntegrityMismatchMsg(operationDescription, levFrom, levTo);
         case DowngradeErrorReason.CONFIDENTIALITY_MISMATCH: return formatConfidentialityMismatchMsg(operationDescription, levFrom, levTo);
         case DowngradeErrorReason.BLOCKING_LEVEL_MISMATCH:
-            return formatPiniBlockingLevelMismatchMsg(operationDescription, currentBlockingLevelForCheck!, levTo);
+            return formatBlockingLevelMismatchMsg(operationDescription, currentBlockingLevelForCheck!, levTo);
         case DowngradeErrorReason.INSUFFICIENT_AUTHORITY: return formatValueInsufficientAuthorityMsg(operationDescription, levFrom, authorityLevel, levTo);
         case DowngradeErrorReason.ROBUSTNESS_VIOLATION:
             if (!pcLevel) throw new ImplementationError("pcLevel required for ROBUSTNESS_VIOLATION");

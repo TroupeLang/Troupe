@@ -6,7 +6,7 @@ import { DowngradeResult, DowngradeDimension, DowngradeErrorReason, DowngradeKin
 import {
     formatIntegrityMismatchMsg,
     formatConfidentialityMismatchMsg,
-    formatPiniBlockingLevelMismatchMsg,
+    formatBlockingLevelMismatchMsg,
     formatValueInsufficientAuthorityMsg,
     formatRobustnessViolationMsg,
     formatTransparencyViolationMsg
@@ -130,7 +130,7 @@ export function downgrader (runtime: RuntimeInterface,
                         errorMessage = formatConfidentialityMismatchMsg(downgradeKindString, levFrom, lev_to);
                         break;
                     case DowngradeErrorReason.BLOCKING_LEVEL_MISMATCH:
-                        errorMessage = formatPiniBlockingLevelMismatchMsg(downgradeKindString, bl, lev_to);
+                        errorMessage = formatBlockingLevelMismatchMsg(downgradeKindString, bl, lev_to);
                         break;
                     case DowngradeErrorReason.INSUFFICIENT_AUTHORITY:
                         errorMessage = formatValueInsufficientAuthorityMsg(downgradeKindString, levFrom, auth.val.authorityLevel, lev_to);

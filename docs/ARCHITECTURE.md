@@ -307,10 +307,10 @@ tests able to downgrade; the note is the thread to pull if that is wanted.
 
 ### Blocking-label downgrades
 
-The operators that lower the blocking label are in `rt/src/builtins/pini.mts`: `blockdecl` /
-`blockdeclto` (confidentiality), `blockendorse` / `blockendorseto` (integrity), and `blockdown` /
-`blockdownto` (both). The plain forms lower it to the current pc; the `*to` forms take a target
-level.
+The operators that lower the blocking label are in `rt/src/builtins/blockinglabel.mts`:
+`blockdecl` / `blockdeclto` (confidentiality), `blockendorse` / `blockendorseto` (integrity), and
+`blockdown` / `blockdownto` (both). The plain forms lower it to the current pc; the `*to` forms take
+a target level.
 
 `let pini A D in B end` is parser sugar (`piniDecl` in `Parser.y`): it reads the blocking label with
 `_bl ()` before `D`, and after `D` calls `blockdownto` with `A` and that label.

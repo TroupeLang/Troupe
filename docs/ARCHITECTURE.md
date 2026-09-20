@@ -237,7 +237,7 @@ Troupe implements dynamic information flow control:
   live in `rt/src/levels/`: DC labels (`DCLabels/`), a singleton lattice (`singleton.mts`), and
   tag sets (`tagsets.mts`).
 - **PC (program-counter) label** — tracks implicit flows through control flow.
-- **Blocking label** — a per-thread label maintained alongside the PC (see the pini stack below).
+- **Blocking label** — a per-thread label maintained alongside the PC (see blocking-label downgrades below).
 - **Sandboxing** — isolated execution under label constraints (tests under
   `tests/rt/pos/ifc/sandbox/`).
 
@@ -305,17 +305,15 @@ values and only need the write to be admitted. Each says so in its `.trp.options
 A self-dual level naming each test's own principals would be non-corrupt and would leave those
 tests able to downgrade; the note is the thread to pull if that is wanted.
 
-### The pini / blocking-label stack
+### Blocking-label downgrades
 
-The blocking label bounds where a thread may downgrade. It is managed as a stack through operators
-in `rt/src/builtins/pini.mts`:
+The operators that lower the blocking label are in `rt/src/builtins/blockinglabel.mts`:
+`blockdecl` / `blockdeclto` (confidentiality), `blockendorse` / `blockendorseto` (integrity), and
+`blockdown` / `blockdownto` (both). The plain forms lower it to the current pc; the `*to` forms take
+a target level.
 
-- `pinipush` (authority) raises the blocking level; `pinipop` (capability) restores it;
-  `pinipushto` raises it to a specified level, requiring that level to flow to the current blocking
-  level.
-- Blocking-level downgrade operators tie the pini stack to downgrading: `blockdecl` / `blockdeclto`
-  (confidentiality), `blockendorse` / `blockendorseto` (integrity), and `blockdown` / `blockdownto`
-  (both). The `*to` forms take an explicit target level.
+`let pini A D in B end` is parser sugar (`piniDecl` in `Parser.y`): it reads the blocking label with
+`_bl ()` before `D`, and after `D` calls `blockdownto` with `A` and that label.
 
 ### Inspecting labels
 

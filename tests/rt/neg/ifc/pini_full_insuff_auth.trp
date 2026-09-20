@@ -1,7 +1,7 @@
 let val a_ = attenuate (authority, `<alice;#root-integrity>`)
-    val c = pinipushto (a_ , `<alice;#root-integrity>`) 
+    val target = `<alice;#root-integrity>` 
     val _ = if (true raisedTo `<alice & bob;#root-integrity>`) then () else ()   
     val _ = debugpc ()
-    val _ = pinipop (c)
+    val _ = blockdownto (a_, target)
 in debugpc ()
 end

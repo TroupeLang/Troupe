@@ -5,7 +5,7 @@ import { BuiltinMath } from './builtins/math.mjs'
 import { BuiltinBigInt } from './builtins/bigint.mjs'
 import { BuiltinDebugUtils } from './builtins/debugutils.mjs'
 import { BuiltinDebugValue } from './builtins/debugValue.mjs'
-import { BuiltinPini } from './builtins/pini.mjs'
+import { BuiltinBlockingLabel } from './builtins/blockinglabel.mjs'
 import { BuiltinMonitors } from './builtins/monitor.mjs'
 import { BuiltinSleep } from './builtins/sleep.mjs'
 import { BuiltinLevOps } from './builtins/levelops.mjs'
@@ -69,7 +69,7 @@ export const UserRuntime =
     BuiltinLevOps(
     BuiltinSleep(
     BuiltinMonitors(
-    BuiltinPini(
+    BuiltinBlockingLabel(
     BuiltinDebugValue(
     BuiltinDebugUtils(
     BuiltinMath(

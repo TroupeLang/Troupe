@@ -15,9 +15,9 @@ let (* set secret to true or false *)
     val mainPid = self ()
     val _ = print mainPid
 
-    fun leak i = let val c = pinipush authority 
+    fun leak i = let val entryBl = _bl () 
                      val _ = wait () 
-                     val _ = pinipop c
+                     val _ = blockdownto (authority, entryBl)
                      val _ = adv i
                      val _ = printWithLabels i                     
                      val _ = signal mainPid

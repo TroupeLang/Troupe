@@ -35,7 +35,7 @@ let val receive = fn h =>
     val _ = printWithLabels ( read x )    
     (* prints 42@`{secret}`%`{secret}` *)
 
-    val c = pinipush authority
+    val entryBl = _bl ()
     val _ = if (100 raisedTo `<secret;#root-integrity>` > 0) then write x 2 else ()
 
     (* The above line taints the PC of the cell process *)
@@ -46,7 +46,7 @@ let val receive = fn h =>
 
     (* prints 20@`{secret}`%`{secret}` *)
 
-    val _ = pinipop c
+    val _ = blockdownto (authority, entryBl)
     
     val _ = write x 10     
     val _ = printWithLabels ( read x )

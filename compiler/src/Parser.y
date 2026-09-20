@@ -654,12 +654,15 @@ errorDecl _ = ErrorDecl
 
 piniDecl :: LTerm -> [Decl] -> [Decl]
 piniDecl auth decs =
-    let pushDecl = ValDecl (rtGenPat (VarPattern "$pini"))
-                           (rtGenTerm (App (rtGenTerm (Var "pinipush")) [auth]))
-        popDecl  = ValDecl (rtGenPat Wildcard)
-                           (rtGenTerm (App (rtGenTerm (Var "pinipop")) [rtGenTerm (Var "$pini")]))
+    let var = rtGenTerm . Var
+        authDecl    = ValDecl (rtGenPat (VarPattern "$pini_auth")) auth
+        entryBlDecl = ValDecl (rtGenPat (VarPattern "$pini_bl"))
+                              (rtGenTerm (App (var "_bl") [rtGenTerm (Lit LUnit)]))
+        restoreDecl = ValDecl (rtGenPat Wildcard)
+                              (rtGenTerm (App (var "blockdownto")
+                                              [rtGenTerm (Tuple [var "$pini_auth", var "$pini_bl"] False)]))
     in
-        (pushDecl:decs) ++ [popDecl]
+        authDecl : entryBlDecl : decs ++ [restoreDecl]
 
 -- mkSeq now takes the token to get position from
 mkSeq :: LTerm -> LTerm -> L Token -> ParseM LTerm

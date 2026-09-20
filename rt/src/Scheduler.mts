@@ -133,14 +133,6 @@ export class Scheduler implements SchedulerInterface {
     }
 
 
-    pinipush (l, cap) {        
-        this.__currentThread.pcpinipush(l, cap)        
-    }
-
-    pinipop (cap) {
-        return this.__currentThread.pinipop(cap); 
-    }
-
     mkVal(x) {        
         return this.__currentThread.mkVal (x);    
     }

@@ -32,11 +32,6 @@ let isPiniMode = argv[TroupeCliArg.Pini]?true:false;
 let isNmifcMode = argv[TroupeCliArg.Nmifc]?true:false;
 
 
-export enum PCDowngradePurpose {
-    Full="pcpush", 
-    Pini="pinipush"
-}
-
 // stack frame configuration constants
 export const CALLSIZE = 5
 const SPOFFSET = CALLSIZE
@@ -61,8 +56,7 @@ export class Capability<T> {
     field of this class. 
 
 
-    We use these kinds of capabilities to enforce a scoping discipline on pcpush/pinipush
-    and raise/lower mailbox mechanisms.
+    We use these kinds of capabilities to enforce a scoping discipline on ranged receive.
 
     */
    
@@ -307,7 +301,6 @@ export class Thread {
     }
     r0_tlev: any;
 
-    pini_uuid : string;
 
     handlerState: HnState;
     monitors: {};
@@ -350,7 +343,6 @@ export class Thread {
         this.tid = tid;    
         this.pc = pc;
         this.bl = levblock;
-        this.pini_uuid = null;
         this.handlerState = handlerState;
         this.monitors = {};
         this.killCounter = 0;
@@ -437,7 +429,6 @@ export class Thread {
         let __state = {            
             pc             : this.pc,
             bl             : this.pc,
-            pini_uuid      : this.pini_uuid,
             sp             : this._sp,
             next           : this.next,            
             callStack      : this.callStack,
@@ -452,7 +443,6 @@ export class Thread {
     importState (__state) {             
         this.pc =        __state.pc
         this.bl =        __state.bl  
-        this.pini_uuid = __state.pini_uuid
         this._sp =       __state.sp
         this.next =      __state.next
         this.callStack = __state.callStack
@@ -534,8 +524,7 @@ export class Thread {
             ['SP / Sparse Slot', `${this._sp} / ${this.sparseSlot ?? 'N/A'} (value: ${sparseVal})`],
             ['R0 val', r0ValStr],
             ['R0 lev', truncate(r0LevStr, 55)],
-            ['R0 tlev', truncate(r0TlevStr, 55)],
-            ['Pini UUID', this.pini_uuid ?? '(null)']
+            ['R0 tlev', truncate(r0TlevStr, 55)]
         );
 
         lines.push('');
@@ -856,149 +845,6 @@ export class Thread {
         let uuidval = this.mkVal ( pid );
         return uuidval;  
     }  
-
-    // TODO: deprecate(!) 2025-12-29; see comment below; AA
-
-    pcpinipush ( auth: any, purpose: PCDowngradePurpose | string, bl = this.bl )  {
-        let uid = uuidv4()
-        let cap = this.mkVal (new Capability(uid,
-                    { bl
-                    , pc: this.pc
-                    , auth : auth                    
-                    , purpose: purpose
-                    },
-                    this.pini_uuid,
-                    this.pc)); // 2021-05-12; AA; TODO: revisit this; alternative might be te use auth level? 
-                               // also, why not block though that will require invalidating the
-                               // sparse bit
-                
-        this.pini_uuid = uid;
-        return this.returnImmediateLValue(cap)
-    }
-
-    // 2025-12-29: AA: this method 
-    // is problemamtic in the context of the 
-    // Stack representation that stores earlier 
-    // PC values in "regular" raw escaping variables
-    // TODO: deprecate (!)
-    pcpop (cap_lval) {
-        if (this.pini_uuid == null) {
-            this.threadError ("unmatched pcpop", false, null, ErrorKind.IFCCheck);
-        }
-
-        let cap: Capability<any> = cap_lval.val;
-        let {bl, pc, auth, purpose} = cap.data;
-
-        // check the capability
-        if (this.pini_uuid != cap.uid || purpose != PCDowngradePurpose.Full) {
-            this.threadError ("Ill-scoped pinipush/pinipop", false, null, ErrorKind.IFCCheck);
-            return null; // does not schedule anything in this thread
-                         // effectively terminating/blocking the thread
-        }
-
-        
-        // We declassify the current blocking level to the old blocking level. 
-        // and also the current pc to the old pc. 
-        // We check that there is sufficient authority to declassify from 
-        // the current blocking level all the way down to the target pc 
-
-        let levFrom = this.bl;
-        let levTo = pc
-
-
-        debug (`Level to declassify to at pinipop ${levTo.stringRep()}`)
-        // check that the provided authority is sufficient for the declassification
-        this._validateDowngradeOrThrow({
-            levFrom,
-            levTo,
-            authorityLevel: auth.val.authorityLevel,
-            downgradeKind: DowngradeKind.BLOCKING,
-            downgradeDimension: DowngradeDimension.BOTH,
-            blockLevel: this.bl,
-            operationDescription: "pc downgrade",
-            pcLevel: this.pc
-        });
-        
-        this.pc = pc;           
-        this.bl = bl;
-        let loop_sp = this._sp 
-        let j = loop_sp - PCOFFSET; 
-        while (j >= 0 && !levels.flowsTo (this.callStack[j], pc)) {   
-            this.callStack[j] = pc;
-            loop_sp = this.callStack[loop_sp - SPOFFSET]
-            j = loop_sp - PCOFFSET 
-        }            
-        this.pini_uuid = cap.prev;
-        
-        this.invalidateSparseBit ()
-         // 2025-12-29; 
-         // thet above is poor man's attempt 
-         // to mitigate for the havoc thath the 
-         // stack traversal causes
-         // but ultimately a failure. 
-         // We should either have a very 
-         // complicated "pc map" for cross-call escaping 
-         // raw values that would need to be restored 
-         // or just not do this
-         // 
-         // This compounds to the problem of 
-         // PC pop + capabilities being a very 
-         // adhoc mechanism in the first place
-         // 
-         // Let's try to write all the interesting 
-         // programs we want to write without trying to
-         // fix this and eventually deprecate this 
-         // concept.
-
-        return this.returnImmediateLValue (__unit); 
-    }
-    
-
-
-    pinipop (cap_lval) {
-        if (this.pini_uuid == null) {
-            this.threadError ("unmatched pinipop", false, null, ErrorKind.IFCCheck);
-        }
-
-        debug (`Current pc level is ${this.pc.stringRep()}`)
-
-        this.raiseBlockingThreadLev(this.pc); // maintaining the invariant that the blocking level is as high as the pc level
-
-        let cap: Capability<any> = cap_lval.val;
-        let {bl, pc, auth, purpose} = cap.data;
-
-
-        if (this.pini_uuid != cap.uid || purpose != PCDowngradePurpose.Pini) {
-            this.threadError ("Ill-scoped pinipush/pinipop", false, null, ErrorKind.IFCCheck);
-            return; // does not schedule anything in this thread
-                    // effectively terminating the thread
-        }
-
-        // If we are here then the pinipop is well-scoped
-        // so we check the declassifications now
-
-        let levFrom = this.bl;
-        let levTo = bl;
-
-        debug (`Level to declassify to at pinipop ${levTo.stringRep()}`)
-        // this.showStack()
-        // check that the provided authority is sufficient to perform declassification to the next level
-        this._validateDowngradeOrThrow({
-            levFrom,
-            levTo,
-            authorityLevel: auth.val.authorityLevel,
-            downgradeKind: DowngradeKind.BLOCKING,
-            downgradeDimension: DowngradeDimension.BOTH,
-            operationDescription: "pini downgrading",
-            pcLevel: this.pc
-        });
-        
-        // Logic from former onSuccess callback
-        this.bl = levTo ;
-        this.pini_uuid = cap.prev;
-
-        return this.returnImmediateLValue (__unit); 
-    }
 
     blockEndorseTo (auth, bl_to = this.pc) {
         // 2025-05-30; AA

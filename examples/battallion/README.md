@@ -1,10 +1,12 @@
 # battallion
 
 A terminal text editor written in Troupe. Under construction; the stages and what each one
-delivers are in `_dev_planning/text-editor/mvp-plan.md`. It opens a file, draws it, navigates it by
-character, word, line and search, edits it, yanks and puts lines, undoes, saves — to its own file or
-to another — and quits; `:help` lists the keys over the buffer. Its keymap, status line, cursor,
-file commands and help page are plugins behind a published interface.
+delivers are in `_dev_planning/text-editor/mvp-plan.md`. It opens a file, draws it, and navigates
+it with a vim command grammar — counts, word and character motions, brackets and paragraphs,
+search and marks. It edits with operators over motions and text objects, insert and replace modes,
+counts and the `.` repeat, a visual selection, undo and redo, and it saves — to its own file or to
+another — and quits; `:help` pages through the keys over the buffer. Its keymap, status line,
+cursor, file commands and help page are plugins behind a published interface.
 
 | File              | What it is                                                                           |
 |-------------------|--------------------------------------------------------------------------------------|
@@ -12,7 +14,10 @@ file commands and help page are plugins behind a published interface.
 | `Session.trp`     | The process constellation — supervisor, kernel, renderer — and the terminal handling  |
 | `Api.trp`         | The plugin interface: the editor state and the operations a plugin is handed          |
 | `Editor.trp`      | The kernel: the frame's geometry, and the plugin set the editor ships                 |
-| `VimMotions.trp`  | Plugin: the keymap — modes, motions, search, and the editing keys                     |
+| `VimMotions.trp`  | Plugin: the keymap — the command grammar, the modes, search, marks, and the repeat    |
+| `Motions.trp`     | Where a motion lands: words, character finds, brackets, paragraphs, the search scan   |
+| `TextObjects.trp` | The text an `i` or `a` object names: a word, a bracket pair, a quote, a paragraph     |
+| `Operators.trp`   | What an operator does to a range: delete, change, yank, shift, case; put, join, `r`    |
 | `StatusLine.trp`  | Plugin: the frame's bottom row                                                        |
 | `CursorStyle.trp` | Plugin: the seam for the cursor's appearance; inert, the terminal's own cursor stands |
 | `FileOps.trp`     | Plugin: what a command word means — `:w`, `:q`, a line number, `:help`                |
@@ -72,25 +77,64 @@ replaced. A NUL and the other control bytes are valid UTF-8 and survive a round 
 Editing arbitrary bytes is out of scope: the runtime has a byte-level read and write
 (`readFileBytes`, `writeFileBytes`), but the buffer, the screen and the key decoder are all text.
 
+Motions:
+
+| Key                                    | What it does                                              |
+|----------------------------------------|-----------------------------------------------------------|
+| `h` `j` `k` `l`, arrow keys            | Move the cursor by one                                    |
+| `0` Home, `^`, `$` End, <code>&#124;</code> | Line start, first non-blank, end, column `N`         |
+| `w` `b` `e` `ge`                       | Word start next and previous, word end forward and back   |
+| `W` `B` `E` `gE`                       | The same, over blank-delimited words                      |
+| `f` `t` `F` `T`, `;` `,`               | To or till a character; repeat, and reversed              |
+| `%`, `{` `}`                           | Matching bracket; paragraph back and forward              |
+| `gg` `G`, `H` `M` `L`                  | First, last or line `N`; screen top, middle, bottom       |
+| `+` `-` `_`, Enter                     | Line down, up, `N` down, to the first non-blank           |
+| CTRL-f / CTRL-b, PageDown / PageUp     | Move by one screen                                        |
+| CTRL-d / CTRL-u, CTRL-e / CTRL-y       | Half a screen; scroll a line, cursor kept on screen       |
+
+Operators, over any motion or text object, and doubled to take whole lines:
+
+| Key                       | What it does                                                    |
+|---------------------------|-----------------------------------------------------------------|
+| `d` `c` `y`               | Delete, change, yank; `dd` `cc` `yy` the line                   |
+| `<` `>`                   | Shift a line left, right by one tab; `<<` `>>` the line          |
+| `g~` `gu` `gU`            | Toggle, lower, upper case; `g~~` `guu` `gUU` the line            |
+
+Text objects, after an operator or in visual mode, with `i` for inside and `a` for around:
+
+| Key                                        | What it does                                        |
+|--------------------------------------------|-----------------------------------------------------|
+| `iw` `aw`, `iW` `aW`                        | A word, with its spaces; blank-delimited            |
+| `i(` `a(` `ib`, `i[` `i{` `iB` `i<`        | Inside or around a bracket pair                     |
+| <code>i"</code> `i'` <code>i`</code>       | Inside or around a quoted stretch                   |
+| `ip` `ap`                                  | A paragraph                                         |
+
+Editing:
+
 | Key                                | What it does                                        |
 |------------------------------------|-----------------------------------------------------|
-| `h` `j` `k` `l`, arrow keys        | Move the cursor by one                              |
-| `0`, Home                          | Start of the line                                   |
-| `^`                                | First character of the line that is not a space     |
-| `$`, End                           | End of the line                                     |
-| `w` `b`                            | Start of the next, previous word                    |
-| `gg` `G`                           | First, last line                                    |
-| PageUp / PageDown, CTRL-b / CTRL-f | Move by one screen                                  |
-| `/text` Enter                      | Search forward for `text`                           |
-| `n` `N`                            | Next, previous match of the last pattern            |
-| `i`, Esc                           | Enter and leave insert mode                         |
-| `o`                                | Open a line below and enter insert mode             |
-| `x`, Delete                        | Delete the character under the cursor               |
-| `dd`                               | Delete the line                                     |
-| `yy`                               | Yank the line                                       |
-| `p` `P`                            | Put the yanked line below, above the cursor's       |
-| `u`                                | Undo one change                                     |
+| `i` `a` `I` `A`                    | Insert before, after the cursor, at line start, end |
+| `o` `O`                           | Open a line below, above, and enter insert mode     |
+| `R`                                | Replace mode: overwrite until Esc                   |
+| `x` `X`, Delete                    | Delete the character under, before the cursor       |
+| `s` `S`, `D` `C`, `Y`             | Change a character, the line, to the end; yank line  |
+| `r`                                | Replace one character, `N` with a count             |
+| `~`                                | Toggle case and move on                             |
+| `J` `gJ`                          | Join lines, without a space                         |
+| `p` `P`                           | Put after, before the cursor                        |
+| `u`, CTRL-r                        | Undo, redo                                          |
+| `.`                                | Repeat the last change                              |
+
+Visual mode, search, marks, and the session:
+
+| Key                                | What it does                                        |
+|------------------------------------|-----------------------------------------------------|
+| `v` `V`                           | Start a charwise, linewise selection; `o` swaps ends |
+| `/text` `?text` Enter              | Search forward, backward for `text`                 |
+| `n` `N`, `*` `#`                   | Next, previous match; the word under the cursor      |
+| `ma`, `'a` <code>`a</code>         | Set mark `a`; go to its line, its column            |
 | `:`                                | Open the command line                               |
+| `ZZ` `ZQ`                         | Write and quit; quit discarding changes             |
 | `q`, CTRL-c                        | Quit, refusing while the buffer is modified         |
 
 | Command             | What it does                                                       |
@@ -106,31 +150,64 @@ Editing arbitrary bytes is out of scope: the runtime has a byte-level read and w
 The viewport scrolls to follow the cursor, a window resize redraws at the new size, and the
 terminal is given back on every way out — including a kernel that stops answering.
 
-`gg`, `dd` and `yy` are the two-key sequences. The first key is held in the state and the second
-is looked up as a pair, whichever key it is: a pair that is not bound does nothing and the prefix
-is spent, so `d` then `x` leaves the buffer alone and Esc after a prefix abandons it. The status
-line shows a prefix that is waiting, in parentheses.
+Normal mode is a grammar rather than a fixed set of keys: an optional count, then a command that
+is either a standalone key or an operator followed by a motion or a text object, itself with an
+optional count. So `3j`, `d2w`, `2dd`, `ci(`, `>ip` and `d/foo` Enter are all read from the same
+rules, and two counts multiply — `2d3w` deletes six words. A partial command waits in the state
+and is shown at the end of the status line in parentheses; a key sequence the grammar cannot read
+is dropped, and Esc abandons whatever is pending. A motion that cannot be made — `fx` on a line
+with no `x`, `j` on the last line — aborts the command it is the target of, so `dfx` with no `x`
+deletes nothing, as vi does.
 
-A vertical motion aims for a remembered column. Moving down from column 40 onto a short line puts
-the cursor at that line's end and moving down again returns it to 40; a horizontal motion sets the
-column it aims for, and `$` sets it to the end of the line, so `$` then `j` walks down the ends.
+The cursor sits on a character in normal mode, never past the last one: leaving insert mode steps
+it left onto the last character typed, and every normal-mode command pulls it back onto the line
+when a motion would leave it beyond the end. Insert mode may sit one past the end, since that is
+where `a` and `A` append. A vertical motion aims for a remembered column, which a horizontal
+motion sets and `$` sets to the line's end, so `$` then `j` walks down the ends of the lines.
 
-The search is a plain substring, case-sensitive, and it wraps: `/text` searches forward from the
-cursor, `n` and `N` repeat it forward and backward, a search that runs off the end continues from
-the other and says so, and one that finds nothing says that instead and leaves the cursor where it
-was. A pattern is remembered whether or not it was found; `/` and Enter with nothing typed repeats
-it. A pattern is matched within one line.
+Every command is one undo step, and so is an insert: a command that edits several times — `3x`,
+`J`, a shift over a range — squashes its edits into one, and an insert entered with a count, `3ix`
+or `2o`, repeats its typed text that many times and undoes as one. `.` repeats the last change,
+replaying its keys, and a count on `.` replaces the count the change was recorded with. The
+register is the unnamed one only: everything that deletes writes it, `y` writes it without
+deleting, the text is marked charwise or linewise, and `p` and `P` put it accordingly, `N` times.
+
+Replace mode, entered with `R`, overwrites the character under the cursor with each printable key
+and appends past the end of a line; Backspace steps back and restores the character it overwrote,
+and Esc returns to normal mode. `r` replaces a single character without entering the mode.
+
+Visual mode selects first and operates second: `v` starts a charwise selection and `V` a linewise
+one, the selection is drawn in reverse video and follows the cursor as any motion moves it, `o`
+swaps which end the cursor is on, and an operator, a text object or a key like `d`, `y`, `U`, `J`,
+`r` or `p` acts on what is selected and returns to normal mode. A second `v` or `V`, or Esc, ends
+the selection without acting.
+
+The search is a plain substring, case-sensitive, and it wraps: `/text` searches forward and
+`?text` backward from the cursor, `n` and `N` repeat it in and against its direction, `*` and `#`
+search for the word under the cursor as a whole word, a search that runs off the end continues
+from the other and says so, and one that finds nothing says that instead and leaves the cursor
+where it was. A pattern is remembered whether or not it was found; `/` and Enter with nothing typed
+repeats it. A pattern is matched within one line.
+
+A mark is a position: `ma` notes the cursor under the letter `a`, `'a` goes to the first non-blank
+of its line and <code>`a</code> to its exact column, and `''` and <code>``</code> return to where
+the cursor was before the last jump. An edit above a mark does not move it, and a jump to one
+clamps it to the buffer as it now stands.
+
+The linewise commands — `gg`, `G`, `dd`, `:N`, a jump to a mark's line — land on the line's first
+non-blank, as vim does with `startofline` set, rather than at column zero. `^` is one keystroke
+from any of them when column zero is wanted.
 
 `:w PATH` writes a copy and does not adopt the path, which is what vi does: the buffer goes on
 belonging to the file it was opened with, a later `:w` writes there, and the buffer stays modified
 because its own file is still out of date. Where the copy may land is bounded by `--io-root`, like
 every other path.
 
-`:help` draws a page of the keys and commands over the buffer and any key puts it away. The page is
-assembled from sections the plugins export — the keymap's keys and the command interpreter's words
-— so a key added to a plugin is listed by the plugin that added it. It is laid out in as many
-columns as the terminal is wide enough for, and a terminal too small for the whole list says how
-many columns are missing.
+`:help` draws the keys and commands over the buffer. The list is assembled from sections the
+plugins export — the keymap's keys and the command interpreter's words — so a key added to a plugin
+is listed by the plugin that added it. It is laid out in as many columns as the terminal is wide
+enough for, and a list too long for one screen is paged: Space and PageDown turn forward, `b` and
+PageUp back, and any other key returns to the buffer. The bottom row says which page is up.
 
 The cursor is the terminal's own, and it is on the screen whenever the editor is idle: a frame
 hides it while it redraws and shows it again as the last thing it writes. No shape is selected —
@@ -203,7 +280,10 @@ at the tab stops on a terminal too narrow for them, quits, kills the kernel with
 resizes the pty, and sends SIGTERM, asserting on each path that the terminal was restored — the
 automatic wrap the session clears among the rest. The second types text, edits, searches, deletes and puts lines, goes to a line by
 number, undoes, writes — to its own file and to another — and compares the saved file byte for
-byte, including an undo that walks back past a `:w`. The third checks the per-frame cursor
+byte, including an undo that walks back past a `:w`. It also drives the vim grammar the keymap
+adds: counts and operators over motions, the text objects, the `.` repeat and redo, replace mode,
+join and the case operators, and a visual selection an operator acts on — each ending in a write
+and a byte-exact comparison. The third checks the per-frame cursor
 discipline, that no shape escape is written, and the frame `:help` draws over the buffer. The
 fourth checks the edges: the argument list, the path rules above applied to `:w PATH` as well as to
 the file opened, the file-content policy, a terminal of one row, and a `:wq` the filesystem

@@ -41,10 +41,10 @@
  * revision with the file's, which is what makes `:q` refuse after an undo that walks back past a
  * write (Api.trp's header carries the reasoning).
  *
- * A LINE NUMBER IS A COMMAND. `:42` goes to line 42 and `:$` to the last line, both landing at
- * column zero (VimMotions.trp's header says why that rather than the first non-blank). A number
- * past the end of the buffer goes to the last line rather than failing, and `:0` to the first: the
- * state's own clamp is what decides both.
+ * A LINE NUMBER IS A COMMAND. `:42` goes to line 42 and `:$` to the last line, both landing on
+ * the first non-blank, as the keymap's linewise motions do. A number past the end of the buffer
+ * goes to the last line rather than failing, and `:0` to the first: the state's own clamp is what
+ * decides both.
  *)
 
 import String
@@ -75,6 +75,16 @@ let (** The refusal a modified buffer earns. The wording is vi's, which is what 
         in if n = 0 then -1 else go (0, 0)
         end
 
+    (** The cursor on line `l`, clamped, at its first character that is not a blank. *)
+    fun gotoLine (api, st, l) =
+        let val st1  = api.moveTo (st, l, 0)
+            val line = api.lineAt (st1, st1.line)
+            val n    = String.size line
+            fun go i = if i < n andalso (String.sub (line, i) = " " orelse String.sub (line, i) = "\t")
+                       then go (i + 1) else i
+        in api.moveTo (st1, st1.line, go 0)
+        end
+
     (** Where a write goes: the path the command named, or the buffer's own when it named none. *)
     fun target (st, arg) = if arg = "" then st.path else arg
 
@@ -99,9 +109,9 @@ let (** The refusal a modified buffer earns. The wording is vi's, which is what 
            else if (word = "help" orelse word = "h") andalso bare
                     then (api.setMode (st, HELP), false)
            else if word = "$" andalso bare
-                    then (api.moveTo (st, api.lastLine st, 0), false)
+                    then (gotoLine (api, st, api.lastLine st), false)
            else if bare andalso lineNumber word >= 0
-                    then (api.moveTo (st, lineNumber word - 1, 0), false)
+                    then (gotoLine (api, st, lineNumber word - 1), false)
            else unknown (api, st, c)
         end
 

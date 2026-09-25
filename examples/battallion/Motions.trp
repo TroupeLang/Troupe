@@ -1,0 +1,471 @@
+(* Motions — where a motion lands: words, characters on a line, brackets, paragraphs, and the
+ * pattern search.
+ *
+ * A program-relative module of examples/battallion, and pure. Every function takes `api`, the
+ * plugin record (Api.trp), and the state, and answers either a state with the cursor moved or
+ * `NONE` for a motion that could not be made — `fx` on a line with no `x`, `e` at the end of the
+ * buffer. A motion that fails aborts the command it is the target of, as vim's does: `dfx` with
+ * no `x` deletes nothing.
+ *
+ * A WORD IS A RUN OF ONE CHARACTER CLASS. The small motions `w b e ge` divide the text into three
+ * classes — spaces and tabs, word characters (letters, digits, underscore, and everything above
+ * ASCII), and everything else — and the capital ones `W B E gE` into two, space and not. Every
+ * one of them crosses line breaks as vi's does. An empty line is a word to `w`, `b` and `ge`
+ * and is passed over by `e`, which is what vim does with it. Treating every character above
+ * ASCII as a word character is what keeps a word of accented letters one word; it also makes a
+ * run of box-drawing characters one, which is the price.
+ *
+ * EVERY MOTION TAKES A COUNT, and a count is that many single steps: `3w` is `w` three times,
+ * and it stops where the buffer ends rather than failing when the count runs out — except `e`
+ * and `ge`, which fail at the end they cannot pass, and the character finds, which need the
+ * count-th character to be there.
+ *
+ * SEARCH IS PLAIN TEXT, CASE-SENSITIVE, AND WRAPS. The pattern is a substring, not a regular
+ * expression: what is typed is what is looked for, and `.` and `*` match themselves. Case is not
+ * folded — `/the` does not find `The` — because a search that ignored case would need a way to
+ * say when it should not, and the editor has no options to say it in. A search that reaches the
+ * end of the buffer continues from the other end and says so; one that finds nothing says that
+ * instead and leaves the cursor where it was. A pattern is matched within one line. `*` and `#`
+ * search for the word under the cursor as a whole word: a hit is refused when a word character
+ * touches it on either side.
+ *)
+
+import String
+import List
+import Option
+import "./Api"
+
+let (*-----------------------------------  Messages  ----------------------------------*)
+
+    val wrapDownMessage = "search hit the bottom, continuing at the top"
+    val wrapUpMessage   = "search hit the top, continuing at the bottom"
+
+    fun notFoundMessage p = "pattern not found: " ^ p
+
+    (*-------------------------------  Character classes  -----------------------------*)
+
+    (* The classes: 0 is a space, 1 is a word character, 2 is anything else. *)
+    val classSpace = 0
+    val classWord  = 1
+    val classOther = 2
+
+    fun isSpace c = c = " " orelse c = "\t"
+
+    fun classOf c =
+        if isSpace c then classSpace
+        else let val u = String.subCode (c, 0)
+             in if (u >= 48 andalso u <= 57)
+                   orelse (u >= 65 andalso u <= 90)
+                   orelse (u >= 97 andalso u <= 122)
+                   orelse u = 95
+                   orelse u >= 128
+                then classWord else classOther
+             end
+
+    (** The two-class division the capital motions use: space, and everything else. *)
+    fun bigClassOf c = if isSpace c then classSpace else classWord
+
+    (** The class function for `big`, which says whether the motion was a capital one. *)
+    fun classifier big = if big then bigClassOf else classOf
+
+    fun classIn (cls, line, i) = cls (String.sub (line, i))
+
+    (** The column of the line's first character that is not a space, or its end when it has
+     *  none. *)
+    fun firstNonBlank (api, st, l) =
+        let val line = api.lineAt (st, l)
+            val n    = String.size line
+            fun go i = if i < n andalso isSpace (String.sub (line, i)) then go (i + 1) else i
+        in go 0
+        end
+
+    (** `f` applied `count` times to `SOME st`, stopping at the first NONE. *)
+    fun times (count, f, st) =
+        let fun go (k, s) = if k <= 0 then SOME s
+                            else case f s of NONE => NONE | SOME s' => go (k - 1, s')
+        in go (count, st)
+        end
+
+    (** Like `times`, but a step that fails after at least one succeeded keeps what was gained:
+     *  `5w` near the end of the buffer goes as far as it can. *)
+    fun asFarAs (count, f, st) =
+        let fun go (k, s, moved) =
+                if k <= 0 then SOME s
+                else case f s of NONE => if moved then SOME s else NONE
+                               | SOME s' => go (k - 1, s', true)
+        in go (count, st, false)
+        end
+
+    (*---------------------------------  Word starts  ---------------------------------*)
+
+    (** The column on `line` where the next word begins, at or after `c`, or -1 when the line has
+     *  no word start left in it: the run under the cursor is skipped, then the spaces after it. *)
+    fun nextWordIn (cls, line, n, c) =
+        let fun skip (i, k) = if i < n andalso classIn (cls, line, i) = k then skip (i + 1, k) else i
+            val here  = if c < n then classIn (cls, line, c) else classSpace
+            val after = if here = classSpace then c else skip (c, here)
+            val start = skip (after, classSpace)
+        in if start < n then start else -1
+        end
+
+    (** The column on `line` where the word before `c` begins, or -1 when there is none: the spaces
+     *  before `c` are stepped over, then the run they end. *)
+    fun prevWordIn (cls, line, n, c) =
+        let val from = if c > n then n else c
+            fun skipSpace i = if i >= 0 andalso classIn (cls, line, i) = classSpace
+                              then skipSpace (i - 1) else i
+            val i = skipSpace (from - 1)
+        in if i < 0 then -1
+           else let val k = classIn (cls, line, i)
+                    fun back j = if j >= 0 andalso classIn (cls, line, j) = k
+                                 then back (j - 1) else j + 1
+                in back i
+                end
+        end
+
+    (** One `w`: the cursor at the start of the next word, crossing line breaks. `fresh` says the
+     *  line was reached by crossing a break, in which case a word starting at its first column is
+     *  the answer and an empty line is one too. At the end of the buffer the cursor goes past
+     *  the last character, and from there the motion fails. *)
+    fun wordStep (api, st, big) =
+        let val cls  = classifier big
+            val last = api.lastLine st
+            fun seek (l, c, fresh) =
+                let val line = api.lineAt (st, l)
+                    val n    = String.size line
+                in if fresh andalso (n = 0 orelse classIn (cls, line, 0) <> classSpace)
+                   then SOME (api.moveTo (st, l, 0))
+                   else let val hit = nextWordIn (cls, line, n, c)
+                        in if hit >= 0 then SOME (api.moveTo (st, l, hit))
+                           else if l < last then seek (l + 1, 0, true)
+                           else if c < n then SOME (api.moveTo (st, l, n))
+                           else NONE
+                        end
+                end
+        in seek (st.line, st.col, false)
+        end
+
+    (** One `b`: the cursor at the start of the previous word, crossing line breaks. An empty line
+     *  reached by crossing a break is a word. Fails at the start of the buffer. *)
+    fun wordBackStep (api, st, big) =
+        let val cls = classifier big
+            fun seek (l, c, fresh) =
+                let val line = api.lineAt (st, l)
+                    val n    = String.size line
+                in if fresh andalso n = 0
+                   then SOME (api.moveTo (st, l, 0))
+                   else let val hit = prevWordIn (cls, line, n, c)
+                        in if hit >= 0 then SOME (api.moveTo (st, l, hit))
+                           else if l > 0 then seek (l - 1, Api.goalEnd, true)
+                           else NONE
+                        end
+                end
+        in seek (st.line, st.col, false)
+        end
+
+    (*----------------------------------  Word ends  ----------------------------------*)
+
+    (** One `e`: forward to the end of a word. The cursor first steps off the character it is on,
+     *  then over spaces and empty lines, then to the end of the run it is in. *)
+    fun wordEndStep (api, st, big) =
+        let val cls  = classifier big
+            val last = api.lastLine st
+            fun endOfRun (line, n, c) =
+                let val k = classIn (cls, line, c)
+                    fun go i = if i + 1 < n andalso classIn (cls, line, i + 1) = k
+                               then go (i + 1) else i
+                in go c
+                end
+            fun seek (l, c) =
+                let val line = api.lineAt (st, l)
+                    val n    = String.size line
+                    fun skip i = if i < n andalso classIn (cls, line, i) = classSpace
+                                 then skip (i + 1) else i
+                    val i = skip c
+                in if i < n then SOME (api.moveTo (st, l, endOfRun (line, n, i)))
+                   else if l < last then seek (l + 1, 0)
+                   else NONE
+                end
+        in seek (st.line, st.col + 1)
+        end
+
+    (** One `ge`: backward to the end of the previous word. The run under the cursor is left
+     *  first, then spaces are stepped over backwards; an empty line is a stop. Fails at the
+     *  start of the buffer. *)
+    fun wordEndBackStep (api, st, big) =
+        let val cls = classifier big
+            (* The position before (l, c), crossing to the end of the line above; NONE at the
+             * start of the buffer. *)
+            fun before (l, c) =
+                if c > 0 then SOME (l, c - 1)
+                else if l > 0 then let val m = String.size (api.lineAt (st, l - 1))
+                                   in SOME (l - 1, if m = 0 then 0 else m - 1)
+                                   end
+                else NONE
+            fun isBlankAt (l, c) =
+                let val line = api.lineAt (st, l)
+                in String.size line > 0 andalso classIn (cls, line, c) = classSpace
+                end
+            fun skipBlanks (l, c) =
+                if isBlankAt (l, c)
+                then case before (l, c) of NONE => NONE | SOME p => skipBlanks p
+                else SOME (l, c)
+            val line = api.lineAt (st, st.line)
+            val n    = String.size line
+            (* Leave the run the cursor is in: the column of its first character, or the cursor's
+             * own when it is on a space or past the end. *)
+            fun runStart i =
+                if i >= n orelse classIn (cls, line, i) = classSpace then i
+                else let val k = classIn (cls, line, i)
+                         fun go j = if j > 0 andalso classIn (cls, line, j - 1) = k
+                                    then go (j - 1) else j
+                     in go i
+                     end
+        in case before (st.line, runStart st.col) of
+                NONE   => NONE
+              | SOME p => case skipBlanks p of
+                               NONE         => NONE
+                             | SOME (l, c)  => SOME (api.moveTo (st, l, c))
+        end
+
+    (*--------------------------------  The word motions  ------------------------------*)
+
+    fun wordForward  (api, st, count, big) = asFarAs (count, fn s => wordStep (api, s, big), st)
+    fun wordBackward (api, st, count, big) = asFarAs (count, fn s => wordBackStep (api, s, big), st)
+    fun wordEnd      (api, st, count, big) = times (count, fn s => wordEndStep (api, s, big), st)
+    fun wordEndBack  (api, st, count, big) = times (count, fn s => wordEndBackStep (api, s, big), st)
+
+    (*--------------------------------  Character finds  ------------------------------*)
+
+    (** The column of the `count`-th `ch` after column `from` on `line`, or -1. *)
+    fun findAfter (line, n, from, ch, count) =
+        let fun go (i, k) =
+                if i >= n then -1
+                else if String.sub (line, i) = ch
+                then (if k <= 1 then i else go (i + 1, k - 1))
+                else go (i + 1, k)
+        in go (from + 1, count)
+        end
+
+    (** The column of the `count`-th `ch` before column `from` on `line`, or -1. *)
+    fun findBefore (line, from, ch, count) =
+        let fun go (i, k) =
+                if i < 0 then -1
+                else if String.sub (line, i) = ch
+                then (if k <= 1 then i else go (i - 1, k - 1))
+                else go (i - 1, k)
+        in go (from - 1, count)
+        end
+
+    (** `f`, `t`, `F` and `T` — `cmd` is the letter — for `ch`, `count` times, on the cursor's
+     *  line. `repeat` says the command is `;` or `,` repeating a `t` or `T`, which starts one
+     *  character further so that it does not stick on the character it already sits before. *)
+    fun charFind (api, st, cmd, ch, count, repeat) =
+        let val line = api.lineAt (st, st.line)
+            val n    = String.size line
+            val till = cmd = "t" orelse cmd = "T"
+            val fwd  = cmd = "f" orelse cmd = "t"
+            val from = if till andalso repeat then (if fwd then st.col + 1 else st.col - 1)
+                       else st.col
+            val hit  = if fwd then findAfter (line, n, from, ch, count)
+                       else findBefore (line, from, ch, count)
+            val col  = if hit < 0 then -1 else if not till then hit
+                       else if fwd then hit - 1 else hit + 1
+        in if col < 0 then NONE else SOME (api.moveTo (st, st.line, col))
+        end
+
+    (*------------------------------------  Brackets  ---------------------------------*)
+
+    (** The bracket that closes `c`, or opens it: what `%` pairs. *)
+    fun partner "(" = ")" | partner ")" = "("
+      | partner "[" = "]" | partner "]" = "["
+      | partner "{" = "}" | partner "}" = "{"
+      | partner _   = ""
+
+    fun isOpen c = c = "(" orelse c = "[" orelse c = "{"
+
+    (** The position of the bracket matching the `open`/`close` pair whose one half is at
+     *  `(l, c)`, scanning forward for a closer and backward for an opener across lines, with
+     *  nesting counted. NONE when unmatched. *)
+    fun matchFrom (api, st, l, c, ch) =
+        let val other = partner ch
+            val fwd   = isOpen ch
+            val last  = api.lastLine st
+            fun scan (l, c, depth) =
+                let val line = api.lineAt (st, l)
+                    val n    = String.size line
+                in if fwd andalso c >= n
+                   then (if l < last then scan (l + 1, 0, depth) else NONE)
+                   else if (not fwd) andalso c < 0
+                   then (if l > 0 then scan (l - 1, String.size (api.lineAt (st, l - 1)) - 1, depth)
+                         else NONE)
+                   else let val x = String.sub (line, c)
+                            val next = if fwd then c + 1 else c - 1
+                        in if x = ch then scan (l, next, depth + 1)
+                           else if x = other
+                           then (if depth = 0 then SOME (l, c) else scan (l, next, depth - 1))
+                           else scan (l, next, depth)
+                        end
+                end
+            val start = if fwd then c + 1 else c - 1
+        in scan (l, start, 0)
+        end
+
+    (** `%`: the bracket at or after the cursor on its line, and then the one it pairs with. *)
+    fun matchBracket (api, st) =
+        let val line = api.lineAt (st, st.line)
+            val n    = String.size line
+            fun find i = if i >= n then -1
+                         else if partner (String.sub (line, i)) <> "" then i else find (i + 1)
+            val i = find st.col
+        in if i < 0 then NONE
+           else case matchFrom (api, st, st.line, i, String.sub (line, i)) of
+                     NONE        => NONE
+                   | SOME (l, c) => SOME (api.moveTo (st, l, c))
+        end
+
+    (*-----------------------------------  Paragraphs  --------------------------------*)
+
+    fun isEmptyLine (api, st, l) = api.lineLength (st, l) = 0
+
+    (** One `}`: forward to the next empty line after a paragraph, or the end of the last line. *)
+    fun paragraphForwardStep (api, st) =
+        let val last = api.lastLine st
+            fun skipEmpty l = if l <= last andalso isEmptyLine (api, st, l) then skipEmpty (l + 1) else l
+            fun skipFull  l = if l <= last andalso not (isEmptyLine (api, st, l)) then skipFull (l + 1) else l
+            val l = skipFull (skipEmpty st.line)
+        in if l <= last then SOME (api.moveTo (st, l, 0))
+           else if st.line = last andalso st.col >= api.lineLength (st, last) - 1 then NONE
+           else SOME (api.moveTo (st, last, api.lineLength (st, last) - 1))
+        end
+
+    (** One `{`: backward to the previous empty line before a paragraph, or the first line. *)
+    fun paragraphBackStep (api, st) =
+        let fun skipEmpty l = if l >= 0 andalso isEmptyLine (api, st, l) then skipEmpty (l - 1) else l
+            fun skipFull  l = if l >= 0 andalso not (isEmptyLine (api, st, l)) then skipFull (l - 1) else l
+            val l = skipFull (skipEmpty st.line)
+        in if l >= 0 then SOME (api.moveTo (st, l, 0))
+           else if st.line = 0 andalso st.col = 0 then NONE
+           else SOME (api.moveTo (st, 0, 0))
+        end
+
+    fun paragraphForward (api, st, count) = asFarAs (count, fn s => paragraphForwardStep (api, s), st)
+    fun paragraphBack    (api, st, count) = asFarAs (count, fn s => paragraphBackStep (api, s), st)
+
+    (*------------------------------------  Search  -----------------------------------*)
+
+    (** Whether the hit of `pat` at column `i` of `line` is a whole word: no word character
+     *  touches it on either side. *)
+    fun wholeWordAt (line, i, pat) =
+        let val n = String.size line
+            val j = i + String.size pat
+            val leftOk  = i = 0 orelse classOf (String.sub (line, i - 1)) <> classWord
+            val rightOk = j >= n orelse classOf (String.sub (line, j)) <> classWord
+        in leftOk andalso rightOk
+        end
+
+    (** The first hit of `pat` on `line` at or after `from`, honouring `word`, or -1. *)
+    fun hitIn (line, pat, from, word) =
+        let val i = strIndexOf (line, pat, from)
+        in if i < 0 then -1
+           else if (not word) orelse wholeWordAt (line, i, pat) then i
+           else hitIn (line, pat, i + 1, word)
+        end
+
+    (** The first hit at or after `(l0, c0)`, scanning to the last line: `SOME (line, col)` or
+     *  `NONE`. One scan per line, so a miss costs a scan of the text below the cursor. *)
+    fun hitFrom (api, st, pat, word, l0, c0) =
+        let val last = api.lastLine st
+            fun go (l, from) =
+                if l > last then NONE
+                else let val i = hitIn (api.lineAt (st, l), pat, from, word)
+                     in if i >= 0 then SOME (l, i) else go (l + 1, 0)
+                     end
+        in go (l0, c0)
+        end
+
+    (** The last hit on `line` that begins before column `limit`, or -1. *)
+    fun lastHitIn (line, pat, limit, word) =
+        let fun go (i, best) =
+                let val j = hitIn (line, pat, i, word)
+                in if j < 0 orelse j >= limit then best else go (j + 1, j)
+                end
+        in go (0, -1)
+        end
+
+    (** The last hit before `(l0, c0)`, scanning upwards to the first line. *)
+    fun hitBefore (api, st, pat, word, l0, c0) =
+        let fun go (l, limit) =
+                if l < 0 then NONE
+                else let val i = lastHitIn (api.lineAt (st, l), pat, limit, word)
+                     in if i >= 0 then SOME (l, i) else go (l - 1, Api.goalEnd)
+                     end
+        in go (l0, c0)
+        end
+
+    (** The state at the next hit of `pat`, or NONE with the reason in the status line. `down`
+     *  is the direction and `word` whether only whole words count. A search that runs off the
+     *  end continues from the other one, which is what makes `n` on the last hit come back to
+     *  the first; the wrap is reported, a miss is reported, and a hit that needed neither says
+     *  nothing. *)
+    fun searchFor (api, st, pat, word, down) =
+        let val (hit, wrapped) =
+                if down
+                then case hitFrom (api, st, pat, word, st.line, st.col + 1) of
+                          SOME p => (SOME p, false)
+                        | NONE   => (hitFrom (api, st, pat, word, 0, 0), true)
+                else case hitBefore (api, st, pat, word, st.line, st.col) of
+                          SOME p => (SOME p, false)
+                        | NONE   => (hitBefore (api, st, pat, word, api.lastLine st, Api.goalEnd), true)
+            val note = if down then wrapDownMessage else wrapUpMessage
+        in case hit of
+                NONE        => NONE
+              | SOME (l, c) =>
+                  let val st' = api.moveTo (st, l, c)
+                  in SOME (if wrapped then api.setStatus (st', note) else st')
+                  end
+        end
+
+    (** `searchFor` `count` times; NONE on a miss. *)
+    fun search (api, st, pat, word, down, count) =
+        times (count, fn s => searchFor (api, s, pat, word, down), st)
+
+    (** The word under the cursor, or the first word after it on the line: `SOME (text, col)`
+     *  or NONE when the line has none. What `*` and `#` search for. *)
+    fun wordUnder (api, st) =
+        let val line = api.lineAt (st, st.line)
+            val n    = String.size line
+            fun isW i = classIn (classOf, line, i) = classWord
+            fun fwd i = if i < n andalso not (isW i) then fwd (i + 1) else i
+            fun back i = if i > 0 andalso isW (i - 1) then back (i - 1) else i
+            fun run i = if i < n andalso isW i then run (i + 1) else i
+            val i = fwd st.col
+        in if i >= n then NONE
+           else let val a = back i
+                    val b = run i
+                in SOME (String.substring (line, a, b), a)
+                end
+        end
+
+in [ ("classSpace", classSpace)
+   , ("partnerOf", partner)
+   , ("classWord", classWord)
+   , ("classOf", classOf)
+   , ("bigClassOf", bigClassOf)
+   , ("isSpace", isSpace)
+   , ("firstNonBlank", firstNonBlank)
+   , ("times", times)
+   , ("wordForward", wordForward)
+   , ("wordBackward", wordBackward)
+   , ("wordEnd", wordEnd)
+   , ("wordEndBack", wordEndBack)
+   , ("charFind", charFind)
+   , ("matchFrom", matchFrom)
+   , ("matchBracket", matchBracket)
+   , ("paragraphForward", paragraphForward)
+   , ("paragraphBack", paragraphBack)
+   , ("search", search)
+   , ("wordUnder", wordUnder)
+   , ("notFoundMessage", notFoundMessage)
+   ]
+end

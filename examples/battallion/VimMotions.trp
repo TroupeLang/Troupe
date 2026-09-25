@@ -1,83 +1,98 @@
-(* VimMotions — battallion's keymap: modes, motions, search and the editing keys.
+(* VimMotions — battallion's keymap: vim's normal-mode grammar, and the insert, replace, command
+ * and help modes.
  *
- * A plugin. It imports `Api` for the state operations and `Key` for the key values, holds no
- * authority, no pid and no descriptor, and its whole effect on the editor is the state it returns.
- * The kernel hands it the `api` record and a command interpreter and folds its `onKey` over the
- * decoded keys.
+ * A plugin. It imports `Api` for the state operations, `Key` for the key values, and the three
+ * modules that answer where a motion lands (Motions.trp), what text an object names
+ * (TextObjects.trp) and what an operator does to a range (Operators.trp). It holds no authority,
+ * no pid and no descriptor, and its whole effect on the editor is the state it returns. The kernel
+ * hands it the `api` record, a command interpreter and the help page count, and folds its `onKey`
+ * over the decoded keys.
  *
- * ONE KEY IN, ONE STATE OUT. `onKey (api, commands, st, k)` returns `(state', quit)`; `quit` is
- * true when the key ends the session. A key that asks for something the kernel must do — a write —
- * leaves a request in the state instead (`api.requestWrite`), which the kernel carries out before
- * folding the keys behind it.
+ * ONE KEY IN, ONE STATE OUT. `onKey (api, commands, helpPages, st, k)` returns `(state', quit)`;
+ * `quit` is true when the key ends the session. A key that asks for something the kernel must do
+ * — a write — leaves a request in the state instead (`api.requestWrite`), which the kernel carries
+ * out before folding the keys behind it.
  *
  * THE COMMAND WORD IS NOT THIS PLUGIN'S. `:` opens the command line and this module edits it, but
  * what a command *means* is FileOps.trp's: on Enter the line is handed to the `commands` function
- * the kernel passed in, with the mode already back to normal and the line cleared. `q` and CTRL-c
- * go through the same function as the word "q", which is what makes them refuse a modified buffer
- * exactly as `:q` does.
+ * the kernel passed in, with the mode already back to normal and the line cleared. `q`, CTRL-c
+ * and `ZQ` go through the same function as the words "q" and "q!", and `ZZ` as "wq", which is
+ * what makes them behave exactly as the typed commands do.
  *
- * NORMAL MODE. `h j k l` and the arrows move by one; `0` and Home go to the line's start, `^` to
- * its first non-blank, `$` and End to its end; `w` and `b` move by a word; `gg` and `G` go to the
- * first and last line; PageUp/PageDown and CTRL-b/CTRL-f move by one screen. `i` enters insert
- * mode, `o` opens a line below and enters it, `x` deletes the character under the cursor, `dd`
- * deletes the line, `yy` yanks it, `p` and `P` put it back below and above, `u` undoes, `/` starts
- * a search and `n` and `N` repeat it, `:` starts a command line. `q` and CTRL-c quit, refusing on a
- * modified buffer exactly as `:q` does. CTRL-c quits because in raw mode it arrives as the byte
- * 0x03 with no signal raised, so without a binding the habit of pressing it would do nothing at
- * all. Every other key is ignored.
+ * A KEY IS A TOKEN. Every key is turned into a string first: a printable key is its own
+ * character, and every other key a name in angle brackets — `<enter>`, `<down>`, `<c-r>`. The
+ * grammar below is written over tokens, so `d<down>` and `dj` are the same command, and the keys
+ * typed in an insert are kept as tokens and replayed as tokens.
  *
- * INSERT MODE. A printable key inserts itself, whatever it is: the payload of `KEY_PRINT` is one
- * code point as a string and it goes into the buffer as it stands, so a multibyte character typed
- * or pasted is stored as typed. Enter splits the line, Tab inserts a tab, Backspace deletes the
- * character to the left and joins with the line above when there is none, Delete removes the
- * character under the cursor, Esc returns to normal mode. Motions work in insert mode too.
+ * NORMAL MODE IS A GRAMMAR, NOT A LIST OF BINDINGS:
  *
- * COMMAND MODE IS ONE MODE FOR TWO PROMPTS. `:` opens it with a colon and `/` with a slash, and
- * `st.prompt` is which. The editing is the same either way — printable keys extend the line,
- * Backspace shortens it and leaves the mode when the line is empty, as backspacing over the colon
- * does in vi, Esc cancels — and only Enter looks at the prompt, handing a colon line to the
- * command interpreter and a slash line to the search below. One mode rather than two because the
- * status line has one row for both and because a second mode would be the same nine keys again.
+ *     [count] operator [count] (motion | text object | operator again)
+ *     [count] command
  *
- * A TWO-KEY SEQUENCE IS A PREFIX IN THE STATE. `gg`, `dd` and `yy` are the pairs, and `st.pending`
- * holds the first key of one until the next key arrives. The rule is the whole mechanism: in
- * normal mode, a key that arrives with a prefix waiting is looked up as a *pair* and the prefix is
- * cleared, whether or not the pair is bound. So `d` then `x` does nothing and leaves normal mode
- * where it was, Esc after a prefix is a way to abandon it, and no key can be left half-pressed.
- * The prefix is shown at the end of the status line, so a `g` pressed by accident is visible
- * rather than silent. A prefix does not survive into insert or command mode, there being no pair
- * to complete it there, and it is not in an undo snapshot (Api.trp).
+ * `st.pending` is the printable tokens of the command typed so far, shown at the end of the
+ * status line. Each key extends it and the whole is parsed again: a complete command runs and
+ * clears it, an incomplete one keeps it, and a sequence the grammar has no reading for drops it
+ * — so `d` then `x` does nothing and leaves normal mode where it was, Esc abandons whatever is
+ * pending, and no key is ever left half-pressed. A named key never stays pending: it completes a
+ * command or it cancels one. Two counts multiply: `2d3w` deletes six words.
  *
- * SEARCH IS PLAIN TEXT, CASE-SENSITIVE, AND WRAPS. `/text` searches forward from just after the
- * cursor; `n` repeats it and `N` runs it backwards, both from wherever the cursor is now. The
- * pattern is a substring, not a regular expression: what is typed is what is looked for, and `.`
- * and `*` match themselves. Case is not folded — `/the` does not find `The` — because a search
- * that ignored case would need a way to say when it should not, and the editor has no options to
- * say it in. A search that reaches the end of the buffer continues from the top and says so in
- * the status line; one that finds nothing says that instead and leaves the cursor where it was. A
- * pattern is matched within one line: the buffer is scanned line by line, so a pattern cannot span
- * a line break — which nothing typed at the prompt can contain anyway.
+ * THE OPERATORS are `d` delete, `c` change, `y` yank, `<` and `>` shift, `g~`, `gu` and `gU`
+ * for case. Doubled — `dd`, `yy`, `>>`, `gUU` — an operator takes the line, or `count` lines. THE
+ * MOTIONS are `h j k l w W b B e E ge gE 0 ^ $ | f t F T ; , % { } gg G H M L + - _ n N * # '
+ * \`` and the named keys; what each one means is Motions.trp's, and whether the text it covers
+ * ends before or on the character it lands on — exclusive, inclusive or linewise — is the table
+ * `kindOf` below. THE TEXT OBJECTS are `i` or `a` with `w W ( ) b [ ] { } B < > " ' \` p`. THE
+ * COMMANDS are the keys that stand alone: `x X s S D C Y p P J gJ r ~ u CTRL-r . i a I A o O R m
+ * zz zt zb ZZ ZQ : / ? q CTRL-c CTRL-e CTRL-y CTRL-d CTRL-u CTRL-f CTRL-b`. `q` quits rather than
+ * recording a macro: there are no registers to record into, and the editor has had `q` for quit
+ * since it could quit.
  *
- * A WORD IS A RUN OF ONE CHARACTER CLASS. `w` and `b` divide the text into three classes — spaces
- * and tabs, word characters (letters, digits, underscore, and everything above ASCII), and
- * everything else — and move to the start of the next or the previous run that is not spaces,
- * crossing line breaks as vi does. An empty line is a word of its own and both keys stop on it.
- * Treating every character above ASCII as a word character is what keeps a word of accented
- * letters one word; it also makes a run of box-drawing characters one, which is the price.
+ * A MOTION THAT CANNOT BE MADE ABORTS ITS COMMAND. `fx` on a line without an `x`, `j` on the last
+ * line, `e` at the end of the buffer: the motion answers NONE, the command does nothing and the
+ * state is what it was. Under an operator that is what keeps `dfx` from deleting anything when
+ * there is no `x`.
  *
- * THE LINEWISE KEYS LAND AT COLUMN ZERO. `gg`, `G`, `dd` and `:N` put the cursor at the start of
- * the line rather than at its first non-blank, which is where vi puts it. `^` is the key that
- * finds the first non-blank, and it is one keystroke away from any of them.
+ * THE CURSOR IS ON A CHARACTER IN NORMAL MODE, as vi's is: after every normal-mode command
+ * `api.intoLine` pulls a cursor that sits past the last character back onto it, and leaving
+ * insert mode steps the cursor left by one. Insert mode may sit past the end, since that is where
+ * appended text goes; `a` and `A` are the keys that put it there. The goal column is not touched
+ * by the pull, so `$` and then `j` still walk down the ends of the lines.
  *
- * THE YANK REGISTER IS ONE LINE. `yy` takes the cursor's line, `dd` takes the line it deletes, and
- * `p` and `P` put whichever was taken last below or above the cursor's line. There is no charwise
- * yank and there are no named registers: a delete that is not linewise (`x`) does not touch the
- * register, so what `p` puts back is always a whole line.
+ * EVERY COMMAND IS ONE UNDO STEP, and so is every insert. A command that edits several times —
+ * `3x`, `J`, `>j` — pushes several undo entries and squashes them into one when it completes; an
+ * insert notes the undo depth when it begins and squashes when Esc ends it (Api.trp's
+ * `beginInsert` and `endInsert`). A change that opens an insert, `cw` or `o`, begins the insert
+ * before it edits, so that the deletion and the typing are one step too.
  *
- * WHAT A VI USER WILL STILL MISS. There is no count prefix, so `5j` is five presses of `j`. Undo is
- * per keystroke, so a typed word takes as many `u`s as it had letters. `x` at the end of a line
- * does nothing where vi steps left onto the last character first, and leaving insert mode does not
- * pull the cursor left (Api.trp's header says where that choice lives).
+ * `.` REPEATS THE LAST CHANGE. When a change completes, its tokens are kept (`st.dot`), and when
+ * it opened an insert the keys typed until Esc are kept beside them (`st.dotInsert`). `.` runs
+ * the tokens again and then types the keys again; a count given to `.` replaces the count that
+ * was recorded. A count on an insert command — `3ix`, `2o` — repeats the typed keys, or for `o`
+ * and `O` the whole command, that many times when Esc is pressed, which is the same replay.
+ *
+ * THE REGISTER IS ONE, THE UNNAMED. Everything that deletes writes it — `x`, `dw`, `dd`, `s`,
+ * `C` — and `y` writes it without deleting; the text is marked charwise or linewise, and `p` and
+ * `P` put it accordingly, `count` times. There are no named registers.
+ *
+ * REPLACE MODE overwrites: a printable key replaces the character under the cursor and moves on,
+ * or appends past the end of the line; Backspace steps back and restores the character it had
+ * overwritten, by undoing that one replacement; Enter breaks the line without replacing anything.
+ * Everything else is insert mode's.
+ *
+ * COMMAND MODE IS ONE MODE FOR THREE PROMPTS. `:` opens it with a colon, `/` and `?` with the
+ * search's direction, and `st.prompt` is which. The editing is the same for all — printable keys
+ * extend the line, Backspace shortens it and leaves the mode when the line is empty, as
+ * backspacing over the colon does in vi, Esc cancels — and only Enter looks at the prompt, handing
+ * a colon line to the command interpreter and a search line to the search.
+ *
+ * MARKS ARE POSITIONS. `m` with a letter notes the cursor, `'` with the letter goes to the first
+ * non-blank of its line and `` ` `` to the exact column, both clamped to the buffer as it now
+ * stands: an edit above a mark does not move it. `''` and ``` `` ``` go back to where the cursor
+ * was before the last jump — a jump being any of `G gg % { } n N * # H M L` or a search, or a
+ * mark.
+ *
+ * THE LINEWISE KEYS LAND ON THE FIRST NON-BLANK, as vim's do with `startofline` set: `gg`, `G`,
+ * `dd`, `j` after a linewise put, `'a`.
  *)
 
 import String
@@ -85,335 +100,894 @@ import List
 import Option
 import "./Api"
 import "./Key"
+import "./Motions"
+import "./TextObjects"
+import "./Operators"
+
+(* What an operator is applied to. *)
+datatype target = MOTION of string * string     (* the motion's name and its character, if any *)
+                | OBJECT of string * string     (* "i" or "a", and the object's character      *)
+                | SAME                          (* the operator doubled: the line               *)
+
+(* A complete normal-mode command: an operator with its target, or a command that stands alone,
+ * each with the count typed before it, if one was. *)
+datatype cmd = OPERATE of int option * string * target
+             | ACT     of int option * string * string
+
+datatype outcome = DONE of cmd | MORE | BAD
 
 let (*-----------------------------------  Messages  ----------------------------------*)
 
-    val noPatternMessage     = "no previous search pattern"
-    val wrapDownMessage      = "search hit the bottom, continuing at the top"
-    val wrapUpMessage        = "search hit the top, continuing at the bottom"
-    val nothingYankedMessage = "nothing has been yanked"
-    val yankedMessage        = "line yanked"
+    val noPatternMessage = "no previous search pattern"
+    val noMarkMessage    = "mark not set"
+    val noChangeMessage  = "no change to repeat"
 
-    fun notFoundMessage p = "pattern not found: " ^ p
+    (*------------------------------------  Tokens  -----------------------------------*)
 
-    (*-------------------------------  Character classes  -----------------------------*)
+    fun tokenOf (KEY_PRINT c)   = c
+      | tokenOf KEY_ENTER       = "<enter>"
+      | tokenOf KEY_TAB         = "<tab>"
+      | tokenOf KEY_BACKSPACE   = "<bs>"
+      | tokenOf KEY_DELETE      = "<del>"
+      | tokenOf KEY_ESC         = "<esc>"
+      | tokenOf KEY_UP          = "<up>"
+      | tokenOf KEY_DOWN        = "<down>"
+      | tokenOf KEY_LEFT        = "<left>"
+      | tokenOf KEY_RIGHT       = "<right>"
+      | tokenOf KEY_HOME        = "<home>"
+      | tokenOf KEY_END         = "<end>"
+      | tokenOf KEY_PAGEUP      = "<pgup>"
+      | tokenOf KEY_PAGEDOWN    = "<pgdn>"
+      | tokenOf (KEY_CTRL c)    = "<c-" ^ c ^ ">"
+      | tokenOf (KEY_UNKNOWN s) = "<?>"
 
-    (* The classes `w` and `b` move between: 0 is a space, 1 is a word character, 2 is anything
-     * else. Everything above ASCII is class 1, so an accented word is one word. *)
-    val classSpace = 0
-    val classWord  = 1
-    val classOther = 2
+    (** Whether a token is a printable key: one code point, which is not a name. *)
+    fun isPrintable t = String.size t = 1 orelse (String.size t = 2 andalso String.sub (t, 0) <> "<")
 
-    fun classOf c =
-        if c = " " orelse c = "\t" then classSpace
-        else let val u = String.subCode (c, 0)
-             in if (u >= 48 andalso u <= 57)
-                   orelse (u >= 65 andalso u <= 90)
-                   orelse (u >= 97 andalso u <= 122)
-                   orelse u = 95
-                   orelse u >= 128
-                then classWord else classOther
-             end
-
-    fun classIn (line, i) = classOf (String.sub (line, i))
-
-    (*---------------------------------  Word motions  --------------------------------*)
-
-    (** The column on `line` where the next word begins, at or after `c`, or -1 when the line has
-     *  no word start left in it: the run under the cursor is skipped, then the spaces after it. *)
-    fun nextWordIn (line, n, c) =
-        let fun skip (i, k) = if i < n andalso classIn (line, i) = k then skip (i + 1, k) else i
-            val here  = if c < n then classIn (line, c) else classSpace
-            val after = if here = classSpace then c else skip (c, here)
-            val start = skip (after, classSpace)
-        in if start < n then start else -1
+    (** The tokens of a pending string: its code points, a surrogate pair kept together. *)
+    fun tokensOf s =
+        let val n = String.size s
+            fun go (i, acc) =
+                if i >= n then List.reverse acc
+                else let val u = String.subCode (s, i)
+                         val w = if u >= 0xd800 andalso u <= 0xdbff andalso i + 1 < n then 2 else 1
+                     in go (i + w, String.substring (s, i, i + w) :: acc)
+                     end
+        in go (0, [])
         end
 
-    (** The column on `line` where the word before `c` begins, or -1 when there is none: the spaces
-     *  before `c` are stepped over, then the run they end. *)
-    fun prevWordIn (line, n, c) =
-        let val from = if c > n then n else c
-            fun skipSpace i = if i >= 0 andalso classIn (line, i) = classSpace
-                              then skipSpace (i - 1) else i
-            val i = skipSpace (from - 1)
-        in if i < 0 then -1
-           else let val k = classIn (line, i)
-                    fun back j = if j >= 0 andalso classIn (line, j) = k
-                                 then back (j - 1) else j + 1
+    fun isDigit t = String.size t = 1 andalso String.subCode (t, 0) >= 48 andalso String.subCode (t, 0) <= 57
+
+    fun digitOf t = String.subCode (t, 0) - 48
+
+    fun isLetter t = String.size t = 1 andalso String.subCode (t, 0) >= 97 andalso String.subCode (t, 0) <= 122
+
+    (*----------------------------------  The grammar  ---------------------------------*)
+
+    (** A count: digits starting with one that is not `0`, `0` alone being the motion. *)
+    fun count toks =
+        let fun go (t :: rest, n) = if isDigit t then go (rest, n * 10 + digitOf t)
+                                    else (SOME n, t :: rest)
+              | go ([], n)        = (SOME n, [])
+        in case toks of
+                t :: rest => if isDigit t andalso t <> "0" then go (rest, digitOf t)
+                             else (NONE, toks)
+              | []        => (NONE, [])
+        end
+
+    fun mul (SOME a, SOME b) = SOME (a * b)
+      | mul (SOME a, NONE)   = SOME a
+      | mul (NONE, b)        = b
+
+    fun isOperator t = t = "d" orelse t = "c" orelse t = "y" orelse t = "<" orelse t = ">"
+
+    (** The token that doubles an operator: `dd`, `>>`, `gUU`. *)
+    fun doubles ("g~", t) = t = "~"
+      | doubles ("gu", t) = t = "u"
+      | doubles ("gU", t) = t = "U"
+      | doubles (op, t)   = t = op
+
+    (** The motions that take a character. *)
+    fun needsChar t = t = "f" orelse t = "t" orelse t = "F" orelse t = "T"
+                      orelse t = "'" orelse t = "`"
+
+    (** The one-token motions. *)
+    fun isMotion t =
+        List.elem t [ "h", "j", "k", "l", "w", "W", "b", "B", "e", "E", "0", "^", "$", "|"
+                    , ";", ",", "%", "{", "}", "G", "H", "M", "L", "+", "-", "_", "n", "N"
+                    , "*", "#", " ", "<left>", "<right>", "<up>", "<down>", "<home>", "<end>"
+                    , "<bs>", "<enter>", "<pgup>", "<pgdn>", "<c-f>", "<c-b>", "<c-d>", "<c-u>" ]
+
+    fun isObjectChar t =
+        List.elem t [ "w", "W", "(", ")", "b", "[", "]", "{", "}", "B", "<", ">", "p"
+                    , String.strCode 34, "'", "`" ]
+
+    (** The commands that stand alone. *)
+    fun isAct t =
+        List.elem t [ "x", "X", "s", "S", "D", "C", "Y", "p", "P", "J", "~", "u", "."
+                    , "i", "a", "I", "A", "o", "O", "R", ":", "/", "?", "q", "<del>"
+                    , "<c-r>", "<c-c>", "<c-e>", "<c-y>", "<esc>", "v", "V" ]
+
+    (** The rest of an operator's command: its own count and its target. *)
+    fun parseTarget (n1, op, toks) =
+        let val (n2, rest) = count toks
+            val n = mul (n1, n2)
+        in case rest of
+                []        => MORE
+              | t :: more =>
+                  if doubles (op, t) then DONE (OPERATE (n, op, SAME))
+                  else if t = "i" orelse t = "a"
+                  then (case more of
+                             []     => MORE
+                           | u :: _ => if isObjectChar u then DONE (OPERATE (n, op, OBJECT (t, u)))
+                                       else BAD)
+                  else if t = "g"
+                  then (case more of
+                             []     => MORE
+                           | u :: _ => if u = "g" orelse u = "e" orelse u = "E"
+                                       then DONE (OPERATE (n, op, MOTION ("g" ^ u, "")))
+                                       else if doubles (op, "g" ^ u) then DONE (OPERATE (n, op, SAME))
+                                       else BAD)
+                  else if needsChar t
+                  then (case more of
+                             []     => MORE
+                           | u :: _ => DONE (OPERATE (n, op, MOTION (t, u))))
+                  else if isMotion t then DONE (OPERATE (n, op, MOTION (t, "")))
+                  else BAD
+        end
+
+    (** The tokens as a command: complete, incomplete, or nothing the grammar reads. *)
+    fun parse toks =
+        let val (n1, rest) = count toks
+        in case rest of
+                []        => MORE
+              | t :: more =>
+                  if isOperator t then parseTarget (n1, t, more)
+                  else if t = "g"
+                  then (case more of
+                             []     => MORE
+                           | u :: after =>
+                               if u = "~" orelse u = "u" orelse u = "U" then parseTarget (n1, "g" ^ u, after)
+                               else if u = "g" orelse u = "e" orelse u = "E" orelse u = "J"
+                               then DONE (ACT (n1, "g" ^ u, ""))
+                               else BAD)
+                  else if t = "z" orelse t = "Z"
+                  then (case more of
+                             []     => MORE
+                           | u :: _ => if (t = "z" andalso (u = "z" orelse u = "t" orelse u = "b"))
+                                          orelse (t = "Z" andalso (u = "Z" orelse u = "Q"))
+                                       then DONE (ACT (n1, t ^ u, "")) else BAD)
+                  else if needsChar t orelse t = "r" orelse t = "m"
+                  then (case more of
+                             []     => MORE
+                           | u :: _ => DONE (ACT (n1, t, u)))
+                  else if isMotion t orelse isAct t then DONE (ACT (n1, t, ""))
+                  else BAD
+        end
+
+    (*-----------------------------------  Motions  -----------------------------------*)
+
+    (** How the text a motion covers is bounded. `;` and `,` take the kind of the find they
+     *  repeat. *)
+    fun kindOf (name, st) =
+        if List.elem name ["j", "k", "<up>", "<down>", "gg", "G", "+", "-", "_", "<enter>"
+                          , "H", "M", "L", "'", "<c-f>", "<c-b>", "<c-d>", "<c-u>", "<pgup>", "<pgdn>"]
+        then LINEWISE
+        else if List.elem name ["e", "E", "ge", "gE", "f", "t", "$", "<end>", "%"] then INCLUSIVE
+        else if name = ";" orelse name = ","
+        then (if String.size st.charFind > 0
+                 andalso (String.sub (st.charFind, 0) = "f" orelse String.sub (st.charFind, 0) = "t")
+              then INCLUSIVE else EXCLUSIVE)
+        else EXCLUSIVE
+
+    fun isJump name =
+        List.elem name ["G", "gg", "%", "{", "}", "n", "N", "*", "#", "H", "M", "L", "'", "`"]
+
+    fun nonBlank (api, st, l) = api.moveTo (st, l, Motions.firstNonBlank (api, st, l))
+
+    (** The line `delta` lines away, at the goal column; NONE when the cursor cannot move that
+     *  way at all. *)
+    fun byLines (api, st, delta) =
+        if (delta > 0 andalso st.line >= api.lastLine st) orelse (delta < 0 andalso st.line = 0)
+        then NONE else SOME (api.moveLine (st, st.line + delta))
+
+    (** The `;` and `,` repeat of the last character find, `count` times. *)
+    fun repeatFind (api, st, reverse, n) =
+        if String.size st.charFind < 2 then NONE
+        else let val c0 = String.sub (st.charFind, 0)
+                 val ch = String.substring (st.charFind, 1, String.size st.charFind)
+                 val c1 = if not reverse then c0
+                          else if c0 = "f" then "F" else if c0 = "F" then "f"
+                          else if c0 = "t" then "T" else "t"
+             in Motions.charFind (api, st, c1, ch, n, true)
+             end
+
+    (** `w` and `W` under an operator stop at the end of the line the last word moved over ends
+     *  on, so that `dw` on the last word of a line does not join the next line onto it. *)
+    fun wordForOp (api, st, n, big) =
+        case Motions.wordForward (api, st, n, big) of
+             NONE => NONE
+           | SOME s =>
+               if s.line = st.line then SOME s
+               else let val prev = if n <= 1 then SOME st else Motions.wordForward (api, st, n - 1, big)
+                    in case prev of
+                            NONE => SOME s
+                          | SOME p => if p.line < s.line
+                                      then SOME (api.moveTo (st, p.line, api.lineLength (st, p.line)))
+                                      else SOME s
+                    end
+
+    (** Where a motion lands: SOME state with the cursor there, or NONE. `forOp` says an operator
+     *  is asking, in which case `l` may land past the end of the line and `w` stops at it. *)
+    fun move (api, st, name, arg, cnt, forOp) =
+        let val n = Option.getOrElse cnt 1
+            val len = api.lineLength (st, st.line)
+            val last = api.lastLine st
+            val h = api.textRows st
+        in      if name = "h" orelse name = "<left>" orelse name = "<bs>"
+                then (if st.col = 0 then NONE else SOME (api.moveTo (st, st.line, st.col - n)))
+           else if name = "l" orelse name = "<right>" orelse name = " "
+                then (if forOp
+                      then (if st.col >= len then NONE else SOME (api.moveTo (st, st.line, st.col + n)))
+                      else if st.col + 1 >= len then NONE
+                      else SOME (api.moveTo (st, st.line, if st.col + n >= len then len - 1 else st.col + n)))
+           else if name = "j" orelse name = "<down>" then byLines (api, st, n)
+           else if name = "k" orelse name = "<up>"   then byLines (api, st, 0 - n)
+           else if name = "0" orelse name = "<home>" then SOME (api.moveTo (st, st.line, 0))
+           else if name = "^" then SOME (nonBlank (api, st, st.line))
+           else if name = "$" orelse name = "<end>"
+                then (if st.line + n - 1 > last then NONE else SOME (api.moveEnd (st, st.line + n - 1)))
+           else if name = "|" then SOME (api.moveTo (st, st.line, n - 1))
+           else if name = "w" orelse name = "W"
+                then (if forOp then wordForOp (api, st, n, name = "W")
+                      else Motions.wordForward (api, st, n, name = "W"))
+           else if name = "b" orelse name = "B" then Motions.wordBackward (api, st, n, name = "B")
+           else if name = "e" orelse name = "E" then Motions.wordEnd (api, st, n, name = "E")
+           else if name = "ge" orelse name = "gE" then Motions.wordEndBack (api, st, n, name = "gE")
+           else if needsChar name andalso name <> "'" andalso name <> "`"
+                then (if isPrintable arg
+                      then Option.map (fn s => api.setCharFind (s, name ^ arg))
+                                      (Motions.charFind (api, st, name, arg, n, false))
+                      else NONE)
+           else if name = ";" then repeatFind (api, st, false, n)
+           else if name = "," then repeatFind (api, st, true, n)
+           else if name = "%"
+                then (case cnt of
+                           NONE   => Motions.matchBracket (api, st)
+                         | SOME p => SOME (nonBlank (api, st, (p * (last + 1) + 99) div 100 - 1)))
+           else if name = "{" then Motions.paragraphBack (api, st, n)
+           else if name = "}" then Motions.paragraphForward (api, st, n)
+           else if name = "gg" then SOME (nonBlank (api, st, n - 1))
+           else if name = "G"  then SOME (nonBlank (api, st, case cnt of NONE => last | SOME p => p - 1))
+           else if name = "H"  then SOME (nonBlank (api, st, st.top + n - 1))
+           else if name = "L"  then SOME (nonBlank (api, st, st.top + h - n))
+           else if name = "M"
+                then let val bottom = if st.top + h - 1 > last then last else st.top + h - 1
+                     in SOME (nonBlank (api, st, (st.top + bottom) div 2))
+                     end
+           else if name = "+" orelse name = "<enter>"
+                then Option.map (fn s => nonBlank (api, s, s.line)) (byLines (api, st, n))
+           else if name = "-"
+                then Option.map (fn s => nonBlank (api, s, s.line)) (byLines (api, st, 0 - n))
+           else if name = "_"  then SOME (nonBlank (api, st, st.line + n - 1))
+           else if name = "n" orelse name = "N"
+                then (if st.find = "" then NONE
+                      else Motions.search (api, st, st.find, st.findWord,
+                                           if name = "n" then st.findDown else not st.findDown, n))
+           else if name = "*" orelse name = "#"
+                then (case Motions.wordUnder (api, st) of
+                           NONE => NONE
+                         | SOME (w, c) =>
+                             let val st1 = api.setFind (api.moveTo (st, st.line, c), w, name = "*", true)
+                             in Motions.search (api, st1, w, true, name = "*", n)
+                             end)
+           else if name = "'" orelse name = "`"
+                then (case api.markAt (st, if arg = "'" orelse arg = "`" then "'" else arg) of
+                           NONE => NONE
+                         | SOME (l, c) => SOME (if name = "'" then nonBlank (api, st, l)
+                                                else api.moveTo (st, l, c)))
+           else if name = "<c-f>" orelse name = "<pgdn>" then byLines (api, st, n * h)
+           else if name = "<c-b>" orelse name = "<pgup>" then byLines (api, st, 0 - n * h)
+           else if name = "<c-d>" then byLines (api, st, n * (h div 2))
+           else if name = "<c-u>" then byLines (api, st, 0 - n * (h div 2))
+           else NONE
+        end
+
+    (** A motion as a command: the cursor moved, a jump remembered, a failed search reported. *)
+    fun moveCmd (api, st, name, arg, cnt) =
+        case move (api, st, name, arg, cnt, false) of
+             SOME s => SOME (if isJump name then api.setMark (s, "'", st.line, st.col) else s, false)
+           | NONE   =>
+               if (name = "n" orelse name = "N") andalso st.find = ""
+               then SOME (api.setStatus (st, noPatternMessage), false)
+               else if name = "n" orelse name = "N"
+               then SOME (api.setStatus (st, Motions.notFoundMessage st.find), false)
+               else if name = "*" orelse name = "#"
+               then (case Motions.wordUnder (api, st) of
+                          SOME (w, _) => SOME (api.setStatus (st, Motions.notFoundMessage w), false)
+                        | NONE        => NONE)
+               else if name = "'" orelse name = "`"
+               then SOME (api.setStatus (st, noMarkMessage), false)
+               else NONE
+
+    (*----------------------------------  Operators  ----------------------------------*)
+
+    (** The span an operator's target covers, or NONE. `cw` on a word changes to its end. *)
+    fun spanFor (api, st, op, target, cnt) =
+        let val n = Option.getOrElse cnt 1
+            val last = api.lastLine st
+        in case target of
+                SAME => SOME (st.line, if st.line + n - 1 > last then last else st.line + n - 1, true)
+              | OBJECT (kind, ch) =>
+                  let val around = kind = "a"
+                  in if ch = "w" orelse ch = "W" then TextObjects.word (api, st, n, ch = "W", around)
+                     else if ch = "p" then TextObjects.paragraph (api, st, n, around)
+                     else if ch = "(" orelse ch = ")" orelse ch = "b"
+                          then TextObjects.bracket (api, st, n, "(", around)
+                     else if ch = "[" orelse ch = "]" then TextObjects.bracket (api, st, n, "[", around)
+                     else if ch = "{" orelse ch = "}" orelse ch = "B"
+                          then TextObjects.bracket (api, st, n, "{", around)
+                     else if ch = "<" orelse ch = ">" then TextObjects.bracket (api, st, n, "<", around)
+                     else TextObjects.quote (api, st, ch, around)
+                  end
+              | MOTION (name, arg) =>
+                  let val line = api.lineAt (st, st.line)
+                      val len  = String.size line
+                      val cls  = if name = "W" then Motions.bigClassOf else Motions.classOf
+                      val onWord = st.col < len andalso cls (String.sub (line, st.col)) <> Motions.classSpace
+                      val atEnd  = onWord andalso (st.col + 1 >= len
+                                                   orelse cls (String.sub (line, st.col + 1))
+                                                          <> cls (String.sub (line, st.col)))
+                  in if op = "c" andalso (name = "w" orelse name = "W") andalso onWord
+                     then (if atEnd andalso n = 1
+                           then SOME (Operators.spanOf (api, st, st.line, st.col, INCLUSIVE))
+                           else Option.map (fn s => Operators.spanOf (api, st, s.line, s.col, INCLUSIVE))
+                                           (Motions.wordEnd (api, st, if atEnd then n - 1 else n, name = "W")))
+                     else Option.map (fn s => Operators.spanOf (api, st, s.line, s.col, kindOf (name, st)))
+                                     (move (api, st, name, arg, cnt, true))
+                  end
+        end
+
+    (** The operator applied to its span. `c` enters insert mode, the session having been begun
+     *  by the caller. *)
+    fun operate (api, st, op, target, cnt) =
+        case spanFor (api, st, op, target, cnt) of
+             NONE => NONE
+           | SOME span =>
+               SOME (if op = "d" then Operators.delete (api, st, span)
+                     else if op = "c" then api.setMode (Operators.change (api, st, span), INSERT)
+                     else if op = "y" then Operators.yank (api, st, span)
+                     else if op = ">" then Operators.shift (api, st, span, true)
+                     else if op = "<" then Operators.shift (api, st, span, false)
+                     else Operators.recase (api, st, span, String.substring (op, 1, 2)))
+
+    (*----------------------------------  Commands  -----------------------------------*)
+
+    fun timesOr (n, f, st) = let fun go (k, s) = if k <= 0 then s else go (k - 1, f s) in go (n, st) end
+
+    (** The shorthand commands as the operator commands they stand for. *)
+    fun shorthand "x"     = SOME ("d", MOTION ("l", ""))
+      | shorthand "<del>" = SOME ("d", MOTION ("l", ""))
+      | shorthand "X"     = SOME ("d", MOTION ("h", ""))
+      | shorthand "D"     = SOME ("d", MOTION ("$", ""))
+      | shorthand "C"     = SOME ("c", MOTION ("$", ""))
+      | shorthand "s"     = SOME ("c", MOTION ("l", ""))
+      | shorthand "S"     = SOME ("c", SAME)
+      | shorthand "Y"     = SOME ("y", SAME)
+      | shorthand _       = NONE
+
+    (** A command that stands alone: SOME (state', quit) or NONE when it could not be done. The
+     *  insert commands only place the cursor and set the mode; the session was begun by the
+     *  caller. *)
+    fun act (api, commands, st, name, arg, cnt) =
+        let val n = Option.getOrElse cnt 1
+            val len = api.lineLength (st, st.line)
+            val h = api.textRows st
+            fun ok s = SOME (s, false)
+            fun okOpt r = Option.map (fn s => (s, false)) r
+        in case shorthand name of
+                SOME (op, target) => okOpt (operate (api, st, op, target, cnt))
+              | NONE =>
+                     if name = "p" then ok (Operators.put (api, st, n, true))
+                else if name = "P" then ok (Operators.put (api, st, n, false))
+                else if name = "J" then ok (Operators.join (api, st, n, true))
+                else if name = "gJ" then ok (Operators.join (api, st, n, false))
+                else if name = "r"
+                     then (if arg = "<enter>" then okOpt (Operators.replaceChars (api, st, n, "\n"))
+                           else if isPrintable arg then okOpt (Operators.replaceChars (api, st, n, arg))
+                           else NONE)
+                else if name = "~" then ok (Operators.toggleCase (api, st, n))
+                else if name = "u" then ok (timesOr (n, api.undo, st))
+                else if name = "<c-r>" then ok (timesOr (n, api.redo, st))
+                else if name = "i" then ok (api.setMode (st, INSERT))
+                else if name = "a"
+                     then ok (api.setMode (api.moveTo (st, st.line, if st.col < len then st.col + 1 else st.col), INSERT))
+                else if name = "I" then ok (api.setMode (nonBlank (api, st, st.line), INSERT))
+                else if name = "A" then ok (api.setMode (api.moveEnd (st, st.line), INSERT))
+                else if name = "o" then ok (api.setMode (Operators.openLine (api, st, false), INSERT))
+                else if name = "O" then ok (api.setMode (Operators.openLine (api, st, true), INSERT))
+                else if name = "R" then ok (api.setMode (st, REPLACE))
+                else if name = "v" then ok (api.setMode (api.setAnchor (st, st.line, st.col), VISUAL))
+                else if name = "V" then ok (api.setMode (api.setAnchor (st, st.line, st.col), VLINE))
+                else if name = "m"
+                     then (if isLetter arg then ok (api.setMark (st, arg, st.line, st.col)) else NONE)
+                else if name = "zz" then ok (api.setTop (st, st.line - h div 2))
+                else if name = "zt" then ok (api.setTop (st, st.line))
+                else if name = "zb" then ok (api.setTop (st, st.line - h + 1))
+                else if name = "<c-e>" then ok (api.setTop (st, st.top + n))
+                else if name = "<c-y>" then ok (api.setTop (st, st.top - n))
+                else if name = "ZZ" then SOME (commands (st, "wq"))
+                else if name = "ZQ" then SOME (commands (st, "q!"))
+                else if name = "q" orelse name = "<c-c>" then SOME (commands (st, "q"))
+                else if name = ":" orelse name = "/" orelse name = "?" then ok (api.openPrompt (st, name))
+                else if name = "<esc>" then ok st
+                else moveCmd (api, st, name, arg, cnt)
+        end
+
+    (*-----------------------------  Running a command  -------------------------------*)
+
+    (** Whether a command changes the buffer, and so is what `.` repeats. *)
+    fun isChange (OPERATE (_, op, _)) = op <> "y"
+      | isChange (ACT (_, name, _)) =
+          List.elem name ["x", "<del>", "X", "s", "S", "D", "C", "p", "P", "J", "gJ", "r", "~"
+                         , "i", "a", "I", "A", "o", "O", "R"]
+
+    (** The mode a command opens, if it opens one, and the count that insert carries. *)
+    fun opensMode (OPERATE (_, op, _)) = if op = "c" then SOME (INSERT, 1) else NONE
+      | opensMode (ACT (cnt, name, _)) =
+          if List.elem name ["s", "S", "C"] then SOME (INSERT, 1)
+          else if List.elem name ["i", "a", "I", "A", "o", "O"] then SOME (INSERT, Option.getOrElse cnt 1)
+          else if name = "R" then SOME (REPLACE, Option.getOrElse cnt 1)
+          else NONE
+
+    fun execute (api, commands, st, OPERATE (cnt, op, target)) =
+          Option.map (fn s => (s, false)) (operate (api, st, op, target, cnt))
+      | execute (api, commands, st, ACT (cnt, name, arg)) = act (api, commands, st, name, arg, cnt)
+
+    (** A complete command run against `st`, whose pending is already cleared: the insert session
+     *  begun first when the command opens one, the change recorded for `.`, the undo entries it
+     *  pushed squashed into one, and the cursor pulled onto the line. A command that could not be
+     *  done leaves the state as it was. *)
+    fun run (api, commands, st, cmd, toks) =
+        let val depth = api.undoDepth st
+            val st0 = case opensMode cmd of
+                           SOME (m, n) => api.beginInsert (st, m, n)
+                         | NONE        => st
+        in case execute (api, commands, st0, cmd) of
+                NONE => (st, false)
+              | SOME (st1, quit) =>
+                  let val st2 = if isChange cmd then api.setDot (st1, toks, []) else st1
+                  in case st2.mode of
+                          NORMAL => (api.intoLine (api.squashUndo (st2, depth)), quit)
+                        | _      => (st2, quit)
+                  end
+        end
+
+    (** The tokens with their count replaced by `cnt`, when one is given. *)
+    fun recount (toks, cnt) =
+        let val (_, rest) = count toks
+        in case cnt of
+                NONE   => toks
+              | SOME n => List.append (tokensOf (toString n)) rest
+        end
+
+    (** The tokens without their count. *)
+    fun uncount toks = let val (_, rest) = count toks in rest end
+
+    (*--------------------------------  Insert mode  ---------------------------------*)
+
+    (** The column where CTRL-w's deletion starts: the start of the word before the cursor on
+     *  its line, the spaces before the cursor stepped over first. *)
+    fun wordStartBefore (api, st) =
+        let val line = api.lineAt (st, st.line)
+            fun skipSpace i = if i > 0 andalso Motions.isSpace (String.sub (line, i - 1)) then skipSpace (i - 1) else i
+            val i = skipSpace st.col
+        in if i = 0 then 0
+           else let val k = Motions.classOf (String.sub (line, i - 1))
+                    fun back j = if j > 0 andalso Motions.classOf (String.sub (line, j - 1)) = k
+                                 then back (j - 1) else j
                 in back i
                 end
         end
 
-    (** The cursor at the start of the next word, crossing line breaks; the end of the buffer stops
-     *  it. `fresh` says the line was reached by crossing a break, in which case a word starting at
-     *  its first column is the answer and an empty line is one too. *)
-    fun wordForward (api, st) =
-        let val last = api.lastLine st
-            fun seek (l, c, fresh) =
-                let val line = api.lineAt (st, l)
-                    val n    = String.size line
-                in if fresh andalso (n = 0 orelse classIn (line, 0) <> classSpace)
-                   then api.moveTo (st, l, 0)
-                   else let val hit = nextWordIn (line, n, c)
-                        in if hit >= 0 then api.moveTo (st, l, hit)
-                           else if l < last then seek (l + 1, 0, true)
-                           else api.moveTo (st, l, n)
-                        end
+    (** How many code units CTRL-d takes off the front of the line: one tab, or up to eight
+     *  spaces. *)
+    fun dedentUnits (api, st) =
+        let val line = api.lineAt (st, st.line)
+            val n = String.size line
+        in if n > 0 andalso String.sub (line, 0) = "\t" then 1
+           else let fun spaces i = if i < n andalso i < 8 andalso String.sub (line, i) = " "
+                                   then spaces (i + 1) else i
+                in spaces 0
                 end
-        in seek (st.line, st.col, false)
         end
 
-    (** The cursor at the start of the previous word, crossing line breaks; the start of the buffer
-     *  stops it. An empty line reached by crossing a break is a word. *)
-    fun wordBackward (api, st) =
-        let fun seek (l, c, fresh) =
-                let val line = api.lineAt (st, l)
-                    val n    = String.size line
-                in if fresh andalso n = 0
-                   then api.moveTo (st, l, 0)
-                   else let val hit = prevWordIn (line, n, c)
-                        in if hit >= 0 then api.moveTo (st, l, hit)
-                           else if l > 0 then seek (l - 1, Api.goalEnd, true)
-                           else api.moveTo (st, l, 0)
-                        end
-                end
-        in seek (st.line, st.col, false)
-        end
-
-    (** The column of the line's first character that is not a space, or its end when it has
-     *  none. *)
-    fun firstNonBlank (api, st, l) =
-        let val line = api.lineAt (st, l)
-            val n    = String.size line
-            fun go i = if i < n andalso classIn (line, i) = classSpace then go (i + 1) else i
-        in go 0
-        end
-
-    (*------------------------------------  Search  -----------------------------------*)
-
-    (** The first hit at or after `(l0, c0)`, scanning to the last line: `SOME (line, col)` or
-     *  `NONE`. One `strIndexOf` per line, so a miss costs a scan of the text below the cursor. *)
-    fun hitFrom (api, st, pat, l0, c0) =
-        let val last = api.lastLine st
-            fun go (l, from) =
-                if l > last then NONE
-                else let val i = strIndexOf (api.lineAt (st, l), pat, from)
-                     in if i >= 0 then SOME (l, i) else go (l + 1, 0)
+    (** One token in insert or replace mode, other than the one that leaves it. *)
+    fun insertToken (api, st0, tok) =
+        let val st = api.noteTyped (st0, tok)
+            val replacing = case st.mode of REPLACE => true | _ => false
+        in      if tok = "<enter>" then api.insertText (st, "\n")
+           else if tok = "<tab>" then (if replacing then api.replaceChar (st, "\t") else api.insertText (st, "\t"))
+           else if tok = "<bs>"
+                then (if replacing
+                      then (if api.undoDepth st > st.insertMark then api.undo st
+                            else if st.col > 0 then api.moveTo (st, st.line, st.col - 1) else st)
+                      else api.backspace st)
+           else if tok = "<del>" then api.deleteChar st
+           else if tok = "<c-w>"
+                then (if st.col = 0 then api.backspace st
+                      else let val c = wordStartBefore (api, st)
+                           in api.deleteAt (st, api.lineStart (st, st.line) + c, st.col - c)
+                           end)
+           else if tok = "<c-u>"
+                then (if st.col = 0 then st
+                      else api.deleteAt (st, api.lineStart (st, st.line), st.col))
+           else if tok = "<c-t>"
+                then let val st1 = api.insertAt (st, api.lineStart (st, st.line), "\t")
+                     in api.moveTo (st1, st.line, st.col + 1)
                      end
-        in go (l0, c0)
-        end
-
-    (** The last hit on `line` that begins before column `limit`, or -1. *)
-    fun lastHitIn (line, pat, limit) =
-        let fun go (i, best) =
-                let val j = strIndexOf (line, pat, i)
-                in if j < 0 orelse j >= limit then best else go (j + 1, j)
-                end
-        in go (0, -1)
-        end
-
-    (** The last hit before `(l0, c0)`, scanning upwards to the first line. *)
-    fun hitBefore (api, st, pat, l0, c0) =
-        let fun go (l, limit) =
-                if l < 0 then NONE
-                else let val i = lastHitIn (api.lineAt (st, l), pat, limit)
-                     in if i >= 0 then SOME (l, i) else go (l - 1, Api.goalEnd)
+           else if tok = "<c-d>"
+                then let val k = dedentUnits (api, st)
+                         val st1 = api.deleteAt (st, api.lineStart (st, st.line), k)
+                     in api.moveTo (st1, st.line, if st.col > k then st.col - k else 0)
                      end
-        in go (l0, c0)
+           else if isPrintable tok then (if replacing then api.replaceChar (st, tok) else api.insertText (st, tok))
+           else if tok = "<left>" then api.moveTo (st, st.line, st.col - 1)
+           else if tok = "<right>" then api.moveTo (st, st.line, st.col + 1)
+           else if tok = "<up>" then api.moveLine (st, st.line - 1)
+           else if tok = "<down>" then api.moveLine (st, st.line + 1)
+           else if tok = "<home>" then api.moveTo (st, st.line, 0)
+           else if tok = "<end>" then api.moveEnd (st, st.line)
+           else if tok = "<pgdn>" then api.moveLine (st, st.line + api.textRows st)
+           else if tok = "<pgup>" then api.moveLine (st, st.line - api.textRows st)
+           else st
         end
 
-    (** The state at the next hit of `pat`, or where it was with a message. `down` is the
-     *  direction. A search that runs off the end continues from the other one, which is what makes
-     *  `n` on the last hit come back to the first; the wrap is reported, a miss is reported, and a
-     *  hit that needed neither says nothing. *)
-    fun searchFor (api, st, pat, down) =
-        let val (hit, wrapped) =
-                if down
-                then case hitFrom (api, st, pat, st.line, st.col + 1) of
-                          SOME p => (SOME p, false)
-                        | NONE   => (hitFrom (api, st, pat, 0, 0), true)
-                else case hitBefore (api, st, pat, st.line, st.col) of
-                          SOME p => (SOME p, false)
-                        | NONE   => (hitBefore (api, st, pat, api.lastLine st, Api.goalEnd), true)
-            val note = if down then wrapDownMessage else wrapUpMessage
-        in case hit of
-                NONE        => api.setStatus (st, notFoundMessage pat)
-              | SOME (l, c) =>
-                  let val st' = api.moveTo (st, l, c)
-                  in if wrapped then api.setStatus (st', note) else st'
-                  end
+    fun feedInsert (api, st, keys) = List.foldl (fn (k, s) => insertToken (api, s, k)) st keys
+
+    (** The session ended without any count: normal mode, one undo step, the cursor stepped
+     *  left onto the last character typed. *)
+    fun finishInsert (api, st) =
+        let val st1 = api.endInsert st
+        in api.intoLine (if st1.col > 0 then api.moveTo (st1, st1.line, st1.col - 1) else st1)
         end
 
-    (** The pattern typed at the `/` prompt, remembered and run. An empty pattern repeats the last
-     *  one, as vi's does. *)
-    fun runSearch (api, st, pat) =
-        if pat = ""
-        then if st.find = "" then api.setStatus (st, noPatternMessage)
-             else searchFor (api, st, st.find, true)
-        else searchFor (api, api.setFind (st, pat), pat, true)
+    (** Whether the change that opened the insert was `o` or `O`, whose count repeats the whole
+     *  command rather than the typed keys alone. *)
+    fun opensLine toks = case parse toks of
+                              DONE (ACT (_, name, _)) => name = "o" orelse name = "O"
+                            | _ => false
 
-    (** `n` and `N`: the last pattern again, forward or backward. *)
-    fun repeatSearch (api, st, down) =
-        if st.find = "" then api.setStatus (st, noPatternMessage)
-        else searchFor (api, st, st.find, down)
+    (** Esc in insert or replace mode: the typed keys repeated for the count the insert was
+     *  entered with, then the session ended. The repeats' own sessions are squashed into the
+     *  first, so `3ohi` is one undo step. *)
+    fun leaveInsert (api, commands, st) =
+        let val keys  = List.reverse st.typed
+            val n     = st.insertCount
+            val mark  = st.insertMark
+            val toks  = uncount st.dot
+            fun again s =
+                if opensLine toks
+                then let val (s1, _) = case parse toks of
+                                            DONE cmd => run (api, commands, finishInsert (api, s), cmd, toks)
+                                          | _        => (s, false)
+                     in feedInsert (api, s1, keys)
+                     end
+                else feedInsert (api, s, keys)
+            val st1 = timesOr (n - 1, again, st)
+            val st2 = finishInsert (api, st1)
+            val st3 = if mark >= 0 then api.squashUndo (st2, mark) else st2
+        in api.setDot (st3, st.dot, keys)
+        end
 
-    (*------------------------------  Yanking and putting  ----------------------------*)
+    (*--------------------------------  Repeating  -----------------------------------*)
 
-    fun yankLine (api, st) =
-        api.setStatus (api.setYank (st, SOME (api.lineAt (st, st.line))), yankedMessage)
-
-    fun putLine (api, st, below) =
-        case st.yank of
-             NONE   => api.setStatus (st, nothingYankedMessage)
-           | SOME s => if below then api.putBelow (st, s) else api.putAbove (st, s)
-
-    (*-----------------------------------  Motions  -----------------------------------*)
-
-    (** The motions, shared by normal and insert mode. The vertical ones go through `moveLine`,
-     *  which keeps the goal column, and the horizontal ones through `moveTo` and `moveEnd`, which
-     *  set it (Api.trp). Any other key leaves the state alone. *)
-    fun motion (api, st, KEY_LEFT)     = api.moveTo (st, st.line, st.col - 1)
-      | motion (api, st, KEY_RIGHT)    = api.moveTo (st, st.line, st.col + 1)
-      | motion (api, st, KEY_DOWN)     = api.moveLine (st, st.line + 1)
-      | motion (api, st, KEY_UP)       = api.moveLine (st, st.line - 1)
-      | motion (api, st, KEY_HOME)     = api.moveTo (st, st.line, 0)
-      | motion (api, st, KEY_END)      = api.moveEnd (st, st.line)
-      | motion (api, st, KEY_PAGEDOWN) = api.moveLine (st, st.line + api.textRows st)
-      | motion (api, st, KEY_PAGEUP)   = api.moveLine (st, st.line - api.textRows st)
-      | motion (api, st, _)            = st
-
-    (*-------------------------------  Two-key sequences  -----------------------------*)
-
-    (** The key that completes a prefix. The prefix is already cleared from `st`: a pair that is
-     *  not bound leaves the state as it stands, so no key can be left half-pressed. *)
-    fun pendingKey (api, st, prefix, KEY_PRINT c) =
-             if prefix = "g" andalso c = "g" then (api.moveTo (st, 0, 0), false)
-        else if prefix = "d" andalso c = "d" then (api.deleteLine (yankLine (api, st)), false)
-        else if prefix = "y" andalso c = "y" then (yankLine (api, st), false)
-        else (st, false)
-      | pendingKey (api, st, prefix, k) = (st, false)
+    (** `.`: the last change's tokens run again, its typed keys fed again, and its insert ended
+     *  — as one undo step. *)
+    fun repeatChange (api, commands, st, cnt) =
+        if st.dot = [] then (api.setStatus (st, noChangeMessage), false)
+        else let val toks = recount (st.dot, cnt)
+                 val keys = st.dotInsert
+             in case parse toks of
+                     DONE cmd =>
+                       let val (st1, quit) = run (api, commands, st, cmd, toks)
+                       in case st1.mode of
+                               NORMAL => (st1, quit)
+                             | _      => (leaveInsert (api, commands, feedInsert (api, st1, keys)), quit)
+                       end
+                   | _ => (st, false)
+             end
 
     (*--------------------------------  Normal mode  ---------------------------------*)
 
-    fun normalPrint (api, commands, st, c) =
-             if c = "h" then (api.moveTo (st, st.line, st.col - 1), false)
-        else if c = "l" then (api.moveTo (st, st.line, st.col + 1), false)
-        else if c = "j" then (api.moveLine (st, st.line + 1), false)
-        else if c = "k" then (api.moveLine (st, st.line - 1), false)
-        else if c = "0" then (api.moveTo (st, st.line, 0), false)
-        else if c = "^" then (api.moveTo (st, st.line, firstNonBlank (api, st, st.line)), false)
-        else if c = "$" then (api.moveEnd (st, st.line), false)
-        else if c = "w" then (wordForward (api, st), false)
-        else if c = "b" then (wordBackward (api, st), false)
-        else if c = "G" then (api.moveTo (st, api.lastLine st, 0), false)
-        else if c = "i" then (api.setMode (st, INSERT), false)
-        else if c = "o" then (api.openBelow st, false)
-        else if c = "x" then (api.deleteChar st, false)
-        else if c = "p" then (putLine (api, st, true), false)
-        else if c = "P" then (putLine (api, st, false), false)
-        else if c = "u" then (api.undo st, false)
-        else if c = "n" then (repeatSearch (api, st, true), false)
-        else if c = "N" then (repeatSearch (api, st, false), false)
-        else if c = "/" then (api.openPrompt (st, "/"), false)
-        else if c = ":" then (api.openPrompt (st, ":"), false)
-        else if c = "g" orelse c = "d" orelse c = "y" then (api.setPending (st, c), false)
-        else if c = "q" then commands (st, "q")
-        else (st, false)
-
-    fun normalKey (api, commands, st, KEY_PRINT c) = normalPrint (api, commands, st, c)
-      | normalKey (api, commands, st, KEY_CTRL c) =
-             if c = "f" then (api.moveLine (st, st.line + api.textRows st), false)
-        else if c = "b" then (api.moveLine (st, st.line - api.textRows st), false)
-        else if c = "c" then commands (st, "q")
-        else (st, false)
-      | normalKey (api, commands, st, KEY_DELETE) = (api.deleteChar st, false)
-      | normalKey (api, commands, st, k)          = (motion (api, st, k), false)
-
-    (*--------------------------------  Insert mode  ---------------------------------*)
-
-    fun insertKey (api, st, KEY_PRINT c)   = (api.insertText (st, c), false)
-      | insertKey (api, st, KEY_ENTER)     = (api.insertText (st, "\n"), false)
-      | insertKey (api, st, KEY_TAB)       = (api.insertText (st, "\t"), false)
-      | insertKey (api, st, KEY_BACKSPACE) = (api.backspace st, false)
-      | insertKey (api, st, KEY_DELETE)    = (api.deleteChar st, false)
-      | insertKey (api, st, KEY_ESC)       = (api.setMode (st, NORMAL), false)
-      | insertKey (api, st, k)             = (motion (api, st, k), false)
+    (** One token in normal mode: the pending command extended by it and parsed. *)
+    fun normalToken (api, commands, st, tok) =
+        let val toks = List.append (tokensOf st.pending) [tok]
+            val cleared = api.setPending (st, "")
+        in if tok = "<esc>" then (cleared, false)
+           else case parse toks of
+                     MORE     => (api.setPending (st, st.pending ^ tok), false)
+                   | BAD      => (cleared, false)
+                   | DONE cmd =>
+                       (case cmd of
+                             ACT (cnt, ".", _) => repeatChange (api, commands, cleared, cnt)
+                           | _                 => run (api, commands, cleared, cmd, toks))
+        end
 
     (*--------------------------------  Command mode  --------------------------------*)
+
+    (** The pattern typed at a search prompt, remembered and run in the prompt's direction. An
+     *  empty pattern repeats the last one, as vi's does. A hit is a jump. *)
+    fun runSearch (api, st, pat, down) =
+        let val pattern = if pat = "" then st.find else pat
+        in if pattern = "" then api.setStatus (st, noPatternMessage)
+           else let val st1 = api.setFind (st, pattern, down, false)
+                in case Motions.search (api, st1, pattern, false, down, 1) of
+                        SOME s => api.setMark (s, "'", st.line, st.col)
+                      | NONE   => api.setStatus (st1, Motions.notFoundMessage pattern)
+                end
+        end
 
     (** What Enter does with the line is what the prompt says: a command word goes to the command
      *  interpreter, a search pattern to the search above. *)
     fun runPrompt (api, commands, st, prompt, line) =
-        if prompt = "/" then (runSearch (api, st, line), false) else commands (st, line)
+        if prompt = ":" then commands (st, line)
+        else (api.intoLine (runSearch (api, st, line, prompt = "/")), false)
 
-    fun commandKey (api, commands, st, KEY_PRINT c) = (api.setCmd (st, st.cmd ^ c), false)
-      | commandKey (api, commands, st, KEY_ENTER)   =
-          runPrompt (api, commands, api.closePrompt st, st.prompt, st.cmd)
-      | commandKey (api, commands, st, KEY_ESC)     = (api.closePrompt st, false)
-      | commandKey (api, commands, st, KEY_BACKSPACE) =
-          if st.cmd = "" then (api.closePrompt st, false)
-          else (api.setCmd (st, String.substring (st.cmd, 0, String.size st.cmd - 1)), false)
-      | commandKey (api, commands, st, KEY_CTRL c) =
-          if c = "c" then (api.closePrompt st, false) else (st, false)
-      | commandKey (api, commands, st, _) = (st, false)
+    fun commandToken (api, commands, st, tok) =
+             if tok = "<enter>" then runPrompt (api, commands, api.closePrompt st, st.prompt, st.cmd)
+        else if tok = "<esc>" orelse tok = "<c-c>" then (api.closePrompt st, false)
+        else if tok = "<bs>"
+             then (if st.cmd = "" then (api.closePrompt st, false)
+                   else (api.setCmd (st, String.substring (st.cmd, 0, String.size st.cmd - 1)), false))
+        else if tok = "<c-u>" then (api.setCmd (st, ""), false)
+        else if isPrintable tok then (api.setCmd (st, st.cmd ^ tok), false)
+        else (st, false)
+
+    (*---------------------------------  Visual mode  ---------------------------------*)
+
+    (** The keys that act on a selection. *)
+    fun isVisualAct t =
+        List.elem t [ "d", "x", "<del>", "X", "D", "c", "s", "C", "S", "R", "y", "Y", "<", ">"
+                    , "~", "u", "U", "J", "p", "P", "o", "v", "V", "<esc>", "<c-c>"
+                    , "<c-e>", "<c-y>" ]
+
+    (** The tokens as a visual-mode command: a count, then a motion, an object, a key that acts
+     *  on the selection, or one of the two-key sequences. *)
+    fun parseVisual toks =
+        let val (n, rest) = count toks
+        in case rest of
+                []        => MORE
+              | t :: more =>
+                  if t = "g"
+                  then (case more of
+                             []     => MORE
+                           | u :: _ => if List.elem u ["J", "u", "U", "~", "g", "e", "E"]
+                                       then DONE (ACT (n, "g" ^ u, "")) else BAD)
+                  else if t = "i" orelse t = "a"
+                  then (case more of
+                             []     => MORE
+                           | u :: _ => if isObjectChar u then DONE (ACT (n, t, u)) else BAD)
+                  else if needsChar t orelse t = "r" orelse t = "m"
+                  then (case more of
+                             []     => MORE
+                           | u :: _ => DONE (ACT (n, t, u)))
+                  else if t = "z"
+                  then (case more of
+                             []     => MORE
+                           | u :: _ => if u = "z" orelse u = "t" orelse u = "b"
+                                       then DONE (ACT (n, "z" ^ u, "")) else BAD)
+                  else if isMotion t orelse isVisualAct t then DONE (ACT (n, t, ""))
+                  else BAD
+        end
+
+    (** The span between the anchor and the cursor: whole lines in linewise mode, otherwise the
+     *  characters from the one to the other, both included. `linewise` forces the lines. *)
+    fun selection (api, st, linewise) =
+        let val (al, ac) = st.anchor
+            val kind = case st.mode of VLINE => LINEWISE | _ => if linewise then LINEWISE else INCLUSIVE
+        in Operators.spanOf (api, st, al, ac, kind)
+        end
+
+    fun leaveVisual (api, st) = api.intoLine (api.setMode (st, NORMAL))
+
+    (** The selection replaced by the register (charwise: put before the start of what was
+     *  deleted), or an operator applied to it. Each ends the selection. *)
+    fun visualOp (api, st, op, linewise) =
+        let val span = selection (api, st, linewise)
+        in      if op = "d" then leaveVisual (api, Operators.delete (api, st, span))
+           else if op = "y" then leaveVisual (api, Operators.yank (api, st, span))
+           else if op = "c" then api.setMode (Operators.change (api, st, span), INSERT)
+           else if op = ">" then leaveVisual (api, Operators.shift (api, st, span, true))
+           else if op = "<" then leaveVisual (api, Operators.shift (api, st, span, false))
+           else if op = "p" then leaveVisual (api, Operators.putOver (api, st, span))
+           else leaveVisual (api, Operators.recase (api, st, span, op))
+        end
+
+    (** An object in visual mode: the selection becomes the object, the anchor at its start and
+     *  the cursor on its last character, linewise for a paragraph. *)
+    fun selectObject (api, st, kind, ch, cnt) =
+        case spanFor (api, st, "y", OBJECT (kind, ch), cnt) of
+             NONE => NONE
+           | SOME (l1, l2, true) =>
+               SOME (api.moveTo (api.setMode (api.setAnchor (st, l1, 0), VLINE), l2, 0))
+           | SOME (a, b, false) =>
+               let val (al, ac) = Operators.positionOf (api, st, a)
+                   val (cl, cc) = Operators.positionOf (api, st, if b > a then b - 1 else a)
+               in SOME (api.moveTo (api.setMode (api.setAnchor (st, al, ac), VISUAL), cl, cc))
+               end
+
+    (** One command in visual mode: SOME (state', quit) or NONE. *)
+    fun visualAct (api, commands, st, name, arg, cnt) =
+        let val n = Option.getOrElse cnt 1
+            val h = api.textRows st
+            val (al, ac) = st.anchor
+            val (l1, l2) = case selection (api, st, true) of (a, b, _) => (a, b)
+            fun ok s = SOME (s, false)
+            fun linewiseChange s = api.setMode (Operators.change (api, s, selection (api, s, true)), INSERT)
+        in      if name = "d" orelse name = "x" orelse name = "<del>" then ok (visualOp (api, st, "d", false))
+           else if name = "X" orelse name = "D" then ok (visualOp (api, st, "d", true))
+           else if name = "y" then ok (visualOp (api, st, "y", false))
+           else if name = "Y" then ok (visualOp (api, st, "y", true))
+           else if name = "c" orelse name = "s" then ok (visualOp (api, st, "c", false))
+           else if name = "C" orelse name = "S" orelse name = "R" then ok (linewiseChange st)
+           else if name = ">" orelse name = "<"
+                then ok (leaveVisual (api, timesOr (n, fn s => Operators.shift (api, s, selection (api, st, false), name = ">"), st)))
+           else if name = "~" orelse name = "g~" then ok (visualOp (api, st, "~", false))
+           else if name = "u" orelse name = "gu" then ok (visualOp (api, st, "u", false))
+           else if name = "U" orelse name = "gU" then ok (visualOp (api, st, "U", false))
+           else if name = "J" orelse name = "gJ"
+                then ok (leaveVisual (api, Operators.join (api, api.moveTo (st, l1, 0), l2 - l1 + 1, name = "J")))
+           else if name = "p" orelse name = "P" then ok (visualOp (api, st, "p", false))
+           else if name = "r"
+                then (if isPrintable arg
+                      then ok (leaveVisual (api, Operators.fill (api, st, selection (api, st, false), arg)))
+                      else NONE)
+           else if name = "o" then ok (api.moveTo (api.setAnchor (st, st.line, st.col), al, ac))
+           else if name = "v"
+                then ok (case st.mode of VISUAL => leaveVisual (api, st) | _ => api.setMode (st, VISUAL))
+           else if name = "V"
+                then ok (case st.mode of VLINE => leaveVisual (api, st) | _ => api.setMode (st, VLINE))
+           else if name = "<esc>" orelse name = "<c-c>" then ok (leaveVisual (api, st))
+           else if name = "i" orelse name = "a"
+                then Option.map (fn s => (s, false)) (selectObject (api, st, name, arg, cnt))
+           else if name = "m"
+                then (if isLetter arg then ok (api.setMark (st, arg, st.line, st.col)) else NONE)
+           else if name = "zz" then ok (api.setTop (st, st.line - h div 2))
+           else if name = "zt" then ok (api.setTop (st, st.line))
+           else if name = "zb" then ok (api.setTop (st, st.line - h + 1))
+           else if name = "<c-e>" then ok (api.setTop (st, st.top + n))
+           else if name = "<c-y>" then ok (api.setTop (st, st.top - n))
+           else moveCmd (api, st, name, arg, cnt)
+        end
+
+    (** One token in visual mode: the pending command extended and parsed, as in normal mode.
+     *  A command that ends the selection with an edit is one undo step; a change that opens an
+     *  insert is not what `.` repeats. *)
+    fun visualToken (api, commands, st, tok) =
+        let val toks = List.append (tokensOf st.pending) [tok]
+            val cleared = api.setPending (st, "")
+        in case parseVisual toks of
+                MORE     => (api.setPending (st, st.pending ^ tok), false)
+              | BAD      => (cleared, false)
+              | DONE (ACT (cnt, name, arg)) =>
+                  let val depth = api.undoDepth st
+                      val st0 = if List.elem name ["c", "s", "C", "S", "R"]
+                                then api.setDot (api.beginInsert (cleared, INSERT, 1), [], [])
+                                else cleared
+                  in case visualAct (api, commands, st0, name, arg, cnt) of
+                          NONE => (cleared, false)
+                        | SOME (st1, quit) =>
+                            (case st1.mode of
+                                  NORMAL => (api.intoLine (api.squashUndo (st1, depth)), quit)
+                                | _      => (st1, quit))
+                  end
+              | DONE _ => (cleared, false)
+        end
 
     (*----------------------------------  Help mode  ---------------------------------*)
 
-    (** Any key at all puts the help page away and the buffer back. Nothing else in the state is
-     *  touched, so the key that dismissed the page is spent on dismissing it. *)
-    fun helpKey (api, st, k) = (api.setMode (st, NORMAL), false)
+    (** Space, PageDown, `j` and Down turn to the next page, `b`, PageUp, `k` and Up to the one
+     *  before; any other key puts the page away and the buffer back, the key spent on that. *)
+    fun helpToken (api, helpPages, st, tok) =
+        let val last = helpPages st - 1
+        in if tok = " " orelse tok = "<pgdn>" orelse tok = "j" orelse tok = "<down>"
+           then (api.setHelpPage (st, if st.helpPage >= last then last else st.helpPage + 1), false)
+           else if tok = "b" orelse tok = "<pgup>" orelse tok = "k" orelse tok = "<up>"
+           then (api.setHelpPage (st, if st.helpPage <= 0 then 0 else st.helpPage - 1), false)
+           else (api.setHelpPage (api.setMode (st, NORMAL), 0), false)
+        end
 
     (*-----------------------------------  The map  ----------------------------------*)
 
     (** `(state', quit)` for one key.
      *
      *  A transient status message is cleared here rather than where it is set, so every message
-     *  is shown for exactly as long as it takes the user to press the next key.
-     *
-     *  A prefix waiting in the state is spent here too, and only in normal mode: the key is looked
-     *  up as a pair and the prefix is cleared whether or not the pair is bound. *)
-    fun onKey (api, commands, st0, k) =
-        let val st = if st0.status = "" then st0 else api.setStatus (st0, "")
+     *  is shown for exactly as long as it takes the user to press the next key. *)
+    fun onKey (api, commands, helpPages, st0, k) =
+        let val st  = if st0.status = "" then st0 else api.setStatus (st0, "")
+            val tok = tokenOf k
+            fun typing () = if tok = "<esc>" orelse tok = "<c-c>" then (leaveInsert (api, commands, st), false)
+                            else (insertToken (api, st, tok), false)
         in case st.mode of
-                INSERT  => insertKey (api, st, k)
-              | COMMAND => commandKey (api, commands, st, k)
-              | HELP    => helpKey (api, st, k)
-              | _       => if st.pending = ""
-                           then normalKey (api, commands, st, k)
-                           else pendingKey (api, api.setPending (st, ""), st.pending, k)
+                INSERT  => typing ()
+              | REPLACE => typing ()
+              | VISUAL  => visualToken (api, commands, st, tok)
+              | VLINE   => visualToken (api, commands, st, tok)
+              | COMMAND => commandToken (api, commands, st, tok)
+              | HELP    => helpToken (api, helpPages, st, tok)
+              | NORMAL  => normalToken (api, commands, st, tok)
         end
 
     (*----------------------------------  The help  ----------------------------------*)
 
     (** What `:help` says about this keymap: the sections the plugin set assembles the help page
-     *  from (Help.trp). A key added above belongs in the section it belongs to here. *)
-    val help =
+     *  from (Help.trp). A key added above belongs in the section it belongs to here. A function
+     *  rather than a value because a double quote cannot be written inside a string literal. *)
+    fun help () =
+        let val dq = String.strCode 34
+        in
         [ ("MOTION",
-           [ ("h j k l",   "move by one")
-           , ("arrows",    "move by one")
-           , ("0 Home",    "start of the line")
-           , ("^",         "first non-blank")
-           , ("$ End",     "end of the line")
-           , ("w b",       "next, previous word")
-           , ("gg G",      "first, last line")
-           , ("^B ^F",     "up, down a screen")
-           , ("PgUp PgDn", "up, down a screen") ])
+           [ ("h j k l",   "move by one; arrows too")
+           , ("w b e",     "next word, back, word end")
+           , ("W B E",     "the same over blank-delimited words")
+           , ("ge gE",     "back to a word end")
+           , ("0 ^ $ |",   "line start, first non-blank, end, column")
+           , ("f t F T",   "to or till a character, back with F T")
+           , ("; ,",       "repeat the find, reversed")
+           , ("%",         "matching bracket")
+           , ("{ }",       "paragraph back, forward")
+           , ("gg G",      "first line, last or line N")
+           , ("H M L",     "screen top, middle, bottom")
+           , ("+ - Enter", "line down, up, to first non-blank")
+           , ("^F ^B",     "page down, up; PgDn PgUp too")
+           , ("^D ^U",     "half a page down, up")
+           , ("^E ^Y",     "scroll a line down, up")
+           , ("zz zt zb",  "cursor line to middle, top, bottom") ])
+        , ("OPERATOR",
+           [ ("d c y",     "delete, change, yank a motion")
+           , ("< >",       "shift lines left, right")
+           , ("g~ gu gU",  "toggle, lower, upper case")
+           , ("dd cc yy",  "the line; >> << gUU likewise")
+           , ("N before",  "a count on any of these") ])
+        , ("OBJECT",
+           [ ("iw aw",     "a word, with its spaces")
+           , ("iW aW",     "a blank-delimited word")
+           , ("i( a( ib",  "inside, around ( ); [ { < too")
+           , ("i" ^ dq ^ " i' i`", "inside quotes; a for around")
+           , ("ip ap",     "a paragraph") ])
         , ("EDIT",
-           [ ("i",         "insert before the cursor")
-           , ("o",         "open a line below")
-           , ("x Del",     "delete a character")
-           , ("dd",        "delete the line")
-           , ("yy",        "yank the line")
-           , ("p P",       "put it below, above")
-           , ("u",         "undo one change")
-           , ("Esc",       "leave insert mode") ])
+           [ ("i a I A",   "insert here, after, at start, end")
+           , ("o O",       "open a line below, above")
+           , ("R",         "replace mode until Esc")
+           , ("x X",       "delete under, before the cursor")
+           , ("s S",       "change a character, the line")
+           , ("D C Y",     "to the end of the line; Y yanks the line")
+           , ("r",         "replace one character")
+           , ("~",         "toggle case and move on")
+           , ("J gJ",      "join lines, without a space")
+           , ("p P",       "put after, before")
+           , ("u ^R",      "undo, redo")
+           , (".",         "repeat the last change")
+           , ("Esc",       "leave insert or replace mode") ])
+        , ("INSERT",
+           [ ("^W ^U",     "delete a word, the line before the cursor")
+           , ("^T ^D",     "indent, dedent the line")
+           , ("Enter Tab", "line break, tab") ])
         , ("SEARCH",
-           [ ("/text",     "search forward")
-           , ("n N",       "next, previous match") ])
+           [ ("/text",     "search forward; ?text back")
+           , ("n N",       "next, previous match")
+           , ("* #",       "the word under the cursor, forward, back") ])
+        , ("MARK",
+           [ ("ma",        "set mark a")
+           , ("'a `a",     "go to its line, its column")
+           , ("'' ``",     "back before the last jump") ])
         , ("SESSION",
            [ (":",         "start a command")
+           , ("ZZ ZQ",     "write and quit; quit discarding")
            , ("q ^C",      "quit like :q") ])
         ]
+        end
 
 in [ ("onKey", onKey)
    , ("help", help)

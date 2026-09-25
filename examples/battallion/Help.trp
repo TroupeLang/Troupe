@@ -19,8 +19,9 @@
  * columns of at most the available height, in the order they are given, and the columns are laid
  * out side by side at a width computed from the widest key and the widest description in the whole
  * list. How many columns fit is the terminal's width divided by that; a terminal too narrow for
- * two gets one. A list that does not fit even so is cut, and the last row says how much was left
- * out rather than leaving the reader to wonder.
+ * two gets one. A list with more columns than fit is paged: `page` draws the columns of one page
+ * and its last row says which page it is and how to turn it, `pages` says how many there are, and
+ * the keymap holds which one is up (`st.helpPage`). A page number past the last draws the last.
  *
  * ROWS ARE NOT PADDED TO THE WIDTH. A cell is padded only when a cell to its right has something
  * in it, so a row ends where its text ends — which is what the renderer wants, every row being
@@ -59,14 +60,23 @@ let (** The page's first row. *)
 
     (*-----------------------------------  Packing  -----------------------------------*)
 
+    (** A block taller than `h` cut into pieces of at most `h` rows, so that a long section
+     *  continues in the next column rather than overflowing the one it starts in. *)
+    fun pieces (b, h) =
+        if h <= 0 orelse List.length b <= h then [b]
+        else List.take h b :: pieces (List.drop h b, h)
+
     (** The blocks packed into columns of at most `h` rows each, in order, with a blank row
-     *  between two sections that share a column. A block taller than `h` gets a column of its own
-     *  and overflows it, which the caller's cut then trims. *)
+     *  between two sections that share a column. A block taller than `h` is split across
+     *  columns of its own. *)
     fun pack (blocks, h) =
         let fun go ([], cur, cols)      = List.reverse (if cur = [] then cols
                                                         else List.reverse cur :: cols)
               | go (b :: bs, cur, cols) =
-                  if cur = []
+                  if List.length b > h
+                  then go (bs, [], List.revAppend (pieces (b, h))
+                                                  (if cur = [] then cols else List.reverse cur :: cols))
+                  else if cur = []
                   then go (bs, List.reverse b, cols)
                   else if List.length cur + 1 + List.length b <= h
                   then go (bs, List.revAppend b ("" :: cur), cols)
@@ -100,37 +110,56 @@ let (** The page's first row. *)
 
     (*-------------------------------------  Page  ------------------------------------*)
 
-    (** The help page as exactly `rows` rows, laid out for a terminal `cols` wide.
-     *
-     *  A terminal of fewer than five rows has no room for the title and the blank row under it,
-     *  and gets the entries alone: the page is a reminder, and on a screen that small the rows it
-     *  can show are worth more than a heading. *)
-    fun page (sections, cols, rows) =
+    (** The layout for a terminal: the column width, how many columns fit, the header rows, the
+     *  rows left for the body, and the packed columns. *)
+    fun layout (sections, cols, rows) =
         let val entries = entriesOf sections
             val keyw    = longest (fn (k, d) => k, entries)
             val descw   = longest (fn (k, d) => d, entries)
             val colw    = String.size indent + keyw + String.size keyGap + descw + gutter
             val wide    = if colw <= 0 then 1 else Number.intDiv cols colw
             val nc      = if wide < 1 then 1 else wide
-
             val header  = if rows >= 5 then [title, ""] else []
             val avail   = rows - List.length header
-
+            (* One row of the body is the page note when there is more than one page. *)
             val columns = pack (List.map (fn s => sectionRows (keyw, s)) sections, avail)
-            val shown   = List.take nc columns
-            val left    = List.length columns - nc
+            val paged   = List.length columns > nc
+            val body    = if paged then avail - 1 else avail
+            val columns = if paged
+                          then pack (List.map (fn s => sectionRows (keyw, s)) sections, body)
+                          else columns
+        in (colw, nc, header, body, columns)
+        end
+
+    (** How many pages the list takes on a terminal. *)
+    fun pages (sections, cols, rows) =
+        let val (_, nc, _, _, columns) = layout (sections, cols, rows)
+            val n = List.length columns
+        in if n <= nc then 1 else (n + nc - 1) div nc
+        end
+
+    (** Page `pg` of the help list as exactly `rows` rows, laid out for a terminal `cols` wide;
+     *  a page past the last is the last.
+     *
+     *  A terminal of fewer than five rows has no room for the title and the blank row under it,
+     *  and gets the entries alone: the page is a reminder, and on a screen that small the rows it
+     *  can show are worth more than a heading. *)
+    fun page (sections, cols, rows, pg) =
+        let val (colw, nc, header, avail, columns) = layout (sections, cols, rows)
+            val count   = pages (sections, cols, rows)
+            val this    = if pg < 0 then 0 else if pg >= count then count - 1 else pg
+            val shown   = List.take nc (List.drop (this * nc) columns)
 
             fun bodyRow i = rowText (List.map (fn c => cellAt (c, i)) shown, colw)
             val body    = List.tabulate avail bodyRow
-            val more    = if left = 1 then "(1 more column not shown)"
-                          else "(" ^ toString left ^ " more columns not shown)"
-            val cut     = if left > 0
-                          then List.append (List.take (avail - 1) body) [more]
-                          else body
+            val note    = "(page " ^ toString (this + 1) ^ " of " ^ toString count
+                          ^ ": Space next, b back, any other key returns)"
+            val cut     = if count > 1 then List.append body [note] else body
         in exactly (List.append header cut, rows)
         end
 
 in [ ("title", title)
+   , ("pages", pages)
    , ("page", page)
    ]
 end

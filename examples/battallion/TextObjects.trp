@@ -1,0 +1,188 @@
+(* TextObjects — the text an `i` or `a` object names: a word, a bracketed or quoted stretch, a
+ * paragraph.
+ *
+ * A program-relative module of examples/battallion, and pure. Every function takes `api`, the
+ * plugin record (Api.trp), and the state, and answers `SOME (a, b, linewise)` — a span as
+ * Operators.trp reads it, charwise offsets `[a, b)` or the first and last line — or NONE when
+ * there is no such object at the cursor, which aborts the command.
+ *
+ * `iw` IS THE RUN UNDER THE CURSOR, spaces included: on a word it is the word, on a run of
+ * spaces it is the spaces, in the classes Motions.trp divides the text into (`iW` in the two
+ * classes of the capital motions). `aw` is the word and the spaces after it, or the spaces before
+ * it when none follow, which is what lets `daw` on the last word of a line take the space that
+ * separated it. A count extends over that many further runs. Both stay on the cursor's line;
+ * an empty line has no word.
+ *
+ * A BRACKET OBJECT IS THE INNERMOST PAIR AROUND THE CURSOR, found by scanning back for the
+ * opener that no closer has matched and forward from it for its closer, across lines with nesting
+ * counted (Motions.trp's `matchFrom`). A cursor on either bracket is inside the pair. A count
+ * takes that many levels out. `i` is between the brackets and `a` includes them.
+ *
+ * A QUOTE OBJECT IS ON THE CURSOR'S LINE. The line's quotes are paired off from its start, as vim
+ * pairs them; the pair around the cursor is the object, and when the cursor is not in one, the
+ * first pair after it is. `i` is between the quotes; `a` includes them and the spaces after, or
+ * the spaces before when none follow. A quote escaped by a backslash is not counted.
+ *
+ * A PARAGRAPH IS A RUN OF NON-EMPTY LINES, or of empty ones when the cursor is on one; `ip` is
+ * the run and `ap` adds the run of empty lines after it, or before it when none follow. Both are
+ * linewise. A count extends over that many further runs.
+ *)
+
+import String
+import List
+import Option
+import "./Api"
+import "./Motions"
+
+let (*------------------------------------  Words  ------------------------------------*)
+
+    (** The run of one class that column `c` of `line` is in: its first column and the column
+     *  after its last. *)
+    fun runAround (cls, line, n, c) =
+        let val k = cls (String.sub (line, c))
+            fun back i = if i > 0 andalso cls (String.sub (line, i - 1)) = k then back (i - 1) else i
+            fun fwd i  = if i < n andalso cls (String.sub (line, i)) = k then fwd (i + 1) else i
+        in (back c, fwd c)
+        end
+
+    (** `iw`/`aw` and their capitals: `count` runs from the cursor's, on the cursor's line. *)
+    fun word (api, st, count, big, around) =
+        let val cls  = if big then Motions.bigClassOf else Motions.classOf
+            val line = api.lineAt (st, st.line)
+            val n    = String.size line
+            val from = api.lineStart (st, st.line)
+            fun isSpaceAt i = cls (String.sub (line, i)) = Motions.classSpace
+        in if n = 0 orelse st.col >= n then NONE
+           else let val (a0, b0) = runAround (cls, line, n, st.col)
+                    (* `k` more runs after `b`; with `around` a word takes its trailing spaces as
+                     * part of the same count. *)
+                    fun extend (b, k) =
+                        if k <= 0 orelse b >= n then b
+                        else let val (_, b') = runAround (cls, line, n, b)
+                             in if around andalso not (isSpaceAt b) andalso b' < n andalso isSpaceAt b'
+                                then extend (let val (_, b'') = runAround (cls, line, n, b') in b'' end, k - 1)
+                                else extend (b', k - 1)
+                             end
+                    val onSpace = isSpaceAt st.col
+                    val b1 = if around andalso not onSpace andalso b0 < n andalso isSpaceAt b0
+                             then let val (_, b') = runAround (cls, line, n, b0) in b' end
+                             else b0
+                    val b2 = extend (b1, count - 1)
+                    (* `aw` on a word with no spaces after it takes the spaces before it. *)
+                    val a1 = if around andalso not onSpace andalso b1 = b0 andalso a0 > 0
+                                andalso isSpaceAt (a0 - 1)
+                             then let val (a', _) = runAround (cls, line, n, a0 - 1) in a' end
+                             else a0
+                in SOME (from + a1, from + b2, false)
+                end
+        end
+
+    (*----------------------------------  Brackets  -----------------------------------*)
+
+    (** The opener `open` before or at `(l, c)` that no closer has matched, scanning back across
+     *  lines; NONE when there is none. *)
+    fun unmatchedOpen (api, st, l, c, open, close) =
+        let fun scan (l, c, depth) =
+                if c < 0
+                then (if l > 0 then scan (l - 1, api.lineLength (st, l - 1) - 1, depth) else NONE)
+                else let val x = String.sub (api.lineAt (st, l), c)
+                     in if x = open
+                        then (if depth = 0 then SOME (l, c) else scan (l, c - 1, depth - 1))
+                        else if x = close then scan (l, c - 1, depth + 1)
+                        else scan (l, c - 1, depth)
+                     end
+        in scan (l, c, 0)
+        end
+
+    (** `i`/`a` with `open`: the pair `count` levels out from the cursor, as offsets. *)
+    fun bracket (api, st, count, open, around) =
+        let val close = Motions.partnerOf open
+            val line  = api.lineAt (st, st.line)
+            val n     = String.size line
+            (* A cursor on the closer starts from the character before it, so that the pair it
+             * closes is the innermost. *)
+            val c0    = if st.col < n andalso String.sub (line, st.col) = close then st.col - 1 else st.col
+            fun levels (l, c, k) =
+                case unmatchedOpen (api, st, l, c, open, close) of
+                     NONE => NONE
+                   | SOME (ol, oc) => if k <= 1 then SOME (ol, oc) else levels (ol, oc - 1, k - 1)
+        in case levels (st.line, c0, count) of
+                NONE => NONE
+              | SOME (ol, oc) =>
+                  case Motions.matchFrom (api, st, ol, oc, open) of
+                       NONE => NONE
+                     | SOME (cl, cc) =>
+                         let val a = api.lineStart (st, ol) + oc
+                             val b = api.lineStart (st, cl) + cc
+                         in if around then SOME (a, b + 1, false) else SOME (a + 1, b, false)
+                         end
+        end
+
+    (*-----------------------------------  Quotes  ------------------------------------*)
+
+    (** The columns of the unescaped `q` on `line`, in order. *)
+    fun quoteColumns (line, n, q) =
+        let fun go (i, acc) =
+                if i >= n then List.reverse acc
+                else if String.sub (line, i) = "\\" then go (i + 2, acc)
+                else if String.sub (line, i) = q then go (i + 1, i :: acc)
+                else go (i + 1, acc)
+        in go (0, [])
+        end
+
+    (** The pair of `q` around column `c`, or the first pair after it, as `(open, close)`. *)
+    fun quotePair (cols, c) =
+        case cols of
+             o :: cl :: rest => if c <= cl then SOME (o, cl) else quotePair (rest, c)
+           | _               => NONE
+
+    (** `i`/`a` with a quote character `q`, on the cursor's line. *)
+    fun quote (api, st, q, around) =
+        let val line = api.lineAt (st, st.line)
+            val n    = String.size line
+            val from = api.lineStart (st, st.line)
+        in case quotePair (quoteColumns (line, n, q), st.col) of
+                NONE => NONE
+              | SOME (o, cl) =>
+                  if not around then SOME (from + o + 1, from + cl, false)
+                  else let fun spacesAfter i = if i < n andalso Motions.isSpace (String.sub (line, i))
+                                               then spacesAfter (i + 1) else i
+                           fun spacesBefore i = if i > 0 andalso Motions.isSpace (String.sub (line, i - 1))
+                                                then spacesBefore (i - 1) else i
+                           val b = spacesAfter (cl + 1)
+                           val a = if b > cl + 1 then o else spacesBefore o
+                       in SOME (from + a, from + b, false)
+                       end
+        end
+
+    (*---------------------------------  Paragraphs  ----------------------------------*)
+
+    (** `ip`/`ap`: the run of lines the cursor's is in, `count` runs on, as first and last line. *)
+    fun paragraph (api, st, count, around) =
+        let val last = api.lastLine st
+            fun empty l = api.lineLength (st, l) = 0
+            (* The last line of the run that `l` starts or is in. *)
+            fun runEnd l = if l < last andalso empty (l + 1) = empty l then runEnd (l + 1) else l
+            fun runStart l = if l > 0 andalso empty (l - 1) = empty l then runStart (l - 1) else l
+            val l1 = runStart st.line
+            fun extend (l2, k) =
+                if k <= 0 orelse l2 >= last then l2
+                else let val e = runEnd (l2 + 1)
+                     in if around andalso not (empty (l2 + 1)) andalso e < last
+                        then extend (runEnd (e + 1), k - 1)
+                        else extend (e, k - 1)
+                     end
+            val e0 = runEnd st.line
+            val e1 = if around andalso not (empty st.line) andalso e0 < last then runEnd (e0 + 1) else e0
+            val e2 = extend (e1, count - 1)
+            val a  = if around andalso not (empty st.line) andalso e1 = e0 andalso l1 > 0
+                     then runStart (l1 - 1) else l1
+        in SOME (a, e2, true)
+        end
+
+in [ ("word", word)
+   , ("bracket", bracket)
+   , ("quote", quote)
+   , ("paragraph", paragraph)
+   ]
+end

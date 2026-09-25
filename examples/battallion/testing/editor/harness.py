@@ -42,6 +42,12 @@ Observed 2026-08-02 (dev-text-editor, display-width truncation in the tree),
   case 10 linewise edits        yy, p, P and dd, undone; the file byte-exact
   case 11 save as               :w PATH writes a copy and leaves the buffer modified
   case 12 goto                  :N, :$, :0, a number past the end, and a word that is not one
+  case 13 counts                d2w, 3x; the file byte-exact
+  case 14 text objects          ci(, dap, di"; the file byte-exact
+  case 15 dot and redo          cw then ., dd/u/CTRL-R; the file byte-exact
+  case 16 replace mode          R overwrites, Backspace restores, r with a count
+  case 17 join and case         3J, gUiw, ~; the file byte-exact
+  case 18 visual mode           Vjd and viwU; the file byte-exact
 """
 import fcntl
 import os
@@ -503,16 +509,22 @@ def case6():
         after = r.type(b"\x1b", settle=ESCAPE_MS / 1000.0 + 0.6)
         check("the lone Esc left insert mode without another key",
               "NORMAL" in status_row(after), repr(status_row(after)))
-        check("the cursor kept its column", "1,3" in status_row(after),
-              repr(status_row(after)))
+        # Leaving insert mode steps the cursor left onto the last character
+        # typed, as vi's does, so the column is one less than it was in insert.
+        check("the cursor stepped left onto the last character",
+              "1,2" in status_row(after), repr(status_row(after)))
 
         # Esc and the key behind it, arriving inside the timer's window: the
         # decoder carries the Esc into the next chunk and both keys take effect.
+        # The key behind is `l` rather than `h` because Esc lands the cursor at
+        # the last character and, at column one here, `h` would move onto column
+        # zero either way -- `l` moving right is what tells a key that acted from
+        # one that was swallowed.
         r.type(b"i", settle=0.6)
         mark = len(r.text())
         r.send(b"\x1b")
         time.sleep(0.01)
-        r.send(b"h")
+        r.send(b"l")
         r.pump(0.9)
         after = r.text()[mark:]
         check("Esc inside the window still left insert mode",
@@ -890,8 +902,218 @@ def case12():
         r.close()
 
 
+
+# ---------------------------------------------------------------- case 13
+
+
+def case13():
+    print("case 13: counts and operators over motions")
+    r = open_editor("counts.txt", b"one two three four five\n")
+    try:
+        after = r.type(b"d2w", settle=1.0)
+        check("d2w deletes two words", body_rows(after)[0] == "three four five",
+              repr(body_rows(after)[0]))
+        after = r.type(b"3x", settle=1.0)
+        check("3x deletes three characters", body_rows(after)[0] == "ee four five",
+              repr(body_rows(after)[0]))
+        r.send(b":wq\r")
+        quit_and_check(r)
+        check("the file holds the counted edits",
+              read_file("counts.txt") == b"ee four five\n",
+              repr(read_file("counts.txt")))
+    finally:
+        r.close()
+
+
+# ---------------------------------------------------------------- case 14
+
+
+def case14():
+    print("case 14: text objects — ci(, dap, di\"")
+    r = open_editor("objs.txt", b"alpha (inner text) beta\n")
+    try:
+        # ci( from outside the parens does nothing, as vi's does; on the paren it works.
+        after = r.type(b"ci(NEW\x1b", settle=1.2)
+        check("ci( outside the parens leaves the line alone",
+              body_rows(after)[0] == "alpha (inner text) beta",
+              repr(body_rows(after)[0]))
+        after = r.type(b"f(ci(NEW\x1b", settle=1.2)
+        check("ci( on the paren changes what is inside",
+              body_rows(after)[0] == "alpha (NEW) beta", repr(body_rows(after)[0]))
+        r.send(b":wq\r")
+        quit_and_check(r)
+        check("the file holds the changed object",
+              read_file("objs.txt") == b"alpha (NEW) beta\n",
+              repr(read_file("objs.txt")))
+    finally:
+        r.close()
+
+    r = open_editor("objs2.txt", b"w1 w2\nw3 w4\n\np2a p2b\n")
+    try:
+        after = r.type(b"dap", settle=1.2)
+        check("dap deletes the paragraph and the blank line after it",
+              body_rows(after)[0] == "p2a p2b", repr(body_rows(after)[:2]))
+        r.send(b":wq\r")
+        quit_and_check(r)
+        check("the file holds the remaining paragraph",
+              read_file("objs2.txt") == b"p2a p2b\n", repr(read_file("objs2.txt")))
+    finally:
+        r.close()
+
+    r = open_editor("objs3.txt", b'quote "hello there" end\n')
+    try:
+        r.type(b'f"di"', settle=1.2)
+        r.send(b":wq\r")
+        quit_and_check(r)
+        check("di\" empties what is between the quotes",
+              read_file("objs3.txt") == b'quote "" end\n', repr(read_file("objs3.txt")))
+    finally:
+        r.close()
+
+
+# ---------------------------------------------------------------- case 15
+
+
+def case15():
+    print("case 15: . repeats the last change, and CTRL-R redoes")
+    r = open_editor("dot.txt", b"foo bar baz\n")
+    try:
+        after = r.type(b"cwQ\x1b", settle=1.2)
+        check("cw changes the word", body_rows(after)[0] == "Q bar baz",
+              repr(body_rows(after)[0]))
+        after = r.type(b"w.", settle=1.2)
+        check("the dot repeats the change on the next word",
+              body_rows(after)[0] == "Q Q baz", repr(body_rows(after)[0]))
+        r.send(b":wq\r")
+        quit_and_check(r)
+        check("the file holds both changes",
+              read_file("dot.txt") == b"Q Q baz\n", repr(read_file("dot.txt")))
+    finally:
+        r.close()
+
+    r = open_editor("redo.txt", b"aaa\nbbb\n")
+    try:
+        after = r.type(b"dd", settle=1.0)
+        check("dd took the first line", body_rows(after)[0] == "bbb",
+              repr(body_rows(after)[0]))
+        after = r.type(b"u", settle=1.0)
+        check("u put it back", body_rows(after)[0] == "aaa",
+              repr(body_rows(after)[0]))
+        after = r.type(b"\x12", settle=1.0)   # CTRL-R
+        check("CTRL-R redid the delete", body_rows(after)[0] == "bbb",
+              repr(body_rows(after)[0]))
+        r.send(b":wq\r")
+        quit_and_check(r)
+        check("the file holds the redone delete",
+              read_file("redo.txt") == b"bbb\n", repr(read_file("redo.txt")))
+    finally:
+        r.close()
+
+
+# ---------------------------------------------------------------- case 16
+
+
+def case16():
+    print("case 16: replace mode overwrites, Backspace restores, R with a count")
+    r = open_editor("repl.txt", b"HELLO world\n")
+    try:
+        after = r.type(b"R", settle=0.8)
+        check("R enters replace mode", "REPLACE" in status_row(after),
+              repr(status_row(after)))
+        after = r.type(b"hi", settle=1.0)
+        check("printable keys overwrite", body_rows(after)[0] == "hiLLO world",
+              repr(body_rows(after)[0]))
+        after = r.type(b"\x7f", settle=1.0)   # Backspace restores the overwritten char
+        check("Backspace restores the character it overwrote",
+              body_rows(after)[0] == "hELLO world", repr(body_rows(after)[0]))
+        r.type(b"\x1b", settle=0.6)
+        r.send(b":wq\r")
+        quit_and_check(r)
+        check("the file holds the overwrite less the restored character",
+              read_file("repl.txt") == b"hELLO world\n", repr(read_file("repl.txt")))
+    finally:
+        r.close()
+
+    r = open_editor("repl2.txt", b"abcdef\n")
+    try:
+        r.type(b"5rX", settle=1.0)
+        r.send(b":wq\r")
+        quit_and_check(r)
+        check("r with a count replaces that many characters",
+              read_file("repl2.txt") == b"XXXXXf\n", repr(read_file("repl2.txt")))
+    finally:
+        r.close()
+
+
+# ---------------------------------------------------------------- case 17
+
+
+def case17():
+    print("case 17: J joins, gU uppercases, ~ toggles")
+    r = open_editor("join.txt", b"l1\nl2\nl3\nl4\n")
+    try:
+        after = r.type(b"3J", settle=1.2)
+        check("3J joins three lines with single spaces",
+              body_rows(after)[0] == "l1 l2 l3", repr(body_rows(after)[:2]))
+        r.send(b":wq\r")
+        quit_and_check(r)
+        check("the file holds the joined lines",
+              read_file("join.txt") == b"l1 l2 l3\nl4\n", repr(read_file("join.txt")))
+    finally:
+        r.close()
+
+    r = open_editor("case.txt", b"hello world\n")
+    try:
+        after = r.type(b"gUiw", settle=1.2)
+        check("gUiw uppercases the word", body_rows(after)[0] == "HELLO world",
+              repr(body_rows(after)[0]))
+        after = r.type(b"3~", settle=1.2)
+        check("3~ toggles three characters and moves on",
+              body_rows(after)[0] == "helLO world", repr(body_rows(after)[0]))
+        r.send(b":q!\r")
+        quit_and_check(r)
+    finally:
+        r.close()
+
+
+# ---------------------------------------------------------------- case 18
+
+
+def case18():
+    print("case 18: visual mode selects, then an operator acts on the selection")
+    r = open_editor("vis.txt", b"abc\ndef\nghi\n")
+    try:
+        after = r.type(b"Vj", settle=1.0)
+        check("V enters visual-line mode", "VISUAL LINE" in status_row(after),
+              repr(status_row(after)))
+        after = r.type(b"d", settle=1.0)
+        check("d deletes the selected lines and returns to normal",
+              body_rows(after)[0] == "ghi" and "NORMAL" in status_row(after),
+              repr(status_row(after)))
+        r.send(b":wq\r")
+        quit_and_check(r)
+        check("the file holds the line the selection spared",
+              read_file("vis.txt") == b"ghi\n", repr(read_file("vis.txt")))
+    finally:
+        r.close()
+
+    r = open_editor("vis2.txt", b"hello world\n")
+    try:
+        after = r.type(b"wviwU", settle=1.2)
+        check("viw then U uppercases the selected word",
+              body_rows(after)[0] == "hello WORLD", repr(body_rows(after)[0]))
+        r.send(b":wq\r")
+        quit_and_check(r)
+        check("the file holds the recased selection",
+              read_file("vis2.txt") == b"hello WORLD\n", repr(read_file("vis2.txt")))
+    finally:
+        r.close()
+
+
+
 for c in (case1, case2, case3, case4, case5, case6, case7, case8,
-          case9, case10, case11, case12):
+          case9, case10, case11, case12, case13, case14, case15, case16,
+          case17, case18):
     c()
     print("")
 

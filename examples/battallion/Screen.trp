@@ -74,6 +74,7 @@
  *)
 
 import String
+import Option
 import qualified "../proscenium/Ansi" as Ansi
 
 let (*------------------------------  Terminal mode  ------------------------------*)
@@ -149,9 +150,36 @@ let (*------------------------------  Terminal mode  ---------------------------
              in go (0, 0)
              end
 
+    (** Reverse video on and every attribute off: what a highlighted stretch of a row is wrapped
+     *  in. `\x1b[7m` and `\x1b[0m` are SGR, the one escape this module writes inside a row — and
+     *  after truncation, so that the columns the row is cut by are the columns of its text. *)
+    val reverseVideo = "\x1b[7m"
+    val plainVideo   = "\x1b[0m"
+
+    (** One row: `text` cut to the width, and the code units `[a, b)` of a highlight drawn in
+     *  reverse video where there is one. A highlight that begins at or past the end of the cut
+     *  text draws one reversed blank after it, which is how an empty line, or the end of a line,
+     *  shows that it is selected. *)
+    fun row ((text, hl), width) =
+        let val cut = truncate (text, width)
+            val n   = String.size cut
+        in case hl of
+                NONE => cut
+              | SOME (a, b) =>
+                  let val a' = if a < 0 then 0 else if a > n then n else a
+                      val b' = if b < a' then a' else if b > n then n else b
+                  in if b' > a'
+                     then String.substring (cut, 0, a') ^ reverseVideo ^ String.substring (cut, a', b')
+                          ^ plainVideo ^ String.substring (cut, b', n)
+                     else if a' >= n andalso n < width then cut ^ reverseVideo ^ " " ^ plainVideo
+                     else cut
+                  end
+        end
+
     (** The whole visible screen: the cursor hidden, `lines` laid out from the top, each line
      *  erased whole before its text is written, the cursor left at `(curRow, curCol)`, `tail`
-     *  written after it, and the cursor shown again.
+     *  written after it, and the cursor shown again. A line is `(text, highlight)`, the highlight
+     *  `NONE` or `SOME (a, b)` for the code units to draw in reverse video.
      *
      *  `lines` is expected to hold exactly `rows` entries; a shorter list draws fewer rows and
      *  leaves the rest of the screen as it was, which is what a caller wants when the buffer has
@@ -165,8 +193,8 @@ let (*------------------------------  Terminal mode  ---------------------------
      *  force by the time the cursor is on the screen. *)
     fun frame (lines, width, curRow, curCol, tail) =
         let fun go ([], acc)      = acc
-              | go ([l], acc)     = acc ^ Ansi.eraseLine ^ truncate (l, width)
-              | go (l :: ls, acc) = go (ls, acc ^ Ansi.eraseLine ^ truncate (l, width) ^ "\r\n")
+              | go ([l], acc)     = acc ^ Ansi.eraseLine ^ row (l, width)
+              | go (l :: ls, acc) = go (ls, acc ^ Ansi.eraseLine ^ row (l, width) ^ "\r\n")
         in hideCursor ^ go (lines, Ansi.home) ^ cursorTo (curRow, curCol) ^ tail ^ showCursor
         end
 
@@ -180,6 +208,7 @@ in [ ("enterAlt", enterAlt)
    , ("tabStop", tabStop)
    , ("column", column)
    , ("truncate", truncate)
+   , ("row", row)
    , ("frame", frame)
    ]
 end

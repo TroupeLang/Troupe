@@ -56,6 +56,7 @@
 
 import String
 import List
+import Option
 import "./Api"
 import "./Screen"
 import "./VimMotions"
@@ -81,8 +82,8 @@ let (*--------------------  What the session needs from the state  -------------
 
     (*-----------------------------------  Frames  -----------------------------------*)
 
-    (** The visible lines, one per terminal row, the cursor's position on the screen, and the
-     *  escape that shapes the cursor there.
+    (** The visible lines, one per terminal row, each with the highlight a visual selection puts
+     *  on it, the cursor's position on the screen, and the escape that shapes the cursor there.
      *
      *  Rows past the end of the buffer are drawn as "~", the filler vi has used since the
      *  seventies to say "this row is not part of the file". The last row is the status plugin's,
@@ -107,14 +108,31 @@ let (*--------------------  What the session needs from the state  -------------
     fun frameOf (plugins, st) =
         let val h    = Api.textRows st
             val last = Api.lastLine st
+
+            (** The highlight of buffer line `l`, as the code units a visual selection covers on
+             *  it: the whole line inside a linewise selection or strictly between the ends of a
+             *  charwise one, and from or to the end on the lines the ends are on. *)
+            val (al, ac) = st.anchor
+            val (l1, c1, l2, c2) =
+                if al < st.line orelse (al = st.line andalso ac <= st.col)
+                then (al, ac, st.line, st.col) else (st.line, st.col, al, ac)
+            fun highlight l =
+                if l < l1 orelse l > l2 then NONE
+                else case st.mode of
+                          VLINE  => SOME (0, Api.lineLength (st, l))
+                        | VISUAL => SOME (if l = l1 then c1 else 0,
+                                          if l = l2 then c2 + 1 else Api.lineLength (st, l))
+                        | _      => NONE
+
             fun rowsFrom (i, acc) =
                 if i >= h then List.reverse acc
                 else let val l = st.top + i
-                     in rowsFrom (i + 1, (if l > last then "~" else Api.lineAt (st, l)) :: acc)
+                     in rowsFrom (i + 1, (if l > last then ("~", NONE)
+                                          else (Api.lineAt (st, l), highlight l)) :: acc)
                      end
-            val body  = case st.mode of HELP => plugins.help (st, h)
+            val body  = case st.mode of HELP => List.map (fn r => (r, NONE)) (plugins.help (st, h))
                                       | _    => rowsFrom (0, [])
-            val lines = if Api.hasStatus st then List.append body [plugins.status st] else body
+            val lines = if Api.hasStatus st then List.append body [(plugins.status st, NONE)] else body
 
             (** Where column `c` of `text` is drawn: `Screen.column` maps it through the tab stops
              *  the renderer truncates by, so the cursor is on the character the user is at rather
@@ -145,11 +163,15 @@ let (*--------------------  What the session needs from the state  -------------
      *  level constructs values and does not call — the export table of a library that called one
      *  would not be built at all (docs/MODULES.md). *)
     val helpPage = fn (st, rows) =>
-        Help.page (List.append VimMotions.help FileOps.help, st.cols, rows)
+        Help.page (List.append (VimMotions.help ()) FileOps.help, st.cols, rows, st.helpPage)
+
+    (** How many pages the help list takes on this terminal, for the keymap's page turning. *)
+    val helpPages = fn st =>
+        Help.pages (List.append (VimMotions.help ()) FileOps.help, st.cols, Api.textRows st)
 
     (** The plugin set the editor ships. *)
     val plugins =
-        { onKey       = fn (st, k)           => VimMotions.onKey (Api.api, commands, st, k)
+        { onKey       = fn (st, k)           => VimMotions.onKey (Api.api, commands, helpPages, st, k)
         , onWritten   = fn (st, ok, message) => FileOps.onWritten (Api.api, st, ok, message)
         , status      = fn st                => StatusLine.render (Api.api, st)
         , help        = helpPage

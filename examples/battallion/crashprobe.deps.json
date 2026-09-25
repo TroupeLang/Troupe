@@ -2,15 +2,18 @@
   "deps": [
     {"path": "../proscenium/Ansi", "hash": "9vrb4ti2hssdjorne9q0n3cise4oc20240f8a3cn1mim12ecar40", "name": "../proscenium/Ansi"},
     {"path": "../proscenium/Key", "hash": "t93u5gtdr744r05vrpj49n1raeuno6vo4dmfpdbmguv16vlmr1eg", "name": "../proscenium/Key"},
-    {"path": "Api", "hash": "5qgtvb4r9pcf588hv9p2b43golo8ffm9qfa4eev169a13n71lggg", "name": "Api"},
+    {"path": "Api", "hash": "ritvggd7bo043btemsmlt7q88u97t9krav6v8g4pjtnmav0g6glg", "name": "Api"},
     {"path": "CursorStyle", "hash": "q9opdofp92s1ig6mndvn47cg10gj1pfvbsbt0em9p6fatmfacvn0", "name": "CursorStyle"},
-    {"path": "Editor", "hash": "9n5mrf41iam4e8q03j2n4l27k5h5kv90i3n30us5rqdj2is41l50", "name": "Editor"},
-    {"path": "FileOps", "hash": "ah8flo58p8kqjob8jls55mjcnv8ei8utnjqi6kkdckksvr59vr90", "name": "FileOps"},
-    {"path": "Help", "hash": "k7ajt7v06qa2lhgjhfhmqpj0f8qq9c939285duiam7al0gf6eeu0", "name": "Help"},
+    {"path": "Editor", "hash": "cgviie0igrqcmec3icgd2ugp5nf8vmn608ati1pudll74nn16org", "name": "Editor"},
+    {"path": "FileOps", "hash": "tp15pfb1r2n293rbudj94fdim4dh4jtuqorsv5ou8hjfkf4isbf0", "name": "FileOps"},
+    {"path": "Help", "hash": "lcbcbgnp4tdd0ge8afcp58chh5pb9h5o9183vheb2ad0s4bm2g4g", "name": "Help"},
     {"path": "Key", "hash": "pulh2blak00itnh0m6l9p8f36c0otm0p5nu0cuj39sqoceck2ie0", "name": "Key"},
-    {"path": "Screen", "hash": "8hp7mab9vsntrrredrgn32riarka0vj8qg18rktotdgleg2o84rg", "name": "Screen"},
-    {"path": "Session", "hash": "cffd99bad0k8vldi9hgfjtq0m6kqnabsavm5ett474gtaikateng", "name": "Session"},
-    {"path": "StatusLine", "hash": "m9qubbjaecpsobotb5nfqmb23lt8q9825n3e9hrffdjh1oi02uv0", "name": "StatusLine"},
-    {"path": "VimMotions", "hash": "okr0ii427a6dk6552iqd1qvf2lhnjrc1jm6huvnn16uo9fjun5fg", "name": "VimMotions"}
+    {"path": "Motions", "hash": "ap5c2ij0de4ms2j1anb0fsrguug8milpdsc9g210aucqsa6ocjf0", "name": "Motions"},
+    {"path": "Operators", "hash": "5m38sjf9jhlngruu86qrhg87h78h102bn4e4704cclndifjn1j2g", "name": "Operators"},
+    {"path": "Screen", "hash": "e9l9cksi076hnbcna2rc6rlf0om9v9ghcl5o2d6ja02s8ud1p6jg", "name": "Screen"},
+    {"path": "Session", "hash": "n6ru9orma83mc2jtsb66sonn5939t4medg0aa54ros53ro1avjj0", "name": "Session"},
+    {"path": "StatusLine", "hash": "2plr23fruaqqhkiki1brjo999bod0ftudckfhim96vb47rm11660", "name": "StatusLine"},
+    {"path": "TextObjects", "hash": "75vs49uujdfb0ooo01bhr28dlr188nffmrfh8tplv89lcvqgi130", "name": "TextObjects"},
+    {"path": "VimMotions", "hash": "bob4mp9p03pj54gclv58ssr9aim9s87ars23d1rql27q2j40v5a0", "name": "VimMotions"}
   ]
 }

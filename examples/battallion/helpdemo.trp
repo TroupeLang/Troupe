@@ -23,12 +23,12 @@ let val a = authority
 
     (** The sections the editor's plugin set assembles the page from. Built inside a function
      *  because a module's top level does not call one (docs/MODULES.md). *)
-    fun sections () = List.append VimMotions.help FileOps.help
+    fun sections () = List.append (VimMotions.help ()) FileOps.help
 
     fun show (cols, rows) =
         let val _  = fwrite (out, "=== " ^ toString cols ^ " columns, " ^ toString rows
                                   ^ " rows of text\n")
-            val ls = Help.page (sections (), cols, rows)
+            val ls = Help.page (sections (), cols, rows, 0)
             val _  = List.map (fn l => fwrite (out, "|" ^ l ^ "|\n")) ls
         in fwrite (out, "rows drawn: " ^ toString (List.length ls) ^ "\n\n")
         end

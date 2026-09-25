@@ -24,33 +24,46 @@
  *   col      the cursor's column within that line, counting from zero
  *   cols     the terminal's width, in code units
  *   rows     the terminal's height, in rows, status line included
- *   mode     NORMAL, INSERT, COMMAND or HELP
+ *   mode     NORMAL, INSERT, REPLACE, VISUAL, VLINE, COMMAND or HELP
  *   rev      the identity of the buffer's present contents (see below)
  *   revNext  the next identity to hand out
  *   savedRev the identity the file on disk holds
  *   undo     the states `u` walks back through, newest first
- *   prompt   what the typed row means: ":" a command, "/" a search, "" not prompting
+ *   redo     the states CTRL-r walks forward through, newest first; emptied by every edit
+ *   prompt   what the typed row means: ":" a command, "/" or "?" a search, "" not prompting
  *   cmd      the line being typed after that prompt
  *   status   a transient message for the status line; "" when there is none
  *   goalCol  the column a vertical motion aims for (see below)
- *   pending  the keymap's prefix key, waiting for the key that completes it; "" when none
+ *   pending  the keymap's partial command, waiting for the keys that complete it; "" when none
  *   find     the last search pattern, which `n` and `N` repeat; "" when there has been none
- *   yank     the last yanked line, SOME text or NONE
+ *   findDown whether that search ran forward; `n` keeps the direction and `N` reverses it
+ *   findWord whether that pattern matches whole words only, as `*` and `#` search
+ *   charFind the last `f`, `t`, `F` or `T` with its character, which `;` and `,` repeat; "" none
+ *   yank     the register: SOME (text, linewise) or NONE
+ *   marks    the named positions `m` sets, as (name, line, col); `'` is the one before a jump
+ *   insertMark  the undo depth when the current insert began, or -1 outside one
+ *   insertCount the count the current insert was entered with
+ *   typed    the keys typed in the current insert, newest first
+ *   dot      the tokens of the last change, which `.` repeats
+ *   dotInsert   the keys typed in the insert that change opened
+ *   anchor   the other end of a visual selection, as (line, col); the cursor is the one end
+ *   helpPage which page of the help list is up
  *   req      what a plugin is asking the kernel to do, REQ_NONE when nothing
  *
  * A plugin reads those fields directly and writes them only through the operations below: the
  * state's shape is published, its transitions are not open-coded.
  *
- * FOUR OF THE FIELDS ARE THE KEYMAP'S BOOKKEEPING and not the buffer's: `prompt`, `pending`,
- * `find` and `yank` are what a plugin needs to carry from one keystroke to the next, and they are
- * here because the state is the only thing a pure plugin gets back. They hold no invariant the
- * kernel checks, and none of them is in an undo snapshot.
+ * A DOZEN OF THE FIELDS ARE THE KEYMAP'S BOOKKEEPING and not the buffer's: from `prompt` to
+ * `helpPage` above is what a plugin needs to carry from one keystroke to the next, and it is here
+ * because the state is the only thing a pure plugin gets back. They hold no invariant the kernel
+ * checks, and none of them is in an undo snapshot.
  *
  * THE CURSOR MAY SIT ONE PAST THE LAST CHARACTER of its line, i.e. `col` ranges over
  * `0..length`, not `0..length-1`, in every mode. Insert mode needs the position, and a vi-style
- * normal mode that stops one earlier is a keymap decision — the keymap being a plugin. One
- * consequence is visible: leaving insert mode does not pull the cursor left the way vi does, so
- * `i`, some text, Esc leaves the cursor after the text rather than on its last character.
+ * normal mode that stops one earlier is a keymap decision — the keymap being a plugin. `intoLine`
+ * is the operation a keymap makes that decision with: it pulls a cursor that sits past the last
+ * character back onto it and leaves the goal column alone, so a keymap that applies it after each
+ * normal-mode command gets vi's cursor without each motion knowing.
  *
  * THE COLUMN IS REMEMBERED ACROSS VERTICAL MOTIONS, in `goalCol`. Moving down from column 40 onto
  * a short line puts the cursor at that line's end, and moving down again onto a long one returns
@@ -84,21 +97,25 @@
  * and counted as one, so a cursor past one is drawn to its left, and a line of them is clipped at
  * the terminal's right edge rather than cut (Screen.trp's header).
  *
- * UNDO IS PER KEYSTROKE and unlimited. Every operation that changes the buffer first pushes the
- * whole previous state — rope, cursor, revision — onto `undo`, and `undo` pops one. Two
- * consequences are deliberate. Typing a word and undoing it takes as many undos as there were
- * letters, where vi would undo the whole insertion; grouping keystrokes into changes is a keymap
- * feature and belongs with the plugins. And the history costs almost nothing: a rope shares every
- * node the edit did not touch with its predecessor, so a snapshot is a handful of nodes rather
- * than a copy of the text — which is the reason the buffer is a persistent structure in the first
- * place. An undo on an empty history is a status message rather than an error.
+ * UNDO IS PER OPERATION and unlimited. Every operation that changes the buffer first pushes the
+ * whole previous state — rope, cursor, revision — onto `undo`, and `undo` pops one. Grouping
+ * operations into changes is the keymap's: `squashUndo` collapses the entries pushed since a
+ * given depth into the oldest of them, so a keymap that notes `undoDepth` when an insert begins
+ * and squashes when it ends makes the insert one undo step, and a command that edits three times
+ * squashes its three entries into one. The history costs almost nothing: a rope shares every node
+ * the edit did not touch with its predecessor, so a snapshot is a handful of nodes rather than a
+ * copy of the text — which is the reason the buffer is a persistent structure in the first place.
+ * An undo on an empty history is a status message rather than an error. `redo` is the inverse:
+ * `undo` pushes the state it leaves onto `redo`, `redo` pops it back, and any edit empties the
+ * redo history, since a change made after an undo is a new branch.
  *
  * A SNAPSHOT IS THE BUFFER, THE CURSOR AND THE REVISION, AND NOTHING ELSE. What `u` puts back is
  * what an edit took away; the keymap's bookkeeping is not part of an edit and does not travel with
  * it. So an undo leaves the search pattern, the yank register and the pending prefix where they
  * were — undoing a `dd` does not un-yank the line it yanked, and `n` after an undo repeats the
  * search the user last asked for. The goal column is the one the restored cursor sits at, which is
- * the rule stated above and not an exception to it.
+ * the rule stated above and not an exception to it. A mark is a position and not an anchor in the
+ * text: an edit above it does not move it, and a jump to one clamps it to the buffer as it now is.
  *
  * THE BUFFER IS MODIFIED WHEN ITS REVISION IS NOT THE FILE'S. There is no modified *flag*: every
  * distinct contents the buffer has ever held carries an identity, `rev`, handed out from `revNext`
@@ -143,9 +160,10 @@ import List
 import Option
 import Rope
 
-(* HELP is a mode because it is what the next key means: in it, every key returns to the buffer.
- * What it draws instead of the buffer is the kernel's business (Editor.trp's `frameOf`). *)
-datatype mode = NORMAL | INSERT | COMMAND | HELP
+(* HELP is a mode because it is what the next key means: in it, most keys return to the buffer.
+ * What it draws instead of the buffer is the kernel's business (Editor.trp's `frameOf`), as is
+ * the highlight VISUAL and VLINE draw between `anchor` and the cursor. *)
+datatype mode = NORMAL | INSERT | REPLACE | VISUAL | VLINE | COMMAND | HELP
 
 (* What a plugin asks the kernel to do. `REQ_WRITE`'s payload is the path the bytes are to go to
  * and whether a successful write ends the session. *)
@@ -163,12 +181,16 @@ let (*--------------------------------  Construction  --------------------------
     fun init (buffer, path, cols, rows) =
         { buffer = buffer, path = path, top = 0, line = 0, col = 0, cols = cols, rows = rows
         , mode = NORMAL, rev = 0, revNext = 1, savedRev = 0
-        , undo = [], prompt = "", cmd = "", status = openingMessage
-        , goalCol = 0, pending = "", find = "", yank = NONE, req = REQ_NONE }
+        , undo = [], redo = [], prompt = "", cmd = "", status = openingMessage
+        , goalCol = 0, pending = "", find = "", findDown = true, findWord = false
+        , charFind = "", yank = NONE, marks = []
+        , insertMark = -1, insertCount = 1, typed = [], dot = [], dotInsert = []
+        , anchor = (0, 0), helpPage = 0, req = REQ_NONE }
 
     (*----------------------------------  Messages  ----------------------------------*)
 
     val oldestMessage = "already at the oldest change"
+    val newestMessage = "already at the newest change"
 
     (*----------------------------------  Queries  -----------------------------------*)
 
@@ -241,6 +263,27 @@ let (*--------------------------------  Construction  --------------------------
                    , top = scrollTo (st, l') }
         end
 
+    (** The state with a cursor that sits past the line's last character pulled back onto it.
+     *  The goal column is left alone, so `$` followed by `j` still walks down the ends of the
+     *  lines after a keymap has applied this to both. *)
+    fun intoLine st =
+        let val n = lineLength (st, st.line)
+        in if st.col >= n andalso n > 0 then { st with col = n - 1 } else st
+        end
+
+    (** The state with `top` as the first line drawn, clamped to the buffer, and the cursor
+     *  moved the least it must to stay on the screen — at the goal column, as a vertical motion
+     *  puts it. *)
+    fun setTop (st, top) =
+        let val last = lastLine st
+            val h    = textRows st
+            val t    = if top < 0 then 0 else if top > last then last else top
+            val st1  = { st with top = t }
+        in if st1.line < t then moveLine (st1, t)
+           else if st1.line >= t + h then moveLine (st1, t + h - 1)
+           else st1
+        end
+
     (*----------------------------------  Editing  -----------------------------------*)
 
     (* The surrogate ranges. A character outside the basic multilingual plane is stored as a high
@@ -288,14 +331,35 @@ let (*--------------------------------  Construction  --------------------------
      *  give back. *)
     fun remember st =
         { st with undo = { buffer = st.buffer, line = st.line, col = st.col, rev = st.rev }
-                         :: st.undo }
+                         :: st.undo
+                , redo = [] }
+
+    (** How many changes the history holds. *)
+    fun undoDepth st = List.length st.undo
+
+    (** The entries pushed since the history was `depth` long collapsed into the oldest of
+     *  them, so that one `u` takes them all back. A history no longer than `depth + 1` is left
+     *  as it is. *)
+    fun squashUndo (st, depth) =
+        let val extra = List.length st.undo - depth - 1
+        in if extra <= 0 then st else { st with undo = List.drop extra st.undo }
+        end
+
+    (** `s` inserted at offset `off`, the cursor after it. *)
+    fun insertAt (st, off, s) =
+        if s = "" then st
+        else let val st1 = remember st
+             in atOffset (st1, Rope.insert (st1.buffer, off, s), off + String.size s)
+             end
 
     (** `s` inserted at the cursor, which ends up after it. *)
-    fun insertText (st, s) =
-        let val off = offsetOf st
-            val st1 = remember st
-        in atOffset (st1, Rope.insert (st1.buffer, off, s), off + String.size s)
-        end
+    fun insertText (st, s) = insertAt (st, offsetOf st, s)
+
+    (** The `n` code units from `off`, as text. *)
+    fun textAt (st, off, n) = Rope.slice (st.buffer, off, off + n)
+
+    (** The offset of the start of line `l`. *)
+    fun lineStart (st, l) = Rope.positionToOffset (st.buffer, l, 0)
 
     (** `n` code units removed from `off`, with the cursor left there. *)
     fun deleteAt (st, off, n) =
@@ -321,6 +385,16 @@ let (*--------------------------------  Construction  --------------------------
            else let val n = unitsBefore (st, off)
                 in deleteAt (st, off - n, n)
                 end
+        end
+
+    (** The character under the cursor overwritten with `c`, the cursor after it; at the end of a
+     *  line `c` is appended instead, which is what replace mode does there. *)
+    fun replaceChar (st, c) =
+        let val off = offsetOf st
+            val n   = if st.col >= lineLength (st, st.line) then 0 else unitsAt (st, off)
+            val st1 = remember st
+            val b1  = if n = 0 then st1.buffer else Rope.delete (st1.buffer, off, n)
+        in atOffset (st1, Rope.insert (b1, off, c), off + String.size c)
         end
 
     (** An empty line below the cursor's, the cursor on it, and insert mode. *)
@@ -378,12 +452,26 @@ let (*--------------------------------  Construction  --------------------------
         in atOffset (st1, Rope.insert (st1.buffer, here, s ^ "\n"), here)
         end
 
-    (** The state before the last change, or a message when there is none. *)
+    (** The state before the last change, or a message when there is none. The state being
+     *  left goes onto the redo history. *)
     fun undo st =
         case st.undo of
              []        => { st with status = oldestMessage }
            | s :: rest =>
-               let val st1 = { st with buffer = s.buffer, undo = rest, rev = s.rev }
+               let val here = { buffer = st.buffer, line = st.line, col = st.col, rev = st.rev }
+                   val st1  = { st with buffer = s.buffer, undo = rest, rev = s.rev
+                                      , redo = here :: st.redo }
+               in moveTo (st1, s.line, s.col)
+               end
+
+    (** The state the last undo left, or a message when there is none. *)
+    fun redo st =
+        case st.redo of
+             []        => { st with status = newestMessage }
+           | s :: rest =>
+               let val here = { buffer = st.buffer, line = st.line, col = st.col, rev = st.rev }
+                   val st1  = { st with buffer = s.buffer, redo = rest, rev = s.rev
+                                      , undo = here :: st.undo }
                in moveTo (st1, s.line, s.col)
                end
 
@@ -394,9 +482,10 @@ let (*--------------------------------  Construction  --------------------------
     (** The line being typed after the prompt. *)
     fun setCmd (st, c) = { st with cmd = c }
 
-    (** Command mode with `p` as its prompt and an empty line: `:` for a command word, `/` for a
-     *  search pattern. One mode edits both, and the prompt is what says which is being typed —
-     *  to the status line, which draws it, and to the keymap, which acts on Enter. *)
+    (** Command mode with `p` as its prompt and an empty line: `:` for a command word, `/` or
+     *  `?` for a search pattern. One mode edits all three, and the prompt is what says which is
+     *  being typed — to the status line, which draws it, and to the keymap, which acts on
+     *  Enter. *)
     fun openPrompt (st, p) = { st with mode = COMMAND, prompt = p, cmd = "" }
 
     (** Normal mode, with no prompt and no line: the state a command or a search runs against. *)
@@ -405,14 +494,55 @@ let (*--------------------------------  Construction  --------------------------
     (** A transient message for the status line. It lives until the next keystroke. *)
     fun setStatus (st, s) = { st with status = s }
 
-    (** The keymap's prefix key, waiting for the key that completes it. *)
+    (** The keymap's partial command, waiting for the keys that complete it. *)
     fun setPending (st, s) = { st with pending = s }
 
-    (** The pattern `n` and `N` repeat. *)
-    fun setFind (st, s) = { st with find = s }
+    (** The pattern `n` and `N` repeat, the direction it ran in, and whether it matches whole
+     *  words only. *)
+    fun setFind (st, s, down, word) = { st with find = s, findDown = down, findWord = word }
 
-    (** The yank register: `SOME line`, or `NONE` for nothing yanked. *)
+    (** The character search `;` and `,` repeat: the command letter followed by the character. *)
+    fun setCharFind (st, s) = { st with charFind = s }
+
+    (** The register: `SOME (text, linewise)`, or `NONE` for nothing yanked. *)
     fun setYank (st, y) = { st with yank = y }
+
+    (** Mark `name` at `(l, c)`, replacing any mark of that name. *)
+    fun setMark (st, name, l, c) =
+        { st with marks = (name, l, c) :: List.filter (fn (m, _, _) => m <> name) st.marks }
+
+    (** Where mark `name` is, or NONE. *)
+    fun markAt (st, name) =
+        case List.find (fn (m, _, _) => m = name) st.marks of
+             SOME (_, l, c) => SOME (l, c)
+           | NONE           => NONE
+
+    (** What `.` repeats: the tokens of a change, and the keys typed in the insert it opened. *)
+    fun setDot (st, toks, keys) = { st with dot = toks, dotInsert = keys }
+
+    (** Which page of the help list is up. *)
+    fun setHelpPage (st, n) = { st with helpPage = n }
+
+    (** The fixed end of a visual selection. *)
+    fun setAnchor (st, l, c) = { st with anchor = (l, c) }
+
+    (*-------------------------------  Insert sessions  ------------------------------*)
+
+    (** Mode `m` — INSERT or REPLACE — entered with `count`, the undo depth noted so that the
+     *  session can be made one change, and the typed keys emptied. *)
+    fun beginInsert (st, m, count) =
+        { st with mode = m, insertMark = List.length st.undo, insertCount = count, typed = [] }
+
+    (** One key typed in the session, recorded newest first. *)
+    fun noteTyped (st, k) = { st with typed = k :: st.typed }
+
+    (** The session over: normal mode, the operations since it began one undo step, the keys it
+     *  typed kept as what `.` replays. Outside a session the mode changes and nothing else. *)
+    fun endInsert st =
+        if st.insertMark < 0 then { st with mode = NORMAL }
+        else let val st1 = squashUndo (st, st.insertMark)
+             in { st1 with mode = NORMAL, insertMark = -1, dotInsert = List.reverse st.typed }
+             end
 
     (** The file now holds the buffer's present contents. Called by the plugin that hears a write
      *  succeed; nothing else in the editor moves `savedRev`. *)
@@ -464,27 +594,39 @@ let (*--------------------------------  Construction  --------------------------
      *  field, because it is a comparison of two fields and open-coding it in every plugin would
      *  publish an invariant instead of an answer.
      *
-     *  `lastLine` and `lineAt` are in the record because a keymap that searches, that goes to the
-     *  last line, or that yanks one has to read the text rather than only move within it. They
-     *  are the whole of a plugin's read access to the buffer, and they are enough: the pattern
-     *  search behind `/`, `n` and `N` is a line-by-line scan written in the keymap plugin, so
-     *  what "matches" means is that plugin's to decide and no search policy is published here. *)
+     *  `lastLine`, `lineAt`, `lineStart`, `offsetOf` and `textAt` are in the record because a
+     *  keymap that searches, that goes to the last line, or that yanks a range has to read the
+     *  text rather than only move within it. They are the whole of a plugin's read access to the
+     *  buffer, and they are enough: the pattern search behind `/`, `n` and `N` is a line-by-line
+     *  scan written in the keymap plugin, so what "matches" means is that plugin's to decide and
+     *  no search policy is published here. *)
     val api = { textRows     = textRows
               , lastLine     = lastLine
               , lineAt       = lineAt
               , lineLength   = lineLength
+              , lineStart    = lineStart
+              , offsetOf     = offsetOf
+              , textAt       = textAt
               , isDirty      = isDirty
               , moveTo       = moveTo
               , moveLine     = moveLine
               , moveEnd      = moveEnd
+              , intoLine     = intoLine
+              , setTop       = setTop
               , insertText   = insertText
+              , insertAt     = insertAt
+              , deleteAt     = deleteAt
               , deleteChar   = deleteChar
               , deleteLine   = deleteLine
               , backspace    = backspace
+              , replaceChar  = replaceChar
               , openBelow    = openBelow
               , putBelow     = putBelow
               , putAbove     = putAbove
               , undo         = undo
+              , redo         = redo
+              , undoDepth    = undoDepth
+              , squashUndo   = squashUndo
               , setMode      = setMode
               , setCmd       = setCmd
               , openPrompt   = openPrompt
@@ -492,7 +634,16 @@ let (*--------------------------------  Construction  --------------------------
               , setStatus    = setStatus
               , setPending   = setPending
               , setFind      = setFind
+              , setCharFind  = setCharFind
               , setYank      = setYank
+              , setMark      = setMark
+              , markAt       = markAt
+              , setDot       = setDot
+              , setHelpPage  = setHelpPage
+              , setAnchor    = setAnchor
+              , beginInsert  = beginInsert
+              , noteTyped    = noteTyped
+              , endInsert    = endInsert
               , markSaved    = markSaved
               , requestWrite = requestWrite
               , clearRequest = clearRequest

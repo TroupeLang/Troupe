@@ -1,0 +1,385 @@
+(* Operators — what an operator does to a range: delete, change, yank, shift, and case, plus the
+ * edits that are ranges in all but name — put, join, replace-char and toggle-case.
+ *
+ * A program-relative module of examples/battallion, and pure. Every function takes `api`, the
+ * plugin record (Api.trp), and the state, and answers a state. The keymap (VimMotions.trp) parses
+ * the command and finds where its motion lands; this module turns the two positions into a span
+ * and applies the operator.
+ *
+ * A SPAN IS CHARWISE OR LINEWISE. `(a, b, linewise)`: charwise, `a` and `b` are code-unit
+ * offsets and the span is `[a, b)`; linewise, they are the first and last line, both included.
+ * `spanOf` builds one from the cursor and where a motion landed, given the motion's `kind`, and
+ * applies the two adjustments vim documents under `:help exclusive-linewise`: an exclusive
+ * motion that ends in column zero of a later line ends at the end of the line before instead,
+ * inclusively — which is what stops `dw` on the last word of a line from joining the next — and
+ * if the cursor was also at or before the first non-blank of its line, the span becomes
+ * linewise.
+ *
+ * EVERY OPERATION THAT DELETES WRITES THE REGISTER, as vim's unnamed register works: `x`, `s`,
+ * `D` and `dw` all leave what they took where `p` finds it, marked charwise or linewise. `y`
+ * writes it without deleting. There are no named registers.
+ *
+ * SEVERAL EDITS MAY MAKE ONE OPERATION — the shifts and the case operators edit each line, a
+ * join edits per line joined — and each pushes its own undo entry. The keymap squashes them into
+ * one change when the command completes (Api.trp's `squashUndo`), so `u` takes back the whole
+ * command; this module does not know where a command begins.
+ *
+ * CASE IS ASCII. `~`, `g~`, `gu` and `gU` map the letters A–Z and a–z and leave every other
+ * character as it is; there is no case mapping in lib/String.trp to do more with.
+ *)
+
+import String
+import List
+import Option
+import "./Api"
+import "./Motions"
+
+(* How a motion's landing point bounds the text it covers. *)
+datatype kind = EXCLUSIVE | INCLUSIVE | LINEWISE
+
+let (*-----------------------------------  Messages  ----------------------------------*)
+
+    val nothingYankedMessage = "nothing has been yanked"
+
+    fun yankedMessage (n, linewise) =
+        if linewise then toString n ^ (if n = 1 then " line yanked" else " lines yanked")
+        else "yanked"
+
+    (*----------------------------------  Positions  ----------------------------------*)
+
+    fun offsetAt (api, st, l, c) = api.lineStart (st, l) + c
+
+    fun lineEnd (api, st, l) = api.lineStart (st, l) + api.lineLength (st, l)
+
+    (** How many code units the character at `(l, c)` occupies: two for an astral one, none
+     *  past the end of the line. *)
+    fun unitsAt (api, st, l, c) =
+        let val n = api.lineLength (st, l)
+        in if c >= n then 0
+           else let val u = String.subCode (api.lineAt (st, l), c)
+                in if u >= 0xd800 andalso u <= 0xdbff andalso c + 1 < n then 2 else 1
+                end
+        end
+
+    (*------------------------------------  Spans  ------------------------------------*)
+
+    (** The span from the cursor of `st` to `(l, c)` — either may come first — under `kind`. *)
+    fun spanOf (api, st, l, c, kind) =
+        let val before = l < st.line orelse (l = st.line andalso c < st.col)
+            val (l1, c1, l2, c2) = if before then (l, c, st.line, st.col) else (st.line, st.col, l, c)
+        in case kind of
+                LINEWISE  => (l1, l2, true)
+              | INCLUSIVE => (offsetAt (api, st, l1, c1),
+                              offsetAt (api, st, l2, c2) + unitsAt (api, st, l2, c2), false)
+              | EXCLUSIVE =>
+                  if c2 = 0 andalso l2 > l1
+                  then if c1 <= Motions.firstNonBlank (api, st, l1)
+                       then (l1, l2 - 1, true)
+                       else (offsetAt (api, st, l1, c1), offsetAt (api, st, l2, 0) - 1, false)
+                  else (offsetAt (api, st, l1, c1), offsetAt (api, st, l2, c2), false)
+        end
+
+    (** The line that code-unit offset `off` falls on. *)
+    fun lineOfOffset (api, st, off) =
+        let val last = api.lastLine st
+            fun go l = if l < last andalso api.lineStart (st, l + 1) <= off then go (l + 1) else l
+        in go 0
+        end
+
+    (** The position at code-unit offset `off`. *)
+    fun positionOf (api, st, off) =
+        let val l = lineOfOffset (api, st, off)
+        in (l, off - api.lineStart (st, l))
+        end
+
+    (** The lines a span covers. *)
+    fun linesOf (api, st, (a, b, linewise)) =
+        if linewise then (a, b)
+        else (lineOfOffset (api, st, a), lineOfOffset (api, st, if b > a then b - 1 else b))
+
+    (** The text a span covers, for the register. *)
+    fun textOf (api, st, (a, b, linewise)) =
+        if linewise
+        then api.textAt (st, api.lineStart (st, a), lineEnd (api, st, b) - api.lineStart (st, a))
+        else api.textAt (st, a, b - a)
+
+    fun setRegister (api, st, span) =
+        case span of (_, _, linewise) => api.setYank (st, SOME (textOf (api, st, span), linewise))
+
+    (*---------------------------------  The operators  -------------------------------*)
+
+    (** The lines `l1..l2` removed with the breaks that keep the line count right: with a line
+     *  below, the break after; on the last line, the break before; the only line, its text. *)
+    fun deleteLines (api, st, l1, l2) =
+        let val last = api.lastLine st
+            val from = api.lineStart (st, l1)
+        in if l2 < last
+           then api.deleteAt (st, from, api.lineStart (st, l2 + 1) - from)
+           else if l1 > 0
+           then let val st' = api.deleteAt (st, from - 1, lineEnd (api, st, l2) - from + 1)
+                in api.moveTo (st', l1 - 1, 0)
+                end
+           else api.deleteAt (st, 0, lineEnd (api, st, l2))
+        end
+
+    fun toFirstNonBlank (api, st) =
+        api.moveTo (st, st.line, Motions.firstNonBlank (api, st, st.line))
+
+    (** `d`: the span removed and put in the register, the cursor at its start. *)
+    fun delete (api, st, span) =
+        let val st1 = setRegister (api, st, span)
+        in case span of
+                (l1, l2, true) => toFirstNonBlank (api, deleteLines (api, st1, l1, l2))
+              | (a, b, false) => api.deleteAt (st1, a, b - a)
+        end
+
+    (** `c`: like `d`, but a linewise span keeps one empty line for the text to come, and the
+     *  cursor is left where the text goes. Entering insert mode is the keymap's. *)
+    fun change (api, st, span) =
+        let val st1 = setRegister (api, st, span)
+        in case span of
+                (l1, l2, true) => let val from = api.lineStart (st, l1)
+                                  in api.deleteAt (st1, from, lineEnd (api, st, l2) - from)
+                                  end
+              | (a, b, false) => api.deleteAt (st1, a, b - a)
+        end
+
+    (** `y`: the span in the register; the cursor at its start, as vim leaves it. *)
+    fun yank (api, st, span) =
+        let val st1 = setRegister (api, st, span)
+        in case span of
+                (l1, l2, true) => api.setStatus (api.moveLine (st1, l1), yankedMessage (l2 - l1 + 1, true))
+              | (a, _, false) => let val (l, c) = positionOf (api, st1, a)
+                                 in api.setStatus (api.moveTo (st1, l, c), yankedMessage (0, false))
+                                 end
+        end
+
+    (** A tab counts as eight columns and a space as one, so `<` takes one tab or up to eight
+     *  spaces off the front of a line. *)
+    val shiftWidth = 8
+
+    (** `>` and `<` over the lines of the span, one edit per line; an empty line is not
+     *  indented. The cursor goes to the first non-blank of the first line. *)
+    fun shift (api, st, span, right) =
+        let val (l1, l2) = linesOf (api, st, span)
+            fun one (l, s) =
+                let val line = api.lineAt (s, l)
+                    val n    = String.size line
+                    val from = api.lineStart (s, l)
+                in if right
+                   then (if n = 0 then s else api.insertAt (s, from, "\t"))
+                   else if n > 0 andalso String.sub (line, 0) = "\t"
+                   then api.deleteAt (s, from, 1)
+                   else let fun spaces i = if i < n andalso i < shiftWidth
+                                                  andalso String.sub (line, i) = " "
+                                           then spaces (i + 1) else i
+                        in api.deleteAt (s, from, spaces 0)
+                        end
+                end
+            fun go (l, s) = if l > l2 then s else go (l + 1, one (l, s))
+            val st' = go (l1, st)
+        in api.moveTo (st', l1, Motions.firstNonBlank (api, st', l1))
+        end
+
+    (*------------------------------------  Case  ------------------------------------*)
+
+    fun upperOf u = if u >= 97 andalso u <= 122 then u - 32 else u
+    fun lowerOf u = if u >= 65 andalso u <= 90 then u + 32 else u
+    fun toggleOf u = if u >= 97 andalso u <= 122 then u - 32
+                     else if u >= 65 andalso u <= 90 then u + 32 else u
+
+    (** `s` with every ASCII letter mapped by `f`, other characters untouched. *)
+    fun mapCase (f, s) =
+        let val n = String.size s
+            fun go (i, acc) =
+                if i >= n then acc
+                else let val u = String.subCode (s, i)
+                         val v = f u
+                     in go (i + 1, acc ^ (if v = u then String.sub (s, i) else String.strCode v))
+                     end
+        in go (0, "")
+        end
+
+    (** `how` is "~", "u" or "U": the span's text toggled, lowered or uppered, in two edits. The
+     *  cursor goes to the span's start; a linewise span keeps the cursor's column when it starts
+     *  on the cursor's line. *)
+    fun recase (api, st, span, how) =
+        let val f = if how = "u" then lowerOf else if how = "U" then upperOf else toggleOf
+            val (a, b) = case span of
+                              (l1, l2, true) => (api.lineStart (st, l1), lineEnd (api, st, l2))
+                            | (a, b, false)  => (a, b)
+            val text = api.textAt (st, a, b - a)
+            val st1  = api.insertAt (api.deleteAt (st, a, b - a), a, mapCase (f, text))
+            val (l, c) = positionOf (api, st1, a)
+        in case span of
+                (_, _, true) => api.moveTo (st1, l, if l = st.line then st.col else 0)
+              | _            => api.moveTo (st1, l, c)
+        end
+
+    (** `~` without an operator: `count` characters from the cursor toggled, the cursor moved
+     *  past them. On an empty line nothing happens. *)
+    fun toggleCase (api, st, count) =
+        let val n = api.lineLength (st, st.line)
+            val a = api.offsetOf st
+            fun units (c, k, acc) = if k <= 0 orelse c >= n then acc
+                                    else let val u = unitsAt (api, st, st.line, c)
+                                         in units (c + u, k - 1, acc + u)
+                                         end
+            val len = units (st.col, count, 0)
+        in if len = 0 then st
+           else let val st1 = recase (api, st, (a, a + len, false), "~")
+                in api.moveTo (st1, st.line, st.col + len)
+                end
+        end
+
+    (*------------------------------------  Put  -------------------------------------*)
+
+    fun repeatText (s, sep, count) =
+        let fun go (k, acc) = if k <= 1 then acc else go (k - 1, acc ^ sep ^ s)
+        in go (count, s)
+        end
+
+    (** `p` and `P`: the register `count` times. A linewise register goes in as lines below or
+     *  above the cursor's, the cursor at the first non-blank of the first of them; a charwise
+     *  one goes in after or before the cursor's character, the cursor on the last character
+     *  put — or at the start of the text when it spans lines. *)
+    fun put (api, st, count, below) =
+        case st.yank of
+             NONE => api.setStatus (st, nothingYankedMessage)
+           | SOME (s, true) =>
+               let val text = repeatText (s, "\n", count)
+                   val st1  = if below then api.putBelow (st, text) else api.putAbove (st, text)
+               in toFirstNonBlank (api, st1)
+               end
+           | SOME (s, false) =>
+               let val text = repeatText (s, "", count)
+                   val here = api.offsetOf st
+                   val at   = if below then here + unitsAt (api, st, st.line, st.col) else here
+                   val st1  = api.insertAt (st, at, text)
+                   val multi = strIndexOf (text, "\n", 0) >= 0
+                   val stop = if multi then at else at + String.size text - 1
+                   val (l, c) = positionOf (api, st1, stop)
+               in api.moveTo (st1, l, c)
+               end
+
+    (*------------------------------------  Join  ------------------------------------*)
+
+    (** One join of the cursor's line with the one below. With `spaces`, the next line's leading
+     *  blanks go and one space stands in for the break — none when the next line is then empty,
+     *  starts with `)`, or the line is empty or ends in a blank; without, the break alone goes.
+     *  The cursor sits where the lines met. *)
+    fun joinOne (api, st, spaces) =
+        let val l    = st.line
+            val stop = lineEnd (api, st, l)
+            val next = api.lineAt (st, l + 1)
+            val m    = String.size next
+            fun blanks i = if i < m andalso Motions.isSpace (String.sub (next, i)) then blanks (i + 1) else i
+            val lead = if spaces then blanks 0 else 0
+            val line = api.lineAt (st, l)
+            val n    = String.size line
+            val endsBlank = n = 0 orelse Motions.isSpace (String.sub (line, n - 1))
+            val sep  = if not spaces then ""
+                       else if lead >= m orelse String.sub (next, lead) = ")" orelse endsBlank then ""
+                       else " "
+            val st1  = api.deleteAt (st, stop, 1 + lead)
+            val st2  = api.insertAt (st1, stop, sep)
+            val (jl, jc) = positionOf (api, st2, stop)
+        in api.moveTo (st2, jl, jc)
+        end
+
+    (** `J` and `gJ` with a count: `count` lines joined, at least two; stops at the last line. *)
+    fun join (api, st, count, spaces) =
+        let val joins = (if count < 2 then 2 else count) - 1
+            fun go (k, s) = if k <= 0 orelse s.line >= api.lastLine s then s
+                            else go (k - 1, joinOne (api, s, spaces))
+        in go (joins, st)
+        end
+
+    (*--------------------------------  Replace a char  --------------------------------*)
+
+    (** `r`: `count` characters from the cursor replaced by `c`, the cursor on the last of them;
+     *  NONE when the line has fewer. `c` = "\n" replaces them all with one line break. *)
+    fun replaceChars (api, st, count, c) =
+        let val n = api.lineLength (st, st.line)
+            val a = api.offsetOf st
+            fun units (col, k, acc) =
+                if k <= 0 then SOME acc
+                else if col >= n then NONE
+                else let val u = unitsAt (api, st, st.line, col)
+                     in units (col + u, k - 1, acc + u)
+                     end
+        in case units (st.col, count, 0) of
+                NONE     => NONE
+              | SOME len =>
+                  let val text = if c = "\n" then "\n" else repeatText (c, "", count)
+                      val st1  = api.insertAt (api.deleteAt (st, a, len), a, text)
+                      val stop = if c = "\n" then a + 1 else a + String.size text - String.size c
+                      val (l, col) = positionOf (api, st1, stop)
+                  in SOME (api.moveTo (st1, l, col))
+                  end
+        end
+
+    (** `r` over a visual selection: every character of the span but a line break replaced by
+     *  `c`; the cursor at the span's start. *)
+    fun fill (api, st, span, c) =
+        let val (a, b) = case span of
+                              (l1, l2, true) => (api.lineStart (st, l1), lineEnd (api, st, l2))
+                            | (a, b, false)  => (a, b)
+            val text = api.textAt (st, a, b - a)
+            val n = String.size text
+            fun go (i, acc) =
+                if i >= n then acc
+                else let val u = String.subCode (text, i)
+                         val w = if u >= 0xd800 andalso u <= 0xdbff andalso i + 1 < n then 2 else 1
+                     in go (i + w, acc ^ (if u = 10 then "\n" else c))
+                     end
+            val st1 = api.insertAt (api.deleteAt (st, a, b - a), a, go (0, ""))
+            val (l, col) = positionOf (api, st1, a)
+        in api.moveTo (st1, l, col)
+        end
+
+    (** `p` over a visual selection: the selection replaced by the register, and the register
+     *  then holding what was selected. *)
+    fun putOver (api, st, span) =
+        case st.yank of
+             NONE => api.setStatus (st, nothingYankedMessage)
+           | SOME reg =>
+               let val st1 = delete (api, st, span)
+                   val taken = st1.yank
+                   val st2 = case span of
+                                  (_, _, true) => (case reg of
+                                                        (s, true)  => toFirstNonBlank (api, api.putAbove (st1, s))
+                                                      | (s, false) => api.moveTo (api.insertAt (st1, api.lineStart (st1, st1.line), s ^ "\n"), st1.line, 0))
+                                | _ => put (api, api.setYank (st1, SOME reg), 1, false)
+               in api.setYank (st2, taken)
+               end
+
+    (*----------------------------------  Open a line  ---------------------------------*)
+
+    (** `o` and `O`: an empty line below or above the cursor's, the cursor on it. *)
+    fun openLine (api, st, above) =
+        if above
+        then let val st1 = api.insertAt (st, api.lineStart (st, st.line), "\n")
+             in api.moveTo (st1, st.line, 0)
+             end
+        else api.insertAt (st, lineEnd (api, st, st.line), "\n")
+
+in [ ("spanOf", spanOf)
+   , ("positionOf", positionOf)
+   , ("delete", delete)
+   , ("change", change)
+   , ("yank", yank)
+   , ("shift", shift)
+   , ("recase", recase)
+   , ("toggleCase", toggleCase)
+   , ("put", put)
+   , ("join", join)
+   , ("replaceChars", replaceChars)
+   , ("fill", fill)
+   , ("putOver", putOver)
+   , ("openLine", openLine)
+   , ("mapCase", mapCase)
+   , ("upperOf", upperOf)
+   , ("lowerOf", lowerOf)
+   ]
+end

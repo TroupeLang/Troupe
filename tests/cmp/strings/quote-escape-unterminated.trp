@@ -1,0 +1,3 @@
+let val s = "abc\"
+in print s
+end

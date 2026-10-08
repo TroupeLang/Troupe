@@ -1,0 +1,9 @@
+(* An escaped backslash does not escape the quote after it: "a\\" ends at
+   its second quote, and "a\\\"b" holds a backslash and then a quote. *)
+let fun show s = (print s; print (strlen s))
+in show "a\\"
+ ; show ("a\\" ^ "b")
+ ; show "a\\\"b"
+ ; show "\\\\"
+ ; show "\\\\\""
+end

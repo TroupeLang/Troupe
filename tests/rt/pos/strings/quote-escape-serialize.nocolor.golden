@@ -1,0 +1,7 @@
+2026-10-08T12:00:29.856Z [RTM] info: Skipping network creation. Observe that all network operations will yield a runtime error.
+"a"b"
+3
+true
+""x""
+3
+>>> Main thread finished with value: ()@{}%{}

@@ -1,0 +1,274 @@
+(* film — records a stretch of an automatic game as an animated SVG.
+ *
+ *   ./local.sh examples/trapdoor/film.trp --io-root=examples/trapdoor -- SEED FROM TO FILE [dark]
+ *
+ * The policy of Autoplayer.trp plays the game of SEED. Commands 1 to FROM pass unrecorded;
+ * from there to command TO the program takes one frame after every key, so a command of two
+ * keys shows its menu for one frame. FILE is written inside the `--io-root` directory. The
+ * optional `dark` selects the palette for a dark background.
+ *
+ * A FRAME is the image the terminal session would draw, `Ui.view` rendered at 80 by 24, with
+ * each styled segment turned into one SVG text element at its column. Every text element
+ * carries its `textLength`, so the cells align whichever monospaced font the viewer has.
+ *
+ * THE ANIMATION is a film strip: the frames lie side by side, one picture width apart, inside
+ * a group that a CSS animation moves left by one picture width per step. The picture's own
+ * viewport shows one frame at a time. A row of a frame is a reference to a row definition,
+ * and equal rows share one definition, so a frame costs one short reference per non-blank
+ * row plus a definition for each row not drawn before.
+ *
+ * THE FILE WRITE happens in a process of its own. A write raises the writing thread's
+ * blocking label to the root level and returns a root-level outcome (lib/SimpleFileIO.trp),
+ * so a thread that writes can no longer print to the bot-level terminal. The writer process
+ * reduces the outcome to one string, the reason of a failure or "" for success, releases
+ * that string and its own blocking label under the root authority, and sends it; the main
+ * thread stays public and prints it.
+ *
+ * The channel level is bot here as in the game, and the file content is built from views
+ * only. The runtime does not check that: a file write takes the root authority and accepts
+ * content at any level.
+ *)
+
+import List
+import Option
+import String
+import Number
+import Outcome
+import Hash
+import HashMap
+import IfcUtil
+import { writeFile } SimpleFileIO
+import "../proscenium/Key"
+import "../proscenium/Style"
+import "../proscenium/Image"
+import "./Rng"
+import "./World"
+import "./Ui"
+import "./Autoplayer"
+
+let val lev  = `<dungeon;#root-integrity>`
+    val dm   = attenuate (authority, lev)
+    val weak = attenuate (authority, IfcUtil.null)
+
+    val args = IfcUtil.declassifyDeep (getCliArgs authority, authority, IfcUtil.bot)
+    val _ = blockdeclto (authority, IfcUtil.bot)
+    val (given, from, to, file, dark) =
+            case args of
+                 a :: b :: c :: f :: rest =>
+                     ( Rng.seedOfString a
+                     , Option.getOrElse (Rng.seedOfString b) 0
+                     , Option.getOrElse (Rng.seedOfString c) 0
+                     , f
+                     , case rest of "dark" :: _ => true | _ => false )
+               | _ => (NONE, 0, 0, "", false)
+    val usage = case given of SOME _ => false | NONE => true
+    val seed = (case given of SOME n => n | NONE => 0) raisedTo lev
+
+    val _ = setStdioLevel (authority, IfcUtil.bot)
+
+    val world = spawn (fn () => World.run (dm, weak, lev, seed))
+
+    (*---------------------------------  Geometry  ---------------------------------*)
+
+    val cols = 80
+    val rows = 24
+    val cellW = 9
+    val cellH = 18
+    val baseline = 13
+    val pad = 12
+    val pictureW = cols * cellW + 2 * pad
+    val pictureH = rows * cellH + 2 * pad
+    val frameMs = 160
+    val lastFrameHolds = 8
+
+    (*----------------------------------  Colours  ----------------------------------*)
+
+    fun hex2 n =
+        let val digits = "0123456789abcdef"
+        in String.sub (digits, Number.intDiv n 16) ^ String.sub (digits, n mod 16)
+        end
+
+    fun hex (r, g, b) = "#" ^ hex2 r ^ hex2 g ^ hex2 b
+
+    (* The xterm defaults for the sixteen named colours. *)
+    val basic = [ (0, 0, 0), (205, 0, 0), (0, 205, 0), (205, 205, 0), (0, 0, 238), (205, 0, 205)
+                , (0, 205, 205), (229, 229, 229), (127, 127, 127), (255, 0, 0), (0, 255, 0)
+                , (255, 255, 0), (92, 92, 255), (255, 0, 255), (0, 255, 255), (255, 255, 255) ]
+
+    (** The colour of entry `n` of the 256-colour palette. *)
+    fun indexed n =
+        if n < 16 then List.nth basic n
+        else if n < 232 then
+            let val k = n - 16
+                fun level v = if v = 0 then 0 else 55 + 40 * v
+            in (level (Number.intDiv k 36), level ((Number.intDiv k 6) mod 6), level (k mod 6))
+            end
+        else let val v = 8 + 10 * (n - 232) in (v, v, v) end
+
+    (** The SVG colour of a Style colour, or "" for the terminal's default. *)
+    fun colour c =
+        case c of
+             DEFAULT => ""
+           | BASIC n => hex (indexed n)
+           | IDX n   => hex (indexed n)
+           | RGB rgb => hex rgb
+
+    (*-----------------------------------  Rows  -----------------------------------*)
+
+    fun escape s =
+        String.translate (fn c => if c = "&" then "&amp;" else if c = "<" then "&lt;"
+                                  else if c = ">" then "&gt;" else c)
+                         s
+
+    (** One segment at column `x`: a rectangle when it has a background, then its text
+     *  without the spaces at either end. *)
+    fun segmentSvg (a, x, s) =
+        let val n = String.size s
+            fun firstInk i = if i < n andalso String.subCode (s, i) = 32 then firstInk (i + 1) else i
+            fun lastInk i = if i > 0 andalso String.subCode (s, i - 1) = 32 then lastInk (i - 1) else i
+            val lo = firstInk 0
+            val hi = lastInk n
+            val bg = colour a.bg
+            val fg = colour a.fg
+            val rect = if bg = "" then ""
+                       else "<rect x='" ^ toString (x * cellW) ^ "' width='" ^ toString (n * cellW)
+                            ^ "' height='" ^ toString cellH ^ "' fill='" ^ bg ^ "'/>"
+            val text = if lo >= hi then ""
+                       else "<text x='" ^ toString ((x + lo) * cellW) ^ "' y='" ^ toString baseline
+                            ^ "' textLength='" ^ toString ((hi - lo) * cellW) ^ "'"
+                            ^ (if fg = "" then "" else " fill='" ^ fg ^ "'")
+                            ^ (if a.bold then " class='b'" else "")
+                            ^ ">" ^ escape (String.substring (s, lo, hi)) ^ "</text>"
+        in rect ^ text
+        end
+
+    (** The content of one rendered row; "" for a row with nothing to draw. *)
+    fun rowSvg segs =
+        let fun go ([], _, acc) = acc
+              | go (sg :: rest, x, acc) =
+                    case sg of
+                         Image.GAP n      => go (rest, x + n, acc)
+                       | Image.SEG (a, s) => go (rest, x + String.size s, acc ^ segmentSvg (a, x, s))
+        in go (segs, 0, "")
+        end
+
+    (*----------------------------------  The film  ----------------------------------*)
+
+    (* A film in the making: `ids` maps a row's content to the number of its definition,
+     * `defs` and `frames` are the pieces written so far, newest first. *)
+    fun emptyFilm () = {ids = HashMap.empty Hash.hashString, next = 0, defs = [], frames = [], count = 0}
+
+    (** The film with one more frame showing model `m`. *)
+    fun shoot (film, m) =
+        let val rendered = Image.renderAt (Ui.view m, cols, rows)
+            fun place ([], _, film, uses) = (film, uses)
+              | place (segs :: rest, y, film, uses) =
+                    let val content = rowSvg segs
+                    in if content = "" then place (rest, y + 1, film, uses)
+                       else let val (id, film') =
+                                        case HashMap.findOpt film.ids content of
+                                             SOME id => (id, film)
+                                           | NONE =>
+                                                 ( film.next
+                                                 , { film with ids = HashMap.insert film.ids content film.next
+                                                   , next = film.next + 1
+                                                   , defs = ("<g id='r" ^ toString film.next ^ "'>"
+                                                             ^ content ^ "</g>") :: film.defs } )
+                                val use = "<use href='#r" ^ toString id ^ "' y='"
+                                          ^ toString (y * cellH) ^ "'/>"
+                            in place (rest, y + 1, film', uses ^ use)
+                            end
+                    end
+            val (film1, uses) = place (rendered.rows, 0, film, "")
+            val frame = "<g transform='translate(" ^ toString (film1.count * pictureW) ^ ")'>"
+                        ^ uses ^ "</g>"
+        in {film1 with frames = frame :: film1.frames, count = film1.count + 1}
+        end
+
+    fun hold (film, m, k) = if k <= 0 then film else hold (shoot (film, m), m, k - 1)
+
+    fun document film =
+        let val (fg, bg) = if dark then ("#e6edf3", "#0d1117") else ("#1f2328", "#f6f8fa")
+            val n = film.count
+        in String.concat
+               [ "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 ", toString pictureW, " "
+               , toString pictureH, "' width='", toString pictureW, "' height='", toString pictureH
+               , "' font-family='Menlo,Monaco,Consolas,DejaVu Sans Mono,Liberation Mono,monospace'"
+               , " font-size='15' fill='", fg, "'>\n"
+               , "<style>text{white-space:pre}.b{font-weight:bold}"
+               , ".s{animation:k ", toString (n * frameMs), "ms steps(", toString n, ") infinite}"
+               , "@keyframes k{to{transform:translateX(-", toString (n * pictureW), "px)}}</style>\n"
+               , "<rect width='", toString pictureW, "' height='", toString pictureH
+               , "' rx='6' fill='", bg, "'/>\n"
+               , "<defs>\n", String.concatWith "\n" (List.reverse film.defs), "\n</defs>\n"
+               , "<g transform='translate(", toString pad, ",", toString pad, ")'><g class='s'>\n"
+               , String.concatWith "\n" (List.reverse film.frames)
+               , "\n</g></g>\n</svg>\n" ]
+        end
+
+    (*---------------------------------  Writing  ---------------------------------*)
+
+    (** Write `text` to `file` from a process of its own, and return the reason the write
+     *  failed, or "" when it succeeded. The returned string is public. *)
+    fun writeOut (file, text) =
+        let val me = self ()
+            fun writer () =
+                let val reason = case writeFile (authority, file, text) of
+                                      OK _  => ""
+                                    | ERR e => e.reason
+                in send (me, ("WROTE", IfcUtil.pdeclassify (reason, authority, IfcUtil.bot)))
+                end
+            val _ = spawn writer
+        in receive [ hn ("WROTE", reason) => reason ]
+        end
+
+    (*-----------------------------------  Playing  -----------------------------------*)
+
+    fun await m = receive [ hn ("APPMSG", msg) => Ui.arrived (m, msg) ]
+
+    fun press (m, k) =
+        let val (m1, _, commands) = Ui.key (m, KEY_PRINT k)
+        in List.foldl (fn (cmd, m) => let val _ = send (world, ("CMD", cmd)) in await m end)
+                      m1 commands
+        end
+
+    (** Play commands `n`, `n + 1`, ... up to `to`, filming those after `from`. *)
+    fun play (m, trail, serial, n, film) =
+        if m.status <> "play" orelse n > to then (m, film)
+        else let val trail1 = if m.serial = serial then trail else Autoplayer.fresh ()
+                 val (keys, trail2) = Autoplayer.choose (m, trail1)
+                 val film0 = if n = from + 1 then shoot (film, m) else film
+             in case keys of
+                     [] => (m, film0)
+                   | _  =>
+                         let val (m', film') =
+                                     List.foldl (fn (k, (m, film)) =>
+                                                     let val m' = press (m, k)
+                                                     in (m', if n > from then shoot (film, m') else film)
+                                                     end)
+                                                (m, film0) keys
+                         in play (m', trail2, m.serial, n + 1, film')
+                         end
+             end
+
+    val code = if usage orelse to <= from
+               then let val _ = print "usage: film.trp --io-root=DIR -- SEED FROM TO FILE [dark]"
+                    in 2
+                    end
+               else let val _ = send (world, ("HELLO", self ()))
+                        val m0 = await (Ui.init (cols, rows, dark))
+                        val (m, film) = play (m0, Autoplayer.fresh (), m0.serial, 1, emptyFilm ())
+                        val film' = hold (film, m, lastFrameHolds)
+                        val reason = writeOut (file, document film')
+                    in if reason = ""
+                       then let val _ = printString ("wrote " ^ file ^ ": " ^ toString film'.count
+                                                     ^ " frames, " ^ toString film'.next
+                                                     ^ " distinct rows")
+                            in 0
+                            end
+                       else let val _ = printString ("cannot write " ^ file ^ ": " ^ reason)
+                            in 1
+                            end
+                    end
+in exit (authority, code)
+end

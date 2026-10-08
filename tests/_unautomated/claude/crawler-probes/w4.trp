@@ -1,0 +1,32 @@
+import Outcome
+import IfcUtil
+import { writeFile } SimpleFileIO
+(* The write in a separate process that releases its own outcome: it reduces the outcome
+ * to a message string, declassifies that string and its blocking label under the root
+ * authority, and sends it. The main thread receives with a plain receive and stays public. *)
+let val _ = setStdioLevel (authority, IfcUtil.bot)
+    val me = self ()
+    fun writer path =
+        let val r = writeFile (authority, path, "x")
+            val msg = case r of OK _ => "written" | ERR e => "cannot write: " ^ e.reason
+        in send (me, ("WROTE", IfcUtil.pdeclassify (msg, authority, IfcUtil.bot)))
+        end
+    val _ = spawn (fn () => writer "../escape.txt")
+    val a = receive [ hn ("WROTE", m) => m ]
+    val _ = debugpc ()
+    val _ = printWithLabels a
+    val _ = spawn (fn () => writer "fine.txt")
+    val b = receive [ hn ("WROTE", m) => m ]
+    val _ = printWithLabels b
+    val _ = debugpc ()
+in () end
+
+(* OBSERVED 2026-10-08 (dev at dc058177, ./local.sh, default flags)
+ *
+ * run with --io-root=/tmp/wprobe.
+ *
+ *   PC:{}  BL:{}
+ *   "cannot write: path escapes the io-root sandbox"@{}%{}
+ *   "written"@{}%{}
+ *   PC:{}  BL:{}
+ *)

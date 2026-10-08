@@ -1,0 +1,147 @@
+(* Autoplayer — a player's policy written against the public side only: it reads the model
+ * the screen is drawn from (Ui.trp) and answers with the keys to press.
+ *
+ * Pure. `choose (model, trail)` returns the keys of the next command and the trail with the
+ * player's cell added; the trail is the set of cells the player has stood on, on the current
+ * floor, and `fresh ()` is the empty one. No keys means nothing is left to do.
+ *
+ * POLICY, first rule that applies: drink a potion when below half health; read any scroll;
+ * put on better gear; attack an adjacent monster; pick up what lies underfoot; walk towards
+ * the nearest item, else the nearest corridor or doorway cell not yet stood on, else the
+ * trapdoor, and go down it. Rooms need no walking over: entering one shows all of it.
+ *
+ * The policy knows the floor only through `known`, the model's record of what the views
+ * have shown, so a game it wins is a game won on declassified information alone.
+ *)
+
+import List
+import Option
+import String
+import "./Lore"
+import "./Dungeon"
+
+    (*------------------------------  Reading the model  ------------------------------*)
+
+let val dirs = [ (0 - 1, 0, "h"), (1, 0, "l"), (0, 0 - 1, "k"), (0, 1, "j")
+               , (0 - 1, 0 - 1, "y"), (1, 0 - 1, "u"), (0 - 1, 1, "b"), (1, 1, "n") ]
+
+    fun cellAt (rows, x, y) =
+        if x < 0 orelse x >= Lore.mapW orelse y < 0 orelse y >= Lore.mapH then " "
+        else String.sub (List.nth rows y, x)
+
+    fun mark (rows, x, y) =
+        List.mapi (fn (i, row) => if i = y then Dungeon.setSpan (row, x, "x") else row) rows
+
+    fun passable g = g <> " " andalso g <> "-" andalso g <> "|"
+
+    fun isItem g = g = "!" orelse g = "?" orelse g = ")" orelse g = "[" orelse g = "$" orelse g = "*"
+
+    fun isMonster g =
+        let val c = String.subCode (g, 0)
+        in (c >= 65 andalso c <= 90) orelse (c >= 97 andalso c <= 122)
+        end
+
+    fun unmarked () = List.map (fn _ => String.repeat Lore.mapW " ") (List.range Lore.mapH)
+
+    (** The key of the first step on a shortest path from `(px, py)` to the nearest other
+     *  known cell satisfying `wanted`, or NONE. *)
+    fun towards (known, (px, py), wanted) =
+        let fun expand (x, y, k0, seen, back) =
+                List.foldl (fn ((dx, dy, k), (seen, back)) =>
+                                let val nx = x + dx
+                                    val ny = y + dy
+                                in if passable (cellAt (known, nx, ny)) andalso cellAt (seen, nx, ny) = " "
+                                   then (mark (seen, nx, ny), (nx, ny, if k0 = "" then k else k0) :: back)
+                                   else (seen, back)
+                                end)
+                           (seen, back) dirs
+            fun go ([], [], seen) = NONE
+              | go ([], back, seen) = go (List.reverse back, [], seen)
+              | go ((x, y, k0) :: front, back, seen) =
+                    if k0 <> "" andalso wanted (x, y) then SOME k0
+                    else let val (seen', back') = expand (x, y, k0, seen, back)
+                         in go (front, back', seen')
+                         end
+        in go ([(px, py, "")], [], mark (unmarked (), px, py))
+        end
+
+    (*--------------------------------  Choosing  --------------------------------*)
+
+    fun firstOf (inv, cls) =
+        let fun go ([], _) = NONE
+              | go ((c, _, _) :: rest, i) = if c = cls then SOME i else go (rest, i + 1)
+        in go (inv, 0)
+        end
+
+    fun letter i = String.strCode (97 + i)
+
+    (** The rank of a weapon or armour by its base kind, read off the item's name. *)
+    fun rank (names, name) =
+        let fun go ([], _) = 0 - 1
+              | go (n :: rest, i) = if String.endsWith n name then i else go (rest, i + 1)
+        in go (names, 0)
+        end
+
+    (** The pack position of an item of class `cls` better than the one in use, or NONE. *)
+    fun upgrade (inv, cls, names) =
+        let val inUse = List.foldl (fn ((c, name, note), best) =>
+                                        if c = cls andalso note <> "" then rank (names, name) else best)
+                                   (0 - 1) inv
+            fun go ([], _) = NONE
+              | go ((c, name, note) :: rest, i) =
+                    if c = cls andalso note = "" andalso rank (names, name) > inUse then SOME i
+                    else go (rest, i + 1)
+        in go (inv, 0)
+        end
+
+    (** The keys to press next and the trail with this cell added; no keys means nothing is
+     *  left to do. *)
+    fun choose (m, trail0) =
+        let val (px, py) = m.pos
+            val trail = mark (trail0, px, py)
+            val weaponNames = List.map (fn w => w.name) Lore.weapons
+            val armourNames = List.map (fn a => a.name) Lore.armours
+            val (depth, hp, maxhp, str, ac, gold, xp, lvl, turn) = m.stats
+            val here = cellAt (m.known, px, py)
+            val packFull = List.length m.inv >= 20
+            val foe = List.find (fn (dx, dy, _) => isMonster (cellAt (m.lit, px + dx, py + dy))) dirs
+            fun walk wanted = towards (m.known, (px, py), wanted)
+            fun untrodden (x, y) =
+                let val g = cellAt (m.known, x, y)
+                in (g = "#" orelse g = "+") andalso cellAt (trail, x, y) = " "
+                end
+            val keys =
+                case (if hp * 2 < maxhp then firstOf (m.inv, "!") else NONE) of
+                     SOME i => ["q", letter i]
+                   | NONE =>
+                case firstOf (m.inv, "?") of
+                     SOME i => ["r", letter i]
+                   | NONE =>
+                case upgrade (m.inv, ")", weaponNames) of
+                     SOME i => ["w", letter i]
+                   | NONE =>
+                case upgrade (m.inv, "[", armourNames) of
+                     SOME i => ["W", letter i]
+                   | NONE =>
+                case foe of
+                     SOME (_, _, k) => [k]
+                   | NONE =>
+                if isItem here andalso not packFull then [","]
+                else case (if packFull then NONE
+                           else walk (fn (x, y) => isItem (cellAt (m.known, x, y)))) of
+                          SOME k => [k]
+                        | NONE =>
+                     case walk untrodden of
+                          SOME k => [k]
+                        | NONE =>
+                     if here = ">" then [">"]
+                     else case walk (fn (x, y) => cellAt (m.known, x, y) = ">") of
+                               SOME k => [k]
+                             | NONE   => []
+        in (keys, trail)
+        end
+
+in [ ("choose", choose)
+   , ("fresh", unmarked)
+   ]
+end

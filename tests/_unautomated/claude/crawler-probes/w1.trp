@@ -1,0 +1,23 @@
+import Outcome
+import IfcUtil
+import { writeFile } SimpleFileIO
+(* The outcome of a file write, in the writing thread: before and after inspecting it. *)
+let val _ = setStdioLevel (authority, IfcUtil.bot)
+    val r = writeFile (authority, "../escape.txt", "x")
+    val _ = debugpc ()
+    val _ = print "after the write, outcome not inspected"
+    val code = case r of OK _ => 0 | ERR _ => 1
+    val _ = debugpc ()
+    val _ = print "after inspecting the outcome"
+in () end
+
+(* OBSERVED 2026-10-08 (dev at dc058177, ./local.sh, default flags)
+ *
+ * run with --io-root=/tmp/wprobe. The write alone raises the blocking label; the first print is refused.
+ *
+ *   PC:{}  BL:{#ROOT}
+ *   >> write to stdout above the stdio channel level
+ *    | effect level  {#ROOT}
+ *    | pc level      {#ROOT}
+ *    | channel level {}
+ *)

@@ -1,0 +1,23 @@
+import Outcome
+import IfcUtil
+import { writeFile } SimpleFileIO
+(* The write in a separate process, which sends its outcome back uninspected; the main
+ * thread keeps printing, and shows the reason by declassifying it under the root authority. *)
+let val _ = setStdioLevel (authority, IfcUtil.bot)
+    val me = self ()
+    val _ = spawn (fn () => send (me, ("WROTE", writeFile (authority, "../escape.txt", "x"))))
+    val r = receive [ hn ("WROTE", r) => r ]
+    val _ = debugpc ()
+    val _ = print "main thread after the writer answered"
+    val shown = case declassify (r, authority, IfcUtil.bot) of
+                     OK _  => "written"
+                   | ERR e => "cannot write: " ^ declassify (e.reason, authority, IfcUtil.bot)
+    val _ = debugpc ()
+    val _ = print shown
+in () end
+
+(* OBSERVED 2026-10-08 (dev at dc058177, ./local.sh, default flags)
+ *
+ * run with --io-root=/tmp/wprobe. Prints nothing and does not terminate (stopped after 30 s): the
+ * writer's message has root-level presence and the main thread's plain receive never matches it.
+ *)

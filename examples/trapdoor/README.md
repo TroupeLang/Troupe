@@ -4,6 +4,73 @@ Trapdoor is a dungeon crawler in the manner of Rogue and NetHack, written in Tro
 descends five floors of rooms and corridors, fights monsters, collects potions, scrolls, weapons and
 armour, and wins by picking up the Ghost Light on the last floor.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="trapdoor-dark.svg">
+  <img src="trapdoor.svg" width="744" alt="An animated recording of the first 80 commands of a game: the player explores, reads a scroll that maps the floor, fights a rat and puts on armour.">
+</picture>
+
+The recording shows the first 80 commands of the automatic player in the game of seed 4. The player
+is `@`. At command 14 the player reads a scroll of magic mapping and the rest of the floor appears;
+at command 68 the player fights a rat, `r`; at command 77 the player puts on a ring mail. A blank
+cell is either rock or a cell that the player has not seen.
+
+A crawler hides the part of the floor the player has not seen. In most implementations the whole
+floor sits in the same memory as the renderer, and the renderer chooses not to draw it; a rendering
+mistake then shows it. In Trapdoor the floor carries a confidentiality label, the terminal's
+channel level is public, and the runtime refuses any write of the floor to the terminal. The player
+sees a cell only after one process, which holds one authority, has declassified it.
+
+## Programs
+
+All commands run from the repository root.
+
+```
+./local.sh examples/trapdoor/trapdoor.trp                  # a new game
+./local.sh examples/trapdoor/trapdoor.trp -- 42            # the game of seed 42
+./local.sh examples/trapdoor/replay.trp -- 42 'jjjl|i|'    # scripted keys; `|` prints the screen
+./local.sh examples/trapdoor/bot.trp -- 42                 # an automatic player
+./local.sh examples/trapdoor/bot.trp -- 42 300             # the same, stopped after 300 commands    
+./local.sh examples/trapdoor/leak.trp -- write             # a refused write (also: forge, release)
+./local.sh examples/trapdoor/film.trp --io-root=examples/trapdoor -- 4 0 80 trapdoor.svg
+```
+
+The terminal session needs 80 columns and 24 rows, and it shows older messages in any rows beyond
+24. The programs `replay.trp` and `bot.trp` run without a terminal session and print screens as
+plain text, 24 rows of 80 columns. A seed and a key string determine the output of `replay.trp`, and
+a seed and a limit determine the output of `bot.trp`.
+
+The program `film.trp` records commands FROM + 1 to TO of an automatic game as an animated SVG,
+one frame per key at 160 ms per frame, and writes the file inside the `--io-root` directory. A
+fifth argument `dark` selects the palette for a dark background. The last command line above
+produces the recording at the top of this document, and the same line with `trapdoor-dark.svg dark`
+produces its dark variant.
+
+## Keys
+
+| Key                       | Action                                                 |
+|---------------------------|--------------------------------------------------------|
+| `h j k l y u b n`, arrows | move one cell, or attack the monster standing there    |
+| `.` `s`                   | wait a turn                                            |
+| `,` `g`                   | pick up                                                |
+| `>`                       | go down a trapdoor                                     |
+| `i`                       | show the pack                                          |
+| `q` `r` `w` `W` `d`       | drink, read, wield, wear, drop; then the item's letter |
+| `?`                       | help                                                   |
+| `Q`, CTRL-c               | quit                                                   |
+
+A potion or scroll goes by its look ("smoky potion") until one of its kind has been used or a scroll
+of lore has been read. The game draws afresh, for each new game, which look stands for which kind.
+
+## Screens
+
+The screens in this document are output of `bot.trp` and `replay.trp`, copied without changes
+except that trailing spaces are removed. The terminal session draws the same characters and adds
+renditions: remembered cells are gray, monsters are bold in a violet accent, and items are amber.
+
+The first screen is the game of seed 7 after 263 commands of the automatic player, as
+`bot.trp -- 7 263` prints it. The letter `k` is a kobold, `?` is a scroll, and `>` is the trapdoor
+to the next floor.
+
 ```
 You hit the kobold.  The kobold hits you.
 
@@ -31,58 +98,7 @@ You hit the kobold.  The kobold hits you.
  ? help   i pack   Q quit
 ```
 
-The screen above is the game of seed 7 after 263 commands of the automatic player, as
-`bot.trp -- 7 263` prints it. The player is `@`, the letter `k` is a kobold, `?` is a scroll, and
-`>` is the trapdoor to the next floor. A blank cell is either rock or a cell that the player has
-not seen.
-
-A crawler hides the part of the floor the player has not seen. In most implementations the whole
-floor sits in the same memory as the renderer, and the renderer chooses not to draw it; a rendering
-mistake then shows it. In Trapdoor the floor carries a confidentiality label, the terminal's
-channel level is public, and the runtime refuses any write of the floor to the terminal. The player
-sees a cell only after one process, which holds one authority, has declassified it.
-
-## Programs
-
-All commands run from the repository root.
-
-```
-./local.sh examples/trapdoor/trapdoor.trp                  # a new game
-./local.sh examples/trapdoor/trapdoor.trp -- 42            # the game of seed 42
-./local.sh examples/trapdoor/replay.trp -- 42 'jjjl|i|'    # scripted keys; `|` prints the screen
-./local.sh examples/trapdoor/bot.trp -- 42                 # an automatic player
-./local.sh examples/trapdoor/bot.trp -- 42 300             # the same, stopped after 300 commands    
-./local.sh examples/trapdoor/leak.trp -- write             # a refused write (also: forge, release)
-```
-
-The terminal session needs 80 columns and 24 rows, and it shows older messages in any rows beyond
-24. The programs `replay.trp` and `bot.trp` run without a terminal session and print screens as
-plain text, 24 rows of 80 columns. A seed and a key string determine the output of `replay.trp`, and
-a seed and a limit determine the output of `bot.trp`.
-
-## Keys
-
-| Key                       | Action                                                 |
-|---------------------------|--------------------------------------------------------|
-| `h j k l y u b n`, arrows | move one cell, or attack the monster standing there    |
-| `.` `s`                   | wait a turn                                            |
-| `,` `g`                   | pick up                                                |
-| `>`                       | go down a trapdoor                                     |
-| `i`                       | show the pack                                          |
-| `q` `r` `w` `W` `d`       | drink, read, wield, wear, drop; then the item's letter |
-| `?`                       | help                                                   |
-| `Q`, CTRL-c               | quit                                                   |
-
-A potion or scroll goes by its look ("smoky potion") until one of its kind has been used or a scroll
-of lore has been read. The game draws afresh, for each new game, which look stands for which kind.
-
-## Screens
-
-The screens in this document are output of `bot.trp` and `replay.trp`, copied without changes
-except that trailing spaces are removed. The terminal session draws the same characters and adds
-renditions: remembered cells are gray, monsters are bold in a violet accent, and items are amber.
-
-The next two screens show a release that the player causes. The first screen is the game of seed 4
+The next two screens show a release that the player causes. The first of them is the game of seed 4
 after 13 commands of the automatic player (`bot.trp -- 4 13`): the player has seen two rooms and a
 bat, `b`, and has picked up a scroll.
 
@@ -178,19 +194,23 @@ You recognise everything in your pack.
 
 ## Files
 
-| File           | Content                                                                    |
-|----------------|----------------------------------------------------------------------------|
-| `trapdoor.trp` | the main program: authorities, the channel level, the terminal session     |
-| `World.trp`    | the dungeon master process; every downgrade of the game                    |
-| `Monster.trp`  | a monster slot as a process, and the monster minds                         |
-| `Rules.trp`    | the game as pure functions over one state value                            |
-| `Dungeon.trp`  | floor generation                                                           |
-| `Lore.trp`     | the public tables: bestiary, item kinds, names                             |
-| `Rng.trp`      | the pseudo-random generator                                                |
-| `Ui.trp`       | the player's model, key handling and view, as pure functions               |
-| `replay.trp`   | a scripted session that prints screens as text                             |
-| `bot.trp`      | an automatic player that reads only the player's model                     |
-| `leak.trp`     | three attempts to print a floor row, two of which the runtime refuses      |
+| File                | Content                                                                 |
+|---------------------|-------------------------------------------------------------------------|
+| `trapdoor.trp`      | the main program: authorities, the channel level, the terminal session  |
+| `World.trp`         | the dungeon master process; every downgrade of the game                 |
+| `Monster.trp`       | a monster slot as a process, and the monster minds                      |
+| `Rules.trp`         | the game as pure functions over one state value                         |
+| `Dungeon.trp`       | floor generation                                                        |
+| `Lore.trp`          | the public tables: bestiary, item kinds, names                          |
+| `Rng.trp`           | the pseudo-random generator                                             |
+| `Ui.trp`            | the player's model, key handling and view, as pure functions            |
+| `replay.trp`        | a scripted session that prints screens as text                          |
+| `Autoplayer.trp`    | the policy of the automatic player, which reads only the player's model |
+| `bot.trp`           | the automatic player, run to an outcome                                 |
+| `film.trp`          | the automatic player, recorded as an animated SVG                       |
+| `leak.trp`          | three attempts to print a floor row, two of which the runtime refuses   |
+| `trapdoor.svg`      | the recording at the top of this document                               |
+| `trapdoor-dark.svg` | the same recording in the palette for a dark background                 |
 
 The terminal layer is Proscenium ([`../proscenium`](../proscenium)): the modules `Term`, `Image`,
 `Style` and `Key`.
@@ -282,7 +302,7 @@ chooses the commands, so the player chooses which views the game computes.
 The inventory lists every site at which the program downgrades, mints an authority, or opens a
 receive region. The sites were found by a search of the sources for the downgrade primitives and
 for the library wrappers that contain them. The modules `Rules.trp`, `Dungeon.trp`, `Lore.trp`,
-`Rng.trp`, `Monster.trp` and `Ui.trp` contain no value downgrade and no blocking-label downgrade.
+`Rng.trp`, `Monster.trp`, `Ui.trp` and `Autoplayer.trp` contain no value downgrade and no blocking-label downgrade.
 
 ### The view release
 
@@ -343,7 +363,7 @@ read the bit, because no later operation of the slot depends on it.
 
 ### The command-line arguments
 
-The four main programs call `IfcUtil.declassifyDeep (getCliArgs authority, authority,
+The five main programs call `IfcUtil.declassifyDeep (getCliArgs authority, authority,
 IfcUtil.bot)` and then `blockdeclto (authority, IfcUtil.bot)`. The first call moves the
 command-line arguments from the root level to bot, under the root authority. The second call
 lowers the blocking label, which the traversal of the argument list leaves at the root level
@@ -353,6 +373,22 @@ Both calls are needed because each program branches on its arguments before it s
 Without the second call the messages of the main thread have root-level presence, and the dungeon
 master never receives the first one. The two calls release what the operator typed on the command
 line, and the release goes to the operator's own terminal.
+
+### The outcome of the file write
+
+The function `writeOut` in `film.trp` spawns a writer process, and the writer calls
+`IfcUtil.pdeclassify (reason, authority, IfcUtil.bot)`. The call moves one string from the root
+level to bot, and it lowers the blocking label of the writer from the root level to bot. The string
+is the reason of a failed write, or the empty string. The authority is the root authority, which
+the writer needs for the write itself.
+
+The release is needed because a file write raises the blocking label of the writing thread to the
+root level and returns a root-level outcome (probe `w1.trp`). A message sent by the writer without
+the release has root-level presence, and the plain receive of the main thread does not match it
+(probe `w2.trp`, which does not terminate). The writer is a separate process so that the main
+thread, which prints the result, never holds root-level data; probe `w4.trp` shows the arrangement.
+The release covers the reason string, which is the only part of the outcome that the main thread
+uses.
 
 ### The minted authorities
 
@@ -388,6 +424,11 @@ Three places hold no downgrade although a design with one exists.
 - The command `leak.trp -- write` ends in the runtime error `write to stdout above the stdio
   channel level`, the command `leak.trp -- forge` ends in `Not enough authority for
   declassification`, and the command `leak.trp -- release` prints the row.
+- The move of the policy from `bot.trp` into `Autoplayer.trp` left the output of `bot.trp -- 7 263`
+  unchanged.
+- Single frames of both recordings were rendered with QuickLook and match the corresponding text
+  screens. In headless Chrome the animation of `trapdoor.svg` is in the running state, and its
+  transform moves by one picture width per 160 ms when the animation clock is stepped.
 - The terminal session was driven in tmux at 80 by 24: movement, the pack panel, the help panel,
   and quitting with exit code 0.
 - The probes for the label behaviour that the design depends on are in
@@ -406,14 +447,22 @@ Three places hold no downgrade although a design with one exists.
   turn branches on the hidden state.
 - A command that takes no turn is visible in the view: the turn count and the position do not
   change. A step into an unseen wall therefore tells the player that the cell is not walkable.
+- The policy covers the terminal and no other output. A file write takes the root authority and
+  accepts content at any level: probe `w3.trp` writes a dungeon-level string to a file. The program
+  `film.trp` writes only what it builds from views, and no check of the runtime enforces that.
 - The game runs at full integrity throughout, so the labels constrain confidentiality only.
   The module `Rules.trp` validates commands by ordinary checks.
 - The dungeon master waits for an intent from every slot without a timeout. A slot that died of a
   runtime error would stop the game.
 - No golden test covers the game. The step `make test/examples` compiles it; its behaviour was
   checked with `bot.trp`, `replay.trp` and tmux, as [Checks performed](#checks-performed) lists.
-- The palette for a dark background was not exercised. The multiplexer tmux does not answer the
-  background query, so every terminal run used the palette for a light background.
+- The palette for a dark background was not exercised in a terminal session. The multiplexer tmux
+  does not answer the background query, so every terminal run used the palette for a light
+  background. The dark recording shows the colours of the dark palette.
+- The recordings were not viewed on GitHub. The claim that a README there plays an animated SVG,
+  and chooses between the two files by the reader's colour scheme, rests on GitHub's documented
+  support for the `picture` element and on common practice for animated SVG; it is untested for
+  these files.
 - Start-up takes about nine seconds, which the compiler spends on the module graph that includes
   Proscenium; `examples/proscenium/chat.trp` compiled in 7.7 s on the same machine.
 - The strength of the monsters was tuned only against `bot.trp`, which has no tactics.

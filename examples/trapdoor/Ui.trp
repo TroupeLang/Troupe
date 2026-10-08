@@ -23,7 +23,9 @@
  * LOOK. Cells in sight are drawn in the terminal's own foreground; remembered cells are
  * gray. Monsters are bold in one violet accent and items in one amber, each with a variant
  * for a dark and for a light background; the letter or symbol carries the meaning and the
- * colour repeats it. The panels are explicit foreground-and-background pairs.
+ * colour repeats it. The panels are explicit foreground-and-background pairs. Walls,
+ * floor, corridors, doorways, trapdoors, weapons and the Ghost Light are drawn with
+ * box-drawing and symbol characters, each one cell wide; the model keeps the ASCII glyphs.
  *)
 
 import List
@@ -94,32 +96,73 @@ let fun imin (a, b) = if a < b then a else b
         else if c = 62 then 4                                           (* > *)
         else 5
 
-    (** One map row: remembered cells from `known` in gray, cells in sight from `lit` in
-     *  their class's rendition, as runs. `dark` is a row with nothing in sight. *)
-    fun rowImage (pal, dark, known, lit) =
+    (*---------------------------------  Glyphs  ---------------------------------*)
+
+    (* The views and the model's map use the ASCII glyphs of Dungeon.trp and Lore.trp. The
+     * screen shows a drawn glyph in place of some of them, one cell for one cell. *)
+
+    (** The drawn glyph of a glyph whose look does not depend on its neighbours. *)
+    fun drawn g =
+        if g = "." then "·" else if g = "#" then "░" else if g = "|" then "│"
+        else if g = "+" then "∩" else if g = ">" then "▼" else if g = ")" then "†"
+        else if g = "*" then "☼" else g
+
+    (** Row `src` as drawn. `above`, `here` and `below` are the remembered rows around it:
+     *  a "-" with a wall under it or over it is a corner of a room. *)
+    fun drawnRow (blank, src, above, here, below) =
+        let val w = String.size src
+            fun at (row, x) = if x < 0 orelse x >= w then 32 else String.subCode (row, x)
+            fun upright c = c = 124 orelse c = 43
+            fun level c = c = 45 orelse c = 43
+            fun wall x =
+                let val left = level (at (here, x + 1))
+                in if upright (at (below, x)) then (if left then "┌" else "┐")
+                   else if upright (at (above, x)) then (if left then "└" else "┘")
+                   else "─"
+                end
+            fun go (x, acc) =
+                if x >= w then acc
+                else let val g = String.sub (src, x)
+                     in go (x + 1, acc ^ (if g = "-" then wall x else drawn g))
+                     end
+        in if src = blank then src else go (0, "")
+        end
+
+    (*--------------------------------  Map rows  --------------------------------*)
+
+    (** One map row: remembered cells in gray, cells in sight in the rendition of their
+     *  class, as runs. `lit` gives the class of each cell; the text comes from the drawn
+     *  rows `knownD` and `litD`. `dark` is a row with nothing in sight. *)
+    fun rowImage (pal, dark, lit, knownD, litD) =
         let val w = String.size lit
             fun seg (k, from, to) =
-                if k = 0 then Image.text pal.dim (String.substring (known, from, to))
+                if k = 0 then Image.text pal.dim (String.substring (knownD, from, to))
                 else Image.text (if k = 1 then pal.player else if k = 2 then pal.monster
                                  else if k = 3 then pal.item else if k = 4 then pal.stairs
                                  else pal.plain)
-                                (String.substring (lit, from, to))
+                                (String.substring (litD, from, to))
             fun go (x, from, k, acc) =
                 if x >= w then List.reverse (seg (k, from, x) :: acc)
                 else let val k' = classOf (String.subCode (lit, x))
                      in if k' = k then go (x + 1, from, k, acc)
                         else go (x + 1, x, k', seg (k, from, x) :: acc)
                      end
-        in if lit = dark then Image.text pal.dim known
+        in if lit = dark then Image.text pal.dim knownD
            else Image.hcat (go (1, 0, classOf (String.subCode (lit, 0)), []))
         end
 
     fun mapImages (pal, known, lit) =
         let val dark = String.repeat Lore.mapW unlit
-            fun go ([], _) = []
-              | go (_, []) = []
-              | go (k :: ks, l :: ls) = rowImage (pal, dark, k, l) :: go (ks, ls)
-        in go (known, lit)
+            val blank = String.repeat Lore.mapW " "
+            fun go (_, [], _) = []
+              | go (_, _, []) = []
+              | go (above, k :: ks, l :: ls) =
+                    let val below = case ks of b :: _ => b | [] => blank
+                        val knownD = drawnRow (blank, k, above, k, below)
+                        val litD = if l = dark then l else drawnRow (dark, l, above, k, below)
+                    in rowImage (pal, dark, l, knownD, litD) :: go (k, ks, ls)
+                    end
+        in go (blank, known, lit)
         end
 
     (*----------------------------------  Model  ----------------------------------*)
@@ -242,7 +285,7 @@ let fun imin (a, b) = if a < b then a else b
     fun packLines (m, cls) =
         let val ls = List.mapi (fn (i, (c, name, note)) =>
                                     if cls = "" orelse c = cls
-                                    then [ letter i ^ " - " ^ c ^ " " ^ name
+                                    then [ letter i ^ " - " ^ drawn c ^ " " ^ name
                                            ^ (if note = "" then "" else " (" ^ note ^ ")") ]
                                     else [])
                                m.inv
@@ -260,9 +303,9 @@ let fun imin (a, b) = if a < b then a else b
         , "d                         drop"
         , "Q                         quit"
         , ""
-        , "@ you   > trapdoor   + doorway   # corridor"
-        , "! potion   ? scroll   ) weapon   [ armour   $ gold"
-        , "* the Ghost Light: pick it up to win"
+        , "@ you   ▼ trapdoor   ∩ doorway   ░ corridor"
+        , "! potion   ? scroll   † weapon   [ armour   $ gold"
+        , "☼ the Ghost Light: pick it up to win"
         , "letters are monsters"
         ]
 

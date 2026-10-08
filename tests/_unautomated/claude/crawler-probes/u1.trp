@@ -1,0 +1,16 @@
+import String
+let val s = "┌─┐│·░∩▼☼†"
+    val _ = printString s
+    val _ = print (String.size s)
+    val _ = print (String.subCode (s, 0))
+    val _ = printString (String.sub (s, 4) ^ "─")
+    val _ = print (String.sub (s, 1) = "─")
+in () end
+(* OBSERVED 2026-10-08 (dev at 19807afa, --localonly):
+   ┌─┐│·░∩▼☼†
+   10
+   9484
+   ·─
+   true
+   A string literal may hold box-drawing and symbol characters; each counts as one in
+   String.size, and "─" denotes the same character as the literal one. *)

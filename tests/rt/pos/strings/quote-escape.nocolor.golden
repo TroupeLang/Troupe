@@ -1,0 +1,11 @@
+2026-10-08T12:00:29.863Z [RTM] info: Skipping network creation. Observe that all network operations will yield a runtime error.
+"""
+1
+34
+"<rect x="3"/>"
+13
+true
+"say "hi""
+8
+"matched"
+>>> Main thread finished with value: ()@{}%{}

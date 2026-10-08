@@ -1,0 +1,11 @@
+(* \" inside a string literal is one double-quote character. *)
+let val q = "\""
+    val attr = "<rect x=\"3\"/>"
+    fun show s = (print s; print (strlen s))
+in show q
+ ; print (charCodeAtWithDefault (q, 0, 0))
+ ; show attr
+ ; print (substring (attr, 8, 9) = q)
+ ; show ("say " ^ q ^ "hi" ^ q)
+ ; print (case attr of "<rect x=\"3\"/>" => "matched" | _ => "not matched")
+end

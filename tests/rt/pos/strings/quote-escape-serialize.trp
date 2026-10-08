@@ -1,0 +1,13 @@
+(* A string value holding a quote, and a function whose code holds a \"
+   literal, survive save and restore. *)
+let val s = "a\"b"
+    fun quoted x = "\"" ^ x ^ "\""
+    val filename = "string_quote_escape_test"
+    val _ = save (authority, filename, (s, quoted))
+    val (s2, f) = restore (filename)
+in print s2
+ ; print (strlen s2)
+ ; print (s = s2)
+ ; print (f "x")
+ ; print (strlen (f "x"))
+end

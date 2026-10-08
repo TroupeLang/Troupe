@@ -37,7 +37,11 @@ $eol   = [\n]
 $graphic    = $printable # $white
 @sym        = $alpha_ [$alpha $digit \_ \']*
 @tyvar      = \' $alpha [$alpha $digit \_ \']*
-@string     = \" ($printable # \")* \"
+-- A backslash takes the character after it into the string, so \" does not end
+-- the literal and \\ does not escape a closing quote. The token keeps the
+-- source text; the escapes get their meaning from the emitted JS literal.
+$strchar    = $printable # [\" \\]
+@string     = \" ($strchar | \\ $printable)* \"
 @label      = \`\{ ($printable # \})*  \}\`
 -- Operator lexemes (docs: _dev_planning/custom-operators/design.md §2.1).
 -- An operator is a maximal run of $opchar beginning with $opinitial. The

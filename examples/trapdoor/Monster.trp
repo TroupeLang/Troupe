@@ -1,0 +1,127 @@
+(* Monster — one monster slot as a process: it receives a percept each turn, decides, and
+ * answers with an intent.
+ *
+ * The dungeon master keeps where a monster stands and how hurt it is; the process keeps the
+ * monster's mind — whether it has noticed the player, its own random numbers, its rhythm. A
+ * slot outlives its monster: the same process serves whichever monster the current floor
+ * puts in the slot, and starts a fresh mind when the percept's floor counter changes. A slot
+ * with no live monster answers with the null step.
+ *
+ * LABELS. Percepts are dungeon-level data, so a monster process is a dungeon-level process:
+ * it receives at [bot, dungeon level] in a region opened with a null-attenuated authority,
+ * which the runtime leaves confined, and never closes it. Every branch on a percept happens
+ * inside `decide`, so the loop itself runs at a public pc; the blocking label rises to the
+ * dungeon level on the first percept and stays there. A message a monster sends therefore
+ * has dungeon-level presence, which a plain receive in a public process never matches
+ * (../proscenium/Term.trp, "WHO CAN RECEIVE FROM THE KERNEL"), and the monster holds no
+ * authority with which to lower it.
+ *
+ * MINDS, selected by the percept's `mind` field (Lore.trp names one per kind):
+ *
+ *   hunter    asleep until it senses the player, then closes in for good
+ *   erratic   as a hunter, but one step in three goes in a random direction
+ *   flit      never still, never purposeful; attacks half the time when adjacent
+ *   ambush    waits, strikes what comes adjacent, follows only while the player is close
+ *   shambler  a hunter that moves every other turn
+ *   guardian  holds its room: active only while it senses the player
+ *)
+
+import List
+import IfcUtil
+import "./Rng"
+import "./Rules"
+
+let fun imax (a, b) = if a > b then a else b
+    fun iabs a = if a < 0 then 0 - a else a
+    fun sgn a = if a < 0 then 0 - 1 else if a > 0 then 1 else 0
+    fun cheb (ax, ay, bx, by) = imax (iabs (ax - bx), iabs (ay - by))
+
+    val still = (0, 0)
+
+    (** The directions `p` may step in, the player's own cell included when adjacent. *)
+    fun openDirs p =
+        let fun go ([], _) = []
+              | go (_, []) = []
+              | go (d :: ds, f :: fs) = if f then d :: go (ds, fs) else go (ds, fs)
+        in go (Rules.dirs, p.open)
+        end
+
+    fun randomStep (rng, p) =
+        case openDirs p of
+             [] => (still, rng)
+           | ds => Rng.pick (rng, ds)
+
+    (** A step that brings `p` nearer the player: the attack when adjacent, else the open
+     *  neighbour nearest the player, else a random open one. *)
+    fun approach (rng, p) =
+        let val here = cheb (p.x, p.y, p.px, p.py)
+        in if here <= 1 then ((sgn (p.px - p.x), sgn (p.py - p.y)), rng)
+           else let fun dist (dx, dy) =
+                        (* Chebyshev distance first, Manhattan distance to break ties. *)
+                        10 * cheb (p.x + dx, p.y + dy, p.px, p.py)
+                        + iabs (p.x + dx - p.px) + iabs (p.y + dy - p.py)
+                    fun best ([], d, bd) = d
+                      | best (c :: cs, d, bd) =
+                            if dist c < bd then best (cs, c, dist c) else best (cs, d, bd)
+                    val d = best (openDirs p, still, dist still)
+                in if d = still then randomStep (rng, p) else (d, rng)
+                end
+        end
+
+    (** `(mind', intent)` for one percept. *)
+    fun decide (st0, p) =
+        let val st = if p.serial = st0.serial then st0
+                     else {rng = st0.rng, awake = false, serial = p.serial, phase = 0}
+            val near = cheb (p.x, p.y, p.px, p.py)
+            fun done (st, (i, rng)) = ({st with rng = rng, phase = st.phase + 1}, i)
+            (* Noticing: a sleeper that senses the player wakes two times in three. *)
+            fun hunt (st, act) =
+                if st.awake then done (st, act (st.rng, p))
+                else if p.sensed
+                then let val (wakes, rng) = Rng.chance (st.rng, 2, 3)
+                     in done ({st with awake = wakes}, (still, rng))
+                     end
+                else done (st, (still, st.rng))
+        in if not p.alive then done (st, (still, st.rng))
+           else if p.mind = "hunter" then hunt (st, approach)
+           else if p.mind = "erratic" then
+               hunt (st, fn (rng, p) =>
+                             let val (stray, rng') = Rng.chance (rng, 1, 3)
+                             in if stray andalso near > 1 then randomStep (rng', p)
+                                else approach (rng', p)
+                             end)
+           else if p.mind = "flit" then
+               let val (bites, rng) = Rng.chance (st.rng, 1, 2)
+               in if near <= 1 andalso bites then done (st, approach (rng, p))
+                  else done (st, randomStep (rng, p))
+               end
+           else if p.mind = "ambush" then
+               (if near <= 1 orelse (near <= 3 andalso p.sensed) then done (st, approach (st.rng, p))
+                else done (st, (still, st.rng)))
+           else if p.mind = "shambler" then
+               (if st.phase mod 2 = 0 then hunt (st, approach)
+                else done (st, (still, st.rng)))
+           else (if p.sensed then done (st, approach (st.rng, p))
+                 else done (st, (still, st.rng)))
+        end
+
+    fun loop (lev, world, slot, st) =
+        let val (turn, p) = rcv (IfcUtil.bot, lev, [ hn ("TURN", t, p) => (t, p) ])
+            val (st', intent) = decide (st, p)
+            val _ = send (world, ("INTENT", slot, turn, intent))
+        in loop (lev, world, slot, st')
+        end
+
+    (** The life of slot `slot`: answer the percepts `world` sends, for as long as the program
+     *  runs. `weak` is an authority for nothing; it only opens the region. *)
+    fun run (lev, weak, world, slot) =
+        let val (ok, cap) = enableRangedReceive (IfcUtil.bot, lev, weak)
+            val st = {rng = Rng.fromSeed (7919 * (slot + 1)), awake = false, serial = 0, phase = 0}
+            val _ = loop (lev, world, slot, st)
+        in ()
+        end
+
+in [ ("run", run)
+   , ("decide", decide)
+   ]
+end

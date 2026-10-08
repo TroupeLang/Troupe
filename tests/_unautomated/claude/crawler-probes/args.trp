@@ -1,0 +1,25 @@
+import IfcUtil
+import List
+let val _ = debugpc ()
+    val raw = getCliArgs authority
+    val _ = debugpc ()
+    val args = IfcUtil.declassifyDeep (raw, authority, IfcUtil.bot)
+    val _ = debugpc ()
+    val _ = printWithLabels args
+    val n = case args of a :: k :: _ => 2 | _ => 0
+    val _ = debugpc ()
+    val _ = printWithLabels n
+in () end
+
+(* OBSERVED 2026-10-08 (dev at e33721d9, ./local.sh, default flags)
+ *
+ * `./local.sh args.trp -- 7 llj`. After `IfcUtil.declassifyDeep` on the argument list the values
+ * are public and the blocking label is at the root level:
+ *
+ *   PC:{}  BL:{}
+ *   PC:{}  BL:{}
+ *   PC:{}  BL:{#ROOT}
+ *   ["7"@{}%{}, "llj"@{}%{}]@{}%{}
+ *   PC:{}  BL:{#ROOT}
+ *   2@{}%{}
+ *)

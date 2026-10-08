@@ -1,0 +1,97 @@
+(* World — the dungeon master: the one process that holds the game state, and the one place
+ * where anything about it is released.
+ *
+ * The state (Rules.trp) is a single value at the dungeon level `lev`. It starts that way
+ * because the generator state it grows from is handed over at `lev`, and stays that way
+ * because every function applied to it is pure. The dungeon master's own control flow never
+ * depends on it: each turn runs the same sequence, whatever the state holds.
+ *
+ *   1. receive a command from the player's process           public
+ *   2. `Rules.playerAct`                                      at lev
+ *   3. send each monster slot its percept; collect an intent
+ *      from each, in slot order                               at lev, inside a receive region
+ *   4. `Rules.monstersAct`                                    at lev
+ *   5. `Rules.perceive`, RELEASE the view, send it            public again
+ *
+ * THE MONSTER SLOTS are `Lore.slots` processes (Monster.trp), spawned once. Their number and
+ * their pids are public; what each one is told and what it answers are not. The intents come
+ * back in messages whose presence is at `lev`, so step 3 opens a receive region [bot, lev]
+ * and closes it again before the turn ends — the command receive of step 1 has to happen
+ * outside any region, or the command would arrive tainted to the region's ceiling.
+ *
+ * DOWNGRADES. All of them are here, and all of them use `dm`, an authority for `lev` and
+ * nothing else, shown by the caller:
+ *
+ *   - `enableRangedReceive (bot, lev, dm)` in `round`: certifies that the mailbox clearance
+ *     may return to bot when the region closes. The certification bit is read; `run` tries
+ *     the open once before the first turn and stops, saying so, if the runtime refuses.
+ *   - `IfcUtil.declassifyDeep (view, dm, bot)` in `release`: the view, member by member.
+ *   - `blockdeclto (dm, bot)` in `release`: the blocking label, which rose to `lev` when the
+ *     state was first inspected. This releases that the turn's computation terminated.
+ *
+ * What a view contains is decided by `Rules.perceive`; the README's inventory argues each
+ * site.
+ *)
+
+import List
+import IfcUtil
+import "./Rng"
+import "./Lore"
+import "./Rules"
+import "./Monster"
+
+let (** Steps 2 to 4 for one command; returns the next state. *)
+    fun round (dm, lev, pids, s, turn, cmd) =
+        let val s1 = Rules.playerAct (s, cmd)
+            val ps = Rules.percepts s1
+            val (ok, cap) = enableRangedReceive (IfcUtil.bot, lev, dm)
+            val close = if ok then (fn () => disableRangedReceive cap) else (fn () => ())
+            val _ = List.mapi (fn (k, pid) => send (pid, ("TURN", turn, List.nth ps k))) pids
+            val intents =
+                    List.mapi (fn (k, _) =>
+                                   rcv ( IfcUtil.bot, lev
+                                       , [ hn ("INTENT", slot, t, i) when slot = k andalso t = turn => i ]))
+                              pids
+            val _ = close ()
+        in Rules.monstersAct (s1, intents)
+        end
+
+    (** Step 5: the player's view of `s`, public, with the blocking label public again. *)
+    fun release (dm, s) =
+        let val view = IfcUtil.declassifyDeep (Rules.perceive s, dm, IfcUtil.bot)
+            val _ = blockdeclto (dm, IfcUtil.bot)
+        in view
+        end
+
+    fun loop (dm, lev, pids, ui, s, turn) =
+        let val cmd = receive [ hn ("CMD", (verb, a, b)) => (verb, a, b) ]
+            val s' = round (dm, lev, pids, s, turn, cmd)
+            val _ = send (ui, ("APPMSG", ("VIEW", release (dm, s'))))
+        in loop (dm, lev, pids, ui, s', turn + 1)
+        end
+
+    (** The dungeon master's whole life. `dm` is an authority for `lev`; `weak` is an authority
+     *  for nothing, passed on to the monster slots; `seed` is a non-negative integer at `lev`.
+     *  The first message must be `("HELLO", ui)`; views then go to `ui` as
+     *  `("APPMSG", ("VIEW", view))`, one in answer to the hello and one per `("CMD", command)`.
+     *  If the runtime will not certify the receive region under `dm`, `ui` gets
+     *  `("APPMSG", ("REFUSED", reason))` and the process ends. *)
+    fun run (dm, weak, lev, seed) =
+        let val me = self ()
+            val pids = List.map (fn k => spawn (fn () => Monster.run (lev, weak, me, k)))
+                                (List.range Lore.slots)
+            val ui = receive [ hn ("HELLO", p) => p ]
+            val (ok, cap) = enableRangedReceive (IfcUtil.bot, lev, dm)
+            val close = if ok then (fn () => disableRangedReceive cap) else (fn () => ())
+            val _ = close ()
+        in if ok
+           then let val s = Rules.newGame (Rng.fromSeed seed, 0)
+                    val _ = send (ui, ("APPMSG", ("VIEW", release (dm, s))))
+                in loop (dm, lev, pids, ui, s, 0)
+                end
+           else send (ui, ("APPMSG", ("REFUSED", "the dungeon master's authority does not cover the dungeon level")))
+        end
+
+in [ ("run", run)
+   ]
+end

@@ -1,0 +1,104 @@
+(* Lore — the public tables of the game: map dimensions, the bestiary, the item kinds, and
+ * the names items go by.
+ *
+ * Everything here is known to every process at every level. What a particular game keeps
+ * secret is which appearance stands for which potion or scroll, and that mapping is game
+ * state (Rules.trp), not a table.
+ *
+ * AN ITEM is a record {id, cls, kind, ench}. `cls` is the item's map glyph and names its
+ * class: "!" potion, "?" scroll, ")" weapon, "[" armour, "$" gold, "*" the Ghost Light.
+ * `kind` indexes the class's table below. `ench` is the enchantment of a weapon or armour
+ * and the amount of a gold item.
+ *)
+
+import List
+
+let val mapW = 80
+    val mapH = 20
+
+    (** Monster processes per game. The number is public; which slots hold a live monster on
+     *  the current floor is not. *)
+    val slots = 10
+
+    val lastDepth = 5
+
+    (* `mind` selects the behaviour in Monster.trp; `dmg` is the largest damage of one hit;
+     * `depth` is the first floor the kind appears on. *)
+    val monsters =
+        [ {glyph = "r", name = "rat",    hp = 3,  dmg = 2,  xp = 1,  mind = "erratic",  depth = 1}
+        , {glyph = "b", name = "bat",    hp = 3,  dmg = 2,  xp = 1,  mind = "flit",     depth = 1}
+        , {glyph = "k", name = "kobold", hp = 5,  dmg = 4,  xp = 2,  mind = "hunter",   depth = 1}
+        , {glyph = "s", name = "snake",  hp = 6,  dmg = 5,  xp = 3,  mind = "ambush",   depth = 2}
+        , {glyph = "g", name = "goblin", hp = 8,  dmg = 5,  xp = 4,  mind = "hunter",   depth = 2}
+        , {glyph = "o", name = "orc",    hp = 12, dmg = 6,  xp = 6,  mind = "hunter",   depth = 3}
+        , {glyph = "Z", name = "zombie", hp = 18, dmg = 7,  xp = 7,  mind = "shambler", depth = 3}
+        , {glyph = "T", name = "troll",  hp = 24, dmg = 8,  xp = 12, mind = "hunter",   depth = 4}
+        , {glyph = "D", name = "dragon", hp = 40, dmg = 10, xp = 50, mind = "guardian", depth = 5}
+        ]
+
+    val dragon = 8
+    val troll  = 7
+
+    fun monster k = List.nth monsters k
+
+    val potions = [ "healing", "might", "venom", "vigour" ]
+    val potionLooks = [ "fizzy", "murky", "milky", "smoky" ]
+
+    val scrolls = [ "magic mapping", "teleportation", "enchant weapon", "enchant armour", "lore" ]
+    val scrollLooks = [ "EXEUNT OMNES", "DEUS EX MACHINA", "MISE EN SCENE", "DRAMATIS PERSONAE"
+                      , "SOTTO VOCE" ]
+
+    (* `die` is the largest damage of one hit. *)
+    val weapons = [ {name = "dagger", die = 4}, {name = "short sword", die = 6}
+                  , {name = "mace", die = 8}, {name = "long sword", die = 10} ]
+
+    val armours = [ {name = "leather armour", ac = 2}, {name = "ring mail", ac = 3}
+                  , {name = "chain mail", ac = 5}, {name = "plate mail", ac = 7} ]
+
+    val fistDie = 2
+
+    (** Experience needed for levels 2, 3, ... *)
+    val levelSteps = [ 8, 20, 40, 70, 110, 170, 260 ]
+
+    fun signed n = if n >= 0 then "+" ^ toString n else toString n
+
+    (** The name an item goes by, given which potion and scroll kinds are identified and the
+     *  appearance each kind has in this game. *)
+    fun itemName (lore, it) =
+        if it.cls = "!" then
+            (if List.nth lore.potKnown it.kind
+             then "potion of " ^ List.nth potions it.kind
+             else List.nth potionLooks (List.nth lore.potLook it.kind) ^ " potion")
+        else if it.cls = "?" then
+            (if List.nth lore.scrKnown it.kind
+             then "scroll of " ^ List.nth scrolls it.kind
+             else "scroll labelled " ^ List.nth scrollLooks (List.nth lore.scrLook it.kind))
+        else if it.cls = ")" then signed it.ench ^ " " ^ (List.nth weapons it.kind).name
+        else if it.cls = "[" then signed it.ench ^ " " ^ (List.nth armours it.kind).name
+        else if it.cls = "$" then toString it.ench ^ " gold pieces"
+        else "Ghost Light"
+
+    (** The name with its article, for a message. *)
+    fun aName (lore, it) =
+        if it.cls = "*" then "the Ghost Light"
+        else if it.cls = "$" then itemName (lore, it)
+        else "a " ^ itemName (lore, it)
+
+in [ ("mapW", mapW)
+   , ("mapH", mapH)
+   , ("slots", slots)
+   , ("lastDepth", lastDepth)
+   , ("monsters", monsters)
+   , ("monster", monster)
+   , ("dragon", dragon)
+   , ("troll", troll)
+   , ("potions", potions)
+   , ("scrolls", scrolls)
+   , ("weapons", weapons)
+   , ("armours", armours)
+   , ("fistDie", fistDie)
+   , ("levelSteps", levelSteps)
+   , ("itemName", itemName)
+   , ("aName", aName)
+   ]
+end

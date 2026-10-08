@@ -1,0 +1,14 @@
+{
+  "deps": [
+    {"path": "../proscenium/Image", "hash": "p7mvjgi0k70jscndnqfcur8uqinl5sie3bh84ev8dc6j4jr5fg6g", "name": "../proscenium/Image"},
+    {"path": "../proscenium/Key", "hash": "t93u5gtdr744r05vrpj49n1raeuno6vo4dmfpdbmguv16vlmr1eg", "name": "../proscenium/Key"},
+    {"path": "../proscenium/Style", "hash": "5jrgulnqcubrdhujjkoon4i88bcamgo7ft9bhkppss69jgrhqhrg", "name": "../proscenium/Style"},
+    {"path": "Dungeon", "hash": "0jv1dlp5ina7fi6h5hgav6nk7r8gtg5vsvbbjfv7ol37h2unr9a0", "name": "Dungeon"},
+    {"path": "Lore", "hash": "20ill4vbkevd1hl1scdk2gogoglkgj6t66vfp14bp6scdqn0ps2g", "name": "Lore"},
+    {"path": "Monster", "hash": "b69fon4jd63v10f5si8lbg3i3thc15tuq13iofa0mdn7t31rj8eg", "name": "Monster"},
+    {"path": "Rng", "hash": "5iuvfe066j55lb69tmedbdsmjb1q3dj9smqdqbcpdcefrnkuqlh0", "name": "Rng"},
+    {"path": "Rules", "hash": "g50g4joqeo89i3iudc2bueiq1fgk1223v9ng98d8o4a9buuecjp0", "name": "Rules"},
+    {"path": "Ui", "hash": "br8nk9bdcpp6k84p80ns50gnd4fg7v0dpm79fhbhbuaj1h6u46og", "name": "Ui"},
+    {"path": "World", "hash": "8hnivh6q9lduvvl7r10vavhrr20oo8s737cmrtv1culi10fg2u8g", "name": "World"}
+  ]
+}

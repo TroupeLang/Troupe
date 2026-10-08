@@ -1,0 +1,12 @@
+import IfcUtil
+let val lev = `<dungeon;#root-integrity>`
+    val weak = attenuate (authority, IfcUtil.null)
+    val (ok, cap) = enableRangedReceive (IfcUtil.bot, lev, weak)
+in print ok end
+
+(* OBSERVED 2026-10-08 (dev at e33721d9, ./local.sh, default flags)
+ *
+ * A region [bot, dungeon] opened with a null-attenuated authority is not certified:
+ *
+ *   false
+ *)

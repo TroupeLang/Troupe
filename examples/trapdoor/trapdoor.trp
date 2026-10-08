@@ -1,0 +1,81 @@
+(* trapdoor — a dungeon crawler in the manner of Rogue and NetHack, in which what the player
+ * has not yet seen is kept from the screen by the runtime's labels and not by the renderer.
+ *
+ *   ./local.sh examples/trapdoor/trapdoor.trp
+ *   ./local.sh examples/trapdoor/trapdoor.trp -- 42        (a chosen seed)
+ *
+ * You are `@`. Five floors down lies the Ghost Light, `*`; pick it up to win. Ui.trp lists
+ * the keys, and `?` shows them in the game. README.md describes the processes and argues the
+ * downgrades.
+ *
+ * THIS FILE holds the root authority and does four things with it, all before the session
+ * starts: it reads the command line, lowers the terminal's channel level to public, mints
+ * the dungeon master's authority, and runs the terminal session.
+ *
+ *   - The terminal is the player's eyes, so its level is bot for the whole run. From then on
+ *     a write of anything above bot is refused by the runtime, whichever process tries.
+ *   - The dungeon level `lev` is a confidentiality level with full integrity. The seed is
+ *     raised to it in the expression that draws it, so no public binding of it exists.
+ *   - `dm` is an authority for `lev` alone and goes to the dungeon master (World.trp), the
+ *     only process that downgrades. `weak` is an authority for nothing; the monster
+ *     processes open their receive regions with it.
+ *)
+
+import List
+import Option
+import Number
+import IfcUtil
+import "../proscenium/Term"
+import "../proscenium/Key"
+import "../proscenium/Style"
+import "./Rng"
+import "./World"
+import "./Ui"
+
+let val lev  = `<dungeon;#root-integrity>`
+    val dm   = attenuate (authority, lev)
+    val weak = attenuate (authority, IfcUtil.null)
+
+    (* The arguments arrive at the root level; they are the operator's own words and are made
+     * public before anything branches on them. Walking the list raises the blocking label to
+     * the root level as well, and the second line puts it back. *)
+    val args = IfcUtil.declassifyDeep (getCliArgs authority, authority, IfcUtil.bot)
+    val _ = blockdeclto (authority, IfcUtil.bot)
+    val given = case args of
+                     a :: _ => Rng.seedOfString a
+                   | []     => SOME (Number.floor (random () * 1000000000))
+    val usage = case given of SOME _ => false | NONE => true
+    val seed = (case given of SOME n => n | NONE => 0) raisedTo lev
+
+    val _ = setStdioLevel (authority, IfcUtil.bot)
+
+    val world = spawn (fn () => World.run (dm, weak, lev, seed))
+
+    fun init {cols, rows, ui, dark} =
+        let val _ = send (world, ("HELLO", ui))
+        in (Ui.init (cols, rows, dark), [])
+        end
+
+    fun update (ev, m) =
+        case ev of
+             EV (KEY (k, _)) =>
+                 let val (m', quit, commands) = Ui.key (m, k)
+                     val _ = List.map (fn c => send (world, ("CMD", c))) commands
+                 in (m', if quit then [QUIT] else [])
+                 end
+           | RESIZED {cols, rows} => (Ui.resized (m, cols, rows), [])
+           | APP msg => (Ui.arrived (m, msg), [])
+           | _ => (m, [])
+
+    val opts = {depth = Style.TRUECOLOR, mouse = false, paste = false}
+
+    val code = if usage
+               then let val _ = print "usage: trapdoor.trp [-- SEED]   (SEED: up to nine digits)"
+                    in 2
+                    end
+               else Term.run (authority, opts, {init = init, update = update, view = Ui.view})
+
+(* The dungeon master and the monster processes wait in receives for the life of the
+ * program, so the program ends by exiting, not by returning. *)
+in exit (authority, code)
+end

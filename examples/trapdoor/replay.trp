@@ -1,0 +1,70 @@
+(* replay — plays a scripted game without a terminal session and prints the screens.
+ *
+ *   ./local.sh examples/trapdoor/replay.trp -- SEED KEYS
+ *
+ * KEYS is a string of the game's keys (Ui.trp), fed one at a time through the same `Ui.key`
+ * and `Ui.arrived` the terminal session uses, against the same dungeon master. A `|` in KEYS
+ * is not a key: it prints the screen as it stands, as 24 rows of 80 columns of plain text.
+ * The final screen is always printed. A seed and a key string determine the output.
+ *
+ * The channel level is bot here as in the game, so every printed screen passed the same
+ * check: nothing above bot reaches stdout.
+ *)
+
+import List
+import Option
+import String
+import IfcUtil
+import "../proscenium/Key"
+import "./Rng"
+import "./World"
+import "./Ui"
+
+let val lev  = `<dungeon;#root-integrity>`
+    val dm   = attenuate (authority, lev)
+    val weak = attenuate (authority, IfcUtil.null)
+
+    val args = IfcUtil.declassifyDeep (getCliArgs authority, authority, IfcUtil.bot)
+    val _ = blockdeclto (authority, IfcUtil.bot)
+    val (given, keys) = case args of
+                             a :: k :: _ => (Rng.seedOfString a, k)
+                           | _           => (NONE, "")
+    val usage = case given of SOME _ => false | NONE => true
+    val seed = (case given of SOME n => n | NONE => 0) raisedTo lev
+
+    val _ = setStdioLevel (authority, IfcUtil.bot)
+
+    val world = spawn (fn () => World.run (dm, weak, lev, seed))
+
+    fun await m = receive [ hn ("APPMSG", msg) => Ui.arrived (m, msg) ]
+
+    fun show m =
+        let val _ = List.map (fn row => printString row) (Ui.text (m, 80, 24))
+        in printString (String.repeat 80 "=")
+        end
+
+    fun play (m, i) =
+        if i >= String.size keys then m
+        else let val c = String.sub (keys, i)
+             in if c = "|" then let val _ = show m in play (m, i + 1) end
+                else let val (m1, quit, commands) = Ui.key (m, KEY_PRINT c)
+                         val m2 = List.foldl (fn (cmd, m) =>
+                                                  let val _ = send (world, ("CMD", cmd))
+                                                  in await m
+                                                  end)
+                                             m1 commands
+                     in if quit then m2 else play (m2, i + 1)
+                     end
+             end
+
+    val code = if usage
+               then let val _ = print "usage: replay.trp -- SEED KEYS"
+                    in 2
+                    end
+               else let val _ = send (world, ("HELLO", self ()))
+                        val m = play (await (Ui.init (80, 24, false)), 0)
+                        val _ = show m
+                    in 0
+                    end
+in exit (authority, code)
+end

@@ -1,0 +1,28 @@
+import IfcUtil
+import timeout
+let val lev = `<dungeon;#root-integrity>`
+    val _ = setStdioLevel (authority, IfcUtil.bot)
+    val me = self ()
+    val secret = 7 raisedTo lev
+    fun look s = if s > 3 then 1 else 2
+    (* A: a sender whose blocking label rose to the dungeon level; constant payload. *)
+    val _ = spawn (fn () => let val _ = look secret in send (me, ("A", "constant")) end)
+    (* B: a clean sender with a dungeon-level payload. *)
+    val _ = spawn (fn () => send (me, ("B", secret)))
+    val _ = timeout.timeout me ("T", 0) 1000
+    val first = receive [ hn ("A", x) => "A arrived", hn ("T", _) => "A did not arrive within 1 s" ]
+    val _ = print first
+    val b = receive [ hn ("B", x) => x ]
+    val _ = print "B arrived; printing its payload:"
+    val _ = print b
+in () end
+
+(* OBSERVED 2026-10-08 (dev at e33721d9, ./local.sh, default flags)
+ *
+ * "A did not arrive within 1 s"
+ * "B arrived; printing its payload:"
+ * >> write to stdout above the stdio channel level
+ *  | effect level  <dungeon;#root-integrity>
+ *  | pc level      {}
+ *  | channel level {}
+ *)

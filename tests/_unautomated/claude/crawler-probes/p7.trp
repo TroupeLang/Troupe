@@ -1,0 +1,77 @@
+import IfcUtil
+import List
+let val lev = `<dungeon;#root-integrity>`
+    val dm = attenuate (authority, lev)
+    val weak = attenuate (authority, IfcUtil.null)
+    val _ = setStdioLevel (authority, `{}`)
+
+    fun decide (st, p) = if p > 3 then (st + 1, (1, 0)) else (st + 1, (0, 1))
+
+    fun monsterLoop (world, slot, st) =
+        let val (t, p) = rcv ( IfcUtil.bot, lev, [ hn ("TURN", t, p) => (t, p) ])
+            val (st', intent) = decide (st, p)
+            val _ = send (world, ("INTENT", slot, t, intent))
+            val _ = if slot = 0 then debugpc () else ()
+        in monsterLoop (world, slot, st')
+        end
+
+    fun monster (world, slot) =
+        let val (ok, cap) = enableRangedReceive (IfcUtil.bot, lev, weak)
+            val _ = monsterLoop (world, slot, 0)
+        in () end
+
+    fun step (s, replies) =
+        List.foldl (fn ((dx, dy), acc) => if dx > 0 then acc + 10 else acc + 1) s replies
+
+    fun perceive s = (s, ["you see " ^ toString s, "ok"], [(1, 2, "#.#"), (2, 2, "#@#")])
+
+    fun worldLoop (main, pids, s, turn) =
+        let val _ = print "world waiting"
+            val _ = debugMbox ()
+            val cmd = receive [ hn ("CMD", c) => c ]
+            val _ = debugpc ()
+            val k = List.length pids
+            val _ = List.mapi (fn (i, p) => send (p, ("TURN", turn, s + i))) pids
+            val replies = List.map (fn i => rcv ( IfcUtil.bot, lev
+                                                 , [ hn ("INTENT", j, t, it) when j = i andalso t = turn => it ]))
+                                   (List.range k)
+            val s' = step (s, replies)
+            val _ = debugpc ()
+            val view = IfcUtil.declassifyDeep (perceive s', dm, `{}`)
+            val _ = blockdeclto (dm, `{}`)
+            val _ = debugpc ()
+            val _ = send (main, ("VIEW", view))
+        in if cmd = "quit"
+           then []
+           else worldLoop (main, pids, s', turn + 1)
+        end
+
+    fun world main =
+        let val (ok, cap) = enableRangedReceive (IfcUtil.bot, lev, dm)
+            val me = self ()
+            val pids = List.map (fn i => spawn (fn () => monster (me, i))) [0, 1, 2]
+            val s0 = 2 raisedTo lev
+            val _ = worldLoop (main, pids, s0, 0)
+        in () end
+
+    val me = self ()
+    val w = spawn (fn () => world me)
+    fun turn c = let val _ = debugpc () val _ = send (w, ("CMD", c))
+                 in receive [ hn ("VIEW", v) => printWithLabels v ] end
+    val _ = turn "go"
+    val _ = turn "go"
+    val _ = turn "quit"
+in exit (authority, 0) end
+
+(* OBSERVED 2026-10-08 (dev at e33721d9, ./local.sh, default flags)
+ *
+ * The world keeps one receive region [bot, dungeon] open for its whole life. The first turn
+ * completes. The command receive of the second turn raises the blocking label to the region's
+ * ceiling, and the next write is refused with the pc at the dungeon level:
+ *
+ *   Mbox clearance   [{}..<dungeon;#root-integrity>]
+ *   >> write to stdout above the stdio channel level
+ *    | effect level  <dungeon;#root-integrity>
+ *    | pc level      <dungeon;#root-integrity>
+ *    | channel level {}
+ *)

@@ -1,0 +1,53 @@
+(* leak — three ways to put a row of an unseen floor on the terminal, two of which the
+ * runtime refuses.
+ *
+ *   ./local.sh examples/trapdoor/leak.trp -- write      print the row as it is
+ *   ./local.sh examples/trapdoor/leak.trp -- forge      declassify it with an authority for nothing
+ *   ./local.sh examples/trapdoor/leak.trp -- release    declassify it with the dungeon authority
+ *
+ * The set-up is the game's (trapdoor.trp): the terminal's channel level is bot, and the floor
+ * is generated from a state at the dungeon level. `write` and `forge` end in a runtime error
+ * at the marked line, which is the demonstration; `release` prints the row.
+ *)
+
+import List
+import Option
+import IfcUtil
+import "./Rng"
+import "./Dungeon"
+
+let val lev  = `<dungeon;#root-integrity>`
+    val dm   = attenuate (authority, lev)
+    val weak = attenuate (authority, IfcUtil.null)
+
+    val args = IfcUtil.declassifyDeep (getCliArgs authority, authority, IfcUtil.bot)
+    val _ = blockdeclto (authority, IfcUtil.bot)
+    val how = case args of a :: _ => a | [] => ""
+
+    val _ = setStdioLevel (authority, IfcUtil.bot)
+
+    (* The floor is generated after the heading is printed: generating it inspects dungeon-level
+     * data, which raises this thread's blocking label, and from then on even a constant
+     * string is above the terminal. *)
+    fun row9 () = List.nth (Dungeon.generate (Rng.fromSeed (7 raisedTo lev), 1, 1)).rows 9
+
+    fun release (auth, row) =
+        let val public = declassify (row, auth, IfcUtil.bot)
+            val _ = blockdeclto (auth, IfcUtil.bot)
+        in public
+        end
+
+in if how = "write" then
+       let val _ = printString "Row 9 of the floor, written without a release:"
+       in printString (row9 ())                                       (* refused *)
+       end
+   else if how = "forge" then
+       let val _ = printString "Row 9 of the floor, released under an authority for nothing:"
+       in printString (release (weak, row9 ()))                       (* refused *)
+       end
+   else if how = "release" then
+       let val _ = printString "Row 9 of the floor, released under the dungeon authority:"
+       in printString (release (dm, row9 ()))
+       end
+   else printString "usage: leak.trp -- write | forge | release"
+end

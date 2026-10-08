@@ -1,0 +1,334 @@
+(* Ui — the player's side: the model a session keeps, how keys and views change it, and the
+ * image it draws.
+ *
+ * Pure: `key` returns the commands to send instead of sending them, so the same functions
+ * serve the terminal session (trapdoor.trp) and the scripted one (replay.trp). Everything
+ * here is public data. The map the model holds is the player's own record of what the views
+ * have shown, not a copy of the floor: `known` is one string per map row, blank where nothing
+ * has been seen, and `lit` marks the cells in sight this turn.
+ *
+ * KEYS, in play:
+ *
+ *   h j k l y u b n, arrows   move, or attack what stands there
+ *   . s                       wait a turn
+ *   , g                       pick up
+ *   >                         go down a trapdoor
+ *   i                         show the pack
+ *   q r w W d                 drink, read, wield, wear, drop: then the item's letter
+ *   ?                         help
+ *   Q, CTRL-c                 quit
+ *
+ * After the game ends: n starts another, q or Q quits.
+ *
+ * LOOK. Cells in sight are drawn in the terminal's own foreground; remembered cells are
+ * gray. Monsters are bold in one violet accent and items in one amber, each with a variant
+ * for a dark and for a light background; the letter or symbol carries the meaning and the
+ * colour repeats it. The panels are explicit foreground-and-background pairs.
+ *)
+
+import List
+import Option
+import String
+import "../proscenium/Style"
+import "../proscenium/Image"
+import "../proscenium/Key"
+import "./Lore"
+import "./Dungeon"
+
+let fun imin (a, b) = if a < b then a else b
+    fun imax (a, b) = if a > b then a else b
+
+    (* The character that marks a cell of `lit` as out of sight; no map glyph uses it. *)
+    val unlit = "~"
+    val unlitCode = 126
+
+    fun setNth (xs, k, v) = List.mapi (fn (i, x) => if i = k then v else x) xs
+
+    fun blankRows c = List.map (fn _ => String.repeat Lore.mapW c) (List.range Lore.mapH)
+
+    fun applySpans (rows, spans) =
+        List.foldl (fn ((y, x, g), rows) => setNth (rows, y, Dungeon.setSpan (List.nth rows y, x, g)))
+                   rows spans
+
+    (** `msgs` packed whole into lines of at most `w` columns, as exactly two lines: the
+     *  message area. What does not fit in two lines is cut. *)
+    fun messageLines (msgs, w) =
+        let fun go ([], cur, acc) = List.reverse (cur :: acc)
+              | go (m :: rest, cur, acc) =
+                    if cur = "" then go (rest, m, acc)
+                    else if String.size cur + 2 + String.size m <= w then go (rest, cur ^ "  " ^ m, acc)
+                    else go (rest, m, cur :: acc)
+        in case go (msgs, "", []) of
+                a :: b :: _ => [a, b]
+              | a :: _      => [a, ""]
+              | _           => ["", ""]
+        end
+
+    (*---------------------------------  Palette  ---------------------------------*)
+
+    fun palette dark =
+        let val plain = Style.default
+            fun fg n = Style.withFg (Style.IDX n) plain
+            val accent = if dark then Style.RGB (203, 166, 247) else Style.RGB (136, 57, 239)
+            val panel = if dark
+                        then Style.withBg (Style.IDX 237) (Style.withFg (Style.IDX 252) plain)
+                        else Style.withBg (Style.IDX 252) (Style.withFg (Style.IDX 236) plain)
+        in { plain = plain
+           , dim = fg (if dark then 245 else 243)
+           , player = Style.withBold true plain
+           , monster = Style.withBold true (Style.withFg accent plain)
+           , item = fg (if dark then 179 else 94)
+           , stairs = Style.withBold true plain
+           , panel = panel
+           , panelTitle = Style.withBold true panel }
+        end
+
+    (*--------------------------------  Map rows  --------------------------------*)
+
+    (* Rendition classes of a cell in sight. *)
+    fun classOf c =
+        if c = unlitCode then 0
+        else if c = 64 then 1                                           (* @ *)
+        else if (c >= 65 andalso c <= 90) orelse (c >= 97 andalso c <= 122) then 2
+        else if c = 33 orelse c = 63 orelse c = 41 orelse c = 91 orelse c = 36 orelse c = 42 then 3
+        else if c = 62 then 4                                           (* > *)
+        else 5
+
+    (** One map row: remembered cells from `known` in gray, cells in sight from `lit` in
+     *  their class's rendition, as runs. `dark` is a row with nothing in sight. *)
+    fun rowImage (pal, dark, known, lit) =
+        let val w = String.size lit
+            fun seg (k, from, to) =
+                if k = 0 then Image.text pal.dim (String.substring (known, from, to))
+                else Image.text (if k = 1 then pal.player else if k = 2 then pal.monster
+                                 else if k = 3 then pal.item else if k = 4 then pal.stairs
+                                 else pal.plain)
+                                (String.substring (lit, from, to))
+            fun go (x, from, k, acc) =
+                if x >= w then List.reverse (seg (k, from, x) :: acc)
+                else let val k' = classOf (String.subCode (lit, x))
+                     in if k' = k then go (x + 1, from, k, acc)
+                        else go (x + 1, x, k', seg (k, from, x) :: acc)
+                     end
+        in if lit = dark then Image.text pal.dim known
+           else Image.hcat (go (1, 0, classOf (String.subCode (lit, 0)), []))
+        end
+
+    fun mapImages (pal, known, lit) =
+        let val dark = String.repeat Lore.mapW unlit
+            fun go ([], _) = []
+              | go (_, []) = []
+              | go (k :: ks, l :: ls) = rowImage (pal, dark, k, l) :: go (ks, ls)
+        in go (known, lit)
+        end
+
+    (*----------------------------------  Model  ----------------------------------*)
+
+    fun init (cols, rows, dark) =
+        let val pal = palette dark
+            val known = blankRows " "
+            val lit = blankRows unlit
+        in { cols = cols, rows = rows, pal = pal
+           , have = false, refused = ""
+           , status = "play", stats = (1, 0, 0, 0, 0, 0, 0, 1, 0), inv = [], cause = "", serial = 0
+           , pos = (0, 0), known = known, lit = lit, mapRows = mapImages (pal, known, lit)
+           , top = ["", ""], log = []
+           , mode = "play", pickCls = "", pickVerb = "", pickTitle = "" }
+        end
+
+    fun resized (m, cols, rows) = {m with cols = cols, rows = rows}
+
+    (** The model after a message from the dungeon master: a view, or its refusal to start. *)
+    fun arrived (m, msg) =
+        case msg of
+             ("VIEW", (status, stats, pos, seen, memory, msgs, inv, (serial, cause))) =>
+                 let val known0 = if serial = m.serial then m.known else blankRows " "
+                     val known  = applySpans (known0, memory)
+                     val lit    = applySpans (blankRows unlit, seen)
+                 in { m with have = true, status = status, stats = stats, inv = inv
+                    , cause = cause, serial = serial, pos = pos, known = known, lit = lit
+                    , mapRows = mapImages (m.pal, known, lit)
+                    , top = messageLines (msgs, m.cols)
+                    , log = List.take 50 (List.revAppend msgs m.log) }
+                 end
+           | ("REFUSED", reason) => {m with refused = reason}
+           | _ => m
+
+    (*----------------------------------  Keys  ----------------------------------*)
+
+    fun letter i = String.strCode (97 + i)
+
+    fun stepOf k =
+        case k of
+             KEY_PRINT "h" => SOME (0 - 1, 0)     | KEY_LEFT  => SOME (0 - 1, 0)
+           | KEY_PRINT "l" => SOME (1, 0)         | KEY_RIGHT => SOME (1, 0)
+           | KEY_PRINT "k" => SOME (0, 0 - 1)     | KEY_UP    => SOME (0, 0 - 1)
+           | KEY_PRINT "j" => SOME (0, 1)         | KEY_DOWN  => SOME (0, 1)
+           | KEY_PRINT "y" => SOME (0 - 1, 0 - 1)
+           | KEY_PRINT "u" => SOME (1, 0 - 1)
+           | KEY_PRINT "b" => SOME (0 - 1, 1)
+           | KEY_PRINT "n" => SOME (1, 1)
+           | _ => NONE
+
+    (** Open the item menu for a verb, or say there is nothing to apply it to. *)
+    fun choose (m, cls, verb, title, nothing) =
+        if List.exist (fn (c, _, _) => cls = "" orelse c = cls) m.inv
+        then ({m with mode = "pick", pickCls = cls, pickVerb = verb, pickTitle = title}, false, [])
+        else ({m with top = [nothing, ""]}, false, [])
+
+    fun playKey (m, k) =
+        case stepOf k of
+             SOME (dx, dy) => (m, false, [("MOVE", dx, dy)])
+           | NONE =>
+                 (case k of
+                       KEY_PRINT "." => (m, false, [("REST", 0, 0)])
+                     | KEY_PRINT "s" => (m, false, [("REST", 0, 0)])
+                     | KEY_PRINT "," => (m, false, [("PICKUP", 0, 0)])
+                     | KEY_PRINT "g" => (m, false, [("PICKUP", 0, 0)])
+                     | KEY_PRINT ">" => (m, false, [("DESCEND", 0, 0)])
+                     | KEY_PRINT "i" => ({m with mode = "inv"}, false, [])
+                     | KEY_PRINT "?" => ({m with mode = "help"}, false, [])
+                     | KEY_PRINT "q" => choose (m, "!", "USE", "Drink what?", "You have nothing to drink.")
+                     | KEY_PRINT "r" => choose (m, "?", "USE", "Read what?", "You have nothing to read.")
+                     | KEY_PRINT "w" => choose (m, ")", "USE", "Wield what?", "You have no weapon.")
+                     | KEY_PRINT "W" => choose (m, "[", "USE", "Wear what?", "You have no armour.")
+                     | KEY_PRINT "d" => choose (m, "", "DROP", "Drop what?", "You have nothing to drop.")
+                     | KEY_PRINT "Q" => (m, true, [])
+                     | _ => (m, false, []))
+
+    fun pickKey (m, k) =
+        let val back = {m with mode = "play"}
+        in case k of
+                KEY_PRINT c =>
+                    let val i = String.subCode (c, 0) - 97
+                    in if String.size c = 1 andalso i >= 0 andalso i < List.length m.inv
+                       then let val (cls, _, _) = List.nth m.inv i
+                            in if m.pickCls = "" orelse cls = m.pickCls
+                               then (back, false, [(m.pickVerb, i, 0)])
+                               else (back, false, [])
+                            end
+                       else (back, false, [])
+                    end
+              | _ => (back, false, [])
+        end
+
+    (** `(model', quit, commands)` for one key: whether the session ends, and what to send
+     *  the dungeon master. *)
+    fun key (m, k) =
+        case k of
+             KEY_CTRL "c" => (m, true, [])
+           | _ =>
+                 if not m.have then (case k of KEY_PRINT "Q" => (m, true, []) | _ => (m, false, []))
+                 else if m.mode = "pick" then pickKey (m, k)
+                 else if m.mode <> "play" then ({m with mode = "play"}, false, [])
+                 else if m.status <> "play" then
+                     (case k of
+                           KEY_PRINT "n" => (m, false, [("NEW", 0, 0)])
+                         | KEY_PRINT "q" => (m, true, [])
+                         | KEY_PRINT "Q" => (m, true, [])
+                         | _ => (m, false, []))
+                 else playKey (m, k)
+
+    (*----------------------------------  View  ----------------------------------*)
+
+    (** A panel of text lines on the palette's panel pair, one blank cell of margin. *)
+    fun panel (pal, title, lines) =
+        let val w = List.foldl (fn (l, acc) => imax (acc, String.size l)) (String.size title) lines
+            fun row a l = Image.text a (" " ^ String.padRight w " " l ^ " ")
+        in Image.vcat (row pal.panelTitle title :: row pal.panel ""
+                       :: List.append (List.map (row pal.panel) lines) [row pal.panel ""])
+        end
+
+    fun packLines (m, cls) =
+        let val ls = List.mapi (fn (i, (c, name, note)) =>
+                                    if cls = "" orelse c = cls
+                                    then [ letter i ^ " - " ^ c ^ " " ^ name
+                                           ^ (if note = "" then "" else " (" ^ note ^ ")") ]
+                                    else [])
+                               m.inv
+        in List.concat ls
+        end
+
+    val helpLines =
+        [ "h j k l y u b n, arrows   move or attack"
+        , ". s                       wait a turn"
+        , ", g                       pick up"
+        , ">                         go down a trapdoor"
+        , "i                         show the pack"
+        , "q r                       drink a potion, read a scroll"
+        , "w W                       wield a weapon, wear armour"
+        , "d                         drop"
+        , "Q                         quit"
+        , ""
+        , "@ you   > trapdoor   + doorway   # corridor"
+        , "! potion   ? scroll   ) weapon   [ armour   $ gold"
+        , "* the Ghost Light: pick it up to win"
+        , "letters are monsters"
+        ]
+
+    fun statusLine m =
+        let val (depth, hp, maxhp, str, ac, gold, xp, lvl, turn) = m.stats
+        in " Floor " ^ toString depth ^ "   $ " ^ toString gold
+           ^ "   HP " ^ toString hp ^ "(" ^ toString maxhp ^ ")"
+           ^ "   Str " ^ toString str ^ "   AC " ^ toString ac
+           ^ "   Level " ^ toString lvl ^ " (" ^ toString xp ^ " xp)"
+           ^ "   Turn " ^ toString turn
+           ^ (if hp * 4 <= maxhp andalso m.status = "play" then "   badly hurt" else "")
+        end
+
+    fun endLines m =
+        let val (depth, hp, maxhp, str, ac, gold, xp, lvl, turn) = m.stats
+            val tally = [ "Floor " ^ toString depth ^ ", turn " ^ toString turn ^ ", "
+                          ^ toString gold ^ " gold pieces, level " ^ toString lvl ^ "."
+                        , ""
+                        , "n  new game     q  quit" ]
+        in if m.status = "won"
+           then ("You carried the Ghost Light out of the cellars.", tally)
+           else ("You died, killed by " ^ m.cause ^ ".", tally)
+        end
+
+    fun view m =
+        let val pal = m.pal
+            val hint = if m.status = "play" then " ? help   i pack   Q quit" else ""
+            val spare = imax (m.rows - (Lore.mapH + 4), 0)
+            val older = List.map (fn l => Image.text pal.dim (" " ^ l)) (List.take spare m.log)
+            val base = Image.vcat (List.concat
+                                       [ List.map (Image.text pal.plain) m.top
+                                       , m.mapRows
+                                       , [Image.text pal.plain (statusLine m), Image.text pal.dim hint]
+                                       , older ])
+            fun over p = Image.overlay (Image.shift (4, 3) p) base
+        in if m.refused <> "" then Image.text pal.plain ("The game cannot start: " ^ m.refused ^ ". Q quits.")
+           else if not m.have then Image.text pal.dim "The house lights go down..."
+           else if m.mode = "inv" then
+               over (panel (pal, "Your pack", case packLines (m, "") of [] => ["(empty)"] | ls => ls))
+           else if m.mode = "pick" then over (panel (pal, m.pickTitle, packLines (m, m.pickCls)))
+           else if m.mode = "help" then over (panel (pal, "Trapdoor", helpLines))
+           else if m.status <> "play" then
+               let val (title, lines) = endLines m
+               in over (panel (pal, title, lines))
+               end
+           else base
+        end
+
+    (** The view as plain text rows, `cols` by `rows`: what a terminal of that size shows,
+     *  without renditions. *)
+    fun text (m, cols, rows) =
+        let val r = Image.renderAt (view m, cols, rows)
+        in List.map (fn segs =>
+                         List.foldl (fn (sg, acc) =>
+                                         acc ^ (case sg of
+                                                     Image.SEG (_, s) => s
+                                                   | Image.GAP n      => String.repeat n " "))
+                                    "" segs)
+                    r.rows
+        end
+
+in [ ("init", init)
+   , ("resized", resized)
+   , ("arrived", arrived)
+   , ("key", key)
+   , ("view", view)
+   , ("text", text)
+   ]
+end

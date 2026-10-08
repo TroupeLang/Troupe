@@ -1,0 +1,33 @@
+import IfcUtil
+let val lev = `<dungeon;#root-integrity>`
+    val dm = attenuate (authority, lev)
+    val _ = setStdioLevel (authority, `{}`)
+    val secret = "#.#" raisedTo lev
+    fun look s = if s = "#.#" then 1 else 2
+    val r = look secret
+    val _ = debugpc ()
+    val d = declassify (r, dm, `{}`)
+    val _ = blockdeclto (dm, `{}`)
+    val _ = debugpc ()
+    val _ = printWithLabels d
+    val _ = print (guard (fn () => secret, `{}`, "<withheld>"))
+    val weak = attenuate (authority, IfcUtil.null)
+    val d2 = declassify (r, weak, `{}`)
+in () end
+
+(* OBSERVED 2026-10-08 (dev at e33721d9, ./local.sh, default flags)
+ *
+ * A value at the confidentiality-only dungeon level, with the channel level lowered to bot:
+ * the dungeon authority declassifies it and lowers the blocking label; `guard` substitutes its
+ * default (and the runtime prints a warning on stdout); a null-attenuated authority is refused.
+ *
+ *   PC:{}  BL:<dungeon;#root-integrity>
+ *   PC:{}  BL:{}
+ *   1@{}%{}
+ *   Warning: runtime exception in the handler or sandbox: guard violation
+ *   "<withheld>"
+ *   >> Not enough authority for declassification
+ *    | level of the data: <dungeon;#root-integrity>
+ *    | level of the authority: {#NULL}
+ *    | target level of the declassification: {}
+ *)

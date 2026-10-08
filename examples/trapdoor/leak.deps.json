@@ -1,0 +1,7 @@
+{
+  "deps": [
+    {"path": "Dungeon", "hash": "0jv1dlp5ina7fi6h5hgav6nk7r8gtg5vsvbbjfv7ol37h2unr9a0", "name": "Dungeon"},
+    {"path": "Lore", "hash": "20ill4vbkevd1hl1scdk2gogoglkgj6t66vfp14bp6scdqn0ps2g", "name": "Lore"},
+    {"path": "Rng", "hash": "5iuvfe066j55lb69tmedbdsmjb1q3dj9smqdqbcpdcefrnkuqlh0", "name": "Rng"}
+  ]
+}

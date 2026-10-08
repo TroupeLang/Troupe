@@ -1,0 +1,455 @@
+(* Rules — the game as pure functions over one state value.
+ *
+ * Nothing here sends, receives, or downgrades. The dungeon master (World.trp) holds the
+ * state at the dungeon level and calls four functions on it each turn:
+ *
+ *   playerAct   (state, command)  -> state      the player's move
+ *   percepts    state             -> percept list   what each monster slot senses
+ *   monstersAct (state, intents)  -> state      the monsters' moves, in slot order
+ *   perceive    state             -> view       what the player now sees and knows
+ *
+ * A COMMAND is a triple `(verb, a, b)`: ("MOVE", dx, dy), ("REST", 0, 0), ("PICKUP", 0, 0),
+ * ("DESCEND", 0, 0), ("USE", i, 0) and ("DROP", i, 0) with `i` an inventory position, and
+ * ("NEW", 0, 0), which starts a new game. A command that does nothing — a step into a wall,
+ * an empty pickup — takes no turn: `playerAct` leaves `tick` false and `monstersAct` then
+ * ignores the intents. The caller runs the same two calls either way, so whether a turn
+ * passed is not visible in the caller's control flow.
+ *
+ * A PERCEPT is a record {alive, mind, serial, x, y, px, py, sensed, open}: the slot's own
+ * monster, the player's position, whether the monster can sense the player (same room, or
+ * within two cells), and which of the eight neighbouring cells it could step into, in the
+ * order of `dirs`. `serial` counts floors, so a monster process can tell a new floor from
+ * the next turn on the same one. An INTENT is a step `(dx, dy)`; a step onto the player is
+ * an attack.
+ *
+ * A VIEW is built from tuples, lists, strings and integers only — no records — because it is
+ * the one value the dungeon master declassifies, member by member, and `IfcUtil.declassifyDeep`
+ * does not traverse records:
+ *
+ *   ( status                       "play", "dead" or "won"
+ *   , (depth, hp, maxhp, str, ac, gold, xp, level, turn)
+ *   , (px, py)
+ *   , seen                         spans `(y, x, glyphs)` in sight now, everything drawn in
+ *   , memory                       the same spans without monsters: what stays on the map
+ *   , messages                     this turn's, oldest first
+ *   , inventory                    `(class glyph, name, note)` per item, in pack order
+ *   , (serial, cause) )            the floor counter, and what killed the player
+ *
+ * SIGHT follows Rogue: standing in a room or one of its doorways shows the whole room, walls
+ * included; anywhere, the eight neighbouring cells show. A scroll of magic mapping adds every
+ * row of the floor to `memory` for one turn.
+ *)
+
+import List
+import String
+import Option
+import "./Rng"
+import "./Lore"
+import "./Dungeon"
+
+let fun imin (a, b) = if a < b then a else b
+    fun imax (a, b) = if a > b then a else b
+    fun iabs a = if a < 0 then 0 - a else a
+    fun sgn a = if a < 0 then 0 - 1 else if a > 0 then 1 else 0
+    fun cheb (ax, ay, bx, by) = imax (iabs (ax - bx), iabs (ay - by))
+
+    fun setNth (xs, k, v) = List.mapi (fn (i, x) => if i = k then v else x) xs
+
+    val dirs = [ (0 - 1, 0 - 1), (0, 0 - 1), (1, 0 - 1), (0 - 1, 0), (1, 0)
+               , (0 - 1, 1), (0, 1), (1, 1) ]
+
+    val packSize = 20
+
+    (*--------------------------------  Queries  --------------------------------*)
+
+    fun say (s, m) = {s with msgs = m :: s.msgs}
+
+    fun tile (s, x, y) =
+        if x < 0 orelse x >= Lore.mapW orelse y < 0 orelse y >= Lore.mapH then " "
+        else String.sub (List.nth s.rows y, x)
+
+    fun walkable t = t = "." orelse t = "#" orelse t = "+" orelse t = ">"
+
+    (** The slot of the live monster at `(x, y)`, or -1. *)
+    fun monAt (mons, x, y) =
+        let fun go ([], _) = 0 - 1
+              | go (m :: rest, k) =
+                    if m.alive andalso m.x = x andalso m.y = y then k else go (rest, k + 1)
+        in go (mons, 0)
+        end
+
+    (** The index of the room whose walls enclose `(x, y)`, or -1. A doorway counts as its
+     *  room. *)
+    fun roomAt (rooms, x, y) =
+        let fun go ([], _) = 0 - 1
+              | go (r :: rest, k) =
+                    if x >= r.x0 - 1 andalso x <= r.x1 + 1 andalso y >= r.y0 - 1 andalso y <= r.y1 + 1
+                    then k else go (rest, k + 1)
+        in go (rooms, 0)
+        end
+
+    fun itemAt (s, x, y) =
+        List.find (fn (ix, iy, _) => ix = x andalso iy = y) s.items
+
+    fun withoutItemAt (s, x, y) =
+        List.filter (fn (ix, iy, _) => ix <> x orelse iy <> y) s.items
+
+    fun roll (s, lo, hi) =
+        let val (v, r) = Rng.range (s.rng, lo, hi)
+        in (v, {s with rng = r})
+        end
+
+    fun wielded s = List.find (fn it => it.id = s.wield) s.inv
+    fun worn s    = List.find (fn it => it.id = s.wear) s.inv
+
+    fun armourClass s =
+        case worn s of
+             SOME it => (List.nth Lore.armours it.kind).ac + it.ench
+           | NONE    => 0
+
+    fun monName m = (Lore.monster m.kind).name
+
+    (*-------------------------------  New floors  -------------------------------*)
+
+    fun enterFloor (s, depth) =
+        let val f = Dungeon.generate (s.rng, depth, s.nextId)
+            val (x, y) = f.start
+            val pl = s.pl
+        in { s with rng = f.rng, depth = depth, serial = s.serial + 1, rows = f.rows
+           , rooms = f.rooms, items = f.items, mons = f.mons, nextId = f.nextId
+           , pl = {pl with x = x, y = y} }
+        end
+
+    (** A new game from a generator state: which look stands for which potion and scroll is
+     *  drawn here, then the first floor. `serial` is the floor counter to continue from, so
+     *  that the first floor of a second game is not mistaken for the first floor of the first. *)
+    fun newGame (rng0, serial) =
+        let val (potLook, rng1) = Rng.shuffle (rng0, List.range (List.length Lore.potions))
+            val (scrLook, rng2) = Rng.shuffle (rng1, List.range (List.length Lore.scrolls))
+            val s = { rng = rng2, depth = 0, serial = serial, rows = [], rooms = [], items = [], mons = []
+                    , pl = {x = 0, y = 0, hp = 20, maxhp = 20, str = 10, gold = 0, xp = 0, lvl = 1}
+                    , inv = [ {id = 1, cls = ")", kind = 0, ench = 0}
+                            , {id = 2, cls = "[", kind = 0, ench = 0} ]
+                    , wield = 1, wear = 2, nextId = 3
+                    , lore = { potLook = potLook, scrLook = scrLook
+                             , potKnown = List.map (fn _ => false) Lore.potions
+                             , scrKnown = List.map (fn _ => false) Lore.scrolls }
+                    , msgs = [], status = "play", cause = "", turn = 0
+                    , reveal = false, tick = false }
+        in say (enterFloor (s, 1), "You drop through the trapdoor into the cellars. Find the Ghost Light.")
+        end
+
+    (*--------------------------------  Fighting  --------------------------------*)
+
+    fun gainXp (s, n) =
+        let val pl  = s.pl
+            val xp  = pl.xp + n
+            val lvl = 1 + List.length (List.filter (fn t => t <= xp) Lore.levelSteps)
+            val up  = 5 * (lvl - pl.lvl)
+        in if lvl > pl.lvl
+           then say ( {s with pl = {pl with xp = xp, lvl = lvl, maxhp = pl.maxhp + up, hp = pl.hp + up}}
+                    , "You reach experience level " ^ toString lvl ^ "." )
+           else {s with pl = {pl with xp = xp}}
+        end
+
+    fun hurtPlayer (s, n, cause) =
+        let val pl = s.pl
+            val hp = pl.hp - n
+        in if hp <= 0
+           then say ({s with pl = {pl with hp = 0}, status = "dead", cause = cause}, "You die...")
+           else {s with pl = {pl with hp = hp}}
+        end
+
+    fun attack (s0, k) =
+        let val m = List.nth s0.mons k
+            val name = monName m
+            val (toHit, s1) = roll (s0, 1, 100)
+        in if toHit > 85 then say (s1, "You miss the " ^ name ^ ".")
+           else let val (die, ench) =
+                            case wielded s1 of
+                                 SOME it => ((List.nth Lore.weapons it.kind).die, it.ench)
+                               | NONE    => (Lore.fistDie, 0)
+                    val (d, s2) = roll (s1, 1, die)
+                    val hp = m.hp - (d + ench + (s2.pl.str - 10))
+                in if hp <= 0
+                   then gainXp ( say ( {s2 with mons = setNth (s2.mons, k, {m with hp = 0, alive = false})}
+                                     , "You kill the " ^ name ^ "." )
+                               , (Lore.monster m.kind).xp )
+                   else say ( {s2 with mons = setNth (s2.mons, k, {m with hp = hp})}
+                            , "You hit the " ^ name ^ "." )
+                end
+        end
+
+    fun monsterAttack (s0, m) =
+        let val name = monName m
+            val (toHit, s1) = roll (s0, 1, 100)
+            val need = imax (20, 80 - 6 * armourClass s1)
+        in if toHit > need then say (s1, "The " ^ name ^ " misses you.")
+           else let val (d, s2) = roll (s1, 1, (Lore.monster m.kind).dmg)
+                in hurtPlayer (say (s2, "The " ^ name ^ " hits you."), d, "a " ^ name)
+                end
+        end
+
+    (*-----------------------------  Player commands  -----------------------------*)
+
+    fun spend s = {s with tick = true}
+
+    (** What stepping onto a cell does: gold is picked up, anything else is described. *)
+    fun arrive s =
+        case itemAt (s, s.pl.x, s.pl.y) of
+             NONE => s
+           | SOME (_, _, it) =>
+                 if it.cls = "$"
+                 then let val pl = s.pl
+                      in say ( {s with pl = {pl with gold = pl.gold + it.ench}
+                               , items = withoutItemAt (s, pl.x, pl.y)}
+                             , "You pick up " ^ Lore.aName (s.lore, it) ^ "." )
+                      end
+                 else say (s, "You see here " ^ Lore.aName (s.lore, it) ^ ".")
+
+    fun move (s, dx, dy) =
+        let val pl = s.pl
+            val tx = pl.x + sgn dx
+            val ty = pl.y + sgn dy
+            val k  = monAt (s.mons, tx, ty)
+        in if k >= 0 then spend (attack (s, k))
+           else if walkable (tile (s, tx, ty))
+           then arrive (spend {s with pl = {pl with x = tx, y = ty}})
+           else s
+        end
+
+    fun pickup s =
+        case itemAt (s, s.pl.x, s.pl.y) of
+             NONE => say (s, "There is nothing here to pick up.")
+           | SOME (_, _, it) =>
+                 if it.cls = "*"
+                 then say ( {s with status = "won", items = withoutItemAt (s, s.pl.x, s.pl.y)}
+                          , "You lift the Ghost Light from its stand. The house lights come up." )
+                 else if List.length s.inv >= packSize then say (s, "Your pack is full.")
+                 else say ( spend {s with inv = List.append s.inv [it]
+                                   , items = withoutItemAt (s, s.pl.x, s.pl.y)}
+                          , "You now have " ^ Lore.aName (s.lore, it) ^ "." )
+
+    fun descend s =
+        if tile (s, s.pl.x, s.pl.y) = ">"
+        then say (spend (enterFloor (s, s.depth + 1)), "You climb down through the trapdoor.")
+        else say (s, "There is no trapdoor here.")
+
+    fun consume (s, it) = spend {s with inv = List.filter (fn i => i.id <> it.id) s.inv}
+
+    fun quaff (s0, it) =
+        let val lore = s0.lore
+            val s1 = say (consume (s0, it), "You drink the " ^ Lore.itemName (lore, it) ^ ".")
+            val s2 = {s1 with lore = {lore with potKnown = setNth (lore.potKnown, it.kind, true)}}
+            val pl = s2.pl
+        in if it.kind = 0 then
+               let val (n, s3) = roll (s2, 8, 16)
+               in say ({s3 with pl = {pl with hp = imin (pl.maxhp, pl.hp + n)}}, "You feel better.")
+               end
+           else if it.kind = 1 then
+               say ({s2 with pl = {pl with str = pl.str + 1}}, "You feel strong.")
+           else if it.kind = 2 then
+               let val (n, s3) = roll (s2, 3, 6)
+               in hurtPlayer (say (s3, "You feel sick."), n, "a potion of venom")
+               end
+           else say ({s2 with pl = {pl with maxhp = pl.maxhp + 4, hp = pl.hp + 4}}, "You feel hardy.")
+        end
+
+    (** The floor cells of `r` with no live monster on them. *)
+    fun emptyCells (s, r) =
+        List.concat
+            (List.map (fn dy =>
+                           List.mapPartial (fn dx =>
+                                                if monAt (s.mons, r.x0 + dx, r.y0 + dy) < 0
+                                                then SOME (r.x0 + dx, r.y0 + dy) else NONE)
+                                           (List.range (r.x1 - r.x0 + 1)))
+                      (List.range (r.y1 - r.y0 + 1)))
+
+    fun enchant (s, held, what) =
+        case held of
+             NONE => say (s, "Your " ^ what ^ " tingle.")
+           | SOME it =>
+                 say ( {s with inv = List.map (fn i => if i.id = it.id then {i with ench = i.ench + 1} else i)
+                                              s.inv}
+                     , "Your " ^ Lore.itemName (s.lore, it) ^ " glows for a moment." )
+
+    fun read (s0, it) =
+        let val lore = s0.lore
+            val s1 = say (consume (s0, it), "You read the " ^ Lore.itemName (lore, it) ^ ".")
+            val s2 = {s1 with lore = {lore with scrKnown = setNth (lore.scrKnown, it.kind, true)}}
+        in if it.kind = 0 then
+               say ({s2 with reveal = true}, "A plan of the floor forms in your mind.")
+           else if it.kind = 1 then
+               let val (r, rng1) = Rng.pick (s2.rng, s2.rooms)
+                   val s3 = {s2 with rng = rng1}
+               in case emptyCells (s3, r) of
+                       [] => say (s3, "You feel a brief wrench, and stay where you are.")
+                     | cells =>
+                           let val ((x, y), rng2) = Rng.pick (s3.rng, cells)
+                               val pl = s3.pl
+                           in arrive (say ( {s3 with rng = rng2, pl = {pl with x = x, y = y}}
+                                          , "You are somewhere else." ))
+                           end
+               end
+           else if it.kind = 2 then enchant (s2, wielded s2, "hands")
+           else if it.kind = 3 then enchant (s2, worn s2, "shoulders")
+           else let val l = s2.lore
+                    fun known (cls, flags) =
+                        List.mapi (fn (k, f) =>
+                                       f orelse List.exist (fn i => i.cls = cls andalso i.kind = k) s2.inv)
+                                  flags
+                in say ( {s2 with lore = {l with potKnown = known ("!", l.potKnown)
+                                         , scrKnown = known ("?", l.scrKnown)}}
+                       , "You recognise everything in your pack." )
+                end
+        end
+
+    fun useItem (s, i) =
+        if i < 0 orelse i >= List.length s.inv then s
+        else let val it = List.nth s.inv i
+                 val name = Lore.itemName (s.lore, it)
+             in if it.cls = "!" then quaff (s, it)
+                else if it.cls = "?" then read (s, it)
+                else if it.cls = ")" then
+                    (if s.wield = it.id
+                     then say (spend {s with wield = 0}, "You put away the " ^ name ^ ".")
+                     else say (spend {s with wield = it.id}, "You wield the " ^ name ^ "."))
+                else if it.cls = "[" then
+                    (if s.wear = it.id
+                     then say (spend {s with wear = 0}, "You take off the " ^ name ^ ".")
+                     else say (spend {s with wear = it.id}, "You put on the " ^ name ^ "."))
+                else s
+             end
+
+    fun drop (s, i) =
+        if i < 0 orelse i >= List.length s.inv then s
+        else if Option.isSome (itemAt (s, s.pl.x, s.pl.y)) orelse tile (s, s.pl.x, s.pl.y) = ">"
+        then say (s, "There is no room to put anything down here.")
+        else let val it = List.nth s.inv i
+             in say ( spend { s with inv = List.filter (fn j => j.id <> it.id) s.inv
+                            , items = (s.pl.x, s.pl.y, it) :: s.items
+                            , wield = if s.wield = it.id then 0 else s.wield
+                            , wear = if s.wear = it.id then 0 else s.wear }
+                    , "You drop the " ^ Lore.itemName (s.lore, it) ^ "." )
+             end
+
+    fun playerAct (s0, (verb, a, b)) =
+        if verb = "NEW" then newGame (s0.rng, s0.serial)
+        else let val s = {s0 with msgs = [], reveal = false, tick = false}
+             in if s.status <> "play" then s
+                else if verb = "MOVE"    then move (s, a, b)
+                else if verb = "REST"    then spend s
+                else if verb = "PICKUP"  then pickup s
+                else if verb = "DESCEND" then descend s
+                else if verb = "USE"     then useItem (s, a)
+                else if verb = "DROP"    then drop (s, a)
+                else s
+             end
+
+    (*---------------------------------  Monsters  ---------------------------------*)
+
+    fun percepts s =
+        let val pl = s.pl
+            val proom = roomAt (s.rooms, pl.x, pl.y)
+        in List.map (fn m =>
+                         { alive = m.alive, mind = (Lore.monster m.kind).mind, serial = s.serial
+                         , x = m.x, y = m.y, px = pl.x, py = pl.y
+                         , sensed = (proom >= 0 andalso roomAt (s.rooms, m.x, m.y) = proom)
+                                    orelse cheb (m.x, m.y, pl.x, pl.y) <= 2
+                         , open = List.map (fn (dx, dy) =>
+                                                walkable (tile (s, m.x + dx, m.y + dy))
+                                                andalso monAt (s.mons, m.x + dx, m.y + dy) < 0)
+                                           dirs })
+                    s.mons
+        end
+
+    fun actOne (s, k, (dx0, dy0)) =
+        let val m = List.nth s.mons k
+            val dx = sgn dx0
+            val dy = sgn dy0
+            val tx = m.x + dx
+            val ty = m.y + dy
+        in if not m.alive orelse s.status <> "play" orelse (dx = 0 andalso dy = 0) then s
+           else if tx = s.pl.x andalso ty = s.pl.y then monsterAttack (s, m)
+           else if walkable (tile (s, tx, ty)) andalso monAt (s.mons, tx, ty) < 0
+           then {s with mons = setNth (s.mons, k, {m with x = tx, y = ty})}
+           else s
+        end
+
+    (** The end of a turn: the clock, the player's slow recovery, the troll's fast one. *)
+    fun endTurn s =
+        if s.status <> "play" then s
+        else let val pl = s.pl
+                 val turn = s.turn + 1
+                 val hp = if turn mod 8 = 0 then imin (pl.maxhp, pl.hp + 1) else pl.hp
+                 fun mend m = if m.alive andalso m.kind = Lore.troll
+                              then {m with hp = imin ((Lore.monster m.kind).hp, m.hp + 1)}
+                              else m
+             in {s with turn = turn, pl = {pl with hp = hp}, mons = List.map mend s.mons}
+             end
+
+    (** Apply one intent per slot, in slot order; nothing happens unless the player's command
+     *  took a turn. *)
+    fun monstersAct (s, intents) =
+        if not s.tick then s
+        else let fun go (s, [], _) = s
+                   | go (s, i :: rest, k) = go (actOne (s, k, i), rest, k + 1)
+             in endTurn (go (s, intents, 0))
+             end
+
+    (*----------------------------------  Sight  ----------------------------------*)
+
+    (** `glyphs`, the cells of row `y` from column `x0`, with each `(x, y, glyph)` of `things`
+     *  that falls inside drawn over it. *)
+    fun overlay (y, x0, glyphs, things) =
+        List.foldl (fn ((tx, ty, g), acc) =>
+                        if ty = y andalso tx >= x0 andalso tx < x0 + String.size acc
+                        then Dungeon.setSpan (acc, tx - x0, g) else acc)
+                   glyphs things
+
+    fun perceive s =
+        let val pl = s.pl
+            val w = Lore.mapW
+            fun span (y, xa, xb) =
+                let val x0 = imax (xa, 0)
+                in (y, x0, String.substring (List.nth s.rows y, x0, imin (xb, w - 1) + 1))
+                end
+            fun rowsBetween (ya, yb, xa, xb) =
+                List.mapPartial (fn y => if y >= ya andalso y <= yb then SOME (span (y, xa, xb)) else NONE)
+                                (List.range Lore.mapH)
+            val k = roomAt (s.rooms, pl.x, pl.y)
+            val roomSpans = if k < 0 then []
+                            else let val r = List.nth s.rooms k
+                                 in rowsBetween (r.y0 - 1, r.y1 + 1, r.x0 - 1, r.x1 + 1)
+                                 end
+            val spans = List.append roomSpans (rowsBetween (pl.y - 1, pl.y + 1, pl.x - 1, pl.x + 1))
+            val allRows = if s.reveal then List.mapi (fn (y, row) => (y, 0, row)) s.rows else []
+
+            val itemGlyphs = List.map (fn (x, y, it) => (x, y, it.cls)) s.items
+            val monGlyphs  = List.mapPartial (fn m => if m.alive
+                                                      then SOME (m.x, m.y, (Lore.monster m.kind).glyph)
+                                                      else NONE)
+                                             s.mons
+            val actors = List.append monGlyphs [(pl.x, pl.y, "@")]
+            val memory = List.map (fn (y, x0, g) => (y, x0, overlay (y, x0, g, itemGlyphs))) spans
+            val seen   = List.map (fn (y, x0, g) => (y, x0, overlay (y, x0, g, actors))) memory
+
+            fun note it = if it.id = s.wield then "wielded" else if it.id = s.wear then "worn" else ""
+        in ( s.status
+           , (s.depth, pl.hp, pl.maxhp, pl.str, armourClass s, pl.gold, pl.xp, pl.lvl, s.turn)
+           , (pl.x, pl.y)
+           , seen
+           , List.append allRows memory
+           , List.reverse s.msgs
+           , List.map (fn it => (it.cls, Lore.itemName (s.lore, it), note it)) s.inv
+           , (s.serial, s.cause) )
+        end
+
+in [ ("newGame", newGame)
+   , ("playerAct", playerAct)
+   , ("percepts", percepts)
+   , ("monstersAct", monstersAct)
+   , ("perceive", perceive)
+   , ("dirs", dirs)
+   ]
+end

@@ -1,0 +1,259 @@
+(* Dungeon — floor generation: nine rooms on a three-by-three grid, joined by corridors, then
+ * stocked with stairs, items and monsters.
+ *
+ * Pure. `generate` takes a generator state and returns a floor; called with a labelled
+ * state, everything it returns carries that label, which is how a floor comes to be secret
+ * (World.trp).
+ *
+ * THE MAP is `mapH` strings of `mapW` characters, one character per cell:
+ *
+ *   " " rock    "." room floor    "#" corridor    "+" doorway    "-" "|" wall    ">" stairs
+ *
+ * LAYOUT. The map divides into nine sectors of 26 by 7 cells, the last row of the bottom
+ * three cut off by the map's edge. Each sector holds one room whose walls stay inside the
+ * sector's first 23 columns and first 6 rows, so two rooms in neighbouring sectors always
+ * have rock between them for a corridor. A corridor joins two
+ * neighbouring rooms through a doorway in each: it leaves one room, turns once at a random
+ * point in the rock between the two, and enters the other. The corridors form a random
+ * spanning tree of the grid, so every room is reachable, plus each remaining neighbour pair
+ * with probability one in four.
+ *)
+
+import List
+import String
+import Number
+import "./Rng"
+import "./Lore"
+
+let val sectorW = 26
+    val sectorH = 7
+
+    fun imin (a, b) = if a < b then a else b
+    fun imax (a, b) = if a > b then a else b
+
+    (*-------------------------------  Painting  -------------------------------*)
+
+    fun setSpan (row, x, s) =
+        String.substring (row, 0, x) ^ s ^ String.substring (row, x + String.size s, String.size row)
+
+    fun put (rows, x, y, s) =
+        List.mapi (fn (i, row) => if i = y then setSpan (row, x, s) else row) rows
+
+    fun hline (rows, y, xa, xb) =
+        put (rows, imin (xa, xb), y, String.repeat (imax (xa, xb) - imin (xa, xb) + 1) "#")
+
+    fun vline (rows, x, ya, yb) =
+        let val lo = imin (ya, yb)
+            val hi = imax (ya, yb)
+        in List.mapi (fn (i, row) => if i >= lo andalso i <= hi then setSpan (row, x, "#") else row)
+                     rows
+        end
+
+    fun paintRoom (rows, r) =
+        let val w = r.x1 - r.x0 + 1
+            val wall  = String.repeat (w + 2) "-"
+            val floor = "|" ^ String.repeat w "." ^ "|"
+        in List.mapi (fn (i, row) =>
+                          if i = r.y0 - 1 orelse i = r.y1 + 1 then setSpan (row, r.x0 - 1, wall)
+                          else if i >= r.y0 andalso i <= r.y1 then setSpan (row, r.x0 - 1, floor)
+                          else row)
+                     rows
+        end
+
+    (*---------------------------------  Rooms  ---------------------------------*)
+
+    (** The room of sector `(i, j)`, as the inclusive bounds of its floor. *)
+    fun makeRoom (rng, i, j) =
+        let val (w, r1)  = Rng.range (rng, 4, 20)
+            val (h, r2)  = Rng.range (r1, 2, 4)
+            val (ox, r3) = Rng.range (r2, 0, 23 - (w + 2))
+            val (oy, r4) = Rng.range (r3, 0, 6 - (h + 2))
+            val bx = i * sectorW + 1
+            val by = j * sectorH
+        in ({x0 = bx + ox + 1, y0 = by + oy + 1, x1 = bx + ox + w, y1 = by + oy + h}, r4)
+        end
+
+    fun makeRooms rng =
+        let fun go (k, rng, acc) =
+                if k = 9 then (List.reverse acc, rng)
+                else let val (r, rng') = makeRoom (rng, k mod 3, Number.intDiv k 3)
+                     in go (k + 1, rng', r :: acc)
+                     end
+        in go (0, rng, [])
+        end
+
+    (*-------------------------------  Corridors  -------------------------------*)
+
+    val gridEdges = [ (0, 1), (1, 2), (3, 4), (4, 5), (6, 7), (7, 8)
+                    , (0, 3), (3, 6), (1, 4), (4, 7), (2, 5), (5, 8) ]
+
+    (** The edges to dig: a random spanning tree of the grid, plus one in four of the rest. *)
+    fun chooseEdges rng =
+        let val (shuffled, rng1) = Rng.shuffle (rng, gridEdges)
+            fun go ([], comp, rng, acc) = (acc, rng)
+              | go ((a, b) :: rest, comp, rng, acc) =
+                    let val ca = List.nth comp a
+                        val cb = List.nth comp b
+                    in if ca <> cb
+                       then go (rest, List.map (fn c => if c = cb then ca else c) comp, rng,
+                                (a, b) :: acc)
+                       else let val (extra, rng') = Rng.chance (rng, 1, 4)
+                            in go (rest, comp, rng', if extra then (a, b) :: acc else acc)
+                            end
+                    end
+        in go (shuffled, List.range 9, rng1, [])
+        end
+
+    (** Dig the corridor of edge `(a, b)`, `b` being the room to the right of `a` or below
+     *  it, and return the map with the two doorways still to be painted. *)
+    fun dig (rows, rooms, (a, b), rng) =
+        let val ra = List.nth rooms a
+            val rb = List.nth rooms b
+        in if b = a + 1
+           then let val wa = ra.x1 + 1
+                    val wb = rb.x0 - 1
+                    val (ya, r1) = Rng.range (rng, ra.y0, ra.y1)
+                    val (yb, r2) = Rng.range (r1, rb.y0, rb.y1)
+                    val (xm, r3) = Rng.range (r2, wa + 1, wb - 1)
+                    val rows1 = hline (rows, ya, wa + 1, xm)
+                    val rows2 = vline (rows1, xm, ya, yb)
+                    val rows3 = hline (rows2, yb, xm, wb - 1)
+                in (rows3, [(wa, ya), (wb, yb)], r3)
+                end
+           else let val wa = ra.y1 + 1
+                    val wb = rb.y0 - 1
+                    val (xa, r1) = Rng.range (rng, ra.x0, ra.x1)
+                    val (xb, r2) = Rng.range (r1, rb.x0, rb.x1)
+                    val (ym, r3) = Rng.range (r2, wa + 1, wb - 1)
+                    val rows1 = vline (rows, xa, wa + 1, ym)
+                    val rows2 = hline (rows1, ym, xa, xb)
+                    val rows3 = vline (rows2, xb, ym, wb - 1)
+                in (rows3, [(xa, wa), (xb, wb)], r3)
+                end
+        end
+
+    (*--------------------------------  Stocking  --------------------------------*)
+
+    (** A floor cell of room `r` that is not in `taken`. A room has at least eight floor
+     *  cells; `generate` deals things to rooms in rotation, at most five to a room, so the
+     *  draw terminates. *)
+    fun freeCell (rng, r, taken) =
+        let val (x, r1) = Rng.range (rng, r.x0, r.x1)
+            val (y, r2) = Rng.range (r1, r.y0, r.y1)
+        in if List.elem (x, y) taken then freeCell (r2, r, taken) else ((x, y), r2)
+        end
+
+    fun makeItem (rng, depth, id) =
+        let val (roll, r1) = Rng.below (rng, 100)
+        in if roll < 35 then
+               let val (k, r2) = Rng.below (r1, List.length Lore.potions)
+               in ({id = id, cls = "!", kind = k, ench = 0}, r2)
+               end
+           else if roll < 60 then
+               let val (k, r2) = Rng.below (r1, List.length Lore.scrolls)
+               in ({id = id, cls = "?", kind = k, ench = 0}, r2)
+               end
+           else if roll < 70 then
+               let val (k, r2) = Rng.range (r1, 0, imin (depth, List.length Lore.weapons - 1))
+                   val (e, r3) = Rng.range (r2, 0, 1)
+               in ({id = id, cls = ")", kind = k, ench = e}, r3)
+               end
+           else if roll < 80 then
+               let val (k, r2) = Rng.range (r1, 0, imin (depth, List.length Lore.armours - 1))
+                   val (e, r3) = Rng.range (r2, 0, 1)
+               in ({id = id, cls = "[", kind = k, ench = e}, r3)
+               end
+           else
+               let val (n, r2) = Rng.range (r1, 5, 15 + 10 * depth)
+               in ({id = id, cls = "$", kind = 0, ench = n}, r2)
+               end
+        end
+
+    (** A monster kind for `depth`: any kind that has appeared by this floor and is at most
+     *  three floors old, the dragon excepted. *)
+    fun pickKind (rng, depth) =
+        let val ks = List.filter (fn k => let val m = Lore.monster k
+                                          in m.depth <= depth andalso m.depth >= depth - 3
+                                             andalso k <> Lore.dragon
+                                          end)
+                                 (List.range (List.length Lore.monsters))
+        in Rng.pick (rng, ks)
+        end
+
+    val noMonster = {kind = 0, x = 0, y = 0, hp = 0, alive = false}
+
+    fun liveMonster (k, (x, y)) = {kind = k, x = x, y = y, hp = (Lore.monster k).hp, alive = true}
+
+    (** A floor for `depth`. `nextId` is the first free item identifier. The result is
+     *  {rows, rooms, start, stairs, items, mons, nextId, rng}: `start` is where the player
+     *  arrives, `stairs` is `(0 - 1, 0 - 1)` on the last floor, `items` is a list of
+     *  `(x, y, item)`, and `mons` has exactly `Lore.slots` entries. On the last floor the
+     *  Ghost Light lies in a room other than the arrival room, with the dragon beside it. *)
+    fun generate (rng0, depth, nextId0) =
+        let val last = depth >= Lore.lastDepth
+            val (rooms, rng1) = makeRooms rng0
+            val blank = List.map (fn _ => String.repeat Lore.mapW " ") (List.range Lore.mapH)
+            val rows1 = List.foldl (fn (r, rows) => paintRoom (rows, r)) blank rooms
+            val (edges, rng2) = chooseEdges rng1
+            val (rows2, doors, rng3) =
+                    List.foldl (fn (e, (rows, ds, rng)) =>
+                                    let val (rows', ds', rng') = dig (rows, rooms, e, rng)
+                                    in (rows', List.append ds' ds, rng')
+                                    end)
+                               (rows1, [], rng2) edges
+            val rows3 = List.foldl (fn ((x, y), rows) => put (rows, x, y, "+")) rows2 doors
+
+            val (order, rng4) = Rng.shuffle (rng3, List.range 9)
+            val startRoom = List.nth rooms (List.nth order 0)
+            val goalRoom  = List.nth rooms (List.nth order 1)
+            val (start, rng5) = freeCell (rng4, startRoom, [])
+            val (goal, rng6)  = freeCell (rng5, goalRoom, [])
+            val (gx, gy) = goal
+            val rows4 = if last then rows3 else put (rows3, gx, gy, ">")
+
+            (* Items: a few per floor, one room after another in the shuffled order. *)
+            val (nItems, rng7) = Rng.range (rng6, 4, 7)
+            fun stock (k, rng, id, taken, acc) =
+                if k = 0 then (acc, id, taken, rng)
+                else let val room = List.nth rooms (List.nth order (k mod 9))
+                         val (pos, r1) = freeCell (rng, room, taken)
+                         val (x, y) = pos
+                         val (it, r2) = makeItem (r1, depth, id)
+                     in stock (k - 1, r2, id + 1, pos :: taken, (x, y, it) :: acc)
+                     end
+            val (items1, id1, taken1, rng8) = stock (nItems, rng7, nextId0, [start, goal], [])
+            val (items2, id2) =
+                    if last
+                    then ( (gx, gy, {id = id1, cls = "*", kind = 0, ench = 0}) :: items1
+                         , id1 + 1 )
+                    else (items1, id1)
+
+            (* Monsters: more of them further down, dealt in rotation to every room but the
+             * arrival room. *)
+            val (nExtra, rng9) = Rng.range (rng8, 0, 2)
+            val nMons = imin (Lore.slots - 1, 3 + depth + nExtra)
+            val awayRooms = List.filteri (fn (i, _) => i > 0) order
+            fun populate (k, rng, taken, acc) =
+                if k = 0 then (acc, taken, rng)
+                else let val room = List.nth rooms (List.nth awayRooms (k mod 8))
+                         val (pos, r1)  = freeCell (rng, room, taken)
+                         val (kind, r2) = pickKind (r1, depth)
+                     in populate (k - 1, r2, pos :: taken, liveMonster (kind, pos) :: acc)
+                     end
+            val (mons1, taken2, rng10) = populate (nMons, rng9, taken1, [])
+            val (mons2, rng11) =
+                    if last
+                    then let val (pos, r1) = freeCell (rng10, goalRoom, taken2)
+                         in (liveMonster (Lore.dragon, pos) :: mons1, r1)
+                         end
+                    else (mons1, rng10)
+            val padding = List.map (fn _ => noMonster)
+                                   (List.range (Lore.slots - List.length mons2))
+        in { rows = rows4, rooms = rooms, start = start, stairs = if last then (0 - 1, 0 - 1) else goal
+           , items = items2, mons = List.append mons2 padding, nextId = id2, rng = rng11 }
+        end
+
+in [ ("generate", generate)
+   , ("setSpan", setSpan)
+   ]
+end

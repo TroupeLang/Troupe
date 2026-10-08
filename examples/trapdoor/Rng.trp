@@ -1,0 +1,74 @@
+(* Rng — a deterministic pseudo-random generator threaded as a value.
+ *
+ * The Lehmer generator with multiplier 48271 and modulus 2^31 - 1; every product stays below
+ * 2^47, inside the range where Troupe's numbers are exact integers. A state is an integer in
+ * 1 .. 2^31 - 2. Each drawing function returns the drawn value and the next state.
+ *)
+
+import List
+import Option
+import String
+
+let val modulus = 2147483647
+
+    fun next s = (s * 48271) mod modulus
+
+    (** A state from any non-negative integer. *)
+    fun fromSeed n = next (next ((n mod (modulus - 1)) + 1))
+
+    (** The seed written in `s`: one to nine decimal digits, or NONE. *)
+    fun seedOfString s =
+        let val n = String.size s
+            fun go (i, acc) =
+                if i >= n then SOME acc
+                else let val c = String.subCode (s, i)
+                     in if c >= 48 andalso c <= 57 then go (i + 1, acc * 10 + (c - 48)) else NONE
+                     end
+        in if n < 1 orelse n > 9 then NONE else go (0, 0)
+        end
+
+    (** An integer in 0 .. n-1. *)
+    fun below (s, n) =
+        let val s' = next s
+        in (s' mod n, s')
+        end
+
+    (** An integer in lo .. hi, both inclusive. *)
+    fun range (s, lo, hi) =
+        let val (v, s') = below (s, hi - lo + 1)
+        in (lo + v, s')
+        end
+
+    (** True `num` times out of `den`. *)
+    fun chance (s, num, den) =
+        let val (v, s') = below (s, den)
+        in (v < num, s')
+        end
+
+    (** One element of a non-empty list. *)
+    fun pick (s, xs) =
+        let val (i, s') = below (s, List.length xs)
+        in (List.nth xs i, s')
+        end
+
+    (** The elements of `xs` in a random order. *)
+    fun shuffle (s, xs) =
+        let fun removeAt (ys, i) = List.filteri (fn (j, _) => j <> i) ys
+            fun go (s, [], acc) = (acc, s)
+              | go (s, ys, acc) =
+                    let val (i, s') = below (s, List.length ys)
+                    in go (s', removeAt (ys, i), List.nth ys i :: acc)
+                    end
+        in go (s, xs, [])
+        end
+
+in [ ("fromSeed", fromSeed)
+   , ("seedOfString", seedOfString)
+   , ("next", next)
+   , ("below", below)
+   , ("range", range)
+   , ("chance", chance)
+   , ("pick", pick)
+   , ("shuffle", shuffle)
+   ]
+end

@@ -321,12 +321,12 @@ simplifySimpleTerm t =
       -- Basics.Eq | (isLit u && isLit v) ->
                     -- _ret $ lit $ C.LBool (litVal u == litVal v) -- slightly more general case
       Basics.Eq | u == v  && (u /= Unknown) -> _ret $ __trueLit
-      Basics.Eq | (isLit u && isLit v) -> _ret $ lit $ C.LBool (C.litEq (litVal u) (litVal v))
+      Basics.Eq | (isLit u && isLit v), Just b <- C.litEq (litVal u) (litVal v) -> _ret $ lit $ C.LBool b
       Basics.Eq | isRecordTerm u -> do
             e <- recordEquiv oper1 oper2
             if e then _ret $ __trueLit
                  else _nochange
-      Basics.Neq | isLit u && isLit v -> _ret $ lit $ C.LBool (C.litNeq (litVal u) (litVal v))
+      Basics.Neq | isLit u && isLit v, Just b <- C.litNeq (litVal u) (litVal v) -> _ret $ lit $ C.LBool b
 
       _ -> case (u, v) of
               (St (ValSimpleTerm (Lit (C.LNumeric (NumInt n1)))),

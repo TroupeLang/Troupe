@@ -1,0 +1,8 @@
+(* A literal with an escape that the compiler does not interpret is compared when the
+ * program runs. *)
+let val _ = print ("\u{41}" = "A")
+    val _ = print ("\u{41}" <> "A")
+    val _ = print ("\q" = "q")
+    val _ = print ("\u{41}" = "B")
+    val _ = print (case "\u{41}" of "A" => "matched" | _ => "missed")
+in () end

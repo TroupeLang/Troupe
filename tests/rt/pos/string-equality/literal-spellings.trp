@@ -1,0 +1,12 @@
+(* Two string literals that spell the same string differently are equal, in a comparison
+ * and in a pattern. *)
+let val _ = print ("\x41" = "A")
+    val _ = print ("\x41" <> "A")
+    val _ = print ("\"" = "\x22")
+    val _ = print ("\n" = "\x0a")
+    val _ = print ("Ab" = "A\x62")
+    val _ = print ("\x41" = "B")
+    val _ = print ("\x41" <> "B")
+    val _ = print (case "\x41" of "A" => "matched" | _ => "missed")
+    val _ = print (case "A" of "\x42" => "matched" | _ => "missed")
+in () end

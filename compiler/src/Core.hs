@@ -43,6 +43,7 @@ import           ShowIndent
 
 import           TroupePositionInfo (Located(..), getLoc, PosInf(..))
 import           PrettyPrint (PP, runPP, runPPDefault, ppLocated, ShowDebug(..))
+import           Util.StringUtil (decodeStringLiteral)
 import           DCLabels (DCLabelExp, ppDCLabelExpLit, dcLabelEq, v1LabelEq, v1LabelToDCLabelExp)
 
 --------------------------------------------------
@@ -120,25 +121,28 @@ instance Ord Lit where
 -- Note: Lit no longer has embedded position info. Position comes from the
 -- Located wrapper around terms containing literals.
 
--- | Semantic equality for literals, handling label normalization
--- This is used for compile-time constant folding to ensure that
--- semantically equivalent labels (e.g., `{alice, bob}` and `{bob, alice}`)
--- are treated as equal.
-litEq :: Lit -> Lit -> Bool
-litEq (LNumeric n1) (LNumeric n2) = n1 == n2
-litEq (LString s) (LString s') = s == s'
-litEq (LLabel l) (LLabel l') = v1LabelEq l l'
-litEq LUnit LUnit = True
-litEq (LBool x) (LBool y) = x == y
-litEq (LDCLabel dc) (LDCLabel dc') = dcLabelEq dc dc'
+-- | Semantic equality for literals, for compile-time constant folding.
+-- Labels are compared after normalization (`{alice, bob}` equals `{bob, alice}`),
+-- and strings by the characters their texts denote (`"\x41"` equals `"A"`).
+-- 'Nothing' means the answer is not known at compile time: a string text has
+-- an escape that 'decodeStringLiteral' does not interpret.
+litEq :: Lit -> Lit -> Maybe Bool
+litEq (LNumeric n1) (LNumeric n2) = Just (n1 == n2)
+litEq (LString s) (LString s')
+  | s == s'   = Just True
+  | otherwise = (==) <$> decodeStringLiteral s <*> decodeStringLiteral s'
+litEq (LLabel l) (LLabel l') = Just (v1LabelEq l l')
+litEq LUnit LUnit = Just True
+litEq (LBool x) (LBool y) = Just (x == y)
+litEq (LDCLabel dc) (LDCLabel dc') = Just (dcLabelEq dc dc')
 -- Cross-syntax comparison: V1 labels vs DC labels
-litEq (LLabel l) (LDCLabel dc) = dcLabelEq (v1LabelToDCLabelExp l) dc
-litEq (LDCLabel dc) (LLabel l) = dcLabelEq dc (v1LabelToDCLabelExp l)
-litEq _ _ = False
+litEq (LLabel l) (LDCLabel dc) = Just (dcLabelEq (v1LabelToDCLabelExp l) dc)
+litEq (LDCLabel dc) (LLabel l) = Just (dcLabelEq dc (v1LabelToDCLabelExp l))
+litEq _ _ = Just False
 
 -- | Semantic inequality for literals
-litNeq :: Lit -> Lit -> Bool
-litNeq x y = not (litEq x y)
+litNeq :: Lit -> Lit -> Maybe Bool
+litNeq x y = not <$> litEq x y
 
 data VarAccess
     -- | A normal variable

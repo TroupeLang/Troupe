@@ -1,12 +1,17 @@
-(* Labelled data.
+(* Labeled values and the standard output.
 
-   Every value carries a label saying who may learn it. `raisedTo` makes a
-   value secret to alice; a computation on it keeps the label, so
-   `secret + public` is alice's too. `printWithLabels` shows a value with
-   its label: `{}` is public. The terminal is a public channel, on which
-   alice's secrets may not appear, so the last line, printing the sum, is
-   refused by the information-flow check. The error report says which
-   level was asked to flow where. *)
+   Every value in Troupe is labeled with a security level. A labeled
+   value is created using the `raisedTo` primitive: `42 raisedTo
+   `{alice}`` is the number 42 at level `{alice}`. The runtime propagates
+   labels throughout the computation, e.g., `secret + public` is labeled
+   `{alice}` as well. The function `printWithLabels` prints a value
+   together with its label; the empty set `{}` is the lowest level. The
+   standard output is a channel with a security level, `{}` in this demo
+   unless changed next to the terminal, and writing to it is permitted
+   only if the label of the value is at most the level of the channel.
+   The last line attempts to print the sum, which results in an
+   information flow violation; the error report shows the level of the
+   value, the pc label, and the level of the channel. *)
 let val public = 1
     val secret = 42 raisedTo `{alice}`
 in printWithLabels public;

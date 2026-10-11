@@ -1,9 +1,14 @@
-(* Processes: spawn, send, receive.
+(* Spawning processes, sending and receiving messages.
 
-   `spawn` starts a process running a function; `self ()` is a process's
-   own id. Processes share nothing and talk by messages: `send (pid, msg)`
-   delivers, `receive [hn pattern => ...]` waits for a message matching a
-   pattern. This server answers requests until told to stop. *)
+   New processes are created using the `spawn` function that takes as its
+   argument a unit-argument function, and returns the process identifier
+   of the new process. The expression `self ()` returns the identifier of
+   the current process. Process communication happens via message
+   passing: `send (p, v)` places the value `v` in the mailbox of process
+   `p`, and `receive` takes a list of handlers of the form `hn pat => e`
+   and selects the first message in the mailbox that matches one of the
+   patterns. The server below answers requests until it receives the
+   message "stop". *)
 let fun server () =
       receive [ hn ("ping", from, n) =>
                   (send (from, ("pong", n * 2)); server ())

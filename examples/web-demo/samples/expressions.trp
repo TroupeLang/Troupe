@@ -1,9 +1,11 @@
-(* An interpreter for arithmetic expressions.
+(* Example: an interpreter for arithmetic expressions.
 
-   An expression is a datatype: a number, a variable, or an operation on
-   two expressions. `eval` walks it with an environment, `show` prints it
-   back as text, and `simplify` rewrites `x + 0` and `x * 1` away by
-   matching nested patterns such as `ADD (e, NUM 0)`. *)
+   The datatype `expr` represents an expression as a number, a variable,
+   or an operation on two expressions. The function `eval` evaluates an
+   expression in an environment, i.e., an association list from variable
+   names to numbers; `show` renders an expression as text; and `simplify`
+   eliminates additions of 0 and multiplications by 1, matching nested
+   patterns such as `ADD (e, NUM 0)`. *)
 import List
 datatype expr = NUM of int | VAR of string
               | ADD of expr * expr | MUL of expr * expr

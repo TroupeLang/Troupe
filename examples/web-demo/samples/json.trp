@@ -1,10 +1,11 @@
-(* JSON, in and out.
+(* The library `Json`.
 
-   The Json library parses text into ordinary Troupe values: an object is
-   a record, an array is a list, null is `()`. `Json.parse` returns an
-   Outcome, `OK value` or `ERR {reason, offset}`, so a malformed document
-   is a value to match on, not a crash. Accessors such as `Json.field`
-   return an Option. `stringify` and `prettyPrint` go the other way. *)
+   The function `Json.parse` converts text to Troupe values: an object
+   becomes a record, an array a list, and `null` the unit value. The
+   result is an outcome, `OK value` or `ERR {reason, offset}`, i.e., a
+   malformed document is reported as a value rather than a runtime
+   error. Accessors such as `Json.field` return an option. The functions
+   `Json.stringify` and `Json.prettyPrint` convert values to text. *)
 import Json
 import Outcome
 import Option

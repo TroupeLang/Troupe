@@ -1,10 +1,10 @@
-(* Maps and sets.
+(* The libraries `Map` and `Set`.
 
-   `Map` and `Set` are search trees over any key type; they take the
-   ordering as a function, here `<` on strings. The
-   program counts how often each word occurs in a text, prints the
-   counts in key order, and uses a set to find the distinct words of a
-   second text that the first one lacks. *)
+   Maps and sets are balanced search trees over keys of any type; the
+   ordering on keys is passed as a function, here `<` on strings. The
+   program counts the occurrences of each word in a text, prints the
+   counts in key order, and uses a set to find the words of a second text
+   that do not occur in the first one. *)
 import Map
 import Set
 import String

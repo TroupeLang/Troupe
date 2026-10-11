@@ -1,12 +1,12 @@
-(* A server that updates its own code.
+(* Example: updateable service.
 
-   Functions are values and can be sent in messages. The server's loop
-   is a function; on ("UPDATE", f) it hands its state to the new
-   function `f` and runs that instead. Version two understands one
-   more request, ("COMPUTE", from, f, x), which applies a function sent
-   by the client. The counter survives the upgrade. From the user guide.
-   The server's farewell is printed by the server process, so it may
-   come after the main thread's own last line. *)
+   Functions are values, and can be sent in messages. The loop of the
+   service is a function; on a message `("UPDATE", f)` it calls the new
+   function `f` with its current state. The second version handles one
+   more request, `("COMPUTE", from, f, x)`, which applies a function sent
+   by the client. Observe that the counter is preserved across the
+   update. The service prints its last line from its own process, which
+   may run after the main thread has finished. *)
 let fun v1 n =
       receive [ hn ("REQUEST", from) => (send (from, n); v1 (n + 1))
               , hn ("UPDATE", newVersion) => newVersion n

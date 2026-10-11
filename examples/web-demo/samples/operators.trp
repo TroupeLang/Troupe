@@ -1,12 +1,13 @@
 (* User-defined operators.
 
-   An operator is an ordinary curried function with a symbolic name. A
-   fixity line in the file header gives it a precedence level, 0 to 9,
-   and an associativity: `infixl`, `infixr`, or `infix` for none. Level
-   6 is where `+` and `-` live, 7 is `*` and `/`. In parentheses an
-   operator is a plain function value, so it can be partially applied.
-   `|>` is the pipeline operator: `x |> f` is `f x`. Fixity lines come
-   after the imports and before the program. *)
+   An operator is a curried function with a symbolic name. Its fixity is
+   declared using `infixl`, `infixr`, or `infix`, followed by a precedence
+   level from 0 to 9, e.g., `+` and `-` are at level 6, and `*` and `/`
+   at level 7. An operator in parentheses is an ordinary function value,
+   so partial application is supported. The operator `|>` below is
+   function application with the arguments reversed, i.e., `x |> f` is
+   `f x`. Note that fixity declarations are placed after the imports and
+   before the program. *)
 import List
 infixl 6 <+>
 infixr 5 ++

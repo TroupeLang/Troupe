@@ -1,10 +1,12 @@
-(* A closure persisted and restored.
+(* Persistence.
 
-   `save` serializes a value under a name, and `restore` brings it back.
-   A function is a value too: it is serialized as the compiler's
-   intermediate representation and, on restore, compiled again by this
-   node's own compiler, the one running in this page. Saving needs
-   authority; the value lives in the browser's own storage. *)
+   The primitive `save (authority, name, v)` serializes the value `v`
+   under the given name, and `restore name` deserializes it. A function
+   value is serialized as the intermediate representation produced by
+   the compiler, and is compiled again on restore by the compiler of the
+   node. Saving requires the top-level authority. In this demo, the saved
+   values are kept in the storage of the browser, and the compiler of the
+   node runs in the page. *)
 let val k = 21
     fun f x = x * 2 + k
     val _ = save (authority, "demo", f)

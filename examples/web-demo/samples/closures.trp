@@ -1,10 +1,11 @@
-(* Closures and currying.
+(* Closures and partial application.
 
-   A function remembers the variables in scope where it was made. `adder`
-   takes `n` and returns a function that still sees `n`, so `add5` and
-   `add10` are two closures over different values. Every function of
-   several arguments is curried: `scale 3` is a function waiting for its
-   second argument, and `compose` builds a function out of two. *)
+   A function value captures the variables that are in scope at the point
+   of its creation. The function `adder` returns a function in which `n`
+   remains bound, e.g., `add5` and `add10` are closures over different
+   values of `n`. Curried function declarations and partial application
+   are supported: `scale 3` is a function that expects the second
+   argument, and `compose` builds a function out of two functions. *)
 import List
 let fun adder n = fn x => x + n
     val add5 = adder 5

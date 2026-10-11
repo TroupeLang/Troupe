@@ -1,9 +1,12 @@
-(* Functions and recursion.
+(* Function declarations.
 
-   `fun` defines a function; there are no loops, so repetition is recursion.
-   `print` shows any value, so numbers come out as numbers; `^` joins
-   strings and `toString` turns a number into one. Functions are values:
-   `twice` takes a function and applies it two times. *)
+   Functions are declared using `let fun` syntax, and recursive functions
+   are written as in SML. Note that Troupe has no loop constructs;
+   iteration is expressed via recursion. The function `print` writes a
+   value of any type to the standard output, `toString` converts a number
+   to a string, and `^` is string concatenation. Functions are first
+   class, e.g., `twice` takes a function as its argument and applies it
+   twice. *)
 let fun square x = x * x
     fun sumTo n = if n <= 0 then 0 else n + sumTo (n - 1)
     fun fib n = if n < 2 then n else fib (n - 1) + fib (n - 2)

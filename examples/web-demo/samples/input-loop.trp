@@ -1,7 +1,8 @@
-(* A loop over typed lines.
+(* Reading lines until an empty line.
 
-   Type numbers, one per line; an empty line ends the input.
-   `stringToInt` parses a line; the recursion carries the running sum. *)
+   The function `loop` reads a line, converts it to a number using
+   `stringToInt`, and adds it to the running sum carried in its argument.
+   An empty line ends the input. *)
 let fun loop sum =
       let val line = inputLine ()
       in if line = "" then sum

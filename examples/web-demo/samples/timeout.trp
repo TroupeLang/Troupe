@@ -1,12 +1,13 @@
-(* A receive with a timeout.
+(* Example: receive with a timeout.
 
-   A `receive` waits until a message matches one of its handlers; there
-   is no clock in it. The idiom from the user guide: spawn a process
-   that sleeps and then sends a fresh token (`mkuuid ()`), and give the
-   receive a handler whose guard `when s = token` fires on that token.
-   The first request is answered in 100 ms and arrives in time; the
-   second server takes three seconds, and the timeout wins; its late
-   answer goes to a mailbox nobody reads. *)
+   A `receive` statement waits until a message matches one of its
+   handlers; it has no time limit of its own. The program implements a
+   timeout as follows: a spawned process sleeps and then sends a unique
+   string created by `mkuuid ()`, and the receive has a handler whose
+   guard `when s = token` selects that string. The first server answers
+   within 100 ms, and the answer arrives in time. The second server takes
+   three seconds, and the timeout handler is selected first; its late
+   answer stays in the mailbox. *)
 let fun slowServer delay =
       receive [ hn ("ask", from) => (sleep delay; send (from, "answer")) ]
     fun askWithTimeout server ms =

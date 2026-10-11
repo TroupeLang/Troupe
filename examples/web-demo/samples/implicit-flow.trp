@@ -1,10 +1,13 @@
 (* Implicit flows.
 
-   A secret leaks through control flow too: branching on alice's secret
-   raises the current level ("pc") to alice's, and whatever the branches
-   do is now alice's business. The first print is fine. The second is in
-   a branch on the secret, so printing even a public string would reveal
-   the branch taken; the check refuses it. *)
+   Conditionals propagate flows as well: a branch on a labeled guard
+   raises the pc label of the process to the label of the guard, and
+   every effect in the branch is at that level, since the choice of
+   branch depends on the guard. The first `printString` runs with the pc
+   label `{}`. The second runs inside a branch on alice's secret, and
+   writing a public string to the standard output results in an
+   information flow violation, because the output reveals which branch
+   was chosen. *)
 let val secret = true raisedTo `{alice}`
 in printString "before the branch";
    if secret then printString "the secret is true"

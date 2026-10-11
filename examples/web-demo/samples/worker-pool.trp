@@ -1,15 +1,15 @@
-(* A pool of worker processes.
+(* Example: a pool of worker processes.
 
-   The main process spawns three workers, hands each number in turn to
-   the next worker, and collects the answers. Each answer carries the
-   worker's number, so the output shows which worker did what; the
-   order of the answers is the order the workers finish in, and a
-   worker's `sleep` makes that vary. `receive` takes the answers one by
-   one, whichever comes first. *)
+   The main process spawns three workers, sends each job to the next
+   worker in turn, and collects the results. Each result carries the
+   identifier of the worker that produced it. Observe that the results
+   arrive in the order in which the workers finish, and the `sleep` in
+   each worker makes that order depend on the job. The function
+   `collect` receives the results one at a time. *)
 import List
 let fun worker id =
       receive [ hn ("job", n, from) =>
-                  ( sleep (n * 7)                     (* pretend to work *)
+                  ( sleep (n * 7)          (* the work takes time proportional to n *)
                   ; send (from, ("result", id, n, n * n))
                   ; worker id )
               , hn "stop" => () ]

@@ -1,9 +1,11 @@
-(* Strings and the String library.
+(* Strings and the library `String`.
 
-   `^` joins strings, `strlen` measures them, `substring (s, i, j)` cuts
-   out positions i to j. The String library adds splitting, trimming,
-   padding and searching. The program takes a line of comma-separated
-   fields, cleans each one, and prints them as an aligned table. *)
+   String concatenation is `^`, `strlen` returns the length of a string,
+   and `substring (s, i, j)` returns the characters at positions i to j.
+   The library `String` provides splitting, trimming, padding, and
+   searching. The program splits a line of fields separated by commas and
+   semicolons, trims each field, and prints the rows as an aligned
+   table. *)
 import String
 import List
 let val line = "  alice , 31,  copenhagen;bob,42, aarhus ;carol ,35,odense"

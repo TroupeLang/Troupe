@@ -1,9 +1,10 @@
-(* Markdown to HTML.
+(* The library `Markdown`.
 
-   The Markdown library parses a document into blocks and renders them
-   through the Html library, which escapes every piece of text, so the
-   `<script>` in the source comes out harmless. `Markdown.headings`
-   lists the headings with the anchors the renderer gives them. *)
+   The function `Markdown.toHtml` parses a Markdown document into blocks
+   and renders them as HTML using the library `Html`, which escapes every
+   text node; note that the `<script>` element in the source is rendered
+   as text. The function `Markdown.headings` lists the headings of the
+   document together with the anchors assigned by the renderer. *)
 import Markdown
 import String
 import List

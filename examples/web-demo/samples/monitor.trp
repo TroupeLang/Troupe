@@ -1,13 +1,14 @@
-(* Supervising a process.
+(* Example: monitoring a process.
 
-   `monitorlocal p` asks to be told when process `p` ends: a message
-   ("DONE", ref, pid, reason) arrives, where the reason is 0 for a
-   normal end or (1, text) for a runtime error. The supervisor here
-   starts a worker, sends it two jobs, sees the first succeed and the
-   second divide by zero, and restarts the worker. The error report
-   printed in between is the runtime's own, for the worker. A process
-   blocked in `receive` keeps the node alive, so the last worker is
-   told to stop. *)
+   The primitive `monitorlocal p` registers the current process to be
+   notified of the termination of process `p`. The notification is a
+   message `("DONE", ref, pid, reason)`, where `reason` is `0` for normal
+   termination and `(1, text)` for a runtime error. The supervisor below
+   starts a worker, sends it three jobs, and restarts the worker after
+   the second job divides by zero. The runtime prints the error report
+   of the worker between the lines of the supervisor. Note that a
+   process blocked in `receive` keeps the node alive; the last worker is
+   therefore told to stop. *)
 let fun worker () =
       receive [ hn "stop" => ()
               , hn (from, a, b) => (send (from, a div b); worker ()) ]

@@ -1,10 +1,11 @@
-(* Big integers.
+(* The library `BigInt`.
 
-   A number is a double, exact only up to 2^53. A literal ending in `n`
-   is a bigint, a separate type with its own arithmetic in the BigInt
-   library; `BigInt.show` prints it in decimal. The program computes
-   2^100, 50 factorial, and the 200th Fibonacci number, none of which a
-   number could hold. *)
+   Numbers in Troupe are double-precision floats, and represent integers
+   exactly only up to 2^53. A literal with the suffix `n` is a big
+   integer, a separate type with arithmetic provided by the library
+   `BigInt`; `BigInt.show` renders it in decimal. The program computes
+   2^100, 50!, and the 200th Fibonacci number, which exceed the range of
+   numbers. *)
 import BigInt
 let fun pow2 0 = 1n
       | pow2 k = BigInt.mul (2n, pow2 (k - 1))
@@ -13,11 +14,12 @@ let fun pow2 0 = 1n
       let fun go (i, a, b) = if i = 0 then a else go (i - 1, b, BigInt.add (a, b))
       in go (n, 0n, 1n)
       end
-in print (9007199254740992 + 1);              (* a number stops counting here *)
+in print (9007199254740992 + 1);              (* the sum is rounded *)
    print (BigInt.show (BigInt.add (9007199254740992n, 1n)));
    print (BigInt.show (pow2 100));
    print (BigInt.show (fact 50));
    print (BigInt.show (fib 200));
    print (BigInt.lt (fact 20, pow2 64));
-   print (BigInt.toInt (fact 15), BigInt.toInt (fact 20))   (* 20! does not fit *)
+   (* 20! exceeds the range of a number *)
+   print (BigInt.toInt (fact 15), BigInt.toInt (fact 20))
 end

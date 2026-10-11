@@ -1,14 +1,14 @@
-(* Declassifying the blocking label.
+(* Declassification of the blocking level.
 
-   The previous sample stopped because a branch on a secret had raised
-   the blocking label. Lowering it is a declassification too and needs
-   authority: `blockdeclto (authority, level)` lowers the blocking label
-   to the level, and `pdeclassify` from the IfcUtil library does both
-   steps at once, the value and the blocking label. After it, the
-   process is public again and can print. `_bl ()` reads the blocking
-   label; it is shown after the repair, when it may be printed. A
-   `declassify` on its own raises the blocking label as well, since it
-   can fail, which is why these samples release with `pdeclassify`. *)
+   Lowering the blocking label is a declassification and requires
+   authority. The primitive `blockdeclto (authority, lev)` lowers the
+   blocking label of the process to `lev`. The function `pdeclassify`
+   from the library `IfcUtil` declassifies a value and the blocking label
+   in one step; after it, the process can write to the standard output
+   again. The primitive `_bl ()` returns the blocking label, and the
+   program prints it once it is `{}`. Note that `declassify` on its own
+   raises the blocking label as well, as a declassification may fail;
+   this is why these samples use `pdeclassify`. *)
 import IfcUtil
 let val _ = setStdioLevel (authority, `{}`)
     val secret = 42 raisedTo `<alice;#root-integrity>`
@@ -17,7 +17,7 @@ let val _ = setStdioLevel (authority, `{}`)
 in printWithLabels released;
    print (_bl ());
    printString "after the branch";
-   (if secret mod 2 = 0 then () else ());    (* taints the blocking label again *)
-   blockdeclto (authority, `{}`);            (* and lowers it by hand *)
+   (if secret mod 2 = 0 then () else ());    (* raises the blocking label to {alice} *)
+   blockdeclto (authority, `{}`);            (* lowers it to {} *)
    printString "and again"
 end

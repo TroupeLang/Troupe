@@ -1,9 +1,10 @@
-(* Option: a value that may be absent.
+(* The library `Option`.
 
-   `SOME v` or `NONE` is the Option library's datatype, and functions
-   that can fail return it instead of a special number. `Option.andThen`
-   chains such functions and stops at the first `NONE`; `getOrElse`
-   supplies a default at the end. *)
+   A value of the datatype `option` is either `SOME v` or `NONE`. A
+   function that may fail returns an option instead of a special value.
+   The function `Option.andThen` applies a function returning an option
+   to the content of an option, and returns `NONE` as soon as either is
+   `NONE`; `Option.getOrElse` supplies a default value. *)
 import Option
 import List
 let fun safeDiv a b = if b = 0 then NONE else SOME (a div b)

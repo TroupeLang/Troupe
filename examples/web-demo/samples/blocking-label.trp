@@ -1,14 +1,17 @@
-(* Progress, and the blocking label.
+(* Termination and blocking flows.
 
-   A branch on a secret can leak by whether the program goes on at all:
-   one branch could wait forever, or fail. Troupe records this in the
-   blocking label of the process. After the branch below the pc is back
-   at public, but the blocking label stays alice's, and from then on
-   every output is refused, even a public string, even after the
-   branch's result has been declassified: performing an effect reveals
-   that the process got this far. The report says effect level alice
-   for a value whose own label is public. The next sample shows the way
-   out. The terminal is set to public first. *)
+   Each process has two runtime labels: the pc label, and the blocking
+   label, which records the levels on which the progress of the process
+   has depended. A branch on a secret can leak via termination, as one
+   branch may block or fail, so the blocking label is raised to the label
+   of the guard and remains raised after the conditional. After the
+   conditional below, the pc label is lowered back to `{}`, but the
+   blocking label remains `{alice}`, and every output is an information
+   flow violation, including a public string and the declassified result
+   of the branch, because performing the output reveals that the process
+   got this far. The error report shows the effect level `{alice}` for a
+   value whose own label is `{}`. The next sample declassifies the
+   blocking label. *)
 let val _ = setStdioLevel (authority, `{}`)
     val secret = 42 raisedTo `<alice;#root-integrity>`
     val _ = printString "before the branch"

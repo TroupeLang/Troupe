@@ -1,10 +1,11 @@
 (* Accumulators, mutual recursion, and timing.
 
-   `fib` written as `fib (n-1) + fib (n-2)` does exponential work; the
-   same function with two accumulators is one pass, and a call in tail
-   position costs no stack. `getTime ()` is the clock in milliseconds,
-   so the program times both versions on the same input. `fun ... and`
-   defines functions that call each other. *)
+   The function `fibSlow` makes two recursive calls per step and does an
+   exponential amount of work. The function `fibFast` carries the two
+   previous numbers as accumulators and makes one tail call per step.
+   The primitive `getTime` returns the current time in milliseconds; the
+   program uses it to time both versions. Mutually recursive functions
+   are delimited using the `and` keyword. *)
 let fun fibSlow n = if n < 2 then n else fibSlow (n - 1) + fibSlow (n - 2)
     fun fibFast n =
       let fun go (i, a, b) = if i = 0 then a else go (i - 1, b, a + b)
@@ -21,6 +22,6 @@ let fun fibSlow n = if n < 2 then n else fibSlow (n - 1) + fibSlow (n - 2)
       end
 in timed "fibSlow" fibSlow 25;
    timed "fibFast" fibFast 25;
-   timed "fibFast" fibFast 80;         (* too slow the other way *)
+   timed "fibFast" fibFast 80;         (* fibSlow 80 would not finish *)
    print (even 10000, odd 10000)
 end

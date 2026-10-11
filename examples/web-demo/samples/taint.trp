@@ -1,16 +1,16 @@
-(* How labels spread.
+(* Label propagation.
 
-   The terminal is a channel with a level; this program sets it to
-   public with `setStdioLevel`, so nothing labelled may be written on
-   it. Every operation on labelled values gives a result labelled with
-   the join of its inputs: alice's number plus bob's number is a value
-   both must be allowed to see, `alice&bob`. `levelOf x` returns x's
-   label, and the label is as secret as the value, since knowing it says
-   something about x; `showLabel` releases it with the program's own
-   authority before printing. `flowsTo (l1, l2)` says whether l1 may
-   flow to l2. The last line indexes a public list with a secret index:
-   the list is public, but which element came out reveals the index, so
-   the result is alice's and the print is refused. *)
+   The program first sets the level of the standard output to `{}` using
+   `setStdioLevel`. An operation on labeled values produces a result
+   labeled with the join of the labels of its operands, e.g., the sum of
+   alice's number and bob's number is labeled `alice&bob`. The primitive
+   `levelOf x` returns the label of `x`; note that the label is itself
+   labeled at the level of `x`, as it carries information about `x`, and
+   the program declassifies it with the top-level authority before
+   printing. The primitive `flowsTo (l1, l2)` tests whether l1 ⊑ l2. The
+   last line indexes a public list with a secret index: the list is
+   public, but the selected element reveals the index, so the result is
+   labeled `{alice}` and the output is an information flow violation. *)
 import List
 import IfcUtil
 let val _ = setStdioLevel (authority, `{}`)
@@ -27,8 +27,8 @@ in showLabel "public" public;
    showLabel "a string built from secret" ("the answer is " ^ toString secret);
    showLabel "secret + bobs" both;
    showLabel "a tuple holding secret" (secret > 2, [secret, 1]);  (* the tuple itself *)
-   print (showFlow (secret, both));              (* alice's may join bob's *)
-   print (showFlow (both, secret));              (* but not come back *)
+   print (showFlow (secret, both));              (* {alice} flows to alice&bob *)
+   print (showFlow (both, secret));           (* alice&bob does not flow to {alice} *)
    print (List.nth public 2);
    print (List.nth public secret)
 end

@@ -1,10 +1,11 @@
-(* Sorting.
+(* Example: sorting.
 
-   Two sorts written by hand over lists: insertion sort, which inserts
-   each element into a sorted rest, and quicksort, which partitions
-   around a pivot with `List.partition`. Both take the ordering as a
-   function, so the same code sorts ascending, descending, or by a key.
-   `List.sort` in the library is a merge sort with the same shape. *)
+   The program implements insertion sort, which inserts each element into
+   the sorted rest of the list, and quicksort, which partitions the list
+   around a pivot using `List.partition`. Both take the ordering as a
+   function argument, and so the same definitions sort in ascending or
+   descending order, or by a component of each element. The library
+   function `List.sort` is a merge sort with the same convention. *)
 import List
 let fun insert lt x [] = [x]
       | insert lt x (y :: ys) = if lt x y then x :: y :: ys

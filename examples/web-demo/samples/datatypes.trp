@@ -1,8 +1,10 @@
-(* Datatypes, records and pattern matching.
+(* Datatypes, records, and pattern matching.
 
-   `datatype` declares variants, each with or without a payload, and
-   `case` takes them apart; a function with several clauses does the
-   same. A record `{name = ..., age = ...}` is matched by its fields. *)
+   A `datatype` declaration introduces constructors, with or without
+   arguments. Case expressions and multi-clause function declarations
+   match a value against patterns, one per constructor. Records are
+   aggregate data structures with named fields, and a record pattern
+   such as `{name = n, age = a}` binds the fields. *)
 datatype shape = CIRCLE of int | SQUARE of int | DOT
 
 let fun area (CIRCLE r) = 3 * r * r

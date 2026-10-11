@@ -1,8 +1,9 @@
-(* Hello.
+(* A minimal Troupe program with output.
 
-   A Troupe program is one expression. This one is a `let`: bindings, then
-   `in`, then the body, then `end`. `printString` writes a string to the
-   terminal below, which is this node's stdout. Press run (or Ctrl-Enter). *)
+   A Troupe program is an expression. The `let` expression binds names in
+   its declarations and evaluates the expression between `in` and `end`.
+   The function `printString` writes its argument to the standard output.
+   In this demo, the standard output is the terminal next to the editor. *)
 let val greeting = "hello from a Troupe node in your browser"
 in printString greeting
 end

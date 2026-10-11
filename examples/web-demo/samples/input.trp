@@ -1,8 +1,8 @@
-(* Reading a line.
+(* Reading from the standard input.
 
-   `inputLine ()` reads one line from this node's stdin, which is the
-   terminal below: the program blocks until a line is typed there and
-   ended with Enter. *)
+   The primitive `inputLine ()` reads one line from the standard input.
+   In this demo, the standard input is the terminal next to the editor,
+   and the process blocks until a line is entered there. *)
 let val _ = printString "what is your name?"
     val name = inputLine ()
 in printString ("hello, " ^ name)

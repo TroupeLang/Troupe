@@ -27,7 +27,7 @@ jobs:
     runs-on: ubuntu-latest
     if: >-
       github.ref != 'refs/heads/master' &&
-      github.ref != 'refs/heads/troupe-2-docker-release' &&
+      github.ref != 'refs/heads/v2-master' &&
       github.repository_owner == 'TroupeLang'
     steps:
       - uses: actions/checkout@v4
@@ -43,7 +43,7 @@ jobs:
   build_docker:
     runs-on: ${{ matrix.runner }}
     if: >-
-      github.ref == 'refs/heads/troupe-2-docker-release' &&
+      github.ref == 'refs/heads/v2-master' &&
       github.repository_owner == 'TroupeLang'
     strategy:
       matrix:
@@ -86,7 +86,7 @@ jobs:
   merge_docker:
     runs-on: ubuntu-latest
     if: >-
-      github.ref == 'refs/heads/troupe-2-docker-release' &&
+      github.ref == 'refs/heads/v2-master' &&
       github.repository_owner == 'TroupeLang'
     needs: build_docker
     steps:

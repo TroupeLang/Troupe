@@ -267,6 +267,10 @@ test/ci-relay: p2p-tools
 	@echo "Running CI relay test..."
 	./tests/ci-relay-test.sh
 
+# The echo pair through the public relays (or the relays given as RELAYS); by hand, not in ci
+test/public-relay: rt p2p-tools
+	./tests/public-relay-test.sh $(RELAYS)
+
 dist: stack npm rt p2p-tools lib
 	rm -rf ./build/
 	mkdir -p ./build/Troupe/rt/built

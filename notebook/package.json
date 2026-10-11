@@ -13,7 +13,7 @@
     "@codemirror/state": "^6.5.4",
     "@codemirror/view": "^6.39.16",
     "codemirror": "^6.0.2",
-    "dompurify": "^3.2.4",
+    "dompurify": "^3.4.16",
     "express": "^4.21.0",
     "marked": "^17.0.3",
     "ws": "^8.18.0"

@@ -3,6 +3,7 @@ import { assertNormalState, assertIsNTuple, assertIsAuthority, assertIsNumber, a
 import { __unit } from '../UnitVal.mjs';
 import { setExitInitiated } from '../runtimeMonitored.mjs';
 import { getResultChannel } from '../ResultChannel.mjs';
+import { getLifecycle } from '../Lifecycle.mjs';
 
 
 export function BuiltinExit <TBase extends Constructor<UserRuntimeZero>>(Base: TBase) {
@@ -18,7 +19,7 @@ export function BuiltinExit <TBase extends Constructor<UserRuntimeZero>>(Base: T
             (async () => {
                 await getResultChannel().sendAndClose({ type: 'process-exit', exitCode: arg.val[1].val });
                 await $r.cleanup()
-                process.exit(arg.val[1].val);
+                getLifecycle().exit(arg.val[1].val);
             }) ()
 
         }, "exit")

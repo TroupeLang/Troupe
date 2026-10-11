@@ -93,7 +93,8 @@ pins.
 
 ### Tests
 
-- `make test` runs `test/local`, `test/multinode`, `test/hostile-peer`, and `test/result-socket`
+- `make test` runs `test/local`, `test/multinode`, `test/hostile-peer`, `test/result-socket`,
+  `test/compiler-service` and `test/browser-host`
 - `make test/local` runs `stack test` in `compiler/` (all of the compiler's Haskell test suites)
   followed by the golden suite
 - `bin/golden` to run the golden test suite with options
@@ -101,6 +102,11 @@ pins.
 - `bin/golden --quick` to run only the optimized pass, skipping the `--no-rawopt` pass
 - `bin/golden --no-color` compares against the `.nocolor.golden` files
 - `make test/multinode` runs `scripts/run-multinode-tests.sh`
+- `make test/compiler-service` checks the browser's compiler service against `bin/troupec`;
+  it needs `bin/troupec.wasm` (`make compiler-wasm`) and reports a skip without it
+- `make test/browser-host` runs the golden corpus through the runtime's browser host under
+  Node; `make browser` builds the two worker bundles a page needs, and
+  `tests/rt/browser-host/README.md` says how to run the corpus in a browser
 - `make test/prop-compiler`, `make test/prop-caseelim`, and `make test/prop-labelrt` run one
   compiler property suite each, for iterating without the full `stack test`
 - `make test/prop-rt` (runtime lattice property tests) and `make test/prop-differential`

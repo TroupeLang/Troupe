@@ -24,4 +24,13 @@ if [ -n "$violations" ]; then
   echo "$violations" >&2
   exit 1
 fi
-echo "host boundary: no Node import in the runtime core"
+
+# The browser host and its native modules run where no Node module exists.
+browser=$(grep -rnE --include='*.mts' "$NODE_IMPORT" ./hosts/browser ./ffi/browser)
+
+if [ -n "$browser" ]; then
+  echo "the browser host imports a Node module:" >&2
+  echo "$browser" >&2
+  exit 1
+fi
+echo "host boundary: no Node import in the runtime core or the browser host"

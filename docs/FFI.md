@@ -164,7 +164,7 @@ Worked examples in the tree:
 
 | File                              | Demonstrates                                                        |
 |-----------------------------------|---------------------------------------------------------------------|
-| `rt/src/ffi/node/ffidemo.mts`     | Minimal platform-neutral module; result labels join argument labels |
+| `rt/src/ffi/ffidemo.mts`          | Minimal platform-neutral module; result labels join argument labels |
 | `rt/src/ffi/node/simplefiles.mts` | Authority checks, sandboxing, suspending the thread for async I/O   |
 | `rt/src/ffi/node/tty.mts`         | A client of core-owned state (stdio's channel level and sink check); a registered shutdown restore |
 
@@ -200,6 +200,6 @@ Every message below is the compiler's or runtime's actual output.
 | Node-host registrations                             | `rt/src/ffi/node/index.mts`                    |
 | Link-time resolution                                | `rt/src/loadLibsAsync.mts`                     |
 | Inbound-error classification                        | `rt/src/deserialize.mts`                       |
-| Demonstration module                                | `rt/src/ffi/node/ffidemo.mts`                  |
+| Demonstration module                                | `rt/src/ffi/ffidemo.mts`                       |
 | Whole-file I/O module (`SimpleFiles`)               | `rt/src/ffi/node/simplefiles.mts`              |
 | Terminal module (`Tty`)                             | `rt/src/ffi/node/tty.mts`                      |

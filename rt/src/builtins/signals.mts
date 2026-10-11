@@ -9,6 +9,7 @@ import { __unit } from '../UnitVal.mjs';
 import { RuntimeInterface } from '../RuntimeInterface.mjs';
 import { __nodeManager } from '../NodeManager.mjs';
 import runId from '../runId.mjs';
+import { getSignals } from '../Signals.mjs';
 
 /**
  * Signal disposition.
@@ -110,7 +111,7 @@ function hasLiveSigtermTrap(): boolean {
 function onSigterm() {
     if (!hasLiveSigtermTrap()) {
         detachSigtermListener();
-        process.kill(process.pid, 'SIGTERM');
+        getSignals().terminateByDefault();
         return;
     }
     const msg = new LVal("SIGTERM", ROOT);
@@ -126,7 +127,7 @@ function attachSigtermListener() {
     if (listenerAttached) {
         return;
     }
-    process.on('SIGTERM', onSigterm);
+    getSignals().trapTerminate(onSigterm);
     listenerAttached = true;
 }
 
@@ -134,7 +135,7 @@ function detachSigtermListener() {
     if (!listenerAttached) {
         return;
     }
-    process.removeListener('SIGTERM', onSigterm);
+    getSignals().untrapTerminate(onSigterm);
     listenerAttached = false;
 }
 

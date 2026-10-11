@@ -1,0 +1,7 @@
+(* The Node side of the closure round trip: a closure, with an environment,
+   persisted by a Node Troupe node for a browser node to restore. *)
+let val k = 21
+    fun f x = x * 2 + k
+    val _ = save (authority, "round-trip", f)
+in print "saved"
+end

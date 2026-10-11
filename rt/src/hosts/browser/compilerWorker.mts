@@ -10,7 +10,7 @@ import { TroupecWasm, CompileResult, LinkedBlob } from './troupecWasm.mjs';
 /** What both sides need of a port: a browser Worker's global scope, a
  *  MessagePort, or Node's. */
 export interface MessagePortLike {
-    postMessage(message: any): void;
+    postMessage(message: any, transfer?: any[]): void;
     addEventListener(type: 'message', listener: (ev: { data: any }) => void): void;
     start?(): void;
 }
@@ -18,13 +18,22 @@ export interface MessagePortLike {
 export type CompilerRequest =
     | { id: number; op: 'init'; wasm: ArrayBuffer; interfaces: Array<[string, Uint8Array]> }
     | { id: number; op: 'compileSource'; source: string }
-    | { id: number; op: 'linkIR'; blobs: string[] };
+    | { id: number; op: 'linkIR'; blobs: string[] }
+    /** Serve the same compiler on another port as well: the one a runtime
+     *  worker holds, so a node links through the compiler its page loaded. */
+    | { id: number; op: 'serve'; port: MessagePortLike };
 
 export type CompilerReply =
     | { id: number; ok: true; result: any }
     | { id: number; ok: false; error: string };
 
-export function serveCompiler(port: MessagePortLike): void {
+export interface CompilerServer {
+    /** Answers requests arriving on the port. */
+    serve(port: MessagePortLike): void;
+}
+
+/** One compiler, served on as many ports as are attached. */
+export function createCompilerServer(): CompilerServer {
     let compiler: TroupecWasm | null = null;
     const linked = new Map<string, LinkedBlob>();
     let queue: Promise<void> = Promise.resolve();
@@ -34,6 +43,9 @@ export function serveCompiler(port: MessagePortLike): void {
             case 'init':
                 compiler = await TroupecWasm.fromBytes(req.wasm, req.interfaces);
                 linked.clear();
+                return null;
+            case 'serve':
+                serve(req.port);
                 return null;
             case 'compileSource':
                 return await requireCompiler().compileSource(req.source);
@@ -59,19 +71,27 @@ export function serveCompiler(port: MessagePortLike): void {
         return compiler;
     }
 
-    port.addEventListener('message', (ev) => {
-        const req = ev.data as CompilerRequest;
-        queue = queue.then(async () => {
-            let reply: CompilerReply;
-            try {
-                reply = { id: req.id, ok: true, result: await handle(req) };
-            } catch (e) {
-                reply = { id: req.id, ok: false, error: e instanceof Error ? e.message : String(e) };
-            }
-            port.postMessage(reply);
+    function serve(port: MessagePortLike): void {
+        port.addEventListener('message', (ev) => {
+            const req = ev.data as CompilerRequest;
+            queue = queue.then(async () => {
+                let reply: CompilerReply;
+                try {
+                    reply = { id: req.id, ok: true, result: await handle(req) };
+                } catch (e) {
+                    reply = { id: req.id, ok: false, error: e instanceof Error ? e.message : String(e) };
+                }
+                port.postMessage(reply);
+            });
         });
-    });
-    port.start?.();
+        port.start?.();
+    }
+
+    return { serve };
+}
+
+export function serveCompiler(port: MessagePortLike): void {
+    createCompilerServer().serve(port);
 }
 
 export type { CompileResult };

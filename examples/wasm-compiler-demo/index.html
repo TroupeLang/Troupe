@@ -59,7 +59,8 @@
 <header>
   <h1>troupec in the browser</h1>
   <p>The Haskell compiler, cross-built to WebAssembly, compiling in this page —
-     with every intermediate stage of the pipeline. <span id="status">loading the compiler…</span></p>
+     with every intermediate stage of the pipeline — and the runtime running what it
+     compiled. <span id="status">loading the compiler…</span></p>
 </header>
 
 <main>
@@ -67,9 +68,22 @@
     <div class="head">
       <h2>source</h2>
       <button id="compile" class="primary" disabled>compile</button>
+      <button id="run" disabled>run</button>
       <select id="sample" aria-label="sample program"></select>
     </div>
     <textarea id="source" spellcheck="false"></textarea>
+
+    <details id="runPanel">
+      <summary>output — the program run on a Troupe node in a worker</summary>
+      <div class="ir">
+        <p style="margin:0;color:var(--dim);font-size:12px">
+          Lines the program reads from stdin, one per line, fed before it starts.
+        </p>
+        <textarea id="input" spellcheck="false" placeholder="(input lines)" style="height:60px;min-height:60px"></textarea>
+        <pre id="output" style="min-height:80px"></pre>
+        <div class="bar" style="border:0;padding:0"><span id="runMeta"></span></div>
+      </div>
+    </details>
 
     <details id="irPanel">
       <summary>compile received IR — the path a node takes when a closure arrives</summary>
@@ -94,11 +108,13 @@
 </main>
 
 <script type="module">
-import { compileSource, linkBlobs, STAGES } from './demo.mjs';
+import { compileSource, linkBlobs, runProgram, STAGES } from './demo.mjs';
 
 const $ = (id) => document.getElementById(id);
 const SAMPLES = {
   'hello': `let\n  val greeting = "hello from a compiler in your browser"\nin\n  print greeting\nend\n`,
+  'reading input': `let\n  val name = inputLine ()\nin\n  print ("hello, " ^ name)\nend\n`,
+  'a closure persisted and restored': `let\n  val _ = save (authority, "demo", fn x => x * 2)\n  val f = restore ("demo")\nin\n  print (f 21)\nend\n`,
   'arithmetic and functions': `let\n  fun square x = x * x\n  fun sumTo n = if n <= 0 then 0 else n + sumTo (n - 1)\nin\n  print (square 12);\n  print (sumTo 100)\nend\n`,
   'a library import': `import List\nlet\n  val xs = [3, 1, 4, 1, 5, 9, 2, 6]\nin\n  print (List.length xs);\n  print (List.reverse xs)\nend\n`,
   'labelled data': `let\n  val secret = 42 raisedTo \`alice\`\nin\n  print (secret + 1)\nend\n`,
@@ -143,6 +159,33 @@ async function doCompile() {
   }
 }
 
+async function doRun() {
+  $('run').disabled = true;
+  $('runPanel').open = true;
+  $('output').textContent = '';
+  $('runMeta').textContent = 'compiling…';
+  try {
+    await doCompile();
+    if (!result?.ok) { $('runMeta').textContent = 'the program did not compile'; return; }
+    $('runMeta').textContent = 'running…';
+    const started = performance.now();
+    const append = (text) => { $('output').textContent += text; };
+    const node = await runProgram(result.js, $('input').value.split('\n').filter((l) => l !== ''), {
+      source: $('source').value,
+      onStdout: append,
+      onStderr: append,
+      onResult: (value) => { $('runMeta').textContent = `main thread finished with value ${value}`; },
+      onError: (message) => { append(`\n${message}\n`); },
+    });
+    const exit = await node.exit;
+    $('runMeta').textContent += ` · exit ${exit.exitCode} · ${(performance.now() - started).toFixed(0)} ms`;
+  } catch (e) {
+    $('runMeta').textContent = `the node failed to start: ${e.message}`;
+  } finally {
+    $('run').disabled = false;
+  }
+}
+
 async function doLink() {
   const blobs = $('blob').value.split('\n').map((s) => s.trim()).filter(Boolean);
   if (!blobs.length) { $('linkOut').textContent = 'Paste a blob first.'; return; }
@@ -175,6 +218,7 @@ $('sample').replaceChildren(...Object.keys(SAMPLES).map((k) => new Option(k, k))
 $('source').value = SAMPLES['hello'];
 $('sample').onchange = (e) => { $('source').value = SAMPLES[e.target.value]; };
 $('compile').onclick = doCompile;
+$('run').onclick = doRun;
 $('link').onclick = doLink;
 $('fillBlob').onclick = fillBlobFromResult;
 
@@ -184,6 +228,7 @@ fetch('troupec.wasm', { method: 'HEAD' }).then((r) => {
   const mb = (Number(r.headers.get('content-length') || 0) / 1e6).toFixed(1);
   $('status').textContent = `compiler loaded (${mb} MB).`;
   $('compile').disabled = false;
+  $('run').disabled = false;
   $('link').disabled = false;
 }).catch(() => {
   $('status').innerHTML = 'bin/troupec.wasm is missing — build it with <code>make compiler-wasm</code>.';

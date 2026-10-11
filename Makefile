@@ -1,4 +1,4 @@
-.PHONY: rt trp-rt compiler compiler-wasm compiler-worker lib p2p-tools npm clean test ci check-host-boundary test/examples dist \
+.PHONY: rt trp-rt compiler compiler-wasm compiler-worker runtime-worker page-client browser lib p2p-tools npm clean test ci check-host-boundary test/examples dist \
         check-compiler notebook \
         dev-planning-to-html
 
@@ -133,7 +133,7 @@ ci-test-golden-no-color:
 	mkdir -p out 
 	./bin/golden --no-color
 
-test: test/local test/ir-sexp-corpus-troupe test/multinode test/hostile-peer test/result-socket test/compiler-service
+test: test/local test/ir-sexp-corpus-troupe test/multinode test/hostile-peer test/result-socket test/compiler-service test/browser-host
 
 # Everything CI runs, in CI's order (.github/workflows/run_tests.yml). Use this
 # before pushing: `make test` alone leaves out the two property targets, and
@@ -149,6 +149,17 @@ check-host-boundary:
 # The compiler worker for a browser, at build/browser/compiler-worker.mjs.
 compiler-worker: rt
 	npx rollup -c rollup.compiler-worker.config.js
+
+runtime-worker: rt
+	npx rollup -c rollup.runtime-worker.config.js
+
+page-client: rt
+	npx rollup -c rollup.page-client.config.js
+
+# What a page needs to run Troupe, under build/browser/: the two workers,
+# troupe-worker.mjs and compiler-worker.mjs, and the page's side of them,
+# troupe-page.mjs.
+browser: compiler-worker runtime-worker page-client
 
 # Every example and benchmark compiles. Nothing else covers examples/: the
 # golden suite is tests/ only, so a library change or a moved module hash can
@@ -223,6 +234,13 @@ test/result-socket-node:
 # bin/troupec.wasm is not built, as in CI.
 test/compiler-service: rt
 	node tests/rt/compiler-service/test-compiler-service.mjs
+
+# The golden corpus through the browser host, served under Node: each test
+# runs in a worker thread as it runs in a browser worker, and its output is
+# compared with the golden. tests/rt/browser-host/README.md says what the
+# host leaves out.
+test/browser-host: compiler rt lib/out/.build-stamp
+	node tests/rt/browser-host/run-corpus.mjs
 
 # Runtime lattice property tests (fast-check + node:test). Not part of the
 # aggregate `test:` target.

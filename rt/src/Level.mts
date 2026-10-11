@@ -1,6 +1,7 @@
 import {levels, Level, QuarantineOptions } from './levels/DCLabels/dclabel.mjs'
 import { DowngradeResult, DowngradeKind, DowngradeDimension } from './DowngradeEnums.mjs'
 import { getRuntimeObject } from './SysState.mjs'
+import { getLifecycle } from './Lifecycle.mjs'
 export { mkLevel, Level, QuarantineOptions } from './levels/DCLabels/dclabel.mjs'
 
 
@@ -60,7 +61,7 @@ export function levelFromFlag (flag: string, x: string): Level {
 			` | V1 labels use braces and commas: '{alice, bob}'\n` +
 			` | V2 labels give both dimensions: '<alice;#root-integrity>'`
 		);
-		process.exit(1);
+		getLifecycle().exit(1);
 	}
 }
 export const BOT  = levels.BOT

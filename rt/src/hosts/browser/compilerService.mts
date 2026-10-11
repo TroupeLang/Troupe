@@ -12,6 +12,9 @@ export interface BrowserCompilerService extends CompilerService {
     /** Sends the compiler and the library interfaces to the worker. */
     init(wasm: ArrayBuffer, interfaces: Array<[string, Uint8Array]>): Promise<void>;
     compileSource(source: string): Promise<CompileResult>;
+    /** Has the worker serve the same compiler on the port as well, which is
+     *  transferred: a runtime worker given its other end links through it. */
+    serve(port: MessagePort): Promise<void>;
 }
 
 export function browserCompilerService(port: MessagePortLike): BrowserCompilerService {
@@ -35,11 +38,11 @@ export function browserCompilerService(port: MessagePortLike): BrowserCompilerSe
         [K in CompilerRequest['op']]: Omit<Extract<CompilerRequest, { op: K }>, 'id'>
     }[CompilerRequest['op']];
 
-    function request(req: RequestBody): Promise<any> {
+    function request(req: RequestBody, transfer: any[] = []): Promise<any> {
         const id = nextId++;
         return new Promise((resolve, reject) => {
             pending.set(id, { resolve, reject });
-            port.postMessage({ id, ...req });
+            port.postMessage({ id, ...req }, transfer);
         });
     }
 
@@ -47,6 +50,7 @@ export function browserCompilerService(port: MessagePortLike): BrowserCompilerSe
         init: (wasm, interfaces) => request({ op: 'init', wasm, interfaces }),
         compileSource: (source) => request({ op: 'compileSource', source }),
         linkIR: (blobs: string[]): Promise<LinkedSnippet[]> => request({ op: 'linkIR', blobs }),
+        serve: (p: MessagePort) => request({ op: 'serve', port: p }, [p]),
         stop: () => {},
     };
 }

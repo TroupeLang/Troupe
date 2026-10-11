@@ -30,6 +30,7 @@ import { getResultChannel } from './ResultChannel.mjs';
 import { getHostConsole } from './hostConsole.mjs';
 import { getConfigStore } from './ConfigStore.mjs';
 import { getPersistStore } from './PersistStore.mjs';
+import { getLifecycle } from './Lifecycle.mjs';
 import { configureColors } from './colorConfig.mjs';
 import { mkLogger, mkDebugTag } from './logger.mjs'
 import { getCodeStore } from './CodeStore.mjs'
@@ -541,7 +542,7 @@ async function getNetworkPeerId(rtHandlers) {
     nodeId = await getConfigStore().nodeIdentity();
   } catch (err) {
     logger.error(err instanceof Error ? err.message : String(err))
-    process.exit(1);
+    getLifecycle().exit(1);
   }
 
   // Handle local-only or persist modes (skip network creation)
@@ -568,7 +569,7 @@ async function getNetworkPeerId(rtHandlers) {
       logger.error("p2p network initialization failed")
       console.error(err.stack);
     }
-    process.exit(1);
+    getLifecycle().exit(1);
   }
 }
 
@@ -635,9 +636,11 @@ export async function start(f) {
       setExitInitiated();
       await getResultChannel().sendAndClose({ type: 'process-exit', exitCode, reason: 'timeout' });
       await cleanupAsync();
-      process.exit(exitCode);
+      getLifecycle().exit(exitCode);
     }, timeoutSeconds * 1000);
-    timer.unref(); // Don't prevent natural exit when all threads complete
+    // On Node the timer must not keep the process alive once every thread
+    // is done; a host whose timers have no such handle needs nothing.
+    (timer as any).unref?.();
   }
 }
 

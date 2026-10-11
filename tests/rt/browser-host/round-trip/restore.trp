@@ -1,0 +1,6 @@
+(* The browser side of the closure round trip: the closure a Node node
+   persisted, restored here, which relinks it through this node's compiler,
+   and applied. *)
+let val f = restore ("round-trip")
+in print (f 10)
+end

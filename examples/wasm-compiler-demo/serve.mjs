@@ -3,10 +3,13 @@
 //   node examples/wasm-compiler-demo/serve.mjs [port]
 //
 // Serves the page, the WebAssembly build of the compiler, the standard
-// library's interface files, the runtime's browser host modules and the
-// bundled compiler worker, all from the repository. It
+// library's interface files and compiled libraries, the runtime's service
+// module and the bundles under build/browser, all from the repository. It
 // exists because a page cannot fetch() from file:// and the .wasm needs its
 // own content type; nothing here is part of the demo's logic.
+//
+// Every response carries the cross-origin isolation headers, which give
+// the page the finer performance.now() clamp.
 import { createServer } from 'node:http';
 import { readFile, readdir } from 'node:fs/promises';
 import { join, dirname, extname, normalize } from 'node:path';
@@ -31,6 +34,8 @@ function send(res, status, body, type) {
   const buf = Buffer.isBuffer(body) ? body : Buffer.from(String(body));
   res.writeHead(status, {
     'Content-Type': type ?? 'text/plain; charset=utf-8',
+    'Cross-Origin-Opener-Policy': 'same-origin',
+    'Cross-Origin-Embedder-Policy': 'require-corp',
     // Set explicitly so a HEAD response still reports the size -- the page
     // reads it to show how large the compiler is before fetching it.
     'Content-Length': buf.length,
@@ -61,13 +66,17 @@ const server = createServer(async (req, res) => {
   if (url === '/demo.mjs') return serveFile(res, join(HERE, 'demo.mjs'));
   if (url === '/troupec.wasm') return serveFile(res, WASM);
 
-  // The runtime's browser host modules the page imports, and the bundled
-  // compiler worker (make compiler-worker).
-  if (url.startsWith('/rt/hosts/browser/')) {
-    return serveFile(res, join(ROOT, 'rt', 'built', 'hosts', 'browser', url.slice('/rt/hosts/browser/'.length)));
+  // The bundles (make browser): the two workers and the page's side of them.
+  if (url.startsWith('/build/')) {
+    return serveFile(res, join(ROOT, 'build', 'browser', url.slice('/build/'.length)));
   }
-  if (url === '/build/compiler-worker.mjs') {
-    return serveFile(res, join(ROOT, 'build', 'browser', 'compiler-worker.mjs'));
+  // What the runtime worker fetches: the compiled libraries, on demand, and
+  // the service module.
+  if (url.startsWith('/lib/out/') && url.endsWith('.js')) {
+    return serveFile(res, join(LIB_OUT, url.slice('/lib/out/'.length)));
+  }
+  if (url === '/trp-rt/out/service.js') {
+    return serveFile(res, join(ROOT, 'trp-rt', 'out', 'service.js'));
   }
 
   // The interface files the compiler reads for `import <Library>`: a manifest

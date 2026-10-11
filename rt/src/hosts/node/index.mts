@@ -20,6 +20,12 @@ import { registerCompression } from '../../Compression.mjs';
 import { nodeCompression } from './compression.mjs';
 import { registerHostConsole } from '../../hostConsole.mjs';
 import { nodeConsole } from './console.mjs';
+import { registerLifecycle } from '../../Lifecycle.mjs';
+import { nodeLifecycle } from './lifecycle.mjs';
+import { registerClock } from '../../Clock.mjs';
+import { nodeClock } from './clock.mjs';
+import { registerSignals } from '../../Signals.mjs';
+import { nodeSignals } from './signals.mjs';
 
 export function registerNodeHost(): void {
     registerCliArgsParser(parseCliArgsFromProcess);
@@ -31,4 +37,7 @@ export function registerNodeHost(): void {
     registerTerminal(nodeTerminal);
     registerCompression(nodeCompression);
     registerHostConsole(nodeConsole());
+    registerLifecycle(nodeLifecycle);
+    registerClock(nodeClock);
+    registerSignals(nodeSignals);
 }

@@ -1,9 +1,9 @@
 'use strict'
-import { mkBase } from '../../builtins/UserRuntimeZero.mjs'
-import { LVal } from '../../Lval.mjs'
-import { assertIsString, assertIsNTuple, assertIsNumber } from '../../Asserts.mjs'
-import { lub } from '../../Level.mjs'
-import { getRuntimeObject } from '../../SysState.mjs'
+import { mkBase } from '../builtins/UserRuntimeZero.mjs'
+import { LVal } from '../Lval.mjs'
+import { assertIsString, assertIsNTuple, assertIsNumber } from '../Asserts.mjs'
+import { lub } from '../Level.mjs'
+import { getRuntimeObject } from '../SysState.mjs'
 
 // FFIDemo: the demonstration native module (manifest ffi/FFIDemo.exports).
 // Deliberately platform-neutral — no node APIs — so every host can register

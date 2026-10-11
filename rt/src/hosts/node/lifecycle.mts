@@ -1,7 +1,14 @@
-// Node's interrupt handling: Ctrl-C ends the node through the runtime's
-// cleanup and exits 0.
+// Node's lifecycle: ending the node is ending the process, and Ctrl-C ends
+// it through the runtime's cleanup with exit code 0.
 
+import { Lifecycle } from '../../Lifecycle.mjs';
 import { getResultChannel } from '../../ResultChannel.mjs';
+
+export const nodeLifecycle: Lifecycle = {
+    exit(code: number): void {
+        process.exit(code);
+    },
+};
 
 /**
  * Installs the SIGINT handler, replacing any listener another module

@@ -37,7 +37,7 @@ import { UserRuntimeZero, Constructor, mkBase } from './UserRuntimeZero.mjs'
 import { LVal } from '../Lval.mjs';
 import { Record } from '../Record.mjs';
 import { assertIsString } from '../Asserts.mjs';
-import { getCompression, DecompressionLimitError } from '../Compression.mjs';
+import { getCompression, hasCompression, DecompressionLimitError } from '../Compression.mjs';
 
 // The cap the compiler enforces when decompressing a blob
 // (IRBlob.maxDecompressedBytes). A stream from a remote node is untrusted
@@ -105,6 +105,10 @@ export function BuiltinCodec<TBase extends Constructor<UserRuntimeZero>>(Base: T
                     "gzip: argument has no UTF-8 encoding: it contains an unpaired surrogate");
                 return;
             }
+            if (!hasCompression()) {
+                this.runtime.$t.threadError("gzip: no compression on this host");
+                return;
+            }
             const out = getCompression().gzip(utf8Encoder.encode(s));
             // The gzip header's OS field (offset 9) is whichever platform this
             // Node's zlib was built for -- 19 on macOS, 3 on Linux. It is the
@@ -126,6 +130,10 @@ export function BuiltinCodec<TBase extends Constructor<UserRuntimeZero>>(Base: T
                 this.runtime.$t.threadError(
                     `gunzip: argument is not a byte string: character ${bad} is ` +
                     `code unit ${s.charCodeAt(bad)}, above 255`);
+                return;
+            }
+            if (!hasCompression()) {
+                this.runtime.$t.threadError("gunzip: no compression on this host");
                 return;
             }
             let raw: Uint8Array;

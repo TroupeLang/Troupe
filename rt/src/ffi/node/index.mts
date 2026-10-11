@@ -1,6 +1,6 @@
 'use strict'
 import * as nativeModules from '../registry.mjs'
-import { ffiDemoExports } from './ffidemo.mjs'
+import { ffiDemoExports } from '../ffidemo.mjs'
 import { simpleFilesExports } from './simplefiles.mjs'
 import { ttyExports, ttyRestore } from './tty.mjs'
 

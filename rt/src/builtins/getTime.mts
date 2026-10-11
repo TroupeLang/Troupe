@@ -3,6 +3,7 @@ import { UserRuntimeZero, Constructor, mkBase } from './UserRuntimeZero.mjs'
 import { LVal } from '../Lval.mjs';
 import { TroupeBigInt } from '../TroupeBigInt.mjs';
 import { assertIsUnit, assertNormalState } from '../Asserts.mjs'
+import { getClock } from '../Clock.mjs'
 
 
 export function BuiltinGetTime<TBase extends Constructor<UserRuntimeZero>>(Base: TBase) {
@@ -18,7 +19,7 @@ export function BuiltinGetTime<TBase extends Constructor<UserRuntimeZero>>(Base:
 
         getNanoTime = mkBase((arg) => {
             assertIsUnit(arg)
-            let t = process.hrtime.bigint()
+            let t = getClock().nanoTime()
             let v = new LVal(new TroupeBigInt(t), this.runtime.$t.pc);
             return this.runtime.ret(v)
         })

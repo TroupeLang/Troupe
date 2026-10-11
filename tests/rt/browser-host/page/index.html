@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Troupe golden corpus in the browser</title>
+<style>
+  body { font: 14px/1.4 system-ui, sans-serif; margin: 1.5rem; max-width: 70rem; }
+  #summary { font-weight: 600; margin: 0.5rem 0 1rem; }
+  table { border-collapse: collapse; width: 100%; }
+  td, th { text-align: left; padding: 0.15rem 0.5rem; border-bottom: 1px solid #ddd; vertical-align: top; font-family: ui-monospace, monospace; font-size: 12px; }
+  td.verdict { width: 5rem; }
+  pre { margin: 0.25rem 0 0; white-space: pre-wrap; color: #444; }
+  .PASS { color: #0072b2; } .FAIL { color: #d55e00; font-weight: 600; } .SKIP { color: #666; }
+  button { font: inherit; padding: 0.3rem 0.8rem; }
+</style>
+</head>
+<body>
+<h1>Troupe golden corpus in the browser</h1>
+<p>Each test runs in a fresh runtime worker (<code>build/browser/troupe-worker.mjs</code>); its stdout is compared with the golden as the golden suite compares it. The closure round trip restores, on a node here, a closure a Node node persisted. Serve with <code>node tests/rt/browser-host/server.mjs</code> after <code>make browser</code>.</p>
+<p><label>Filter <input id="filter" placeholder="substring of a test path"></label> <button id="run">Run</button>
+   <button id="roundTrip">Closure round trip</button></p>
+<div id="summary">not started</div>
+<table><thead><tr><th>Verdict</th><th>Test</th></tr></thead><tbody id="rows"></tbody></table>
+<script type="module" src="/tests/rt/browser-host/page/batch.mjs"></script>
+</body>
+</html>

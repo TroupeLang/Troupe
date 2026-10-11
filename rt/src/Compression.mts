@@ -25,6 +25,10 @@ export function registerCompression(c: Compression): void {
     __compression = c;
 }
 
+export function hasCompression(): boolean {
+    return __compression != null;
+}
+
 export function getCompression(): Compression {
     if (__compression == null) {
         throw new Error('no compression on this host');

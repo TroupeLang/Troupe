@@ -9,6 +9,7 @@ way a node does when a closure arrives.
 ```sh
 make compiler-wasm                        # builds bin/troupec.wasm
 npm install                               # once, for the WASI shim
+make compiler-worker                      # bundles the compiler worker
 node examples/wasm-compiler-demo/serve.mjs
 ```
 
@@ -35,9 +36,16 @@ demonstrated on real blobs — the button lifts one out of the program you just 
 
 ## How it works
 
+The page starts the runtime's compiler worker, `build/browser/compiler-worker.mjs`, and talks to
+it through the runtime's compiler service (`rt/src/hosts/browser/compilerService.mts`), the object
+a browser Troupe node registers to relink the closures it receives. The worker runs
+`rt/src/hosts/browser/troupecWasm.mts`, which is where everything below happens;
+`tests/rt/compiler-service/test-compiler-service.mjs` checks the same service against the native
+compiler under Node.
+
 `bin/troupec.wasm` is an ordinary WASI command module: its only imports are
 `wasi_snapshot_preview1`, and it exports `memory` and `_start`. There is no JavaScript glue inside
-it and no Haskell shim — the page builds a filesystem out of
+it and no Haskell shim — the driver builds a filesystem out of
 [`@bjorn3/browser_wasi_shim`](https://github.com/bjorn3/browser_wasi_shim) objects, instantiates the
 module, and reads the files it wrote.
 
@@ -67,8 +75,9 @@ Driven headlessly in Chrome as part of developing it:
 
 ## Scope
 
-A demonstration, not a component. It does not touch `rt/` or `notebook/`, and nothing in the runtime
-depends on it. The one-shot model it uses — a fresh instance per compile — is correct because the
+A page over the runtime's compiler worker; the worker and the service are the component, under
+`rt/src/hosts/browser/`. The one-shot model — a fresh instance per compile — is correct because the
 `--json-ir` loop is stateless per line; a persistent instance would amortize roughly 50 ms of
 instantiation, which is worth doing for an interactive path and is not what makes wasm slower than
-native (per-blob compilation is, at about 2.5×).
+native (per-blob compilation is, at about 2.5×). The worker memoizes relinked blobs, so a blob a
+node has seen is not compiled again.

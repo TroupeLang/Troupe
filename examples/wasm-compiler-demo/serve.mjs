@@ -3,7 +3,8 @@
 //   node examples/wasm-compiler-demo/serve.mjs [port]
 //
 // Serves the page, the WebAssembly build of the compiler, the standard
-// library's interface files, and the WASI shim, all from the repository. It
+// library's interface files, the runtime's browser host modules and the
+// bundled compiler worker, all from the repository. It
 // exists because a page cannot fetch() from file:// and the .wasm needs its
 // own content type; nothing here is part of the demo's logic.
 import { createServer } from 'node:http';
@@ -13,7 +14,6 @@ import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, '..', '..');
-const SHIM = join(ROOT, 'node_modules', '@bjorn3', 'browser_wasi_shim', 'dist');
 const LIB_OUT = join(ROOT, 'lib', 'out');
 const WASM = join(ROOT, 'bin', 'troupec.wasm');
 
@@ -61,8 +61,13 @@ const server = createServer(async (req, res) => {
   if (url === '/demo.mjs') return serveFile(res, join(HERE, 'demo.mjs'));
   if (url === '/troupec.wasm') return serveFile(res, WASM);
 
-  if (url.startsWith('/vendor/wasi/')) {
-    return serveFile(res, join(SHIM, url.slice('/vendor/wasi/'.length)));
+  // The runtime's browser host modules the page imports, and the bundled
+  // compiler worker (make compiler-worker).
+  if (url.startsWith('/rt/hosts/browser/')) {
+    return serveFile(res, join(ROOT, 'rt', 'built', 'hosts', 'browser', url.slice('/rt/hosts/browser/'.length)));
+  }
+  if (url === '/build/compiler-worker.mjs') {
+    return serveFile(res, join(ROOT, 'build', 'browser', 'compiler-worker.mjs'));
   }
 
   // The interface files the compiler reads for `import <Library>`: a manifest

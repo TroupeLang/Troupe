@@ -150,11 +150,13 @@ async function doLink() {
   $('linkOut').textContent = 'linking…';
   try {
     const r = await linkBlobs(blobs);
-    $('linkOut').textContent = r.snippets.length
-      ? r.snippets.map((s, i) =>
-          `// snippet ${i + 1}${s.malformed ? ' (unparsed)' : ''}\n${s.code ?? ''}`).join('\n\n')
-        + `\n\n// exit ${r.code} · ${r.ms.toFixed(0)} ms`
-      : `no snippets · exit ${r.code}\n${r.crash ?? r.errors ?? ''}`;
+    $('linkOut').textContent = r.snippets.map((s, i) =>
+        `// snippet ${i + 1}\n${s.code ?? ''}`).join('\n\n')
+      + `\n\n// ${r.ms.toFixed(0)} ms`;
+  } catch (e) {
+    // The service rejects a batch the compiler refuses, as the runtime
+    // rejects the closure that carried it.
+    $('linkOut').textContent = `rejected: ${e.message}`;
   } finally {
     $('link').disabled = false;
   }

@@ -1,4 +1,4 @@
-.PHONY: rt trp-rt compiler compiler-wasm lib p2p-tools npm clean test ci check-host-boundary test/examples dist \
+.PHONY: rt trp-rt compiler compiler-wasm compiler-worker lib p2p-tools npm clean test ci check-host-boundary test/examples dist \
         check-compiler notebook \
         dev-planning-to-html
 
@@ -133,7 +133,7 @@ ci-test-golden-no-color:
 	mkdir -p out 
 	./bin/golden --no-color
 
-test: test/local test/ir-sexp-corpus-troupe test/multinode test/hostile-peer test/result-socket
+test: test/local test/ir-sexp-corpus-troupe test/multinode test/hostile-peer test/result-socket test/compiler-service
 
 # Everything CI runs, in CI's order (.github/workflows/run_tests.yml). Use this
 # before pushing: `make test` alone leaves out the two property targets, and
@@ -145,6 +145,10 @@ ci: check-host-boundary test test/examples test/prop-rt test/prop-differential
 # The runtime core imports nothing of Node's; see scripts/check-host-boundary.sh.
 check-host-boundary:
 	@./scripts/check-host-boundary.sh
+
+# The compiler worker for a browser, at build/browser/compiler-worker.mjs.
+compiler-worker: rt
+	npx rollup -c rollup.compiler-worker.config.js
 
 # Every example and benchmark compiles. Nothing else covers examples/: the
 # golden suite is tests/ only, so a library change or a moved module hash can
@@ -214,6 +218,11 @@ test/result-socket-socat:
 	fi
 test/result-socket-node:
 	node tests/rt/result-socket/test-result-socket.mjs
+
+# The browser compiler service against bin/troupec; reports and passes when
+# bin/troupec.wasm is not built, as in CI.
+test/compiler-service: rt
+	node tests/rt/compiler-service/test-compiler-service.mjs
 
 # Runtime lattice property tests (fast-check + node:test). Not part of the
 # aggregate `test:` target.

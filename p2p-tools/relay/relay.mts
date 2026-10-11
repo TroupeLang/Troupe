@@ -118,9 +118,10 @@ async function main () {
           This was rejected to allow for easier upgrading of the libp2p library.
         */
         reservations: {
-          // Use large but safe values (1 hour, 1GB)
-          // Very large values like 2147483647 can cause protobuf encoding issues
-          defaultDurationLimit: 3600,
+          // One hour and 1 GiB per relayed connection. The server applies the
+          // duration in milliseconds (circuit-relay-v2 utils.js, AbortSignal.timeout);
+          // the wire field the client reads is in seconds. 3600 here meant 3.6 s.
+          defaultDurationLimit: 3_600_000,
           defaultDataLimit: BigInt(1073741824),
         }
       }),

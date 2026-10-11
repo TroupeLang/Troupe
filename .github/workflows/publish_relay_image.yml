@@ -1,0 +1,42 @@
+name: Build and publish the relay image
+on:
+  push:
+    branches: [dev]
+    paths:
+      - p2p-tools/**
+      - package.json
+      - package-lock.json
+      - .github/workflows/publish_relay_image.yml
+  workflow_dispatch:
+
+env:
+  IMAGE: ghcr.io/troupelang/troupe-relay
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    if: github.repository_owner == 'TroupeLang'
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Short commit id
+        id: sha
+        run: echo "short=${GITHUB_SHA:0:7}" >> "$GITHUB_OUTPUT"
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: p2p-tools/relay/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:latest
+            ${{ env.IMAGE }}:troupe-${{ steps.sha.outputs.short }}

@@ -1,0 +1,20 @@
+# Runs the published relay image. A host needs only this file:
+#   curl -O https://raw.githubusercontent.com/TroupeLang/Troupe/dev/p2p-tools/relay/docker-compose.yml
+#   docker compose pull && docker compose up -d
+services:
+  relay:
+    image: ghcr.io/troupelang/troupe-relay:${RELAY_TAG:-latest}
+    container_name: troupe-relay
+    restart: unless-stopped
+    ports:
+      - "${RELAY_PUBLIC_PORT:-5555}:5555"
+    volumes:
+      - relay-keys:/app/keys
+    environment:
+      - RELAY_PUBLIC_PORT=${RELAY_PUBLIC_PORT:-5555}
+      # libp2p:circuit-relay:server logs connections, reservations and hops;
+      # add ,libp2p:yamux:trace for all traffic
+      - DEBUG=libp2p:circuit-relay:server
+
+volumes:
+  relay-keys:

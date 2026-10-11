@@ -133,8 +133,10 @@ AI-generated commits must be held to the highest quality bar.
   goal — it clutters diffs.
 - When choosing between a clean-but-laborious approach and a quick partial one, in this codebase we
   almost always do the clean thing that is *right*.
-- **Code over comments.** What matters goes into the code: names, types, structure. Add a comment
-  only for what the code cannot say, and keep a docstring to a line or two.
+- **Comments are liability.** Add one only in the exceptional situation where it documents an
+  important design decision, a subtle runtime behaviour, or something equally exceptional. Most
+  importantly: a comment that duplicates the code is not written, and a comment that should be
+  code is written as code (names, types, structure).
 - **Adding prose is a decision, not a default.** Documentation, design notes and long comments are
   held to the standard of the technical-writing skill, so add less of them: the shortest factual
   statement that serves the reader, in the register of the surrounding document rather than the

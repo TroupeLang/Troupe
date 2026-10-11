@@ -82,22 +82,13 @@ import { identify } from '@libp2p/identify';
 import { circuitRelayTransport } from '@libp2p/circuit-relay-v2';
 import { ping } from '@libp2p/ping';
 const KEEP_ALIVE = 'KEEP_ALIVE'; // Tag for keeping connections alive
-import { Logger } from 'winston';
+import { Logger } from '../logger.mjs';
 import {v4 as uuidv4} from 'uuid';
 import { kadDHT } from '@libp2p/kad-dht';
 
 // USER-FACING ERRORS
 
-/**
- * Error class for P2P errors that should be displayed to users without stack traces.
- * Similar to CliValidationError for network-related user-facing errors.
- */
-export class P2pUserError extends Error {
-    constructor(message: string) {
-        super(message);
-        this.name = 'P2pUserError';
-    }
-}
+import { P2pUserError } from '../NetworkProvider.mjs';
 
 // LOGGING AND DEBUGGING 
 

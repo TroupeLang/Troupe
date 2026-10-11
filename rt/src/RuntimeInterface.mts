@@ -3,6 +3,7 @@ import { Thread } from "./Thread.mjs";
 import { LVal } from './Lval.mjs'
 import { MailboxInterface } from "./MailboxInterface.mjs";
 import { Authority } from './Authority.mjs';
+import { HostConsole } from './hostConsole.mjs';
 
 export interface RuntimeInterface {
     cleanup(): Promise<void>
@@ -19,5 +20,5 @@ export interface RuntimeInterface {
     // ret_raw ()
     // tailcall(funclos: any, __unit: any);
     persist (obj, path)
-    xconsole: Console
+    xconsole: HostConsole
 }

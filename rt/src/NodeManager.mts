@@ -1,11 +1,9 @@
 'use strict'
 
-import * as fs from 'node:fs'
 import * as levels from "./Level.mjs";
-import { getCliArgs, TroupeCliArg } from './TroupeCliArgs.mjs';
+import { getConfigStore } from './ConfigStore.mjs';
 import { ImplementationError } from './TroupeError.mjs';
 import { mkLogger } from './logger.mjs';
-const argv = getCliArgs();
 const logger = mkLogger('NodeManager');
 
 
@@ -23,9 +21,7 @@ class NodeManager {
     
     constructor () {
 
-        let aliases = argv[TroupeCliArg.Aliases]
-                        ? JSON.parse ( fs.readFileSync(argv[TroupeCliArg.Aliases] as string, 'utf8'))
-                        : {}
+        let aliases = getConfigStore().aliases()
 
         
         this.localNode = null;

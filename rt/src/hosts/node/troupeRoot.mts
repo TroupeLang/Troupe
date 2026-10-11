@@ -5,8 +5,8 @@ import { existsSync } from 'node:fs';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// From rt/built/ or rt/src/, go up to repo root
-const selfLocatedRoot = resolve(__dirname, '../..');
+// From rt/built/hosts/node/ or rt/src/hosts/node/, go up to repo root
+const selfLocatedRoot = resolve(__dirname, '../../../..');
 
 function getSelfLocatedRoot(): string | null {
     // Check for .troupe-root marker file

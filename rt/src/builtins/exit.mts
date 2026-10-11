@@ -2,7 +2,7 @@ import { UserRuntimeZero, Constructor, mkBase } from './UserRuntimeZero.mjs'
 import { assertNormalState, assertIsNTuple, assertIsAuthority, assertIsNumber, assertIsRootAuthority } from '../Asserts.mjs'
 import { __unit } from '../UnitVal.mjs';
 import { setExitInitiated } from '../runtimeMonitored.mjs';
-import { sendSocketMessageAndClose } from '../resultSocket.mjs';
+import { getResultChannel } from '../ResultChannel.mjs';
 
 
 export function BuiltinExit <TBase extends Constructor<UserRuntimeZero>>(Base: TBase) {
@@ -16,7 +16,7 @@ export function BuiltinExit <TBase extends Constructor<UserRuntimeZero>>(Base: T
             assertIsRootAuthority(arg.val[0]);
             setExitInitiated();  // Prevent compiler exit handler from interfering
             (async () => {
-                await sendSocketMessageAndClose({ type: 'process-exit', exitCode: arg.val[1].val });
+                await getResultChannel().sendAndClose({ type: 'process-exit', exitCode: arg.val[1].val });
                 await $r.cleanup()
                 process.exit(arg.val[1].val);
             }) ()

@@ -8,10 +8,7 @@ export function configureColors(): void {
     
     const argv = getCliArgs();
     
-    // NO_COLOR environment variable (standard from no-color.org)
-    // Any non-empty value disables colors
-    // CLI flag --disable-color overrides everything
-    if (process.env.NO_COLOR || argv[TroupeCliArg.NoColor]) {
+    if (argv[TroupeCliArg.NoColor]) {
         chalk.level = 0; // Disable all colors
     }
     
@@ -20,5 +17,5 @@ export function configureColors(): void {
 
 export function isColorEnabled(): boolean {
     const argv = getCliArgs();
-    return !(process.env.NO_COLOR || argv[TroupeCliArg.NoColor]);
+    return !argv[TroupeCliArg.NoColor];
 }

@@ -1,9 +1,7 @@
 "use strict";
-import { strict as assert } from 'node:assert'
-import {spawn} from 'child_process'
+import { assert } from './invariant.mjs'
 import { v4 as uuidv4 } from 'uuid';
 import * as Ty from './TroupeTypes.mjs'
-import { __exitInitiated } from './runtimeMonitored.mjs';
 import { LVal } from './Lval.mjs';
 import { mkTuple, mkList } from './ValuesUtil.mjs';
 import { isWellFormedSynVariant } from './RawTuple.mjs';
@@ -17,7 +15,6 @@ import { Level } from './Level.mjs';
 import { Record } from './Record.mjs';
 import { RawClosure } from './RawClosure.mjs';
 import * as levels from './Level.mjs';
-import { getTroupeRoot } from './troupeRoot.mjs';
 import { getCliArgs, TroupeCliArg } from './TroupeCliArgs.mjs';
 import { mkLogger } from './logger.mjs';
 import { DCLabel, createQuarantineAuthority, QuarantineTag } from './levels/DCLabels/dclabel.mjs';
@@ -29,6 +26,7 @@ import {
 } from './Ingress.mjs';
 import { TroupeError } from './TroupeError.mjs';
 import { NativeUnavailableError } from './ffi/registry.mjs';
+import { getCompilerService, LinkedSnippet } from './CompilerService.mjs';
 import { SchedulerInterface } from './SchedulerInterface.mjs';
 
 const argv = getCliArgs();
@@ -56,8 +54,6 @@ class CorruptDataException extends Error {
         super("Corrupt data encountered during deserialization");
     }
 }
-
-let __compilerOsProcess = null;
 
 let __rtObj = null;
 
@@ -111,39 +107,6 @@ function mergeSourceMaps(sourceMaps: any[]): any {
         sources: sources,
         mappings: mappings.join(";")
     }
-}
-
-function startCompiler() {
-    __compilerOsProcess = spawn(getTroupeRoot() + '/bin/troupec', ['--json-ir']);
-    __compilerOsProcess.on('exit', (code: number) => {
-        // Don't exit if runtime's exit() was already called - it will handle the exit code
-        if (!__exitInitiated) {
-            process.exit(code);
-        }
-    });
-
-    let marker = "/*-----*/\n\n"
-
-    // accumulator of communication with the compiler; reset after
-    // each deserialization; needed because we have no guarantees about
-    // how the data coming back from the compiler is chunked
-
-    let accum = "";
-
-    __compilerOsProcess.stdout.on('data', (data: string) => {
-        accum += data;
-        let j = accum.indexOf(marker);
-        if (j >= 0) {
-            constructCurrent(accum.slice(0, j));
-            accum = accum.slice(j + marker.length);
-        }
-    });
-}
-
-startCompiler();
-
-export function stopCompiler() {
-    __compilerOsProcess.stdin.end();
 }
 
 
@@ -207,22 +170,21 @@ export function isExpectedInboundError(e: unknown): boolean {
 // Wrapper around the reconstruction logic: any failure to reconstruct an
 // inbound value is reported through the current errback (rejecting the
 // promise returned by `deserialize`) instead of crashing the node.
-function constructCurrent(compilerOutput: string) {
+function constructCurrent(snippets: LinkedSnippet[]) {
     try {
-        constructCurrentUnchecked(compilerOutput);
+        constructCurrentUnchecked(snippets);
     } catch (e) {
         __currentErrback(asDeserializationError(e));
     }
 }
 
-function constructCurrentUnchecked(compilerOutput: string) {
+function constructCurrentUnchecked(snippets: LinkedSnippet[]) {
     __isCurrentlyUsingCompiler = false;
     let serobj = __currentDeserializedJson;
     let desercb = __currentCallback;
     let deserErrback = __currentErrback;
 
     // 1. reconstruct the namespaces
-    let snippets = compilerOutput.split("\n\n");
     let k = 0;
 
 
@@ -243,7 +205,7 @@ function constructCurrentUnchecked(compilerOutput: string) {
             if (j > 0) {
                 nsFun += "\n\n" // looks neater this way
             }
-            let snippetJson = JSON.parse(snippets[k++]);
+            let snippetJson = snippets[k++];
             nsFun += snippetJson.code;
 
             // Collect source map from snippet if available
@@ -569,26 +531,22 @@ function deserializeCb(lev: Level, jsonObj: any, senderNodeId: string | undefine
 
         __currentDeserializedJson = jsonObj; // obs: another global that we must be careful with
 
-        try {
-            if (jsonObj.namespaces.length > 0) {
-                for (let i = 0; i < jsonObj.namespaces.length; i++) {
-                    let ns = jsonObj.namespaces[i];
-                    for (let j = 0; j < ns.length; j++) {
-                        // debuglog("*s deserialize", ns[j]);
-                        __compilerOsProcess.stdin.write(ns[j][1]);
-                        __compilerOsProcess.stdin.write("\n")
-                        // debuglog ("data out")
-                    }
-                }
-                __compilerOsProcess.stdin.write("!ECHO /*-----*/\n")
-            } else {
-                // shortcutting the unnecessary interaction with the compiler
-                // 2018-09-20: AA
-                constructCurrent("");
+        const blobs: string[] = [];
+        for (let i = 0; i < jsonObj.namespaces.length; i++) {
+            let ns = jsonObj.namespaces[i];
+            for (let j = 0; j < ns.length; j++) {
+                blobs.push(ns[j][1]);
             }
-        } catch (e) {
-            __isCurrentlyUsingCompiler = false;
-            errb(asDeserializationError(e));
+        }
+        if (blobs.length > 0) {
+            getCompilerService().linkIR(blobs).then(constructCurrent, (e) => {
+                __isCurrentlyUsingCompiler = false;
+                errb(asDeserializationError(e));
+            });
+        } else {
+            // shortcutting the unnecessary interaction with the compiler
+            // 2018-09-20: AA
+            constructCurrent([]);
         }
     }
 }

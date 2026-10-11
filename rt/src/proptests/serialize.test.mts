@@ -16,6 +16,9 @@
  * to non-corrupt labels, and serde-harness.mts for the round-trip mechanics and
  * runtime teardown.
  */
+// The host is registered before the runtime is imported, as the entry point
+// does: this import runs first.
+import '../hosts/node/register.mjs'
 import { test } from 'node:test'
 import assert from 'node:assert'
 import fc from 'fast-check'

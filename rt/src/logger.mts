@@ -1,38 +1,76 @@
-// 2018-07-21: AA; A very basic logging setup ... Not particularly attached to
-// this library or this way of doing things, but this still beats console
-// outputs. 
+// The runtime's loggers. A host registers a logger factory before the
+// runtime is imported, since several modules create their loggers at import
+// time; the Node host registers winston (hosts/node/logger.mts). When no
+// factory is registered, mkLogger gives a console logger: one line per
+// message, `timestamp [label] level: message`, the level coloured when
+// colour is on, written to the host's console. The browser runs on that
+// default, since winston does not load there, and so do tools and tests
+// that import the core without a host. Levels are the npm set winston uses,
+// so a logger created at 'info' prints info, warn and error and not debug.
 
-import winston_pkg from 'winston';
-const { createLogger, format, transports } = winston_pkg
-const { combine, timestamp, label, printf } = format;
 import { isColorEnabled } from './colorConfig.mjs';
+import { getHostConsole } from './hostConsole.mjs';
 
-const myFormat = printf(info => {
-  //  return `${info.timestamp} ${info.level}: ${info.message}`;
-  return `${info.timestamp} [${info.label}] ${info.level}: ${info.message}`;
-});
+export interface Logger {
+    error(message: any): void;
+    warn(message: any): void;
+    info(message: any): void;
+    debug(message: any): void;
+    isLevelEnabled(level: string): boolean;
+}
 
-export function mkLogger (l, level='info') {  
-    
-  const consol = new transports.Console();  
+export type LoggerFactory = (label: string, level: string) => Logger;
 
-  // Conditionally include colorize based on color configuration
-  const formatList = [
-    label({ label: `${l}` }),
-    timestamp(),
-    myFormat
-  ];
-  
-  if (isColorEnabled()) {
-    formatList.unshift(format.colorize());
-  }
+let __factory: LoggerFactory | null = null;
 
-  let x =  createLogger({
-              level : level, // comment out this file to remove debug messages
-              format: combine(...formatList),
-              transports: [consol]
-           });
-  return x
+export function registerLoggerFactory(f: LoggerFactory): void {
+    __factory = f;
+}
+
+const LEVELS: Record<string, number> = {
+    error: 0, warn: 1, info: 2, http: 3, verbose: 4, debug: 5, silly: 6,
+};
+
+// ANSI colours per level, as winston's colorize format renders them.
+const COLORS: Record<string, [string, string]> = {
+    error: ['\x1b[31m', '\x1b[39m'],
+    warn: ['\x1b[33m', '\x1b[39m'],
+    info: ['\x1b[32m', '\x1b[39m'],
+    http: ['\x1b[32m', '\x1b[39m'],
+    verbose: ['\x1b[36m', '\x1b[39m'],
+    debug: ['\x1b[34m', '\x1b[39m'],
+    silly: ['\x1b[35m', '\x1b[39m'],
+};
+
+/** The default logger: the host's console, in winston's line format. */
+export class ConsoleLogger implements Logger {
+    private readonly threshold: number;
+
+    constructor(private readonly label: string, level: string) {
+        this.threshold = LEVELS[level] ?? LEVELS.info;
+    }
+
+    isLevelEnabled(level: string): boolean {
+        return (LEVELS[level] ?? LEVELS.info) <= this.threshold;
+    }
+
+    log(level: string, message: any): void {
+        if (!this.isLevelEnabled(level)) return;
+        const shown = isColorEnabled()
+            ? COLORS[level][0] + level + COLORS[level][1]
+            : level;
+        getHostConsole().log(
+            `${new Date().toISOString()} [${this.label}] ${shown}: ${message}`);
+    }
+
+    error(message: any): void { this.log('error', message); }
+    warn(message: any): void { this.log('warn', message); }
+    info(message: any): void { this.log('info', message); }
+    debug(message: any): void { this.log('debug', message); }
+}
+
+export function mkLogger(l: string, level = 'info'): Logger {
+    return __factory ? __factory(l, level) : new ConsoleLogger(l, level);
 }
 
 /** A lazy debug logger for hot paths, used as a tagged template literal:
@@ -49,7 +87,7 @@ export function mkLogger (l, level='info') {
  *  The enabled check is captured at creation time: log levels in this
  *  runtime are fixed at startup from CLI flags.
  */
-export function mkDebugTag (logger) {
+export function mkDebugTag (logger: Logger) {
   const enabled = logger.isLevelEnabled('debug');
   return (strings: TemplateStringsArray | any, ...vals: any[]) => {
     if (!enabled) return;
@@ -67,6 +105,3 @@ export function mkDebugTag (logger) {
     logger.debug(s);
   };
 }
-
-
-

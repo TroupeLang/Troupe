@@ -37,7 +37,7 @@ import { UserRuntimeZero, Constructor, mkBase } from './UserRuntimeZero.mjs'
 import { LVal } from '../Lval.mjs';
 import { Record } from '../Record.mjs';
 import { assertIsString } from '../Asserts.mjs';
-import { gzipSync, gunzipSync } from 'node:zlib';
+import { getCompression, DecompressionLimitError } from '../Compression.mjs';
 
 // The cap the compiler enforces when decompressing a blob
 // (IRBlob.maxDecompressedBytes). A stream from a remote node is untrusted
@@ -53,6 +53,27 @@ function firstNonByte(s: string): number {
     }
     return -1;
 }
+
+/** The bytes a byte string denotes, one per character. */
+function latin1ToBytes(s: string): Uint8Array {
+    const bytes = new Uint8Array(s.length);
+    for (let i = 0; i < s.length; i++) {
+        bytes[i] = s.charCodeAt(i);
+    }
+    return bytes;
+}
+
+/** The byte string denoting the bytes, one character per byte. */
+function bytesToLatin1(bytes: Uint8Array): string {
+    const CHUNK = 0x8000;
+    let s = '';
+    for (let i = 0; i < bytes.length; i += CHUNK) {
+        s += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK) as any);
+    }
+    return s;
+}
+
+const utf8Encoder = new TextEncoder();
 
 // Every leaf carries the argument's label, so a result says exactly as much as
 // the input it was derived from.
@@ -84,7 +105,7 @@ export function BuiltinCodec<TBase extends Constructor<UserRuntimeZero>>(Base: T
                     "gzip: argument has no UTF-8 encoding: it contains an unpaired surrogate");
                 return;
             }
-            const out = gzipSync(Buffer.from(s, 'utf8'));
+            const out = getCompression().gzip(utf8Encoder.encode(s));
             // The gzip header's OS field (offset 9) is whichever platform this
             // Node's zlib was built for -- 19 on macOS, 3 on Linux. It is the
             // only byte of the output not determined by the argument, so
@@ -94,7 +115,7 @@ export function BuiltinCodec<TBase extends Constructor<UserRuntimeZero>>(Base: T
             // required to ignore it. Same reasoning and the same value as the
             // compiler's own producer, IRBlob.setGzipOS.
             if (out.length > 9) out[9] = 255;
-            return this.runtime.ret(new LVal(out.toString('latin1'), arg.lev));
+            return this.runtime.ret(new LVal(bytesToLatin1(out), arg.lev));
         }, "gzip")
 
         gunzip = mkBase((arg) => {
@@ -107,13 +128,12 @@ export function BuiltinCodec<TBase extends Constructor<UserRuntimeZero>>(Base: T
                     `code unit ${s.charCodeAt(bad)}, above 255`);
                 return;
             }
-            let raw: Buffer;
+            let raw: Uint8Array;
             try {
-                raw = gunzipSync(Buffer.from(s, 'latin1'),
-                                 { maxOutputLength: maxDecompressedBytes });
+                raw = getCompression().gunzip(latin1ToBytes(s), maxDecompressedBytes);
             } catch (e) {
                 return this.runtime.ret(mkErr(
-                    e.code === 'ERR_BUFFER_TOO_LARGE'
+                    e instanceof DecompressionLimitError
                     ? `decompressed data exceeds the ${maxDecompressedBytes}-byte cap`
                     : e.message,
                     arg.lev));
@@ -135,21 +155,19 @@ export function BuiltinCodec<TBase extends Constructor<UserRuntimeZero>>(Base: T
                     `code unit ${s.charCodeAt(bad)}, above 255`);
                 return;
             }
-            return this.runtime.ret(
-                new LVal(Buffer.from(s, 'latin1').toString('base64'), arg.lev));
+            return this.runtime.ret(new LVal(btoa(s), arg.lev));
         }, "base64Encode")
 
-        // Node's decoder ignores anything outside the alphabet, so a corrupt
-        // blob would decode to plausible-looking bytes. Checked here instead:
-        // whitespace is skipped, everything else must be base64.
+        // Checked before decoding: whitespace is skipped, everything else must
+        // be base64, so a corrupt blob is refused rather than decoded to
+        // plausible-looking bytes.
         base64Decode = mkBase((arg) => {
             assertIsString(arg);
             const s = (arg.val as string).replace(/\s+/g, '');
             if (!/^[A-Za-z0-9+/]*={0,2}$/.test(s) || s.length % 4 !== 0) {
                 return this.runtime.ret(mkErr("not base64", arg.lev));
             }
-            return this.runtime.ret(
-                mkOk(Buffer.from(s, 'base64').toString('latin1'), arg.lev));
+            return this.runtime.ret(mkOk(atob(s), arg.lev));
         }, "base64Decode")
     }
 }

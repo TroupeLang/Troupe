@@ -15,6 +15,9 @@
  *     a' is at least as authoritative), which is the direction that makes the
  *     `implies(conjunction(auth, X), Y)` and robustness checks monotone.
  */
+// The host is registered before the runtime is imported, as the entry point
+// does: this import runs first.
+import '../hosts/node/register.mjs'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import fc from 'fast-check'

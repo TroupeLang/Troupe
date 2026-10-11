@@ -1,4 +1,4 @@
-.PHONY: rt trp-rt compiler compiler-wasm lib p2p-tools npm clean test ci test/examples dist \
+.PHONY: rt trp-rt compiler compiler-wasm lib p2p-tools npm clean test ci check-host-boundary test/examples dist \
         check-compiler notebook \
         dev-planning-to-html
 
@@ -140,7 +140,11 @@ test: test/local test/ir-sexp-corpus-troupe test/multinode test/hostile-peer tes
 # ./bin/golden alone leaves out far more -- every Haskell suite runs under
 # `stack test`, which only test/local reaches, and the IR conformance corpus
 # lives there.
-ci: test test/examples test/prop-rt test/prop-differential
+ci: check-host-boundary test test/examples test/prop-rt test/prop-differential
+
+# The runtime core imports nothing of Node's; see scripts/check-host-boundary.sh.
+check-host-boundary:
+	@./scripts/check-host-boundary.sh
 
 # Every example and benchmark compiles. Nothing else covers examples/: the
 # golden suite is tests/ only, so a library change or a moved module hash can

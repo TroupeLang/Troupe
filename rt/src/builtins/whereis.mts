@@ -12,7 +12,7 @@ import { __unit } from '../UnitVal.mjs';
 import { nodeTrustLevel } from '../TrustManager.mjs';
 import { ErrorKind } from '../TroupeError.mjs';
 export let __theRegister = {}
-import {p2p} from '../p2p/p2p.mjs'
+import { getNetworkProvider } from '../NetworkProvider.mjs'
 
 // import runId from '../runId.mjs';
 
@@ -99,7 +99,7 @@ export function BuiltinRegistry<TBase extends Constructor<UserRuntimeZero>>(Base
             } else {
                 (async () => {
                     try {
-                        let body1 = await p2p.whereisp2p(n, k);
+                        let body1 = await getNetworkProvider().whereisp2p(n, k);
                         let result = await deserialize(nodeTrustLevel(n), body1, n);
 
                         // DROP means we can't trust the pid we got back

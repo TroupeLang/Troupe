@@ -3,7 +3,7 @@ import { LVal } from '../Lval.mjs';
 import * as levels from '../Level.mjs'
 import {deserialize} from '../deserialize.mjs'
 import { shouldDrop } from '../QuarantineUtils.mjs'
-import * as fs from 'node:fs';
+import { getPersistStore } from '../PersistStore.mjs';
 import { assertIsNTuple, assertIsRootAuthority, assertIsString } from '../Asserts.mjs'
 import { __unit } from '../UnitVal.mjs';
 import { StopThreadError, ErrorKind } from '../TroupeError.mjs';
@@ -117,7 +117,7 @@ export function BuiltinPersist<TBase extends Constructor<UserRuntimeZero>>(Base:
 
             (async () => {
                 try {
-                    let jsonStr = await fs.promises.readFile("./out/saved." + file.val + ".persist.json", 'utf8');
+                    let jsonStr = await getPersistStore().read("./out/saved." + file.val + ".persist.json");
                     // Use ROOT (most trusted) for local deserialization - we trust our own persisted data
                     let result = await deserialize(levels.ROOT, JSON.parse(jsonStr));
 

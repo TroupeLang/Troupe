@@ -127,6 +127,8 @@ jobs:
             which tsc || echo "TypeScript compiler not found"
             exit 1
           }
+      - name: check the host boundary of the runtime
+        run: make check-host-boundary
       - name: run all tests
         run: make test
       - name: compile every example and benchmark

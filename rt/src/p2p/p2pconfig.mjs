@@ -8,7 +8,7 @@ let logger;
 
 import { existsSync, readFileSync } from 'fs';
 import { resolve } from 'path';
-import { getTroupeRoot } from '../troupeRoot.mjs';
+import { getTroupeRoot } from '../hosts/node/troupeRoot.mjs';
 let relays
 
 let default_relays = []

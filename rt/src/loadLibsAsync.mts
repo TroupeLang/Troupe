@@ -1,11 +1,7 @@
 'use strict'
-import * as fs from 'node:fs'
-import * as path from 'node:path'
 import * as levels from './Level.mjs';
-const { readFile } = fs.promises
 
-import { getTroupeRoot } from './troupeRoot.mjs'
-import { seedModuleResolver, resolveModuleFile, moduleDisplayName } from './moduleResolver.mjs'
+import { getCodeStore } from './CodeStore.mjs'
 import * as nativeModules from './ffi/registry.mjs'
 import { mkLogger } from './logger.mjs'
 const logger = mkLogger('lib')
@@ -49,22 +45,9 @@ function loadLib(libname: string, rtObj, root): Promise<LoadedLib> {
         // received closure references: the resolver answers against the
         // receiver's dependencies, so a closure links only modules the receiver
         // already has, matched by hash.
-        let filename
-        if (libname.startsWith("module:")) {
-            filename = resolveModuleFile(root, libname)
-            if (filename == null) {
-                // Not locally discoverable — this program records no
-                // dependencies, or none of them has this hash. A received
-                // module-bearing closure naming a module the receiver does not
-                // have is cleanly rejected here (all-or-nothing: it never links).
-                throw new Error(
-                    `cannot link module ${moduleDisplayName(libname)}: it is not `
-                    + `among this program's dependencies`)
-            }
-        } else {
-            filename = getTroupeRoot() + "/lib/out/" + libname + ".js"
-        }
-        let input = await readFile(filename, 'utf8')
+        // A module identity the receiver cannot link raises
+        // ArtifactNotLinkableError from the store; see CodeStore.mts.
+        let input = await getCodeStore().readArtifact(libname, root)
         // TODO: check for error! 2018-07-03: aa
         let Lib: any = new Function('rt', input)
         let libinstance = new Lib(rtObj)
@@ -99,7 +82,7 @@ export async function loadLibsAsync(obj, rtObj, moduleRoot = null) {
     // the resolver map (a process-level singleton) is seeded once from the
     // dependencies file the main program points at.
     const root = obj.__moduleRoot ?? moduleRoot
-    if (obj.__moduleDepsFile) seedModuleResolver(obj.__moduleDepsFile)
+    if (obj.__moduleDepsFile) getCodeStore().seedModules(obj.__moduleDepsFile)
     for (let n = 0; n < libs.length; n++) {
         let lib = libs[n].lib
         let decl = libs[n].decl
@@ -125,7 +108,7 @@ async function checkConsumedDatatypes(obj, rtObj, root) {
         let exported = (await loadLib(libname, rtObj, root)).datatypeHashes
         for (let h of consumed[libname]) {
             if (!exported.includes(h)) {
-                const disp = moduleDisplayName(libname)
+                const disp = getCodeStore().displayName(libname)
                 throw new Error(
                     "datatype version skew: library '" + disp + "' no longer exports a "
                     + "datatype group that was consumed at compile time (group hash " + h

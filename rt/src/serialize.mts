@@ -9,7 +9,7 @@
 ..######..########.##.....##.####.##.....##.########.####.########.##.....##....##....####..#######..##....##
 */
 
-import assert from 'assert'
+import { assert } from './invariant.mjs'
 import { lub } from './Level.mjs';
 import * as Ty from './TroupeTypes.mjs'
 import { LVal } from './Lval.mjs';

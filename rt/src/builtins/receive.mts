@@ -8,7 +8,6 @@ import { mkTuple } from '../ValuesUtil.mjs';
 import { __unit } from '../UnitVal.mjs';
 import SandboxStatus from '../SandboxStatus.mjs';
 import { Thread } from '../Thread.mjs';
-import { debug } from 'console';
 
 
 

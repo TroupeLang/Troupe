@@ -4,18 +4,18 @@
  *
  * `deserialize` is async and depends on runtime module state: `runtimeMonitored`
  * constructs the runtime object and registers it with the deserializer
- * (`DS.setRuntimeObj`), and loading `deserialize` spawns the `troupec --json-ir`
- * subprocess used to reconstruct dynamic code. Neither a live scheduler nor a
- * thread is required to round-trip pure (non-closure) values: with an empty
+ * (`DS.setRuntimeObj`), and the node host's compiler service is the
+ * `troupec --json-ir` subprocess used to reconstruct dynamic code, registered
+ * here as the entry point registers it. Neither a live scheduler nor a thread
+ * is required to round-trip pure (non-closure) values: with an empty
  * namespace set the deserializer shortcuts the compiler interaction entirely.
  *
- * Two setup constraints are load-bearing:
+ * Two setup constraints hold:
  *
- *  1. Import order. `deserialize` and `runtimeMonitored` form an import cycle
- *     (`deserialize` needs `__exitInitiated`; `runtimeMonitored` calls
- *     `DS.setRuntimeObj`). `runtimeMonitored` must be evaluated first — exactly
- *     as the real entry point does — or `DS.setRuntimeObj` runs against an
- *     uninitialized `__rtObj` (TDZ). Hence its import precedes `deserialize`.
+ *  1. Import order. `runtimeMonitored` calls `DS.setRuntimeObj` at import, so
+ *     it must be evaluated first — exactly as the real entry point does — or
+ *     `DS.setRuntimeObj` runs against an uninitialized `__rtObj` (TDZ). Hence
+ *     its import precedes `deserialize`.
  *
  *  2. Teardown. The compiler subprocess and the stdin readline interface keep
  *     the event loop alive, so `node --test` would hang after the suite. The
@@ -24,16 +24,24 @@
  *     still-running test, masking a failure). The process then exits naturally
  *     with the runner's own exit code.
  */
+// The host is registered before the runtime is imported, as the entry point
+// does: this import runs first.
+import '../hosts/node/register.mjs'
 import { after } from 'node:test'
 // (1) runtimeMonitored MUST load before deserialize — see the note above.
-import { setExitInitiated } from '../runtimeMonitored.mjs'
+import * as rtm from '../runtimeMonitored.mjs'
 import * as DS from '../deserialize.mjs'
+import { registerCompilerService, getCompilerService } from '../CompilerService.mjs'
+import { startNodeCompiler } from '../hosts/node/compilerService.mjs'
 import { IngressResult } from '../deserialize.mjs'
 import { serialize } from '../serialize.mjs'
 import { closeReadline } from '../builtins/stdio.mjs'
 import * as levels from '../Level.mjs'
 import { LVal } from '../Lval.mjs'
 import assert from 'node:assert'
+
+const { setExitInitiated } = rtm
+registerCompilerService(startNodeCompiler(() => rtm.__exitInitiated))
 
 /**
  * Serialize a value, push it through the real JSON wire encoding, and deserialize
@@ -57,7 +65,7 @@ export async function roundTrip(v: LVal): Promise<LVal> {
 after(() => {
     setExitInitiated()
     try { closeReadline() } catch { /* readline may already be closed */ }
-    DS.stopCompiler()
+    getCompilerService().stop()
     const getHandles = (process as any)._getActiveHandles
     if (typeof getHandles === 'function') {
         for (const h of getHandles.call(process)) {

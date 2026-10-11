@@ -1,7 +1,5 @@
-import * as fs from 'node:fs';
 import chalk from 'chalk';
 import { v4 as uuidv4 } from 'uuid'
-import AggregateError from 'aggregate-error';
 import { __unit } from './UnitVal.mjs'
 import { Authority } from './Authority.mjs'
 import { Scheduler } from './Scheduler.mjs'
@@ -12,7 +10,7 @@ import { ProcessID } from './process.mjs';
 import { UserRuntime } from './UserRuntime.mjs'
 import * as levels from './Level.mjs'
 import * as DS from './deserialize.mjs'
-import { p2p, P2pUserError } from './p2p/p2p.mjs'
+import { getNetworkProvider, P2pUserError } from './NetworkProvider.mjs'
 import { closeReadline } from './builtins/stdio.mjs';
 import { runCleanups as runNativeCleanups } from './ffi/registry.mjs';
 import { __theRegister } from './builtins/whereis.mjs';
@@ -25,21 +23,22 @@ import { serialize } from './serialize.mjs';
 import { Thread } from './Thread.mjs';
 import { ErrorKind } from './TroupeError.mjs';
 
-import { Console } from 'node:console'
 
 const { flowsTo, actsFor, lub, glb } = levels
 import { getCliArgs, TroupeCliArg } from './TroupeCliArgs.mjs';
-import { connectResultSocket, sendSocketMessageAndClose } from './resultSocket.mjs';
-import { configureColors, isColorEnabled } from './colorConfig.mjs';
+import { getResultChannel } from './ResultChannel.mjs';
+import { getHostConsole } from './hostConsole.mjs';
+import { getConfigStore } from './ConfigStore.mjs';
+import { getPersistStore } from './PersistStore.mjs';
+import { configureColors } from './colorConfig.mjs';
 import { mkLogger, mkDebugTag } from './logger.mjs'
-import { getTroupeRoot } from './troupeRoot.mjs'
+import { getCodeStore } from './CodeStore.mjs'
+import { getCompilerService } from './CompilerService.mjs'
 import { Record } from './Record.mjs';
-import { level } from 'winston';
 import { shouldDrop, extractQuarantineAuth } from './QuarantineUtils.mjs';
 import { DCLabel } from './levels/DCLabels/dclabel.mjs';
 import { implies } from './levels/DCLabels/cnf.mjs';
 
-const readFile = fs.promises.readFile
 const rt_uuid = runId
 const argv = getCliArgs();
 
@@ -66,12 +65,6 @@ export function setExitInitiated() {
     __exitInitiated = true;
 }
 
-
-let rt_xconsole = 
-      new Console({ stdout: process.stdout
-                  , stderr: process.stderr
-                  , colorMode: isColorEnabled()
-                 });
 
 function $t():Thread { return __sched.__currentThread }; // returns the current thread
 
@@ -111,7 +104,7 @@ async function spawnAtNode(nodeid, f) {
 
 
   try {
-    let body1 = await p2p.spawnp2p(node.nodeId, data);
+    let body1 = await getNetworkProvider().spawnp2p(node.nodeId, data);
     let result = await DS.deserialize(nodeTrustLevel(node.nodeId), body1, node.nodeId)
 
     // For spawn responses, DROP means we can't trust the pid we got back
@@ -308,7 +301,7 @@ function sendMessageToRemote(toPid, message, qauth?: Authority) {
       (qauth ? ` | effective trust (with qauth): ${effectiveTrust.stringRep()}\n` : '') +
       ` | the level of the information to send:  ${level.stringRep()}`, false, null, ErrorKind.IFCCheck);
   } else {
-    p2p.sendp2p(node, pid, data)
+    getNetworkProvider().sendp2p(node, pid, data)
     return $t().returnImmediateLValue(__unit);
   }
 }
@@ -359,7 +352,7 @@ let rt_debug = function (s) {
   let pc = $t().pc.stringRep()
   let bl = $t().bl.stringRep()
   let handler_state = __sched.handlerState.toString()
-  rt_xconsole.log(
+  getHostConsole().log(
     chalk.red(formatToN("PID:" + tid, 50)),
     chalk.red(formatToN("PC:" + pc, 20)),
     chalk.red(formatToN("BL:" + bl, 20)),
@@ -429,7 +422,7 @@ let __service:any = {}
 
 class RuntimeObject implements RuntimeInterface {
   // tailcall = tailcall
-  xconsole = rt_xconsole
+  xconsole = getHostConsole()
   ret = rt_ret
   // ret_raw = rt_ret_raw 
   debug = rt_debug
@@ -440,7 +433,7 @@ class RuntimeObject implements RuntimeInterface {
   cleanup = cleanupAsync
   persist(obj, path) {
     let jsonObj = serialize(obj, $t().pc).data;
-    fs.writeFileSync(path, JSON.stringify(jsonObj));
+    getPersistStore().write(path, JSON.stringify(jsonObj));
   }
 
   get $service () {
@@ -479,44 +472,20 @@ setRuntimeObject(__rtObj)
 
 
 async function cleanupAsync() {
-  await sendSocketMessageAndClose({ type: 'process-exit', exitCode: 0 });
+  await getResultChannel().sendAndClose({ type: 'process-exit', exitCode: 0 });
   runNativeCleanups()
   closeReadline()
-  DS.stopCompiler();
+  getCompilerService().stop();
   if (__p2pRunning) {
     try {
       debug("stopping p2p")
-      await p2p.stopp2p()
+      await getNetworkProvider().stopp2p()
       debug("p2p stop OK")
     } catch (err) {
       debug(`p2p stop failed ${err}`)
     }
   }
 }
-
-
-// 2020-02-09; AA; ugly ugly hack
-function bulletProofSigint() {
-  let listeners = process.listeners("SIGINT");
-  // console.log (util.inspect(listeners))
-  // for (let i = 0; i < listeners.length; i ++  ) {
-  // console.log (listeners[i].toString());
-  // }
-
-  // process.stdin.removeAllListeners("on");
-  process.removeAllListeners("SIGINT");
-  // console.log ("sigint bulletproofing")
-  process.on('SIGINT', () => {
-    debug("SIGINT");
-    (async () => {
-      await sendSocketMessageAndClose({ type: 'process-exit', exitCode: 0 });
-      await cleanupAsync()
-      process.exit(0);
-    })()
-  })
-  // setTimeout (bulletProofSigint, 1000)
-}
-bulletProofSigint();
 
 
 /*****************************************************************************\
@@ -547,7 +516,7 @@ bulletProofSigint();
 
 
 async function loadServiceCode() {
-  let input = await fs.promises.readFile(getTroupeRoot() + '/trp-rt/out/service.js', 'utf8')
+  let input = await getCodeStore().loadService()
   let S: any = new Function('rt', input)
   let service = new S(__userRuntime);
 
@@ -567,18 +536,12 @@ async function loadServiceCode() {
 
 
 async function getNetworkPeerId(rtHandlers) {
-  const nodeIdFile = argv[TroupeCliArg.Id] as string;
-
-  // Parse node ID from file if provided
   let nodeId = null;
-  if (nodeIdFile) {
-    try {
-      const nodeIdObj = await readFile(nodeIdFile, 'utf-8')
-      nodeId = JSON.parse(nodeIdObj);
-    } catch (err) {
-      logger.error(`cannot load id file: ${nodeIdFile}`)
-      process.exit(1);
-    }
+  try {
+    nodeId = await getConfigStore().nodeIdentity();
+  } catch (err) {
+    logger.error(err instanceof Error ? err.message : String(err))
+    process.exit(1);
   }
 
   // Handle local-only or persist modes (skip network creation)
@@ -594,6 +557,7 @@ async function getNetworkPeerId(rtHandlers) {
 
   // Start P2P network
   try {
+    const p2p = getNetworkProvider();
     process.on('unhandledRejection', (e) => p2p.processExpectedNetworkErrors(e, "unhandledRejection"))
     process.on('uncaughtException', (e) => p2p.processExpectedNetworkErrors(e, "uncaughtException"))
     return await p2p.startp2p(nodeId, rtHandlers);
@@ -609,7 +573,7 @@ async function getNetworkPeerId(rtHandlers) {
 }
 
 export async function start(f) {
-  await connectResultSocket();
+  await getResultChannel().connect();
   await initTrustMap()
 
   let peerid = await getNetworkPeerId({
@@ -669,7 +633,7 @@ export async function start(f) {
     const timer = setTimeout(async () => {
       console.error(`Execution timed out after ${timeoutSeconds} seconds`);
       setExitInitiated();
-      await sendSocketMessageAndClose({ type: 'process-exit', exitCode, reason: 'timeout' });
+      await getResultChannel().sendAndClose({ type: 'process-exit', exitCode, reason: 'timeout' });
       await cleanupAsync();
       process.exit(exitCode);
     }, timeoutSeconds * 1000);

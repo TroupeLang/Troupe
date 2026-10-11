@@ -13,7 +13,7 @@ import SandboxStatus from './SandboxStatus.mjs'
 import  {ThreadError, TroupeError} from './TroupeError.mjs'
 import  {lub} from './Level.mjs'
 import { getCliArgs, TroupeCliArg } from './TroupeCliArgs.mjs';
-import { sendSocketMessage, isResultSocketEnabled } from './resultSocket.mjs';
+import { getResultChannel } from './ResultChannel.mjs';
 
 import {SYSTEM_PROCESS_STRING} from './Constants.mjs'
 const argv = getCliArgs();
@@ -92,8 +92,9 @@ export class Scheduler implements SchedulerInterface {
         this.notifyMonitors ();
 
         this.__alive.delete(this.pidKey(this.currentThreadId));
-        sendSocketMessage({ type: 'main-thread-result', value: retVal.stringRep() });
-        if (!argv[TroupeCliArg.SuppressMainThreadFinishedMessage] && !isResultSocketEnabled()) {
+        const results = getResultChannel();
+        results.send({ type: 'main-thread-result', value: retVal.stringRep() });
+        if (!argv[TroupeCliArg.SuppressMainThreadFinishedMessage] && !results.enabled()) {
             console.log(">>> Main thread finished with value:", retVal.stringRep());
         }
         if (persist) {

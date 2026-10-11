@@ -4,8 +4,7 @@ import chalk from 'chalk'
 import { SchedulerInterface } from "./SchedulerInterface.mjs";
 import { configureColors } from './colorConfig.mjs';
 import { getCliArgs, TroupeCliArg } from './TroupeCliArgs.mjs';
-import { readFileSync, statSync } from 'fs';
-import { resolve, isAbsolute } from 'path';
+import { getCodeStore } from './CodeStore.mjs';
 
 // Ensure colors are configured when this module is loaded
 configureColors();
@@ -78,52 +77,15 @@ function parseSourceLocation(loc: string): { filePath: string; line: number; col
 }
 
 /**
- * Check if a path points to a regular file (not a device, pipe, socket, etc.).
- * Returns false for special files like /dev/stdin that can't be re-read.
- */
-function isRegularFile(path: string): boolean {
-    try {
-        const stat = statSync(path);
-        return stat.isFile();
-    } catch {
-        return false;
-    }
-}
-
-/**
- * Resolve a potentially relative file path to an absolute path.
- * Only returns paths to regular files (excludes devices, pipes, sockets).
- */
-function resolveSourcePath(filePath: string): string | null {
-    // If already absolute, check if it's a regular file
-    if (isAbsolute(filePath)) {
-        if (isRegularFile(filePath)) return filePath;
-        return null;
-    }
-
-    // Try relative to current working directory
-    const cwdPath = resolve(process.cwd(), filePath);
-    if (isRegularFile(cwdPath)) return cwdPath;
-
-    return null;
-}
-
-/**
  * Attempt to read a source line from a file.
  * Returns null if file is unavailable or line is out of range.
  */
 function getSourceLine(filePath: string, lineNum: number): string | null {
-    const resolvedPath = resolveSourcePath(filePath);
-    if (!resolvedPath) return null;
-
-    try {
-        const content = readFileSync(resolvedPath, 'utf-8');
-        const lines = content.split('\n');
-        if (lineNum > 0 && lineNum <= lines.length) {
-            return lines[lineNum - 1];
-        }
-    } catch {
-        // File read error - silently return null
+    const content = getCodeStore().readSource(filePath);
+    if (content == null) return null;
+    const lines = content.split('\n');
+    if (lineNum > 0 && lineNum <= lines.length) {
+        return lines[lineNum - 1];
     }
     return null;
 }

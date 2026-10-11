@@ -8,7 +8,7 @@ import { ErrorKind } from '../TroupeError.mjs';
 import { getCliArgs, TroupeCliArg } from '../TroupeCliArgs.mjs';
 const argv = getCliArgs();
 
-import * as rl from 'node:readline';
+import { getTerminal } from '../Terminal.mjs';
 
 /**
  * The level the runtime was started at, from `--stdiolev` or the default.
@@ -65,27 +65,15 @@ function lineListener(input) {
     }
 }
 
-/** Node's readline interface. Created lazily on first use: on a terminal,
- * creating the interface puts stdin into raw mode with readline's own echo,
- * so a program that never reads a line must never trigger it. */
-let readline: rl.Interface | null = null
-
-function getReadline(): rl.Interface {
-    if (readline === null) {
-        readline = rl.createInterface({
-            input: process.stdin,
-            output: process.stdout
-        })
-        readline.on('line', lineListener)
-    }
-    return readline
+/** Opens the terminal's input on first use: on a terminal, opening it
+ * takes the line discipline over, so a program that never reads a line
+ * must never trigger it. */
+function openInput() {
+    getTerminal().readLines(lineListener)
 }
 
 export function closeReadline() {
-    if (readline !== null) {
-        readline.close()
-        readline = null
-    }
+    getTerminal().closeInput()
 }
 
 /**
@@ -139,7 +127,8 @@ export function BuiltinStdIo<TBase extends Constructor<UserRuntimeZero>>(Base: T
         outputDescriptor(descr) {
             assertIsLocalObject(descr);
             const fd = descr.val._value;
-            if (fd !== process.stdout && fd !== process.stderr) {
+            const terminal = getTerminal();
+            if (fd !== terminal.stdout && fd !== terminal.stderr) {
                 this.runtime.$t
                     .threadError(`value ${descr.val.stringRep()} is not an output descriptor`);
             }
@@ -156,7 +145,7 @@ export function BuiltinStdIo<TBase extends Constructor<UserRuntimeZero>>(Base: T
         /** One line onto an output descriptor, checked against the channel. */
         writeLine(fd, text: string, ...operandLevels: Level[]) {
             checkChannelEffect(this.runtime.$t,
-                               fd === process.stderr ? "write to stderr" : "write to stdout",
+                               fd === getTerminal().stderr ? "write to stderr" : "write to stdout",
                                ...operandLevels)
             fd.write(text + "\n");
             return this.runtime.ret(__unit);
@@ -170,15 +159,15 @@ export function BuiltinStdIo<TBase extends Constructor<UserRuntimeZero>>(Base: T
          * Generated code reaches a base name as a raw value, which is what
          * lets these be written `fwrite (stdout, s)` with no call.
          */
-        stdin = new LocalObject(process.stdin);
-        stdout = new LocalObject(process.stdout);
-        stderr = new LocalObject(process.stderr);
+        stdin = new LocalObject(getTerminal().stdin);
+        stdout = new LocalObject(getTerminal().stdout);
+        stderr = new LocalObject(getTerminal().stderr);
 
         /** The descriptor an input operation names, or a thread error. */
         inputDescriptor(descr) {
             assertIsLocalObject(descr);
             const fd = descr.val._value;
-            if (fd !== process.stdin) {
+            if (fd !== getTerminal().stdin) {
                 this.runtime.$t
                     .threadError(`value ${descr.val.stringRep()} is not an input descriptor`);
             }
@@ -241,7 +230,7 @@ export function BuiltinStdIo<TBase extends Constructor<UserRuntimeZero>>(Base: T
             // write.
             checkChannelEffect(this.runtime.$t, "read from stdin", ...operandLevels)
 
-            getReadline()
+            openInput()
 
             this.runtime.$t.raiseBlockingThreadLev(readLevel)
 
@@ -268,7 +257,8 @@ export function BuiltinStdIo<TBase extends Constructor<UserRuntimeZero>>(Base: T
             assertIsLocalObject(arg.val[0]);
 
             const fd = arg.val[0].val._value;
-            if (fd !== process.stdout && fd !== process.stderr) {
+            const terminal = getTerminal();
+            if (fd !== terminal.stdout && fd !== terminal.stderr) {
                 this.runtime.$t
                     .threadError(`value ${arg.val[0].val.stringRep()} is not an output descriptor`);
             }
@@ -277,7 +267,7 @@ export function BuiltinStdIo<TBase extends Constructor<UserRuntimeZero>>(Base: T
 
             // Bytes appearing on the channel are an effect on it.
             checkChannelEffect(this.runtime.$t,
-                               fd === process.stderr ? "write to stderr" : "write to stdout",
+                               fd === terminal.stderr ? "write to stderr" : "write to stdout",
                                arg.lev, arg.val[0].lev, arg.val[1].lev)
 
             fd.write(arg.val[1].val);
@@ -308,19 +298,19 @@ export function BuiltinStdIo<TBase extends Constructor<UserRuntimeZero>>(Base: T
         printString = mkBase((arg) => {
             assertNormalState("printString")
             assertIsString(arg);
-            return this.writeLine(process.stdout, arg.val, arg.lev);
+            return this.writeLine(getTerminal().stdout, arg.val, arg.lev);
         }, "printString");
 
         print = mkBase((arg) => {
             assertNormalState("print")
             const printed = this.printedForm(arg, true);
-            return this.writeLine(process.stdout, printed.text, arg.lev, printed.lev);
+            return this.writeLine(getTerminal().stdout, printed.text, arg.lev, printed.lev);
         }, "print");
 
         printWithLabels = mkBase((arg) => {
             assertNormalState("printWithLabels")
             const printed = this.printedForm(arg, false);
-            return this.writeLine(process.stdout, printed.text, arg.lev, printed.lev);
+            return this.writeLine(getTerminal().stdout, printed.text, arg.lev, printed.lev);
         }, "printWithLabels");
 
         inputLine = mkBase((arg) => {

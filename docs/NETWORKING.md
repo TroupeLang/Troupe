@@ -45,11 +45,13 @@ processes running behind NAT (e.g., something running on a developer laptop) are
 accessible from the outside.
 
 A node takes its relays from `--relay` (repeatable), else from `p2pconfig.json` in the
-working directory or the Troupe root, else from `default_relays` in
-[rt/src/p2p/p2pconfig.mjs](../rt/src/p2p/p2pconfig.mjs), which lists the public relays
-`relay-2.troupe-lang.net` (Amsterdam) and `relay-sfo.troupe-lang.net` (San Francisco). A
-relay that cannot be reached at start is skipped; `--relay-fault-tolerance=fatal` makes it
-stop the node instead, and `--disable-relay` uses no relay at all.
+working directory or the Troupe root; with neither it uses no relay. The public relays are
+`/dns4/relay-2.troupe-lang.net/tcp/5555/ws/p2p/12D3KooWSg5fxhEZ4SMtVCwfj81iBUNo15o3d3rEriTAVE6Lubgp`
+(Amsterdam) and
+`/dns4/relay-sfo.troupe-lang.net/tcp/5555/ws/p2p/12D3KooWS5pvNcKKGevDutCU4RGAbzAtGgVt7PkQdGse8FK9jZKo`
+(San Francisco); `make test/public-relay` runs the echo pair through them, by hand, outside
+`make ci`. A relay that cannot be reached at start is skipped;
+`--relay-fault-tolerance=fatal` makes it stop the node instead.
 
 
 ## Navigating the code base

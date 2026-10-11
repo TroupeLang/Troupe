@@ -1,0 +1,22 @@
+(* A receive with a timeout.
+
+   A `receive` waits until a message matches one of its handlers; there
+   is no clock in it. The idiom from the user guide: spawn a process
+   that sleeps and then sends a fresh token (`mkuuid ()`), and give the
+   receive a handler whose guard `when s = token` fires on that token.
+   The first request is answered in 100 ms and arrives in time; the
+   second server takes three seconds, and the timeout wins; its late
+   answer goes to a mailbox nobody reads. *)
+let fun slowServer delay =
+      receive [ hn ("ask", from) => (sleep delay; send (from, "answer")) ]
+    fun askWithTimeout server ms =
+      let val token = mkuuid ()
+          val me = self ()
+          val _ = spawn (fn () => (sleep ms; send (me, token)))
+      in send (server, ("ask", me));
+         receive [ hn "answer" => "got an answer"
+                 , hn s when s = token => "timed out after " ^ toString ms ^ " ms" ]
+      end
+in printString (askWithTimeout (spawn (fn () => slowServer 100)) 1000);
+   printString (askWithTimeout (spawn (fn () => slowServer 3000)) 500)
+end

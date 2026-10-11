@@ -1,0 +1,9 @@
+(* A runtime error.
+
+   Troupe is dynamically typed: adding a number and a string is an error
+   at the moment it happens. The report quotes the line and points at
+   the expression, and the position names this program as p.trp. *)
+let val n = 1
+    val s = "one"
+in print (n + s)
+end

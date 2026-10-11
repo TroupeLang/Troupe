@@ -1,0 +1,12 @@
+(* Implicit flows.
+
+   A secret leaks through control flow too: branching on alice's secret
+   raises the current level ("pc") to alice's, and whatever the branches
+   do is now alice's business. The first print is fine. The second is in
+   a branch on the secret, so printing even a public string would reveal
+   the branch taken; the check refuses it. *)
+let val secret = true raisedTo `{alice}`
+in printString "before the branch";
+   if secret then printString "the secret is true"
+             else printString "the secret is false"
+end

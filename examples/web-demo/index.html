@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Troupe in the browser</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="stylesheet" href="xterm/css/xterm.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="title">
+    <h1>Troupe in the browser</h1>
+    <p>A Troupe node, its compiler and its terminal, all in this page.
+       <span id="status">loading the compiler…</span></p>
+  </div>
+  <div class="site-controls">
+    <label class="theme-choice">theme
+      <select id="theme" aria-label="theme">
+        <option value="auto">system</option>
+        <option value="light">light</option>
+        <option value="dark">dark</option>
+      </select>
+    </label>
+  </div>
+</header>
+
+<main class="workbench">
+  <section class="pane pane-editor" aria-labelledby="editor-heading">
+    <div class="pane-head">
+      <h2 id="editor-heading">Program</h2>
+      <label class="sample-choice">sample
+        <select id="sample" aria-label="sample program"></select>
+      </label>
+      <span class="spacer"></span>
+      <button id="run" class="primary" disabled title="compile and run (Ctrl-Enter)">run</button>
+      <button id="compile" disabled title="compile only">compile</button>
+    </div>
+    <div id="source-editor" class="editor" aria-label="program"></div>
+    <div class="pane-foot"><span id="meta"></span><span id="errs" class="error-text"></span></div>
+  </section>
+
+  <section class="pane pane-terminal" aria-labelledby="terminal-heading">
+    <div class="pane-head">
+      <h2 id="terminal-heading">Terminal</h2>
+      <label class="level-choice" title="the level of the stdio channel (--stdiolev): what may be printed here">channel level
+        <input id="stdiolev" value="{}" spellcheck="false" autocomplete="off" size="12">
+      </label>
+      <span class="hint">the node's stdio: output appears here, a line typed here is its input, Ctrl-C stops it</span>
+    </div>
+    <div id="terminal" class="terminal"></div>
+    <div class="pane-foot"><span id="runMeta"></span></div>
+  </section>
+
+  <section class="pane pane-stages" aria-labelledby="stages-heading">
+    <details id="stagesPanel">
+      <summary id="stages-heading">The compiler's stages</summary>
+      <div class="tabs" id="tabs" role="tablist"></div>
+      <pre id="view" class="code-view">Compile something.</pre>
+    </details>
+    <details id="irPanel">
+      <summary>Received IR: the path a node takes when a closure arrives</summary>
+      <div class="ir">
+        <p class="hint">
+          A base64 <code>TRPI</code> blob, as it travels between nodes. The compiler links it into
+          the JavaScript the receiver evaluates. One blob per line.
+        </p>
+        <textarea id="blob" class="editor editor-small" spellcheck="false" placeholder="VFJQSQIfiwgA…"></textarea>
+        <div class="row"><button id="link" disabled>link IR</button>
+             <button id="fillBlob">use the blobs of the compiled program</button></div>
+        <pre id="linkOut" class="code-view code-view-small"></pre>
+      </div>
+    </details>
+  </section>
+</main>
+
+<script src="xterm/lib/xterm.js"></script>
+<script src="xterm/lib/addon-fit.js"></script>
+<script type="module">
+import { compileSource, linkBlobs, runProgram, sampleList, sampleSource, STAGES } from './demo.mjs';
+import { terminalTheme } from './theme.mjs';
+import { createEditor } from './troupe-editor.mjs';
+
+const $ = (id) => document.getElementById(id);
+
+// Theme: the choice is kept in this browser; "system" follows the OS.
+const themeChoice = $('theme');
+function applyTheme(value) {
+  document.documentElement.dataset.theme = value === 'auto' ? '' : value;
+  themeChoice.value = value;
+  if (window.term) term.options.theme = terminalTheme();
+}
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => applyTheme(themeChoice.value));
+try { applyTheme(localStorage.getItem('troupe-demo-theme') ?? 'auto'); } catch { applyTheme('auto'); }
+themeChoice.onchange = () => {
+  applyTheme(themeChoice.value);
+  try { localStorage.setItem('troupe-demo-theme', themeChoice.value); } catch {}
+};
+
+// The terminal: output as the node writes it, and a line discipline on the
+// page, since the node reads lines -- characters are echoed and gathered
+// until Enter, backspace edits, Ctrl-C terminates the worker.
+const term = new Terminal({ convertEol: true, cursorBlink: true, fontSize: 13,
+                            fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+                            theme: terminalTheme() });
+window.term = term;
+term.open($('terminal'));
+// Side by side, the program pane and the terminal pane keep one height:
+// dragging the corner of either sets both.
+const panes = [document.querySelector('.pane-editor'), document.querySelector('.pane-terminal')];
+const sideBySide = matchMedia('(min-width: 960px)');
+const paneObserver = new ResizeObserver((entries) => {
+  if (!sideBySide.matches) return;
+  for (const { target } of entries) {
+    const h = Math.round(target.getBoundingClientRect().height);
+    for (const other of panes) {
+      if (other !== target && Math.round(other.getBoundingClientRect().height) !== h) {
+        other.style.height = `${h}px`;
+      }
+    }
+  }
+});
+for (const pane of panes) paneObserver.observe(pane);
+// The terminal takes the size of its pane, and follows it: a fixed 80
+// columns overflow a phone's width, and until it is sized to its pane the
+// renderer paints nothing there.
+const fit = new FitAddon.FitAddon();
+term.loadAddon(fit);
+fit.fit();
+// Refit only when the box itself changed size; its height is fixed by the
+// stylesheet, so the rows the fit sets never feed back into it.
+let fitted = '';
+new ResizeObserver((entries) => {
+  const { width, height } = entries[0].contentRect;
+  const size = `${Math.round(width)}x${Math.round(height)}`;
+  if (size !== fitted) { fitted = size; fit.fit(); }
+}).observe($('terminal'));
+let node = null;
+let lineBuffer = '';
+term.onData((data) => {
+  for (const ch of data) {
+    if (ch === '\r' || ch === '\n') {
+      term.write('\r\n');
+      node?.feedLine(lineBuffer);
+      lineBuffer = '';
+    } else if (ch === '\x7f') {
+      if (lineBuffer.length > 0) { lineBuffer = lineBuffer.slice(0, -1); term.write('\b \b'); }
+    } else if (ch === '\x03') {
+      if (node) { node.terminate(); term.write('^C\r\n'); $('runMeta').textContent = 'stopped'; node = null; $('run').disabled = false; }
+    } else if (ch >= ' ') {
+      lineBuffer += ch;
+      term.write(ch);
+    }
+  }
+});
+// For a driver: the terminal's text, trailing blank lines dropped.
+window.terminalText = () => {
+  const b = term.buffer.active;
+  const lines = [];
+  for (let i = 0; i < b.length; i++) lines.push(b.getLine(i)?.translateToString(true) ?? '');
+  while (lines.length > 0 && lines[lines.length - 1] === '') lines.pop();
+  return lines.join('\n');
+};
+
+// The editor: CodeMirror with the Troupe mode (troupe-editor.mjs); its
+// value is the program's text. Tab inserts two spaces and Ctrl-Enter
+// (Cmd-Enter) runs the program.
+const editor = createEditor({ parent: $('source-editor'), onRun: () => { if (!$('run').disabled) doRun(); } });
+// For a driver: the program's text, and replacing it.
+window.sourceText = () => editor.value;
+window.setSource = (text) => { editor.value = text; };
+
+let result = null;
+let selected = 'emitted JavaScript';
+
+function renderTabs() {
+  const names = ['emitted JavaScript', ...(result ? [...result.stages.keys()] : [])];
+  if (!names.includes(selected)) selected = names[0];
+  $('tabs').replaceChildren(...names.map((n) => {
+    const b = document.createElement('button');
+    b.textContent = n;
+    b.setAttribute('role', 'tab');
+    b.setAttribute('aria-selected', String(n === selected));
+    b.onclick = () => { selected = n; renderTabs(); renderView(); };
+    return b;
+  }));
+}
+
+function renderView() {
+  if (!result) { $('view').textContent = 'Compile something.'; return; }
+  $('view').textContent = selected === 'emitted JavaScript'
+    ? (result.js || '(no output)')
+    : (result.stages.get(selected) ?? '(stage not produced)');
+}
+
+async function doCompile() {
+  $('compile').disabled = true;
+  $('meta').textContent = 'compiling…';
+  $('errs').textContent = '';
+  try {
+    result = await compileSource(editor.value);
+    $('meta').textContent =
+      `exit ${result.code} · ${result.ms.toFixed(0)} ms · ${result.stages.size} stages · `
+      + `${result.js.length.toLocaleString()} bytes of JavaScript`;
+    if (!result.ok) $('errs').textContent = (result.crash ?? result.errors ?? '').slice(0, 400);
+    renderTabs(); renderView();
+  } finally {
+    $('compile').disabled = false;
+  }
+}
+
+async function doRun() {
+  $('run').disabled = true;
+  term.reset();
+  lineBuffer = '';
+  $('runMeta').textContent = 'compiling…';
+  try {
+    await doCompile();
+    if (!result?.ok) { $('runMeta').textContent = 'the program did not compile'; return; }
+    $('runMeta').textContent = 'running…';
+    // On a narrow screen the terminal sits below the editor: bring it into
+    // view, since the output is the point of pressing run.
+    const box = $('terminal').getBoundingClientRect();
+    if (box.top > innerHeight - 120 || box.bottom < 0) {
+      $('terminal').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    term.focus();
+    const started = performance.now();
+    node = await runProgram(result.js, { stdiolev: $('stdiolev').value.trim() || '{}' }, {
+      source: editor.value,
+      onStdout: (text) => term.write(text),
+      onStderr: (text) => term.write(text),
+      onResult: (value) => { $('runMeta').textContent = `main thread finished with value ${value}`; },
+      onError: (message) => term.write(`\r\n${message}\r\n`),
+    });
+    const exit = await node.exit;
+    if ($('runMeta').textContent === 'running…') $('runMeta').textContent = 'the main thread ended without a result';
+    $('runMeta').textContent += ` · exit ${exit.exitCode} · ${(performance.now() - started).toFixed(0)} ms`;
+  } catch (e) {
+    $('runMeta').textContent = `the node failed to start: ${e.message}`;
+  } finally {
+    node = null;
+    $('run').disabled = false;
+  }
+}
+
+async function doLink() {
+  const blobs = $('blob').value.split('\n').map((s) => s.trim()).filter(Boolean);
+  if (!blobs.length) { $('linkOut').textContent = 'Paste a blob first.'; return; }
+  $('link').disabled = true;
+  $('linkOut').textContent = 'linking…';
+  try {
+    const r = await linkBlobs(blobs);
+    $('linkOut').textContent = r.snippets.map((s, i) =>
+        `// snippet ${i + 1}\n${s.code ?? ''}`).join('\n\n')
+      + `\n\n// ${r.ms.toFixed(0)} ms`;
+  } catch (e) {
+    // The service rejects a batch the compiler refuses, as the runtime
+    // rejects the closure that carried it.
+    $('linkOut').textContent = `rejected: ${e.message}`;
+  } finally {
+    $('link').disabled = false;
+  }
+}
+
+// The emitted JavaScript carries one blob per serialized function; lift them
+// all out, one per line, so the IR panel can be tried without hunting for input.
+// The blob text area holds every line of its content in view: its height
+// follows the content.
+function sizeBlobArea() {
+  const t = $('blob');
+  t.style.height = 'auto';
+  t.style.height = `${t.scrollHeight + 2}px`;
+}
+$('blob').addEventListener('input', sizeBlobArea);
+
+function fillBlobFromResult() {
+  const blobs = [...(result?.js?.matchAll(/\.serialized = "([A-Za-z0-9+/=]+)"/g) ?? [])].map((m) => m[1]);
+  $('blob').value = blobs.join('\n');
+  $('irPanel').open = true;
+  sizeBlobArea();
+  $('linkOut').textContent = blobs.length === 0
+    ? 'Compile a program first — its blobs appear in the output.'
+    : `${blobs.length} blob${blobs.length === 1 ? '' : 's'}, one per serialized function; link IR compiles them.`;
+}
+
+// The samples: the first one is in the editor when the page opens.
+const samples = await sampleList();
+$('sample').replaceChildren(...samples.map((s) => new Option(s.title, s.file)));
+async function loadSample(file) { editor.value = await sampleSource(file); }
+$('sample').onchange = (e) => loadSample(e.target.value);
+await loadSample(samples[0].file);
+
+$('compile').onclick = doCompile;
+$('run').onclick = doRun;
+$('link').onclick = doLink;
+$('fillBlob').onclick = fillBlobFromResult;
+
+// Warm the module so the first compile is not also the download.
+fetch('troupec.wasm', { method: 'HEAD' }).then((r) => {
+  if (!r.ok) throw new Error('missing');
+  const mb = (Number(r.headers.get('content-length') || 0) / 1e6).toFixed(1);
+  $('status').textContent = `compiler loaded (${mb} MB).`;
+  $('compile').disabled = false;
+  $('run').disabled = false;
+  $('link').disabled = false;
+}).catch(() => {
+  $('status').innerHTML = 'troupec.wasm is missing — build it with <code>make compiler-wasm</code>.';
+});
+</script>
+</body>
+</html>

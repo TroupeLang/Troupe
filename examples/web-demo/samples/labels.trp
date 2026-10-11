@@ -1,0 +1,15 @@
+(* Labelled data.
+
+   Every value carries a label saying who may learn it. `raisedTo` makes a
+   value secret to alice; a computation on it keeps the label, so
+   `secret + public` is alice's too. `printWithLabels` shows a value with
+   its label: `{}` is public. The terminal is a public channel, on which
+   alice's secrets may not appear, so the last line, printing the sum, is
+   refused by the information-flow check. The error report says which
+   level was asked to flow where. *)
+let val public = 1
+    val secret = 42 raisedTo `{alice}`
+in printWithLabels public;
+   printWithLabels (public + 1);
+   printWithLabels (secret + public)
+end

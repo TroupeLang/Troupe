@@ -1,0 +1,25 @@
+(* Option: a value that may be absent.
+
+   `SOME v` or `NONE` is the Option library's datatype, and functions
+   that can fail return it instead of a special number. `Option.andThen`
+   chains such functions and stops at the first `NONE`; `getOrElse`
+   supplies a default at the end. *)
+import Option
+import List
+let fun safeDiv a b = if b = 0 then NONE else SOME (a div b)
+    fun safeSqrt n = if n < 0 then NONE else SOME (floor (sqrt n))
+    fun describe NONE = "nothing"
+      | describe (SOME v) = "the value " ^ toString v
+    val phonebook = [("alice", 5551), ("bob", 5552)]
+    fun lookup name = Option.map (fn (_, n) => n)
+                                 (List.find (fn (k, _) => k = name) phonebook)
+    fun pipeline a b = Option.andThen safeSqrt (safeDiv a b)
+in printString (describe (safeDiv 100 7));
+   printString (describe (safeDiv 100 0));
+   print (lookup "alice", lookup "carol");
+   print (Option.getOrElse (lookup "carol") 0);
+   print (pipeline 100 4);                       (* sqrt 25 *)
+   print (pipeline 100 0);                       (* division fails first *)
+   print (pipeline (-100) 4);                    (* sqrt fails second *)
+   print (List.mapPartial (fn b => safeDiv 12 b) [1, 0, 2, 0, 3])
+end

@@ -1,0 +1,25 @@
+(* Closures and currying.
+
+   A function remembers the variables in scope where it was made. `adder`
+   takes `n` and returns a function that still sees `n`, so `add5` and
+   `add10` are two closures over different values. Every function of
+   several arguments is curried: `scale 3` is a function waiting for its
+   second argument, and `compose` builds a function out of two. *)
+import List
+let fun adder n = fn x => x + n
+    val add5 = adder 5
+    val add10 = adder 10
+    fun scale k x = k * x
+    fun compose f g = fn x => f (g x)
+    val scaleThenAdd = compose add5 (scale 3)   (* x => 3 * x + 5 *)
+    fun makeGreeter greeting = fn name => greeting ^ ", " ^ name ^ "!"
+    val hello = makeGreeter "hello"
+    val goodbye = makeGreeter "goodbye"
+in print (add5 1);
+   print (add10 1);
+   print (List.map (scale 3) [1, 2, 3]);
+   print (scaleThenAdd 10);
+   printString (hello "alice");
+   printString (goodbye "bob");
+   print (List.map (fn f => f 100) [add5, add10, scale 2])
+end

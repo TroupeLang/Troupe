@@ -1,0 +1,18 @@
+(* Processes: spawn, send, receive.
+
+   `spawn` starts a process running a function; `self ()` is a process's
+   own id. Processes share nothing and talk by messages: `send (pid, msg)`
+   delivers, `receive [hn pattern => ...]` waits for a message matching a
+   pattern. This server answers requests until told to stop. *)
+let fun server () =
+      receive [ hn ("ping", from, n) =>
+                  (send (from, ("pong", n * 2)); server ())
+              , hn "stop" =>
+                  printString "server stopping" ]
+    val p = spawn server
+    fun ask n = ( send (p, ("ping", self (), n))
+                ; receive [ hn ("pong", m) => m ] )
+in print (ask 1);
+   print (ask 21);
+   send (p, "stop")
+end

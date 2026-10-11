@@ -1,0 +1,27 @@
+(* A server that updates its own code.
+
+   Functions are values and can be sent in messages. The server's loop
+   is a function; on ("UPDATE", f) it hands its state to the new
+   function `f` and runs that instead. Version two understands one
+   more request, ("COMPUTE", from, f, x), which applies a function sent
+   by the client. The counter survives the upgrade. From the user guide.
+   The server's farewell is printed by the server process, so it may
+   come after the main thread's own last line. *)
+let fun v1 n =
+      receive [ hn ("REQUEST", from) => (send (from, n); v1 (n + 1))
+              , hn ("UPDATE", newVersion) => newVersion n
+              , hn "STOP" => printString "server stopped" ]
+    fun v2 n =
+      receive [ hn ("REQUEST", from) => (send (from, n); v2 (n + 1))
+              , hn ("COMPUTE", from, f, x) => (send (from, f x); v2 (n + 1))
+              , hn ("UPDATE", newVersion) => newVersion n
+              , hn "STOP" => printString "server stopped" ]
+    val server = spawn (fn () => v1 0)
+    fun ask msg = (send (server, msg); receive [ hn x => x ])
+in print (ask ("REQUEST", self ()));
+   print (ask ("REQUEST", self ()));
+   send (server, ("UPDATE", v2));
+   print (ask ("COMPUTE", self (), fn x => x * x, 42));
+   print (ask ("REQUEST", self ()));
+   send (server, "STOP")
+end

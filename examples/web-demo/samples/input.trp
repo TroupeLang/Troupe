@@ -1,0 +1,9 @@
+(* Reading a line.
+
+   `inputLine ()` reads one line from this node's stdin, which is the
+   terminal below: the program blocks until a line is typed there and
+   ended with Enter. *)
+let val _ = printString "what is your name?"
+    val name = inputLine ()
+in printString ("hello, " ^ name)
+end

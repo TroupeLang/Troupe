@@ -1,0 +1,27 @@
+(* Markdown to HTML.
+
+   The Markdown library parses a document into blocks and renders them
+   through the Html library, which escapes every piece of text, so the
+   `<script>` in the source comes out harmless. `Markdown.headings`
+   lists the headings with the anchors the renderer gives them. *)
+import Markdown
+import String
+import List
+let val doc = String.unlines
+      [ "# A small page"
+      , ""
+      , "Troupe is a language for *distributed* programs with"
+      , "**information-flow control**. See `raisedTo`."
+      , ""
+      , "## Checklist"
+      , ""
+      , "- [x] parse"
+      , "- [ ] render <script>alert(1)</script>"
+      , ""
+      , "| step | done |"
+      , "|------|------|"
+      , "| one  | yes  |"
+      ]
+in print (Markdown.headings doc);
+   printString (Markdown.toHtml doc)
+end

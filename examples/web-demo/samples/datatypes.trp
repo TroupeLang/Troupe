@@ -1,0 +1,20 @@
+(* Datatypes, records and pattern matching.
+
+   `datatype` declares variants, each with or without a payload, and
+   `case` takes them apart; a function with several clauses does the
+   same. A record `{name = ..., age = ...}` is matched by its fields. *)
+datatype shape = CIRCLE of int | SQUARE of int | DOT
+
+let fun area (CIRCLE r) = 3 * r * r
+      | area (SQUARE s) = s * s
+      | area DOT = 0
+    fun describe s =
+      case s of CIRCLE r => "a circle of radius " ^ toString r
+              | SQUARE s => "a square of side " ^ toString s
+              | DOT => "a dot"
+    fun greet {name = n, age = a} = n ^ " is " ^ toString a
+in printString (describe (CIRCLE 2));
+   print (area (SQUARE 4));
+   print (area DOT);
+   printString (greet {name = "alice", age = 31})
+end

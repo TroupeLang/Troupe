@@ -1,4 +1,4 @@
-.PHONY: rt trp-rt compiler compiler-wasm compiler-worker runtime-worker page-client browser lib p2p-tools npm clean test ci check-host-boundary test/examples dist \
+.PHONY: rt trp-rt compiler compiler-wasm compiler-worker runtime-worker page-client editor-bundle browser web-demo lib p2p-tools npm clean test ci check-host-boundary test/examples dist \
         check-compiler notebook \
         dev-planning-to-html
 
@@ -156,10 +156,21 @@ runtime-worker: rt
 page-client: rt
 	npx rollup -c rollup.page-client.config.js
 
+# The browser demo's program editor, at build/browser/troupe-editor.mjs:
+# CodeMirror with the Troupe mode, from examples/web-demo/editor.mjs.
+editor-bundle: rt
+	npx rollup -c rollup.editor.config.js
+
 # What a page needs to run Troupe, under build/browser/: the two workers,
-# troupe-worker.mjs and compiler-worker.mjs, and the page's side of them,
-# troupe-page.mjs.
-browser: compiler-worker runtime-worker page-client
+# troupe-worker.mjs and compiler-worker.mjs, the page's side of them,
+# troupe-page.mjs, and the demo's editor, troupe-editor.mjs.
+browser: compiler-worker runtime-worker page-client editor-bundle
+
+# The browser demo as a static site, build/web-demo: what
+# examples/web-demo/serve.mjs serves and what a static host publishes.
+# Needs bin/troupec.wasm (make compiler-wasm).
+web-demo: browser lib/out/.build-stamp trp-rt
+	./scripts/build-web-demo.sh
 
 # Every example and benchmark compiles. Nothing else covers examples/: the
 # golden suite is tests/ only, so a library change or a moved module hash can

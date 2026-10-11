@@ -1,0 +1,12 @@
+(* A loop over typed lines.
+
+   Type numbers, one per line; an empty line ends the input.
+   `stringToInt` parses a line; the recursion carries the running sum. *)
+let fun loop sum =
+      let val line = inputLine ()
+      in if line = "" then sum
+         else loop (sum + stringToInt line)
+      end
+in printString "numbers, one per line; an empty line ends them";
+   print (loop 0)
+end

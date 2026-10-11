@@ -1,0 +1,17 @@
+(* Lists, and a library.
+
+   `import List` links the List library the first time it is used; the
+   node fetches it on demand. `::` builds a list, `[a, b]` is shorthand,
+   and a function over lists is usually a pattern match on `[]` and
+   `x :: rest`. `fn` is an anonymous function. *)
+import List
+let val xs = [3, 1, 4, 1, 5, 9, 2, 6]
+    fun sum [] = 0
+      | sum (x :: rest) = x + sum rest
+in print (List.length xs);
+   print (List.reverse xs);
+   print (List.map (fn x => 2 * x) xs);
+   print (List.filter (fn x => x > 3) xs);
+   print (sum xs);
+   print (List.foldl (fn (x, acc) => x + acc) 0 xs)
+end

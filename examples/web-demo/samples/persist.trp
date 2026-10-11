@@ -1,0 +1,13 @@
+(* A closure persisted and restored.
+
+   `save` serializes a value under a name, and `restore` brings it back.
+   A function is a value too: it is serialized as the compiler's
+   intermediate representation and, on restore, compiled again by this
+   node's own compiler, the one running in this page. Saving needs
+   authority; the value lives in the browser's own storage. *)
+let val k = 21
+    fun f x = x * 2 + k
+    val _ = save (authority, "demo", f)
+    val g = restore ("demo")
+in print (g 10)
+end

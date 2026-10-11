@@ -1,0 +1,34 @@
+(* An interpreter for arithmetic expressions.
+
+   An expression is a datatype: a number, a variable, or an operation on
+   two expressions. `eval` walks it with an environment, `show` prints it
+   back as text, and `simplify` rewrites `x + 0` and `x * 1` away by
+   matching nested patterns such as `ADD (e, NUM 0)`. *)
+import List
+datatype expr = NUM of int | VAR of string
+              | ADD of expr * expr | MUL of expr * expr
+
+let fun lookup name [] = 0
+      | lookup name ((k, v) :: rest) = if k = name then v else lookup name rest
+    fun eval env (NUM n) = n
+      | eval env (VAR x) = lookup x env
+      | eval env (ADD (a, b)) = eval env a + eval env b
+      | eval env (MUL (a, b)) = eval env a * eval env b
+    fun show (NUM n) = toString n
+      | show (VAR x) = x
+      | show (ADD (a, b)) = "(" ^ show a ^ " + " ^ show b ^ ")"
+      | show (MUL (a, b)) = show a ^ " * " ^ show b
+    fun simplify (ADD (e, NUM 0)) = simplify e
+      | simplify (ADD (NUM 0, e)) = simplify e
+      | simplify (MUL (e, NUM 1)) = simplify e
+      | simplify (MUL (NUM 1, e)) = simplify e
+      | simplify (MUL (_, NUM 0)) = NUM 0
+      | simplify (ADD (a, b)) = ADD (simplify a, simplify b)
+      | simplify (MUL (a, b)) = MUL (simplify a, simplify b)
+      | simplify e = e
+    val e = MUL (ADD (VAR "x", NUM 0), ADD (NUM 1, MUL (VAR "y", NUM 1)))
+    val env = [("x", 6), ("y", 6)]
+in printString (show e);
+   printString (show (simplify e));
+   print (eval env e, eval env (simplify e))
+end

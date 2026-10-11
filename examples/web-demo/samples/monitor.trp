@@ -1,0 +1,30 @@
+(* Supervising a process.
+
+   `monitorlocal p` asks to be told when process `p` ends: a message
+   ("DONE", ref, pid, reason) arrives, where the reason is 0 for a
+   normal end or (1, text) for a runtime error. The supervisor here
+   starts a worker, sends it two jobs, sees the first succeed and the
+   second divide by zero, and restarts the worker. The error report
+   printed in between is the runtime's own, for the worker. A process
+   blocked in `receive` keeps the node alive, so the last worker is
+   told to stop. *)
+let fun worker () =
+      receive [ hn "stop" => ()
+              , hn (from, a, b) => (send (from, a div b); worker ()) ]
+    fun supervise p jobs =
+      case jobs of
+        [] => (send (p, "stop"); printString "no more jobs")
+      | (a, b) :: rest =>
+          ( send (p, (self (), a, b))
+          ; receive [ hn ("DONE", _, _, (1, why)) =>
+                        ( printString ("worker failed: " ^ why)
+                        ; printString "restarting the worker"
+                        ; supervise (start ()) rest )
+                    , hn r => ( print r; supervise p rest ) ] )
+    and start () =
+      let val p = spawn worker
+          val _ = monitorlocal p
+      in p
+      end
+in supervise (start ()) [(100, 5), (1, 0), (81, 9)]
+end

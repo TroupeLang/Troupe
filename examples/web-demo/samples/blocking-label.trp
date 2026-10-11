@@ -1,0 +1,19 @@
+(* Progress, and the blocking label.
+
+   A branch on a secret can leak by whether the program goes on at all:
+   one branch could wait forever, or fail. Troupe records this in the
+   blocking label of the process. After the branch below the pc is back
+   at public, but the blocking label stays alice's, and from then on
+   every output is refused, even a public string, even after the
+   branch's result has been declassified: performing an effect reveals
+   that the process got this far. The report says effect level alice
+   for a value whose own label is public. The next sample shows the way
+   out. The terminal is set to public first. *)
+let val _ = setStdioLevel (authority, `{}`)
+    val secret = 42 raisedTo `<alice;#root-integrity>`
+    val _ = printString "before the branch"
+    val bucket = if secret > 40 then "high" else "low"
+    val released = declassify (bucket, authority, `{}`)
+in printWithLabels released;
+   printString "after the branch"
+end

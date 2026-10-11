@@ -1,0 +1,26 @@
+(* JSON, in and out.
+
+   The Json library parses text into ordinary Troupe values: an object is
+   a record, an array is a list, null is `()`. `Json.parse` returns an
+   Outcome, `OK value` or `ERR {reason, offset}`, so a malformed document
+   is a value to match on, not a crash. Accessors such as `Json.field`
+   return an Option. `stringify` and `prettyPrint` go the other way. *)
+import Json
+import Outcome
+import Option
+import List
+let val text = "{\"name\": \"troupe\", \"tags\": [\"ifc\", \"actors\"], \"stars\": 42}"
+    val record = {language = "troupe", versions = [1, 2], stable = true, notes = ()}
+    fun tags j = Option.getOrElse (Option.andThen Json.asArray (Json.field "tags" j)) []
+in (case Json.parse text of
+      OK v => ( print v
+              ; print (Json.field "name" v)
+              ; print (List.length (tags v))
+              ; printString (Json.prettyPrint 2 v) )
+    | ERR e => printString ("parse error: " ^ e.reason));
+   (case Json.parse "{\"name\": }" of
+      OK v => print v
+    | ERR e => printString ("parse error at offset " ^ toString e.offset
+                            ^ ": " ^ e.reason));
+   printString (Json.stringify record)
+end

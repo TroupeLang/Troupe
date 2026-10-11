@@ -1,0 +1,23 @@
+(* Attenuated authority.
+
+   `authority` is the program's full capability to declassify. It is
+   rarely handed around whole: `attenuate (authority, l)` makes a weaker
+   authority that can only remove l from a label, and a component
+   acting for alice gets alice's. With alice's authority a value at
+   `alice&bob` can be lowered to bob's, removing alice's part; the full
+   authority then releases that to public. Bob's secret, though, alice's
+   authority cannot lower at all: the last line is refused with "Not
+   enough authority", and the report lists the three levels involved.
+   `pdeclassify` is declassification that also clears the process's
+   blocking label; the terminal is set to public first. *)
+import IfcUtil
+let val _ = setStdioLevel (authority, `{}`)
+    val aliceAuth = attenuate (authority, `<alice;#root-integrity>`)
+    val a = 42 raisedTo `<alice;#root-integrity>`
+    val b = 7 raisedTo `<bob;#root-integrity>`
+in print aliceAuth;
+   print (pdeclassify (a, aliceAuth, `{}`));
+   print (pdeclassify (pdeclassify (a + b, aliceAuth, `<bob;#root-integrity>`),
+                       authority, `{}`));
+   print (pdeclassify (b, aliceAuth, `{}`))
+end

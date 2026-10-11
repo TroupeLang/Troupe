@@ -1,0 +1,21 @@
+(* Declassification.
+
+   Only authority can lower a label. The program's own authority is bound
+   to `authority`, and `pdeclassify (value, authority, level)` from the
+   IfcUtil library relabels the value to the level, here `{}` (public), so
+   the result may be printed on the public terminal. The last line prints
+   the unreleased `average` and is refused, as in the labelled-data
+   example: that is the difference the declassification makes. A label
+   has two dimensions, confidentiality and integrity, written
+   `<confidentiality;integrity>`; the secret here is alice's to read but
+   was produced by this program, so its integrity stays the root's, and
+   declassification lowers only the first. Real programs attenuate their
+   authority before handing it to code they do not trust. *)
+import IfcUtil
+let val secret = 42 raisedTo `<alice;#root-integrity>`
+    val average = (secret + 58) div 2
+    val published = pdeclassify (average, authority, `{}`)
+in printWithLabels published;
+   print published;
+   printWithLabels average
+end

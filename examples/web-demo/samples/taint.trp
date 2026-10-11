@@ -1,0 +1,34 @@
+(* How labels spread.
+
+   The terminal is a channel with a level; this program sets it to
+   public with `setStdioLevel`, so nothing labelled may be written on
+   it. Every operation on labelled values gives a result labelled with
+   the join of its inputs: alice's number plus bob's number is a value
+   both must be allowed to see, `alice&bob`. `levelOf x` returns x's
+   label, and the label is as secret as the value, since knowing it says
+   something about x; `showLabel` releases it with the program's own
+   authority before printing. `flowsTo (l1, l2)` says whether l1 may
+   flow to l2. The last line indexes a public list with a secret index:
+   the list is public, but which element came out reveals the index, so
+   the result is alice's and the print is refused. *)
+import List
+import IfcUtil
+let val _ = setStdioLevel (authority, `{}`)
+    val secret = 3 raisedTo `<alice;#root-integrity>`
+    val bobs = 10 raisedTo `<bob;#root-integrity>`
+    val both = secret + bobs
+    val public = [100, 200, 300, 400, 500]
+    fun release x = pdeclassify (x, authority, `{}`)
+    fun showLabel name x =
+      printString (name ^ " is labelled " ^ toString (release (levelOf x)))
+    fun showFlow (x, y) = release (flowsTo (levelOf x, levelOf y))
+in showLabel "public" public;
+   showLabel "secret * 2" (secret * 2);
+   showLabel "a string built from secret" ("the answer is " ^ toString secret);
+   showLabel "secret + bobs" both;
+   showLabel "a tuple holding secret" (secret > 2, [secret, 1]);  (* the tuple itself *)
+   print (showFlow (secret, both));              (* alice's may join bob's *)
+   print (showFlow (both, secret));              (* but not come back *)
+   print (List.nth public 2);
+   print (List.nth public secret)
+end

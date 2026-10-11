@@ -27,6 +27,10 @@ export interface RunResult {
     ms: number;
 }
 
+export interface CompileOptions {
+    sourceMap?: boolean;
+}
+
 export interface CompileResult {
     ok: boolean;
     code: number;
@@ -140,8 +144,14 @@ export class TroupecWasm {
 
     /** Compiles Troupe source: the emitted JavaScript, its exports and every
      *  intermediate stage. */
-    async compileSource(source: string): Promise<CompileResult> {
-        const r = await this.run(['-v', 'p.trp', '-o', 'p.js'], { files: [['p.trp', source]] });
+    /**
+     * Compiles a program. With `sourceMap`, the emitted code carries source
+     * positions (troupec -m), which an error report at run time names
+     * together with the source line.
+     */
+    async compileSource(source: string, options: CompileOptions = {}): Promise<CompileResult> {
+        const args = ['-v', ...(options.sourceMap ? ['-m'] : []), 'p.trp', '-o', 'p.js'];
+        const r = await this.run(args, { files: [['p.trp', source]] });
         const stages = new Map<string, string>();
         for (const [file, label] of STAGES) {
             const text = r.files.get(`out/${file}`);

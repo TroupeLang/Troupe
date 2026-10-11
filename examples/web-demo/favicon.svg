@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- The top element of the lattice, ⊤, in white on the page's accent
+       blue: a bar across the top and a centred stem, proportioned so the
+       mark still reads at 16 px. -->
+  <rect width="64" height="64" rx="14" fill="#0072B2"/>
+  <rect x="11" y="15" width="42" height="9" rx="2.5" fill="#ffffff"/>
+  <rect x="27.5" y="15" width="9" height="36" rx="2.5" fill="#ffffff"/>
+</svg>

@@ -1,0 +1,24 @@
+(* User-defined operators.
+
+   An operator is an ordinary curried function with a symbolic name. A
+   fixity line in the file header gives it a precedence level, 0 to 9,
+   and an associativity: `infixl`, `infixr`, or `infix` for none. Level
+   6 is where `+` and `-` live, 7 is `*` and `/`. In parentheses an
+   operator is a plain function value, so it can be partially applied.
+   `|>` is the pipeline operator: `x |> f` is `f x`. Fixity lines come
+   after the imports and before the program. *)
+import List
+infixl 6 <+>
+infixr 5 ++
+infixl 1 |>
+
+let fun ( <+> ) (a, b) (c, d) = (a + c, b + d)   (* vector addition *)
+    fun ( ++ ) xs ys = List.append xs ys
+    fun ( |> ) x f = f x
+    val addOne = ( <+> ) (1, 1)                   (* partial application *)
+in print ((1, 2) <+> (3, 4) <+> (10, 20));
+   print ([1, 2] ++ [3] ++ [4, 5]);              (* right-associative *)
+   print (addOne (41, 41));
+   print ([3, 1, 2] |> List.reverse |> List.map (fn x => x * 10));
+   print (( + ) 1 2)                             (* a built-in, sectioned *)
+end

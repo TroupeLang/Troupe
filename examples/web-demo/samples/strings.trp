@@ -1,0 +1,25 @@
+(* Strings and the String library.
+
+   `^` joins strings, `strlen` measures them, `substring (s, i, j)` cuts
+   out positions i to j. The String library adds splitting, trimming,
+   padding and searching. The program takes a line of comma-separated
+   fields, cleans each one, and prints them as an aligned table. *)
+import String
+import List
+let val line = "  alice , 31,  copenhagen;bob,42, aarhus ;carol ,35,odense"
+    val rows = List.map (fn r => List.map String.trim (String.split "," r))
+                        (String.split ";" line)
+    fun cell w s = String.padRight w " " s
+    fun showRow [name, age, city] =
+          printString (cell 8 name ^ "| " ^ String.padLeft 3 " " age ^ " | " ^ city)
+      | showRow _ = printString "malformed row"
+in print (strlen line);
+   print (substring (line, 2, 7));
+   print (String.indexOf "bob" line);           (* SOME position *)
+   print (String.indexOf "dave" line);          (* NONE *)
+   printString (String.repeat 24 "-");
+   List.map showRow rows;
+   printString (String.repeat 24 "-");
+   print (List.map (fn r => String.startsWith "a" (List.nth r 0)) rows);
+   printString (String.concatWith " / " (List.map (fn r => List.nth r 2) rows))
+end

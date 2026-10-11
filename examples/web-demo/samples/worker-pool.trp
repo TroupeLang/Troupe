@@ -1,0 +1,33 @@
+(* A pool of worker processes.
+
+   The main process spawns three workers, hands each number in turn to
+   the next worker, and collects the answers. Each answer carries the
+   worker's number, so the output shows which worker did what; the
+   order of the answers is the order the workers finish in, and a
+   worker's `sleep` makes that vary. `receive` takes the answers one by
+   one, whichever comes first. *)
+import List
+let fun worker id =
+      receive [ hn ("job", n, from) =>
+                  ( sleep (n * 7)                     (* pretend to work *)
+                  ; send (from, ("result", id, n, n * n))
+                  ; worker id )
+              , hn "stop" => () ]
+    val workers = List.map (fn id => (id, spawn (fn () => worker id))) [1, 2, 3]
+    val jobs = [9, 2, 7, 4, 5, 1]
+    fun dispatch [] _ = ()
+      | dispatch (j :: js) k =
+          let val (_, p) = List.nth workers (k mod 3)
+          in send (p, ("job", j, self ())); dispatch js (k + 1)
+          end
+    fun collect 0 acc = acc
+      | collect n acc =
+          receive [ hn ("result", id, j, r) =>
+                      ( printString ("worker " ^ toString id ^ ": " ^ toString j
+                                     ^ "^2 = " ^ toString r)
+                      ; collect (n - 1) (r + acc) ) ]
+in dispatch jobs 0;
+   print (collect (List.length jobs) 0);
+   List.map (fn (_, p) => send (p, "stop")) workers;
+   printString "all workers stopped"
+end

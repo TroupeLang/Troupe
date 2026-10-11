@@ -105,7 +105,8 @@ pins.
 - `make test/compiler-service` checks the browser's compiler service against `bin/troupec`;
   it needs `bin/troupec.wasm` (`make compiler-wasm`) and reports a skip without it
 - `make test/browser-host` runs the golden corpus through the runtime's browser host under
-  Node; `make browser` builds the two worker bundles a page needs, and
+  Node; `make browser` builds the bundles a page needs, `make web-demo` assembles the browser demo
+  as a static site in `build/web-demo` (`examples/web-demo/README.md`), and
   `tests/rt/browser-host/README.md` says how to run the corpus in a browser
 - `make test/prop-compiler`, `make test/prop-caseelim`, and `make test/prop-labelrt` run one
   compiler property suite each, for iterating without the full `stack test`

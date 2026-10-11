@@ -1,0 +1,26 @@
+(* Maps and sets.
+
+   `Map` and `Set` are search trees over any key type; they take the
+   ordering as a function, here `<` on strings. The
+   program counts how often each word occurs in a text, prints the
+   counts in key order, and uses a set to find the distinct words of a
+   second text that the first one lacks. *)
+import Map
+import Set
+import String
+import List
+let val text = "the cat sat on the mat and the dog sat on the cat"
+    val words = String.split " " text
+    fun lt a b = a < b
+    val counts = List.foldl (fn (w, m) => Map.insert m w (Map.findOrDefault m w 0 + 1))
+                            (Map.empty lt) words
+    val seen = Set.fromList lt words
+    val other = Set.fromList lt (String.split " " "the dog ate the fish")
+    val new = Set.filter (fn w => not (Set.mem seen w)) other
+in print (Map.size counts);
+   List.map (fn (w, n) => printString (String.padRight 5 " " w ^ toString n))
+            (Map.toAscList counts);
+   print (Map.findOpt counts "cat", Map.findOpt counts "fish");
+   print (Set.toAscList seen);
+   print (Set.toAscList new)
+end

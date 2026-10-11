@@ -254,7 +254,7 @@ async function createLibp2p(_options) {
   const relayOnly = argv[TroupeCliArg.RelayOnly] || false;
   const noP2pCircuit = argv[TroupeCliArg.NoP2pCircuit] || false;
   const disableRelay = argv[TroupeCliArg.DisableRelay] || false;
-  const relayFaultTolerance = argv[TroupeCliArg.RelayFaultTolerance] || 'fatal';
+  const relayFaultTolerance = argv[TroupeCliArg.RelayFaultTolerance] || 'no-fatal';
 
   // Determine fault tolerance setting for transport manager
   const faultTolerance = relayFaultTolerance === 'no-fatal'

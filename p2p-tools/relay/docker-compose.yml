@@ -1,0 +1,15 @@
+services:
+  relay:
+    image: ghcr.io/troupelang/troupe-relay:${RELAY_TAG:-latest}
+    container_name: troupe-relay
+    restart: unless-stopped
+    ports:
+      - "${RELAY_PUBLIC_PORT:-5555}:5555"
+    volumes:
+      - relay-keys:/app/keys
+    environment:
+      - RELAY_PUBLIC_PORT=${RELAY_PUBLIC_PORT:-5555}
+      - DEBUG=libp2p:circuit-relay:server
+
+volumes:
+  relay-keys:

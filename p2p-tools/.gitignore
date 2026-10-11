@@ -1,2 +1,3 @@
 built/
 *.tsbuildinfo
+node_modules

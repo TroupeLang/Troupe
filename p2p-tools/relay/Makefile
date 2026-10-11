@@ -28,3 +28,13 @@ clean/keys:
 
 clean/relay:
 	rm relay.mjs
+
+IMAGE     ?= ghcr.io/troupelang/troupe-relay
+PLATFORMS ?= linux/amd64,linux/arm64
+
+image:
+	cd $(TROUPE) && docker build -f p2p-tools/relay/Dockerfile -t $(IMAGE):latest .
+
+push:
+	cd $(TROUPE) && docker buildx build -f p2p-tools/relay/Dockerfile --platform $(PLATFORMS) \
+	  -t $(IMAGE):latest -t $(IMAGE):troupe-$$(git rev-parse --short HEAD) --push .

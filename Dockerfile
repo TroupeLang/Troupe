@@ -22,6 +22,7 @@ RUN curl -sSL https://get.haskellstack.org/ | sh
 
 # Copy dependency manifests and install npm packages (cached unless package.json changes).
 COPY package.json package-lock.json ./
+COPY p2p-tools/package.json p2p-tools/
 RUN --mount=type=cache,target=/root/.npm npm install
 
 # Copy compiler sources and build (cached unless compiler/ changes).

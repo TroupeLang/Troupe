@@ -77,7 +77,7 @@ root `Makefile`.
 - `make rt`: build the runtime (into the `rt/built` directory)
 - `make lib`: compile Troupe's built-in libraries (into the `lib/out` directory)
 - `make trp-rt`: compile the service module placeholder from `trp-rt/service.trp`
-- `make p2p-tools`: build `p2p-tools/` and `p2p-tools/relay/`
+- `make p2p-tools`: build `p2p-tools/` and `p2p-tools/relay/` (an npm workspace, `troupe-p2p-tools`; its packages are part of the root lockfile)
 - `make notebook`: `npm install` and `npm run build` in `notebook/`
 - `make clean`, `make clean/compiler`, `make clean/rt`, `make clean/trp-rt`, `make clean/p2p-tools`,
   `make clean/lib`: remove build artifacts

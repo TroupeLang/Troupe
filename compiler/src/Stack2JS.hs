@@ -20,6 +20,7 @@ import IR (HFN(..)
           , ppFunCall, ppArgs
           )
 import           IRBlob (serializeFunDef)
+import qualified Data.IntMap.Strict as IntMap
 import qualified Data.ByteString.Lazy.Char8 as BL
 import qualified IR
 import qualified Raw
@@ -128,6 +129,9 @@ type RetKontText = PP.Doc
 
 -- | Marker data: (marker ID, source position info)
 type MarkerData = (Int, PosInf)
+
+-- | Source position by marker ID; what 'processMarkers' looks up
+type MarkerTable = IntMap.IntMap PosInf
 
 -- | Code generation options passed via RWS reader
 data CodeGenOpts = CodeGenOpts
@@ -277,9 +281,9 @@ stack2JSWithMappings compileMode debugMode sourceMapEnabled records moduleRoot m
 -- Returns (code with markers stripped, list of mappings)
 processMarkers :: String -> [MarkerData] -> (String, [Mapping])
 processMarkers code markerData =
-  let markerMap = markerData  -- List of (markerId, srcPos)
+  let markerTable = IntMap.fromList markerData
       -- Scan the code to find marker positions and build mappings
-      (cleanLines, mappings) = scanLines (lines code) markerMap 1 [] []
+      (cleanLines, mappings) = scanLines (lines code) markerTable 1 [] []
   in (unlines' cleanLines, mappings)
   where
     -- Rejoin lines without adding trailing newline if original didn't have one
@@ -289,24 +293,24 @@ processMarkers code markerData =
 -- | Scan lines for markers and build mappings
 -- Skips whitespace-only lines and tracks output line numbers separately
 scanLines :: [String]      -- Lines to process
-          -> [MarkerData]  -- Marker data (id, srcPos)
+          -> MarkerTable   -- Source position of each marker
           -> Int           -- Current output line number (1-based)
           -> [String]      -- Accumulated clean lines
           -> [Mapping]     -- Accumulated mappings
           -> ([String], [Mapping])
 scanLines [] _ _ accLines accMappings = (reverse accLines, reverse accMappings)
-scanLines (line:rest) markerData outLineNum accLines accMappings =
-  let (cleanLine, lineMappings) = processLine line markerData outLineNum
+scanLines (line:rest) markerTable outLineNum accLines accMappings =
+  let (cleanLine, lineMappings) = processLine line markerTable outLineNum
       shouldEmit = not (isWhitespaceOnly cleanLine && not (null rest))
       -- Increment output line number only if we emit this line
       nextLineNum = if shouldEmit then outLineNum + 1 else outLineNum
       -- Add line to output only if we're emitting it
       nextLines = if shouldEmit then (cleanLine:accLines) else accLines
-  in scanLines rest markerData nextLineNum nextLines (lineMappings ++ accMappings)
+  in scanLines rest markerTable nextLineNum nextLines (lineMappings ++ accMappings)
 
 -- | Process a single line, extracting markers and generating mappings
-processLine :: String -> [MarkerData] -> Int -> (String, [Mapping])
-processLine line markerData lineNum = go line 1 "" []
+processLine :: String -> MarkerTable -> Int -> (String, [Mapping])
+processLine line markerTable lineNum = go line 1 "" []
   where
     go :: String -> Int -> String -> [Mapping] -> (String, [Mapping])
     go [] _ acc mappings = (reverse acc, mappings)
@@ -315,7 +319,7 @@ processLine line markerData lineNum = go line 1 "" []
           case parseMarker s of
             Just (markerId, remaining) ->
               -- Found a marker, look up source position
-              case lookup markerId markerData of
+              case IntMap.lookup markerId markerTable of
                 Just srcPos ->
                   -- Create mapping: source position -> current output position
                   let newMapping = case collectMapping srcPos lineNum col of

@@ -7,3 +7,4 @@ notebook/built/
 notebook/node_modules/
 notebook/public/js/bundle.js
 .git/
+p2p-tools/relay/keys/

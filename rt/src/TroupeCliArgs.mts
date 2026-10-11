@@ -100,7 +100,7 @@ export function defaultCliArgs(): ParsedArgs {
         [TroupeCliArg.RelayOnly]: false,
         [TroupeCliArg.NoP2pCircuit]: false,
         [TroupeCliArg.DisableRelay]: false,
-        [TroupeCliArg.RelayFaultTolerance]: 'fatal',
+        [TroupeCliArg.RelayFaultTolerance]: 'no-fatal',
         [TroupeCliArg.NoColor]: false,
         [TroupeCliArg.LabelFormat]: 'v1',
         [TroupeCliArg.SuppressLocalInfoMessage]: false,

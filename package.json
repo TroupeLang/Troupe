@@ -34,7 +34,7 @@
     "chalk": "^5.4.1",
     "cli-table3": "^0.6.5",
     "find-free-port": "^2.0.0",
-    "it-length-prefixed": "^10.0.1",
+    "it-length-prefixed": "^11.0.1",
     "libp2p": "^3.0.0",
     "progress": "^2.0.3",
     "uuid": "^13.0.0",

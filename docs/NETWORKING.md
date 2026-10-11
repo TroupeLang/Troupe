@@ -44,6 +44,13 @@ We use libp2p's functionality of relaying messages. This means that programs or
 processes running behind NAT (e.g., something running on a developer laptop) are
 accessible from the outside.
 
+A node takes its relays from `--relay` (repeatable), else from `p2pconfig.json` in the
+working directory or the Troupe root, else from `default_relays` in
+[rt/src/p2p/p2pconfig.mjs](../rt/src/p2p/p2pconfig.mjs), which lists the public relays
+`relay-2.troupe-lang.net` (Amsterdam) and `relay-sfo.troupe-lang.net` (San Francisco). A
+relay that cannot be reached at start is skipped; `--relay-fault-tolerance=fatal` makes it
+stop the node instead, and `--disable-relay` uses no relay at all.
+
 
 ## Navigating the code base
 

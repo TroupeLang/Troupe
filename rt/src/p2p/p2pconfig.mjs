@@ -11,7 +11,10 @@ import { resolve } from 'path';
 import { getTroupeRoot } from '../troupeRoot.mjs';
 let relays
 
-let default_relays = []
+let default_relays = [
+    "/dns4/relay-2.troupe-lang.net/tcp/5555/ws/p2p/12D3KooWSg5fxhEZ4SMtVCwfj81iBUNo15o3d3rEriTAVE6Lubgp",
+    "/dns4/relay-sfo.troupe-lang.net/tcp/5555/ws/p2p/12D3KooWS5pvNcKKGevDutCU4RGAbzAtGgVt7PkQdGse8FK9jZKo"
+]
   
 let known_nodes = [
     {nodeid:"QmNnooDu7bfjPFoTZYxMNLWUQJyrVwtbZg5gBMjTezGAJN", ip: "/dnsaddr/bootstrap.libp2p.io"},

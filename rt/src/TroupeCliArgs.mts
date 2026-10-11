@@ -132,7 +132,7 @@ export function getCliArgs(): ParsedArgs {
             .option(TroupeCliArg.RelayFaultTolerance, {
                 type: 'string',
                 choices: ['fatal', 'no-fatal'],
-                default: 'fatal',
+                default: 'no-fatal',
                 describe: 'Control whether relay connection failures are fatal (fatal) or non-fatal (no-fatal)'
             })
             .option(TroupeCliArg.NoColor, {

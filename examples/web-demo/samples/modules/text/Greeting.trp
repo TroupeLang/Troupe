@@ -1,0 +1,11 @@
+(* A module: a file another file of the program imports by a relative path.
+   A module is compiled in library mode, and its main expression is its
+   export list, a list of (name, value) pairs. *)
+import String
+
+datatype tone = PLAIN | LOUD
+
+let fun render (PLAIN, name) = "hello, " ^ name
+      | render (LOUD, name) = "HELLO, " ^ name ^ "!"
+in [ ("render", render), ("PLAIN", PLAIN), ("LOUD", LOUD) ]
+end

@@ -40,7 +40,12 @@ repository GitHub Pages serves from.
 
 ## What it does
 
-**Compile and run.** `run` compiles the editor's program and starts a Troupe node on it: a runtime
+**Compile and run.** A program is a project of one or more files, the tabs above the editor: the
+main file, and the modules it imports by relative path (`import "./text/Greeting"`,
+[MODULES.md](../../docs/MODULES.md)). `run` compiles the project in the compiler worker, which
+establishes the dependencies file on every compile (`troupec --update-deps`) and then compiles the
+main file against it; the modules reach the node by content hash in the run request, since a
+program links a module by its hash and never by a path. `run` then starts a Troupe node on it: a runtime
 worker running with `--localonly`, fetching the libraries it links from `lib/out/` on demand and
 the service module from `trp-rt/out/`. The node's stdio is the terminal (xterm.js): what the
 program writes appears there, and a line typed there is a line of its stdin, so `inputLine` blocks

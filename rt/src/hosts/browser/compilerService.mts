@@ -6,12 +6,14 @@
 
 import { CompilerService, LinkedSnippet } from '../../CompilerService.mjs';
 import { CompilerReply, CompilerRequest, MessagePortLike } from './compilerWorker.mjs';
-import { CompileResult, CompileOptions } from './troupecWasm.mjs';
+import { CompileResult, CompileOptions, ProjectResult } from './troupecWasm.mjs';
 
 export interface BrowserCompilerService extends CompilerService {
     /** Sends the compiler and the library interfaces to the worker. */
     init(wasm: ArrayBuffer, interfaces: Array<[string, Uint8Array]>): Promise<void>;
     compileSource(source: string, options?: CompileOptions): Promise<CompileResult>;
+    /** Compiles a project of several files, `main` among them (troupecWasm.mts). */
+    compileProject(files: Array<[string, string]>, main: string, options?: CompileOptions): Promise<ProjectResult>;
     /** Has the worker serve the same compiler on the port as well, which is
      *  transferred: a runtime worker given its other end links through it. */
     serve(port: MessagePort): Promise<void>;
@@ -49,6 +51,7 @@ export function browserCompilerService(port: MessagePortLike): BrowserCompilerSe
     return {
         init: (wasm, interfaces) => request({ op: 'init', wasm, interfaces }),
         compileSource: (source, options = {}) => request({ op: 'compileSource', source, options }),
+        compileProject: (files, main, options = {}) => request({ op: 'compileProject', files, main, options }),
         linkIR: (blobs: string[]): Promise<LinkedSnippet[]> => request({ op: 'linkIR', blobs }),
         serve: (p: MessagePort) => request({ op: 'serve', port: p }, [p]),
         stop: () => {},

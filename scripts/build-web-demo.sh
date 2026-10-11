@@ -20,18 +20,20 @@ for f in bin/troupec.wasm build/browser/troupe-worker.mjs build/browser/compiler
 done
 
 rm -rf "$SITE"
-mkdir -p "$SITE/lib/out" "$SITE/trp-rt/out" "$SITE/xterm/lib" "$SITE/xterm/css"
+mkdir -p "$SITE/lib/out" "$SITE/ffi" "$SITE/trp-rt/out" "$SITE/xterm/lib" "$SITE/xterm/css"
 cp "$DEMO/index.html" "$DEMO/demo.mjs" "$DEMO/theme.mjs" "$DEMO/style.css" "$DEMO/favicon.svg" "$SITE/"
 cp -R "$DEMO/samples" "$SITE/samples"
 cp "$ROOT"/build/browser/*.mjs "$SITE/"
 cp "$ROOT/bin/troupec.wasm" "$SITE/troupec.wasm"
 cp "$ROOT"/lib/out/*.js "$ROOT"/lib/out/*.exports "$SITE/lib/out/"
+cp "$ROOT"/ffi/*.exports "$SITE/ffi/"
 cp "$ROOT/trp-rt/out/service.js" "$SITE/trp-rt/out/"
 cp "$ROOT/node_modules/@xterm/xterm/lib/xterm.js" "$ROOT/node_modules/@xterm/addon-fit/lib/addon-fit.js" "$SITE/xterm/lib/"
 cp "$ROOT/node_modules/@xterm/xterm/css/xterm.css" "$SITE/xterm/css/"
 
-# The library interfaces the compiler mounts, as a manifest the page reads.
-(cd "$ROOT/lib/out" && ls *.exports | sort | node -e '
+# The interface files the compiler mounts -- the libraries' and the native
+# modules' -- as a manifest of paths under the site the page reads.
+(cd "$ROOT" && ls lib/out/*.exports ffi/*.exports | sort | node -e '
   const names = require("fs").readFileSync(0, "utf8").trim().split("\n");
   process.stdout.write(JSON.stringify(names));
 ') > "$SITE/lib-exports.json"

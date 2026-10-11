@@ -17,9 +17,11 @@ that `tests/_util/diff.sh` ignores.
 
 What the host leaves out is decided per test in `corpus.mjs`
 (`exclusionReason`): programs that need gzip, the Node host's native modules
-(SimpleFiles, Tty), signals or content-addressed modules. A test that persists
-values needs the origin private file system, so it runs in the browser and is
-skipped under Node.
+(SimpleFiles, Tty) or signals. A test with modules runs: its modules are read
+from the artifacts the native compile leaves beside their sources and handed
+to the node by content hash, as the page hands a project's. A test that
+persists values needs the origin private file system, so it runs in the
+browser and is skipped under Node.
 
 A persisted closure is restored through the node's compiler. Both runners
 start the compiler worker when `bin/troupec.wasm` is built (`make

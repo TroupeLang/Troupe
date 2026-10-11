@@ -37,6 +37,7 @@
       <button id="run" class="primary" disabled title="compile and run (Ctrl-Enter)">run</button>
       <button id="compile" disabled title="compile only">compile</button>
     </div>
+    <div id="files" class="file-tabs" role="tablist" aria-label="files of the program"></div>
     <div id="source-editor" class="editor" aria-label="program"></div>
     <div class="pane-foot"><span id="meta"></span><span id="errs" class="error-text"></span></div>
   </section>
@@ -78,7 +79,7 @@
 <script src="xterm/lib/xterm.js"></script>
 <script src="xterm/lib/addon-fit.js"></script>
 <script type="module">
-import { compileSource, linkBlobs, runProgram, sampleList, sampleSource, STAGES } from './demo.mjs';
+import { compileProject, linkBlobs, runProgram, sampleList, sampleProject, STAGES } from './demo.mjs';
 import { terminalTheme } from './theme.mjs';
 import { createEditor } from './troupe-editor.mjs';
 
@@ -167,9 +168,68 @@ window.terminalText = () => {
 // value is the program's text. Tab inserts two spaces and Ctrl-Enter
 // (Cmd-Enter) runs the program.
 const editor = createEditor({ parent: $('source-editor'), onRun: () => { if (!$('run').disabled) doRun(); } });
+
+// The project: the files by path, the main file, and the one in the editor.
+// The tabs above the editor show them; a file is added by name, and a file
+// other than the main one can be removed.
+const project = { files: new Map(), main: 'main.trp', current: 'main.trp' };
+function storeCurrent() { project.files.set(project.current, editor.value); }
+function showFile(path) {
+  storeCurrent();
+  project.current = path;
+  editor.value = project.files.get(path) ?? '';
+  renderFiles();
+}
+function projectFiles() { storeCurrent(); return [...project.files.entries()]; }
+function renderFiles() {
+  const tabs = [...project.files.keys()].map((path) => {
+    const b = document.createElement('button');
+    b.setAttribute('role', 'tab');
+    b.setAttribute('aria-selected', String(path === project.current));
+    b.textContent = path + (path === project.main ? '' : '');
+    b.title = path === project.main ? 'the main file' : 'a module';
+    b.onclick = () => showFile(path);
+    if (path !== project.main) {
+      const x = document.createElement('span');
+      x.className = 'close';
+      x.textContent = '×';
+      x.title = 'remove this file';
+      x.onclick = (e) => { e.stopPropagation(); project.files.delete(path); if (project.current === path) showFile(project.main); else renderFiles(); };
+      b.appendChild(x);
+    }
+    return b;
+  });
+  const add = document.createElement('button');
+  add.className = 'add-file';
+  add.textContent = '+ file';
+  add.title = 'add a file to the program, e.g. text/Greeting.trp';
+  add.onclick = () => {
+    const input = document.createElement('input');
+    input.placeholder = 'text/Name.trp';
+    input.className = 'new-file';
+    const done = () => {
+      const name = input.value.trim().replace(/^\.\//, '');
+      if (name && !project.files.has(name)) { project.files.set(name, '(* a module: its main expression is its export list *)\n'); showFile(name); }
+      else renderFiles();
+    };
+    input.onkeydown = (e) => { if (e.key === 'Enter') done(); if (e.key === 'Escape') renderFiles(); };
+    input.onblur = done;
+    add.replaceWith(input);
+    input.focus();
+  };
+  $('files').replaceChildren(...tabs, add);
+}
+function loadProject({ files, main }) {
+  project.files = new Map(files);
+  project.main = main;
+  project.current = main;
+  editor.value = project.files.get(main) ?? '';
+  renderFiles();
+}
 // For a driver: the program's text, and replacing it.
 window.sourceText = () => editor.value;
 window.setSource = (text) => { editor.value = text; };
+window.setProject = (files, main) => loadProject({ files, main });
 
 let result = null;
 let selected = 'emitted JavaScript';
@@ -199,7 +259,7 @@ async function doCompile() {
   $('meta').textContent = 'compiling…';
   $('errs').textContent = '';
   try {
-    result = await compileSource(editor.value);
+    result = await compileProject(projectFiles(), project.main);
     $('meta').textContent =
       `exit ${result.code} · ${result.ms.toFixed(0)} ms · ${result.stages.size} stages · `
       + `${result.js.length.toLocaleString()} bytes of JavaScript`;
@@ -227,8 +287,11 @@ async function doRun() {
     }
     term.focus();
     const started = performance.now();
-    node = await runProgram(result.js, { stdiolev: $('stdiolev').value.trim() || '{}' }, {
-      source: editor.value,
+    node = await runProgram(result.js, {
+      stdiolev: $('stdiolev').value.trim() || '{}',
+      modules: result.modules,
+      sources: Object.fromEntries(projectFiles()),
+    }, {
       onStdout: (text) => term.write(text),
       onStderr: (text) => term.write(text),
       onResult: (value) => { $('runMeta').textContent = `main thread finished with value ${value}`; },
@@ -288,7 +351,7 @@ function fillBlobFromResult() {
 // The samples: the first one is in the editor when the page opens.
 const samples = await sampleList();
 $('sample').replaceChildren(...samples.map((s) => new Option(s.title, s.file)));
-async function loadSample(file) { editor.value = await sampleSource(file); }
+async function loadSample(file) { loadProject(await sampleProject(samples.find((s) => s.file === file))); }
 $('sample').onchange = (e) => loadSample(e.target.value);
 await loadSample(samples[0].file);
 

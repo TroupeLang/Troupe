@@ -43,6 +43,22 @@ export interface CompileResult {
     ms: number;
 }
 
+/** One module of a compiled project: its code and the names the
+ *  dependencies file gives it. */
+export interface CompiledModule {
+    code: string;
+    path: string;
+    name: string;
+}
+
+/** A compiled project: the main program's artifact and every module it
+ *  imports, by content hash, as the runtime links them. */
+export interface ProjectResult extends CompileResult {
+    /** The dependencies file the compiler established, parsed. */
+    deps: { deps: Array<{ path: string; hash: string; name: string }> };
+    modules: Record<string, CompiledModule>;
+}
+
 export interface LinkedBlob {
     code: string;
     sourceMap?: any;
@@ -79,8 +95,10 @@ function filesUnder(dir: Directory, prefix = ''): Map<string, string> {
 export class TroupecWasm {
     /**
      * @param module the compiled bin/troupec.wasm
-     * @param interfaces the standard library's interface files, lib/out/<Name>.exports,
-     *        each by its file name
+     * @param interfaces the interface files the compiler reads for `import`
+     *        and `require native`, each by its path under the Troupe root:
+     *        lib/out/<Name>.exports and ffi/<Name>.exports. A bare file name
+     *        is taken as lib/out/<name>.
      */
     constructor(
         private readonly module: WebAssembly.Module,
@@ -96,17 +114,26 @@ export class TroupecWasm {
         files?: Array<[string, string | Uint8Array]>; stdin?: string;
     } = {}): Promise<RunResult> {
         const root = new Map<string, any>();
+        // A path with directories is placed in them, created as needed, so a
+        // program's modules sit beside it as they do on disk.
+        const place = (path: string, file: any) => {
+            const parts = path.split('/').filter((p) => p !== '' && p !== '.');
+            let dir = root;
+            for (const p of parts.slice(0, -1)) {
+                if (!dir.has(p)) dir.set(p, new Directory(new Map()));
+                dir = dir.get(p).contents;
+            }
+            dir.set(parts[parts.length - 1], file);
+        };
         for (const [name, text] of files) {
-            root.set(name, new File(typeof text === 'string' ? encoder.encode(text) : text));
+            place(name, new File(typeof text === 'string' ? encoder.encode(text) : text));
         }
         // The compiler writes its stage dumps to out/ and does not create it;
         // natively its absence is a write failure rather than a diagnostic.
         root.set('out', new Directory(new Map()));
-        root.set('troupe', new Directory(new Map([
-            ['lib', new Directory(new Map([
-                ['out', new Directory(new Map(this.interfaces.map(([n, d]) => [n, new File(d)])))],
-            ]))],
-        ])));
+        for (const [name, data] of this.interfaces) {
+            place(name.includes('/') ? `troupe/${name}` : `troupe/lib/out/${name}`, new File(data));
+        }
 
         const stdoutFile = new File([]);
         const stderrFile = new File([]);
@@ -152,6 +179,42 @@ export class TroupecWasm {
     async compileSource(source: string, options: CompileOptions = {}): Promise<CompileResult> {
         const args = ['-v', ...(options.sourceMap ? ['-m'] : []), 'p.trp', '-o', 'p.js'];
         const r = await this.run(args, { files: [['p.trp', source]] });
+        return this.compileResult(r);
+    }
+
+    /**
+     * Compiles a project: the files by their paths, `main` among them. The
+     * modules the main file imports are compiled first and their hashes
+     * recorded in the dependencies file (troupec --update-deps), which is
+     * re-established on every compile; the result carries each module's
+     * code by its hash, as the runtime links it.
+     */
+    async compileProject(files: Array<[string, string]>, main: string, options: CompileOptions = {}): Promise<ProjectResult> {
+        // --update-deps compiles the modules and writes the dependencies
+        // file, and no program; the program is then compiled against it.
+        const depsPath = main.replace(/\.trp$/, '') + '.deps.json';
+        const pins = await this.run(['--update-deps', main], { files });
+        if (pins.code !== 0 || pins.crash) {
+            return { ...this.compileResult(pins), deps: { deps: [] }, modules: {} };
+        }
+        const depsText = pins.files.get(depsPath) ?? '{"deps": []}';
+        const args = ['-v', ...(options.sourceMap ? ['-m'] : []), main, '-o', 'p.js'];
+        const r = await this.run(args, { files: [...files, [depsPath, depsText]] });
+        const result = this.compileResult(r);
+        result.ms += pins.ms;
+        const deps = JSON.parse(depsText);
+        const modules: Record<string, CompiledModule> = {};
+        for (const d of deps.deps) {
+            const slash = d.path.lastIndexOf('/');
+            const dir = slash < 0 ? '' : d.path.slice(0, slash + 1);
+            const base = slash < 0 ? d.path : d.path.slice(slash + 1);
+            const code = r.files.get(`${dir}out/${base}.js`);
+            if (code !== undefined) modules[d.hash] = { code, path: d.path, name: d.name };
+        }
+        return { ...result, deps, modules };
+    }
+
+    private compileResult(r: RunResult): CompileResult {
         const stages = new Map<string, string>();
         for (const [file, label] of STAGES) {
             const text = r.files.get(`out/${file}`);

@@ -1,0 +1,13 @@
+(* Native modules.
+
+   A native module is a group of primitives implemented by the host of the
+   node rather than in Troupe; the declaration `require native FFIDemo`
+   makes the module available, and the compiler checks the names against
+   the module's interface. The module `FFIDemo` is the demonstration
+   module every host provides. A program that requires a module the host
+   does not provide is refused when it is linked. *)
+require native FFIDemo
+let val greeting = ffiDemoGreet "browser"
+in printString greeting;
+   print (ffiDemoAdd (40, 2))
+end

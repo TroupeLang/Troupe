@@ -1,0 +1,16 @@
+(* Modules.
+
+   A program may be split over several files. The declaration
+   `import "./text/Greeting"` imports the module in the file
+   `text/Greeting.trp`, relative to this file, and binds its exports under
+   the name `Greeting`. A module is identified by the content hash of its
+   compiled code, recorded in the dependencies file `main.deps.json` next
+   to this file; the compiler checks the pins in that file, and
+   `troupec --update-deps` re-establishes them. In this demo, the files of
+   the project are the tabs above the editor, and the dependencies file is
+   re-established on every compile. *)
+import "./text/Greeting"
+
+let val _ = printString (Greeting.render (Greeting.PLAIN, "alice"))
+in printString (Greeting.render (Greeting.LOUD, "bob"))
+end

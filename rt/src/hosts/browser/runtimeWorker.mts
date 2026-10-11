@@ -18,7 +18,7 @@ export function serveRuntime(port: MessagePortLike, close: (code: number) => voi
         const { start, getRuntimeObject } = await boot({
             args: req.args ?? {},
             terminal,
-            code: { libraries: req.code.libraries, service: req.code.service, sources: req.sources ?? {} },
+            code: { libraries: req.code.libraries, service: req.code.service, sources: req.sources ?? {}, modules: req.code.modules ?? {} },
             config: req.config ?? {},
             post,
             close,

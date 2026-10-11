@@ -18,7 +18,7 @@ let compilerPromise = null;
 function compiler() {
     compilerPromise ??= (async () => {
         if (!(await fetch('/bin/troupec.wasm', { method: 'HEAD' })).ok) return null;
-        const interfaces = await fetchInterfaces('/lib-exports.json', '/lib/out/');
+        const interfaces = await fetchInterfaces('/lib-exports.json', '/');
         return startCompiler('/build/browser/compiler-worker.mjs', '/bin/troupec.wasm', interfaces);
     })();
     return compilerPromise;

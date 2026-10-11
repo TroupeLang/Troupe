@@ -5,7 +5,7 @@
 // blob: closure blobs repeat across a node's traffic, and a blob's snippet
 // depends on nothing but the blob.
 
-import { TroupecWasm, CompileResult, CompileOptions, LinkedBlob } from './troupecWasm.mjs';
+import { TroupecWasm, CompileResult, CompileOptions, ProjectResult, LinkedBlob } from './troupecWasm.mjs';
 
 /** What both sides need of a port: a browser Worker's global scope, a
  *  MessagePort, or Node's. */
@@ -18,6 +18,7 @@ export interface MessagePortLike {
 export type CompilerRequest =
     | { id: number; op: 'init'; wasm: ArrayBuffer; interfaces: Array<[string, Uint8Array]> }
     | { id: number; op: 'compileSource'; source: string; options?: CompileOptions }
+    | { id: number; op: 'compileProject'; files: Array<[string, string]>; main: string; options?: CompileOptions }
     | { id: number; op: 'linkIR'; blobs: string[] }
     /** Serve the same compiler on another port as well: the one a runtime
      *  worker holds, so a node links through the compiler its page loaded. */
@@ -49,6 +50,8 @@ export function createCompilerServer(): CompilerServer {
                 return null;
             case 'compileSource':
                 return await requireCompiler().compileSource(req.source, req.options ?? {});
+            case 'compileProject':
+                return await requireCompiler().compileProject(req.files, req.main, req.options ?? {});
             case 'linkIR': {
                 const missing = req.blobs.filter((b) => !linked.has(b));
                 if (missing.length > 0) {
@@ -94,4 +97,4 @@ export function serveCompiler(port: MessagePortLike): void {
     createCompilerServer().serve(port);
 }
 
-export type { CompileResult, CompileOptions };
+export type { CompileResult, CompileOptions, ProjectResult };

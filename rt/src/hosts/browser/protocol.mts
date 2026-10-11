@@ -19,8 +19,10 @@ export interface RunRequest {
     /** Options for the run, over the defaults; there is no command line. */
     args?: Partial<ParsedArgs>;
     /** Where compiled code comes from: a base URL for the libraries, the
-     *  URL of the trp-rt service module. */
-    code: { libraries: string; service: string };
+     *  URL of the trp-rt service module, and the program's own modules by
+     *  content hash, as a compiled project carries them (the identity a
+     *  program links a module by is its hash, never a path). */
+    code: { libraries: string; service: string; modules?: Record<string, { code: string; name: string }> };
     /** The node's configuration, parsed; absent entries are unconfigured. */
     config?: { aliases?: Record<string, string>; trustList?: any[]; nodeIdentity?: any };
     /** A port to a compiler worker that is serving and initialized

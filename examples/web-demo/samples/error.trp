@@ -2,8 +2,8 @@
 
    Note that Troupe is dynamically typed; adding a number and a string
    results in a runtime type error. The error report quotes the source
-   line, marks the position of the expression, and refers to the program
-   as `p.trp`, the name under which the demo compiles it. *)
+   line, marks the position of the expression, and names the file of the
+   program. *)
 let val n = 1
     val s = "one"
 in print (n + s)

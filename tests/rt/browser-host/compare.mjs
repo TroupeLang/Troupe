@@ -33,7 +33,7 @@ export function runRequest(test, code, supervised) {
         program: test.program,
         sources: { [test.path]: test.source },
         args: { localonly: true, 'no-color': true, ...test.args },
-        code,
+        code: { ...code, modules: test.modules ?? {} },
         supervised,
     };
 }

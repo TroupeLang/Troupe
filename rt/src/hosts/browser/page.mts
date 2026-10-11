@@ -10,8 +10,10 @@ export { browserCompilerService };
 export { STAGES } from './stages.mjs';
 export type { RunRequest, WorkerMessage, BrowserCompilerService };
 
-/** The library interfaces the compiler reads for `import`, fetched from a
- *  manifest (a JSON list of file names) and a base URL. */
+/** The interface files the compiler reads for `import` and `require
+ *  native`, fetched from a manifest (a JSON list of paths under the Troupe
+ *  root, lib/out/<Name>.exports and ffi/<Name>.exports) and the base URL
+ *  the paths are relative to. */
 export async function fetchInterfaces(manifestUrl: string, baseUrl: string): Promise<Array<[string, Uint8Array]>> {
     const names: string[] = await (await fetch(manifestUrl)).json();
     return Promise.all(names.map(async (n) => {

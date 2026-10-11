@@ -14,7 +14,7 @@ import { readFile, readdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { ROOT, listTests, prepareTest } from './corpus.mjs';
-import { startServer, codeLocations } from './server.mjs';
+import { startServer, codeLocations, interfacePaths } from './server.mjs';
 import { diffAgainstGolden, runRequest } from './compare.mjs';
 
 const TIMEOUT_MS = 60_000;
@@ -34,9 +34,7 @@ async function startCompilerServer() {
     const { port1, port2 } = new MessageChannel();
     server.serve(port2);
     const service = browserCompilerService(port1);
-    const libOut = join(ROOT, 'lib', 'out');
-    const names = (await readdir(libOut)).filter((n) => n.endsWith('.exports')).sort();
-    const interfaces = await Promise.all(names.map(async (n) => [n, new Uint8Array(await readFile(join(libOut, n)))]));
+    const interfaces = await Promise.all((await interfacePaths()).map(async (p) => [p, new Uint8Array(await readFile(join(ROOT, p)))]));
     await service.init((await readFile(wasm)).buffer, interfaces);
     return server;
 }

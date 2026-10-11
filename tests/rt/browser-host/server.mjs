@@ -15,7 +15,14 @@ const TYPES = {
     '.wasm': 'application/wasm',
 };
 
-const SERVED = ['/lib/out/', '/trp-rt/out/', '/build/browser/', '/tests/rt/browser-host/', '/bin/troupec.wasm'];
+const SERVED = ['/lib/out/', '/ffi/', '/trp-rt/out/', '/build/browser/', '/tests/rt/browser-host/', '/bin/troupec.wasm'];
+
+/** The interface files the compiler mounts, as paths under the repository:
+ *  the libraries' and the native modules'. */
+export async function interfacePaths() {
+    const under = async (dir) => (await readdir(join(ROOT, dir))).filter((n) => n.endsWith('.exports')).map((n) => `${dir}/${n}`);
+    return [...await under('lib/out'), ...await under('ffi')].sort();
+}
 
 function send(res, status, body, type) {
     res.writeHead(status, { 'Content-Type': type ?? 'text/plain; charset=utf-8', 'Cache-Control': 'no-cache' });
@@ -40,10 +47,7 @@ export function startServer() {
         try {
             if (url === '/' || url === '/index.html') return serveFile(res, join(ROOT, 'tests/rt/browser-host/page/index.html'));
             if (url === '/favicon.ico') return send(res, 204, '');
-            if (url === '/lib-exports.json') {
-                const names = (await readdir(join(ROOT, 'lib', 'out'))).filter((n) => n.endsWith('.exports')).sort();
-                return send(res, 200, JSON.stringify(names), TYPES['.json']);
-            }
+            if (url === '/lib-exports.json') return send(res, 200, JSON.stringify(await interfacePaths()), TYPES['.json']);
             if (url === '/corpus') return send(res, 200, JSON.stringify(await listTests()), TYPES['.json']);
             if (url === '/round-trip') return send(res, 200, JSON.stringify(await prepareRoundTrip()), TYPES['.json']);
             if (url === '/test') {

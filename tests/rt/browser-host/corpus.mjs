@@ -8,7 +8,7 @@ import { execFile } from 'node:child_process';
 import { readFile, readdir, mkdtemp, mkdir, rm } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve, relative } from 'node:path';
+import { join, resolve, relative, dirname, basename } from 'node:path';
 import { promisify } from 'node:util';
 
 export const ROOT = resolve(import.meta.dirname, '..', '..', '..');
@@ -34,9 +34,6 @@ export function exclusionReason(path, source) {
     }
     if (/^\s*(import\s+(Tty|SimpleFileIO)|require\s+native\s+(Tty|SimpleFiles))\b/m.test(source)) {
         return 'Tty and SimpleFiles are native modules of the Node host';
-    }
-    if (existsSync(join(ROOT, path.replace(/\.trp$/, '.deps.json')))) {
-        return 'content-addressed modules need a dependencies file';
     }
     return null;
 }
@@ -98,6 +95,24 @@ export function parseOptions(text) {
     return args;
 }
 
+/**
+ * The modules of a program by content hash, as its compiled project carries
+ * them: read from the dependencies file beside the program and the
+ * artifacts the native compile left beside each module source. Empty for a
+ * program without modules.
+ */
+async function moduleTable(path) {
+    const depsPath = join(ROOT, path.replace(/\.trp$/, '.deps.json'));
+    if (!existsSync(depsPath)) return {};
+    const root = dirname(join(ROOT, path));
+    const table = {};
+    for (const d of JSON.parse(await readFile(depsPath, 'utf8')).deps) {
+        const code = await readFile(join(root, dirname(d.path), 'out', basename(d.path) + '.js'), 'utf8');
+        table[d.hash] = { code, name: d.name };
+    }
+    return table;
+}
+
 async function optional(path) {
     return existsSync(path) ? await readFile(path, 'utf8') : null;
 }
@@ -122,6 +137,7 @@ export async function prepareTest(path) {
             path, program, source, golden, input,
             args: optionsText === null ? {} : parseOptions(optionsText),
             needsPersistence: needsPersistence(source),
+            modules: await moduleTable(path),
         };
     } finally {
         await rm(dir, { recursive: true, force: true });

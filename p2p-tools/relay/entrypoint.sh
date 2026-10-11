@@ -6,7 +6,7 @@ ID_FILE="${KEYS_DIR}/relay.id"
 PRIV_FILE="${KEYS_DIR}/relay.priv"
 PUBLIC_PORT="${RELAY_PUBLIC_PORT:-5555}"
 
-# Generate keys on first run. mkid refuses to overwrite, so clear a partial pair first.
+# mkid refuses to overwrite, so a partial pair is cleared first.
 if [ ! -f "$ID_FILE" ] || [ ! -f "$PRIV_FILE" ]; then
     echo "=== First run: generating relay keys ==="
     mkdir -p "$KEYS_DIR"
@@ -29,5 +29,4 @@ echo "  /dns4/<HOST_NAME>/tcp/${PUBLIC_PORT}/ws/p2p/${PEER_ID}"
 echo "============================================"
 echo ""
 
-# exec so that signals reach node directly
 exec node /app/p2p-tools/relay/relay.mjs --port=5555 --id-file="$ID_FILE" --priv-file="$PRIV_FILE"

@@ -20,8 +20,7 @@ RUN apt-get update && apt-get install -qy \
 # Install Stack (GHC is managed by Stack via the resolver in stack.yaml).
 RUN curl -sSL https://get.haskellstack.org/ | sh
 
-# Copy dependency manifests and install npm packages (cached unless they change).
-# p2p-tools is an npm workspace, so its manifest is part of the install.
+# Copy dependency manifests and install npm packages (cached unless package.json changes).
 COPY package.json package-lock.json ./
 COPY p2p-tools/package.json p2p-tools/
 RUN --mount=type=cache,target=/root/.npm npm install

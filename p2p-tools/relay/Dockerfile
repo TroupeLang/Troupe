@@ -1,8 +1,4 @@
-# The relay image. Build context is the repository root:
-#   docker build -f p2p-tools/relay/Dockerfile -t ghcr.io/troupelang/troupe-relay:latest .
-# p2p-tools is an npm workspace, so `npm ci --workspace p2p-tools` installs its
-# packages alone, at the versions of the root lockfile.
-
+# Build context: the repository root.
 FROM node:22-slim AS build
 WORKDIR /build
 COPY package.json package-lock.json ./

@@ -52,6 +52,7 @@ TEMP_DIR=""
 VERBOSE=false
 RELAY_MULTIADDR=""
 RELAY_PID=""
+RUN_TEMP_DIRS=()
 
 # Detect CI environment and apply modest scaling
 TIMEOUT_SCALE=1.0
@@ -80,6 +81,18 @@ kill_processes_on_port() {
             lsof -ti ":$port" | xargs -r kill -9 2>/dev/null || true
         fi
     fi
+}
+
+# Extended regex matching any temporary directory this runner created. The relay and every
+# node carry their run's directory in their command line (relay keys, aliases file), so a
+# pattern kill that requires it reaches only this runner's processes.
+own_processes_regex() {
+    local escaped=() dir
+    for dir in "${RUN_TEMP_DIRS[@]}"; do
+        escaped+=("$(printf '%s' "$dir" | sed 's/[][\.*^$+?(){}|]/\\&/g')")
+    done
+    local IFS='|'
+    echo "(${escaped[*]})"
 }
 
 # Get all ports used by the test (nodes + relay)
@@ -262,6 +275,11 @@ cleanup() {
         log "CI environment: using scaled cleanup timeouts (relay=${relay_grace_period}s, nodes=${node_grace_period}s, sockets=${socket_release_wait}s)"
     fi
 
+    local own_re=""
+    if [[ -n "${RUN_TEMP_DIRS[*]:-}" ]]; then
+        own_re=$(own_processes_regex)
+    fi
+
     # Kill relay first with graceful shutdown attempt
     if is_valid_pid "$RELAY_PID"; then
         log "Stopping relay (PID: $RELAY_PID)"
@@ -295,11 +313,11 @@ cleanup() {
     fi
 
     # Kill by process name as fallback
-    if pkill -f "relay.mjs" 2>/dev/null; then
+    if [[ -n "$own_re" ]] && pkill -f "relay.mjs.*$own_re" 2>/dev/null; then
         ((cleaned_count++)) || true
         cleanup_failures+=("Found relay.mjs processes via pkill (PID tracking may have failed)")
     fi
-    if pkill -f "node.*network.sh" 2>/dev/null; then
+    if [[ -n "$own_re" ]] && pkill -f "node.*network.sh.*$own_re" 2>/dev/null; then
         ((cleaned_count++)) || true
         cleanup_failures+=("Found network.sh processes via pkill (PID tracking may have failed)")
     fi
@@ -362,7 +380,7 @@ cleanup() {
     fi
 
     # Final cleanup of any troupe processes
-    if pkill -9 -f "node.*troupe" 2>/dev/null; then
+    if [[ -n "$own_re" ]] && pkill -9 -f "node.*troupe.*$own_re" 2>/dev/null; then
         cleanup_failures+=("Found lingering troupe processes requiring pkill -9")
     fi
 
@@ -744,7 +762,7 @@ run_node() {
     fi
     
     local id_file="$test_dir/ids/$node_id.json"
-    local aliases_file="$test_dir/aliases.json"
+    local aliases_file="$TEMP_DIR/aliases.json"
     local output_file="$output_dir/$node_id.out"
     local error_file="$output_dir/$node_id.err"
     
@@ -939,6 +957,7 @@ run_test_single() {
 
     # Set up temporary directory for this test run
     TEMP_DIR=$(mktemp -d -t troupe-multinode-XXXXXX)
+    RUN_TEMP_DIRS+=("$TEMP_DIR")
     local output_dir="$TEMP_DIR/output"
     mkdir -p "$output_dir"
 
@@ -962,6 +981,7 @@ run_test_single() {
 
     # Setup phase
     setup_network_identities "$test_dir" "$config_file"
+    cp "$test_dir/aliases.json" "$TEMP_DIR/aliases.json"
 
     # Start relay if needed
     if [[ "$relay_mode" == "relay" ]]; then

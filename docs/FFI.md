@@ -167,6 +167,7 @@ Worked examples in the tree:
 | `rt/src/ffi/ffidemo.mts`          | Minimal platform-neutral module; result labels join argument labels |
 | `rt/src/ffi/node/simplefiles.mts` | Authority checks, sandboxing, suspending the thread for async I/O   |
 | `rt/src/ffi/node/tty.mts`         | A client of core-owned state (stdio's channel level and sink check); a registered shutdown restore |
+| `rt/src/ffi/node/p2prelaycontrol.mts` | `P2PRelayControl`, a relay node's module: libp2p's questions delivered as messages with a reply closure; the libp2p relay service's reservations ([NETWORKING.md](NETWORKING.md#relay-node)) |
 
 ## Failure modes
 

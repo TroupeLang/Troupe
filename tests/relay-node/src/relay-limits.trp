@@ -1,0 +1,41 @@
+(* Sets a reservation lifetime of 20 s, admits alice and bob, and prints the reservations
+   every 5 s: each peer's name, the seconds to its expiry and its two limits. The questions
+   are named "deny...", after libp2p's hooks, so `reply true` denies and `reply false`
+   admits. *)
+import List
+import Outcome
+import P2PRelayControl
+let val t0 = getTime ()
+    fun at () = "RELAY: t=" ^ toString ((getTime () - t0) div 1000) ^ " s: "
+    fun name p = if p = "@@ALICE@@" then "alice"
+                 else if p = "@@BOB@@" then "bob"
+                 else if p = "@@CAROL@@" then "carol" else p
+    val listed = ["@@ALICE@@", "@@BOB@@"]
+    val limits = {reservationTtl = 20000, maxReservations = 15,
+                  defaultDurationLimit = 3600000, defaultDataLimit = 1073741824}
+    val _ = case P2PRelayControl.setLimits (authority, limits) of
+                 OK _ => print "RELAY: setLimits OK, reservationTtl 20000 ms"
+               | ERR NOT_RELAY => print "RELAY: setLimits ERR NOT_RELAY"
+    val _ = case P2PRelayControl.connectionGater (authority, self ()) of
+                 OK _ => print "RELAY: connectionGater OK"
+               | ERR NOT_RELAY => print "RELAY: connectionGater ERR NOT_RELAY"
+    fun show (r, acc) =
+        acc ^ "; " ^ name r.peer ^ " expires in " ^ toString ((r.expiresAt - getTime ()) div 1000)
+        ^ " s, duration limit " ^ toString r.durationLimit ^ " ms, data limit "
+        ^ toString r.dataLimit ^ " bytes"
+    fun tick () =
+        let val _ = case P2PRelayControl.reservations authority of
+                         OK rs => print (at () ^ toString (List.length rs) ^ " reservations"
+                                         ^ List.foldl show "" rs)
+                       | ERR NOT_RELAY => print "RELAY: reservations ERR NOT_RELAY"
+        in sleep 5000; tick ()
+        end
+    val _ = spawn tick
+    fun loop () =
+      receive [ hn ("denyInboundRelayReservation", peer, reply) =>
+                  (print (at () ^ "reservation question from " ^ name peer);
+                   reply (not (List.elem peer listed));
+                   loop ())
+              , hn ("denyOutboundRelayedConnection", _, reply) => (reply false; loop ()) ]
+in loop ()
+end

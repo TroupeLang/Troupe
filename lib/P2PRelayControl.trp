@@ -1,7 +1,9 @@
 import Outcome
 require native P2PRelayControl
 
-(** P2PRelayControl - the connection gater of a relay node (a node started with `--start-relay`).
+(** P2PRelayControl - the connection gater and the reservation store of a relay node (a node
+ *  started with `--start-relay`). Every function takes the root authority and returns `OK` or
+ *  `ERR NOT_RELAY`, the latter on a node started without `--start-relay`.
  *
  *  `connectionGater (authority, pid)` makes the local process `pid` the one that answers the
  *  libp2p relay service's questions, replacing any earlier one. Each question arrives in its
@@ -11,11 +13,28 @@ require native P2PRelayControl
  *    ("denyOutboundRelayedConnection", (src, dst), reply)  a reserved peer dials another
  *
  *  `reply true` denies, `reply false` admits; the first call counts and later calls are ignored.
- *  The answer must flow to BOT: a decision that depends on a peer id, which carries the peer's
- *  trust level, needs `endorse` and `blockdown` first. Until a process is set, and whenever the
- *  set process is dead when a question arrives, every question is denied.
+ *  The message and the peer ids in it are labelled at the pc of the `connectionGater` call; the
+ *  answer must flow to BOT. Until a process is set, and whenever the set process is dead when a
+ *  question arrives, every question is denied.
  *
- *  `ERR NOT_RELAY` on a node started without `--start-relay`. *)
+ *  `setLimits (authority, {reservationTtl, maxReservations, defaultDurationLimit,
+ *  defaultDataLimit})` sets how long a reservation lasts (ms), how many the relay holds, and how
+ *  long (ms) and how many bytes each relayed connection to the reserved peer may carry. The
+ *  values apply from the next request on: a new reservation takes all four, a client's refresh
+ *  of a held reservation extends it by the current `reservationTtl` and keeps the duration and
+ *  data limits the reservation was made with.
+ *
+ *  `removeReservation (authority, peer, endCircuits)` removes the reservation of the peer id
+ *  `peer`; with `endCircuits = true` the peer's open relayed connections end as well, with
+ *  `false` they run on to their limits. A peer without a reservation gives `OK ()` too.
+ *
+ *  `reservations authority` lists the reservations as `{peer, expiresAt, durationLimit,
+ *  dataLimit}`, `expiresAt` in ms since the epoch, each entry labelled at the caller's pc.
+ *  `expiresAt` is the expiry given when the reservation was made; a refresh extends the
+ *  reservation without changing it.
+ *
+ *  `setLimits` and `removeReservation` are seen by the relay's peers: the pc and the arguments
+ *  must flow to BOT. *)
 
 datatype relayControlError = NOT_RELAY
 
@@ -23,5 +42,16 @@ let fun toOutcome {tag = "Ok",  value = v} = OK v
       | toOutcome {tag = "Err", error = {reason = "NOT_RELAY"}} = ERR NOT_RELAY
 
     fun connectionGater (auth, pid) = toOutcome (P2PRelayControl.setConnectionGater (auth, pid))
-in [ ("connectionGater", connectionGater) ]
+
+    fun setLimits (auth, limits) = toOutcome (P2PRelayControl.setLimits (auth, limits))
+
+    fun removeReservation (auth, peer, endCircuits) =
+        toOutcome (P2PRelayControl.removeReservation (auth, peer, endCircuits))
+
+    fun reservations auth = toOutcome (P2PRelayControl.reservations auth)
+in [ ("connectionGater", connectionGater)
+   , ("setLimits", setLimits)
+   , ("removeReservation", removeReservation)
+   , ("reservations", reservations)
+   ]
 end

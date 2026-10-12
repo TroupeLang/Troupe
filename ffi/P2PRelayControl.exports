@@ -1,1 +1,4 @@
 setConnectionGater
+setLimits
+removeReservation
+reservations

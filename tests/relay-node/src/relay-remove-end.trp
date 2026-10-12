@@ -1,0 +1,41 @@
+(* Admits alice and bob. Five seconds after the first relayed connection question it removes
+   the reservation of the connection's destination with `endCircuits = true`, so
+   its open relayed connections end as well, and prints the reservations before and after. The questions are named
+   "deny...", after libp2p's hooks, so `reply true` denies and `reply false` admits. *)
+import List
+import Outcome
+import P2PRelayControl
+let val t0 = getTime ()
+    fun at () = "RELAY: t=" ^ toString ((getTime () - t0) div 1000) ^ " s: "
+    fun name p = if p = "@@ALICE@@" then "alice"
+                 else if p = "@@BOB@@" then "bob"
+                 else if p = "@@CAROL@@" then "carol" else p
+    val listed = ["@@ALICE@@", "@@BOB@@"]
+    val _ = case P2PRelayControl.connectionGater (authority, self ()) of
+                 OK _ => print "RELAY: connectionGater OK"
+               | ERR NOT_RELAY => print "RELAY: connectionGater ERR NOT_RELAY"
+    fun printReservations () =
+        case P2PRelayControl.reservations authority of
+             OK rs => print (at () ^ "reservations of "
+                             ^ List.foldl (fn (r, acc) => acc ^ name r.peer ^ " ") "" rs)
+           | ERR NOT_RELAY => print "RELAY: reservations ERR NOT_RELAY"
+    fun revoke peer =
+        let val _ = sleep 5000
+            val _ = printReservations ()
+            val _ = case P2PRelayControl.removeReservation (authority, peer, true) of
+                         OK _ => print (at () ^ "removeReservation (" ^ name peer ^ ", true) OK")
+                       | ERR NOT_RELAY => print "RELAY: removeReservation ERR NOT_RELAY"
+        in printReservations ()
+        end
+    fun loop revoked =
+      receive [ hn ("denyInboundRelayReservation", peer, reply) =>
+                  (print (at () ^ "reservation question from " ^ name peer);
+                   reply (not (List.elem peer listed));
+                   loop revoked)
+              , hn ("denyOutboundRelayedConnection", (src, dst), reply) =>
+                  (print (at () ^ "connection question " ^ name src ^ " to " ^ name dst);
+                   reply false;
+                   if revoked then loop true
+                   else (spawn (fn () => revoke dst); loop true)) ]
+in loop false
+end

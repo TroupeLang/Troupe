@@ -140,7 +140,7 @@ test: test/local test/ir-sexp-corpus-troupe test/multinode test/hostile-peer tes
 # ./bin/golden alone leaves out far more -- every Haskell suite runs under
 # `stack test`, which only test/local reaches, and the IR conformance corpus
 # lives there.
-ci: check-host-boundary test test/examples test/prop-rt test/prop-differential
+ci: check-host-boundary test test/examples test/prop-rt test/prop-differential test/libp2p-contract
 
 # The runtime core imports nothing of Node's; see scripts/check-host-boundary.sh.
 check-host-boundary:
@@ -262,6 +262,10 @@ test/prop-rt: rt
 # `test:` target. Requires the `dclabels` executable and the runtime built.
 test/prop-differential:
 	./scripts/run-differential-lattice.sh
+
+# The libp2p internals the runtime relies on, run against the installed versions.
+test/libp2p-contract:
+	node tests/libp2p-contract/contract.mjs
 
 test/ci-relay: p2p-tools
 	@echo "Running CI relay test..."

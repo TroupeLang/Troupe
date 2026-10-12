@@ -1,8 +1,11 @@
 #!/bin/bash
-# run.sh local [CASE...]         the relay node on 127.0.0.1:7560 and the clients here
+# run.sh local [CASE...]         the relay node on 127.0.0.1:PORT and the clients here
 # run.sh remote HOST PORT CASE   the clients here; the relay node of CASE runs on HOST
 # run.sh relay CASE PORT         the relay node of CASE in the foreground (to run on HOST)
-# CASE is no-gater, list, time-limit, labels or idle. local runs the first four by default.
+# CASE is no-gater, list, time-limit, labels, limits, remove-end, remove-keep or idle. local runs
+# all but idle by default. PORT (default 7560) is the relay node's WebSocket port; the relay
+# node's TCP port is PORT+1 and the clients alice, bob and carol listen on PORT+2 to PORT+4.
+# CLIENT_DEBUG (default libp2p:circuit-relay*) is the clients' DEBUG.
 D=$(cd "$(dirname "$0")" && pwd)
 W=$(cd "$D/../.." && pwd)
 export TROUPE=$W
@@ -15,9 +18,8 @@ say() { echo "[t=$(stamp)s] $*"; }
 relay_command() { # relay_command CASE PORT: sets CMD to the relay node's command line
   local program=relay-$1 trust=trust-bot.json extra=()
   case $1 in
-    no-gater|list|time-limit) ;;
-    labels) trust=trust-mixed.json
-            extra=(--stdiolev '<#root-confidentiality;#null-integrity>') ;;
+    no-gater|list|time-limit|limits|remove-end|remove-keep) ;;
+    labels) trust=trust-mixed.json ;;
     idle) program=relay-list ;;
     *) echo "unknown case: $1" >&2; exit 2 ;;
   esac
@@ -33,8 +35,9 @@ start() { # start NAME CMD...: runs CMD in the background; stdout to NAME.out, s
 }
 
 client() { # client NAME PROGRAM
-  start "$1" env 'DEBUG=libp2p:circuit-relay*' "$W/rt/troupe" "$D/built/$2.js" \
-    --id "$D/ids/$1.json" --relay "$RELAY_ADDR" --relay-only \
+  local offset; case $1 in alice) offset=2 ;; bob) offset=3 ;; carol) offset=4 ;; esac
+  start "$1" env "DEBUG=${CLIENT_DEBUG:-libp2p:circuit-relay*}" "$W/rt/troupe" "$D/built/$2.js" \
+    --id "$D/ids/$1.json" --port $((PORT + offset)) --relay "$RELAY_ADDR" --relay-only \
     --aliases "$D/gen/aliases.json" --trustmap "$D/gen/trust-bot.json"
 }
 
@@ -63,7 +66,7 @@ stop_all() {
 }
 
 show() { # show NAME [all]: NAME's stdout, and its stderr filtered (or whole with "all")
-  local filter='reserv|denied|PERMISSION|NO_RESERVATION|gater|status|error|abort|timeout|clos|disconnect'
+  local filter='reserv|denied|PERMISSION|NO_RESERVATION|gater|status|error|abort|timeout|clos|disconnect|succeeded'
   echo; echo "===== $1: stdout ====="; cat "$LOG/$1.out"
   echo "===== $1: stderr, $(wc -l < "$LOG/$1.err" | tr -d ' ') lines$([ "$2" = all ] || echo ", lines matching $filter") ====="
   if [ "$2" = all ]; then cut -c1-400 "$LOG/$1.err"; else grep -iE "$filter" "$LOG/$1.err" | cut -c1-400; fi
@@ -94,11 +97,33 @@ case_time-limit() {
 }
 
 case_labels() {
-  expect "the relay prints bob's id at {}, alice's at its integrity alice, carol's (absent from its trust map) at NULL; all three reserve"
+  expect "the relay prints the three ids at the pc of its connectionGater call, {}, although its trust map puts alice at integrity alice and leaves carol out; all three reserve"
   client bob client-idle; sleep 2
   client alice client-idle; sleep 2
   client carol client-idle
   wait_exit carol 20
+}
+
+case_limits() {
+  expect "setLimits OK; bob reserves, its reservation expires 20 s later and the relay lists none; bob's refresh 30 s after the reservation is a new question and a new 20 s reservation"
+  client bob client-hold
+  wait_exit bob 80
+}
+
+case_remove() { # bob serves echo; alice sends 20 requests, one a second
+  client bob echo-server
+  client alice echo-client-loop
+  wait_exit alice 45
+}
+
+case_remove-end() {
+  expect "the relay removes bob's reservation with endCircuits = true; the relayed connection ends and the relay answers alice's next dial to bob through it with NO_RESERVATION; on loopback alice then dials bob directly, at the address identify gave it, and gets all 20 replies"
+  case_remove
+}
+
+case_remove-keep() {
+  expect "the relay removes bob's reservation with endCircuits = false; the relay lists no reservation for bob, and alice gets all 20 replies over the open relayed connection"
+  case_remove
 }
 
 case_idle() {
@@ -134,9 +159,10 @@ case $MODE in
     echo "\$ DEBUG='libp2p:circuit-relay:server*' ${CMD[*]}"
     DEBUG='libp2p:circuit-relay:server*' exec "${CMD[@]}" ;;
   local)
-    shift; PORT=7560
+    shift; PORT=${PORT:-7560}
     RELAY_ADDR=/ip4/127.0.0.1/tcp/$PORT/ws/p2p/$(node -p "require('$D/gen/aliases.json').relay")
-    CASES=("$@"); [ ${#CASES[@]} -eq 0 ] && CASES=(no-gater list time-limit labels)
+    CASES=("$@")
+    [ ${#CASES[@]} -eq 0 ] && CASES=(no-gater list time-limit labels limits remove-end remove-keep)
     for c in "${CASES[@]}"; do
       relay_command "$c" $PORT
       start relay env 'DEBUG=libp2p:circuit-relay:server*' "${CMD[@]}"
@@ -148,5 +174,5 @@ case $MODE in
     RELAY_ADDR=/ip4/$HOST/tcp/$PORT/ws/p2p/$(node -p "require('$D/gen/aliases.json').relay")
     nc -z "$HOST" "$PORT" || { echo "no relay node listening on $HOST:$PORT"; exit 1; }
     run_case "$4" ;;
-  *) sed -n 2,5p "$0"; exit 2 ;;
+  *) sed -n 2,7p "$0"; exit 2 ;;
 esac

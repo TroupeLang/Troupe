@@ -54,6 +54,39 @@ working directory or the Troupe root; with neither it uses no relay. The public 
 `--relay-fault-tolerance=fatal` makes it stop the node instead.
 
 
+## Relay node
+
+A node started with `--start-relay <port>` is a relay node: its libp2p instance runs the libp2p
+relay service (`circuitRelayServer`) and listens for WebSocket connections on `<port>`; peer
+discovery is off. The flag excludes `--relay`, `--localonly`, `--disable-relay` and
+`--no-p2p-circuit`, and needs `--id`. A client reserves a slot with `--relay
+/ip4/<host>/tcp/<port>/ws/p2p/<relay id>`.
+
+The relay program governs the relay service through the library `P2PRelayControl` (native module
+of the same name, node host only). Each function takes the root authority and returns `OK` or
+`ERR NOT_RELAY`:
+
+| Function                                           | Effect                                                                                                                     |
+|----------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------|
+| `connectionGater (authority, pid)`                 | the local process `pid` answers the connection gater's questions                                                           |
+| `setLimits (authority, limits)`                    | sets `reservationTtl`, `maxReservations`, `defaultDurationLimit` and `defaultDataLimit` (ms, bytes) for later reservations |
+| `removeReservation (authority, peer, endCircuits)` | removes the peer's reservation; `endCircuits = true` also ends its relayed connections                                     |
+| `reservations authority`                           | the reservations as `{peer, expiresAt, durationLimit, dataLimit}`                                                          |
+
+The questions arrive as `("denyInboundRelayReservation", peer, reply)` and
+`("denyOutboundRelayedConnection", (src, dst), reply)`. They carry libp2p's polarity: `reply true`
+denies and `reply false` admits. With no process set, or a dead one, every question is denied.
+A client gives up on a reservation that is not answered within 5 s.
+
+The questions, the peer ids in them and the entries of `reservations` are labelled at the pc of
+the call that set the process or made the query; the peer's trust level is not part of the label. `reply`,
+`setLimits` and `removeReservation` act on the network and need a pc and arguments that flow to
+BOT.
+
+`tests/libp2p-contract/contract.mjs` (`make test/libp2p-contract`, part of `make ci`) checks the
+libp2p internals the module uses against the installed libp2p; `tests/relay-node/` runs relay
+programs with clients over loopback.
+
 ## Navigating the code base
 
 The main p2p runtime module is in [rt/src/p2p/p2p.mts](../rt/src/p2p/p2p.mts). The relay is a

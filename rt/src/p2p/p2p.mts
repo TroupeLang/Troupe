@@ -79,13 +79,13 @@ import { pushable } from 'it-pushable';
 import p2pconfig, { setCliRelays, getRelays } from './p2pconfig.mjs';
 import { multiaddr } from '@multiformats/multiaddr';
 import { identify } from '@libp2p/identify';
-import { circuitRelayTransport, circuitRelayServer } from '@libp2p/circuit-relay-v2';
+import { circuitRelayTransport, circuitRelayServer, type CircuitRelayService } from '@libp2p/circuit-relay-v2';
 import { ping } from '@libp2p/ping';
 const KEEP_ALIVE = 'KEEP_ALIVE'; // Tag for keeping connections alive
 import { Logger } from '../logger.mjs';
 import {v4 as uuidv4} from 'uuid';
 import { kadDHT } from '@libp2p/kad-dht';
-import { denyInboundRelayReservation, denyOutboundRelayedConnection } from '../ffi/node/p2prelaycontrol.mjs';
+import { denyInboundRelayReservation, denyOutboundRelayedConnection, setRelayService } from '../ffi/node/p2prelaycontrol.mjs';
 
 // USER-FACING ERRORS
 
@@ -198,6 +198,7 @@ async function startp2p(nodeId, rt: any): Promise<String> {
   }, { runOnLimitedConnection: true });
 
   if (argv[TroupeCliArg.StartRelay] !== undefined) {
+    setRelayService(_node.services.relay as CircuitRelayService);
     await handleRelayKeepAlive();
   }
 

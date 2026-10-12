@@ -1,0 +1,17 @@
+(* alice: after 3 s, finds bob's "echo" through the relay node and sends one request a second
+   for 20 s; a second process prints each reply with the seconds since the start. Exits 0
+   after 30 s. *)
+let val t0 = getTime ()
+    fun at () = "CLIENT: t=" ^ toString ((getTime () - t0) div 1000) ^ " s: "
+    fun printer () = receive [ hn ("REPLY", x) => (print (at () ^ "reply " ^ x); printer ()) ]
+    val p = spawn printer
+    val _ = sleep 3000
+    val s = whereis ("@bob", "echo")
+    val _ = print (at () ^ "found echo")
+    fun loop i = if i > 20 then ()
+                 else (send (s, ("ECHO", toString i, p)); print (at () ^ "sent " ^ toString i);
+                       sleep 1000; loop (i + 1))
+    val _ = loop 1
+    val _ = sleep 7000
+in exit (authority, 0)
+end

@@ -241,11 +241,14 @@ export function BuiltinStdIo<TBase extends Constructor<UserRuntimeZero>>(Base: T
                 return this.runtime.$t.returnImmediateLValue(r);
             }
 
-            // Otherwise, wait for input to arrive.
+            // Otherwise, wait for input to arrive. The line is delivered to
+            // the reading thread: when it arrives, the scheduler's current
+            // thread is whichever thread ran last.
+            const theThread = this.runtime.$t;
             readlineCallbacks.push((s) => {
-                let r = this.runtime.$t.mkValWithLev(s, readLevel)
-                this.runtime.$t.returnSuspended(r)
-                this.runtime.__sched.scheduleThread(this.runtime.$t);
+                let r = theThread.mkValWithLev(s, readLevel)
+                theThread.returnSuspended(r)
+                this.runtime.__sched.scheduleThread(theThread);
                 this.runtime.__sched.resumeLoopAsync()
             });
         }

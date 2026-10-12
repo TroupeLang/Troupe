@@ -1,0 +1,48 @@
+(* relay-token with a 20 s reservation lifetime. Five seconds after the first admission
+   through the token the gater revokes it: it drops the peer from the admitted set and calls
+   removeReservation with endCircuits = true. The peer's next refresh is refused. Later
+   admissions are not revoked. Times are seconds of the UTC day. *)
+import List
+import Outcome
+import P2PRelayControl
+let fun at () = "RELAY: " ^ toString ((getTime () mod 86400000) / 1000) ^ ": "
+    fun name p = if p = "@@ALICE@@" then "alice"
+                 else if p = "@@BOB@@" then "bob"
+                 else if p = "@@CAROL@@" then "carol" else p
+    val _ = case P2PRelayControl.setLimits (authority,
+                   {reservationTtl = 20000, maxReservations = 15,
+                    defaultDurationLimit = 3600000, defaultDataLimit = 1073741824}) of
+                 OK _ => print (at () ^ "setLimits OK, reservationTtl 20 s")
+               | ERR NOT_RELAY => print "RELAY: setLimits ERR NOT_RELAY"
+    val g = self ()
+    fun gater (admitted, admissions) =
+      receive [ hn ("denyInboundRelayReservation", peer, reply) =>
+                  let val yes = List.elem peer admitted
+                  in print (at () ^ "reservation question from " ^ name peer
+                            ^ ", in the admitted set: " ^ toString yes);
+                     reply (not yes);
+                     gater (admitted, admissions)
+                  end
+              , hn ("denyOutboundRelayedConnection", (src, dst), reply) =>
+                  (reply false; gater (admitted, admissions))
+              , hn ("admit", peer) =>
+                  let val n = admissions + 1
+                      val _ = print (at () ^ "admission " ^ toString n ^ ": " ^ name peer)
+                      val _ = if n = 1 then spawn (fn () => (sleep 5000; send (g, ("revoke", peer))))
+                              else g
+                  in gater (peer :: admitted, n)
+                  end
+              , hn ("revoke", peer) =>
+                  let val _ = case P2PRelayControl.removeReservation (authority, peer, true) of
+                                   OK _ => print (at () ^ "revoked " ^ name peer
+                                                  ^ ": removed from the admitted set, removeReservation OK")
+                                 | ERR NOT_RELAY => print "RELAY: removeReservation ERR NOT_RELAY"
+                  in gater (List.filter (fn p => p <> peer) admitted, admissions)
+                  end ]
+    val adm = spawn (fn () => P2PRelayControl.admissionProcess (authority, g, "s3cret"))
+    val _ = register ("admission", adm, authority)
+    val _ = case P2PRelayControl.connectionGater (authority, g) of
+                 OK _ => print (at () ^ "connectionGater OK")
+               | ERR NOT_RELAY => print "RELAY: connectionGater ERR NOT_RELAY"
+in gater (["@@BOB@@"], 0)
+end

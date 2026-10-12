@@ -1,0 +1,89 @@
+import Outcome
+require native P2PRelayClient
+
+(** P2PRelayClient - a node's reservations on a relay node. Every function takes the root
+ *  authority.
+ *
+ *  `reserve (authority, relayAddr)` asks the relay at the multiaddr `relayAddr`, which ends in
+ *  `/p2p/<relay peer id>` as the argument of `--relay` does, for a reservation, and blocks the
+ *  calling thread until the relay answers. It returns `OK {relay, expiresAt}`, the relay's peer
+ *  id and the expiry in ms since the epoch, or `ERR e`:
+ *
+ *    PERMISSION_DENIED   the relay's connection gater refused the reservation
+ *    TIMEOUT             no answer within 5 s
+ *    DIAL                the relay could not be dialled
+ *    NO_NETWORK          the node runs without libp2p (--localonly) or without the circuit
+ *                        relay transport (--disable-relay)
+ *    FAILED message      any other failure, with libp2p's message
+ *
+ *  A reservation that is held and not due for a refresh is returned without asking the relay.
+ *  The pc and the arguments must flow to BOT. After a successful dial of the relay, a node with
+ *  no relay set (started without `--relay`) uses it for its later dials.
+ *
+ *  `relayEvents (authority, pid)` makes the local process `pid` the one that receives the
+ *  relay messages, replacing any earlier one:
+ *
+ *    ("relayReservation", relay, expiresAt)        a reservation was made or refreshed
+ *    ("relayReservationLost", relay)               a reservation was lost: its refresh failed or
+ *                                                  the connection to the relay closed
+ *    ("relayDialFailed", peer, relay, status)      one attempt of the runtime's dial loop to dial
+ *                                                  `peer` failed while `relay` is the node's relay
+ *
+ *  `status` is the relay's status (`NO_RESERVATION`, `PERMISSION_DENIED`, ...) when the relay
+ *  answered the dial, and the name of libp2p's error otherwise. The messages and their
+ *  components are labelled at the pc of the `relayEvents` call. With no process set they are
+ *  dropped. It returns `OK ()` or `ERR NO_NETWORK`.
+ *
+ *  `keepReserved (authority, relayAddr, onRefused)` reserves; on `ERR PERMISSION_DENIED` it calls
+ *  `onRefused ()`, the program's request for admission, and reserves once more. It returns the
+ *  outcome of the last `reserve`, so a relay that still refuses gives `ERR PERMISSION_DENIED`
+ *  after one round.
+ *
+ *  `watch (authority, relayAddr, onRefused)` takes over the calling process: it makes it the
+ *  process of `relayEvents`, reserves with `keepReserved`, and on `relayReservationLost` from
+ *  that relay reserves again with `keepReserved`; it takes the other relay messages and drops
+ *  them. After `ERR TIMEOUT`, `ERR DIAL` or `ERR (FAILED _)` it tries again 30 s later. It
+ *  returns only with `ERR PERMISSION_DENIED`, after a refused round, or `ERR NO_NETWORK`.
+ *  `spawn (fn () => watch (authority, relayAddr, onRefused))` keeps a reservation as the v1
+ *  runtime did. *)
+
+datatype relayClientError = PERMISSION_DENIED | TIMEOUT | DIAL | NO_NETWORK | FAILED of string
+
+let fun toOutcome {tag = "Ok",  value = v} = OK v
+      | toOutcome {tag = "Err", error = {reason = "PERMISSION_DENIED"}} = ERR PERMISSION_DENIED
+      | toOutcome {tag = "Err", error = {reason = "TIMEOUT"}} = ERR TIMEOUT
+      | toOutcome {tag = "Err", error = {reason = "DIAL"}} = ERR DIAL
+      | toOutcome {tag = "Err", error = {reason = "NO_NETWORK"}} = ERR NO_NETWORK
+      | toOutcome {tag = "Err", error = {reason = "FAILED", message = m}} = ERR (FAILED m)
+
+    fun reserve (auth, relayAddr) = toOutcome (P2PRelayClient.reserve (auth, relayAddr))
+
+    fun relayEvents (auth, pid) = toOutcome (P2PRelayClient.setRelayEvents (auth, pid))
+
+    fun keepReserved (auth, relayAddr, onRefused) =
+        case reserve (auth, relayAddr) of
+             ERR PERMISSION_DENIED => (onRefused (); reserve (auth, relayAddr))
+           | outcome => outcome
+
+    fun watch (auth, relayAddr, onRefused) =
+        let fun attempt () =
+                case keepReserved (auth, relayAddr, onRefused) of
+                     OK r => wait r.relay
+                   | ERR PERMISSION_DENIED => ERR PERMISSION_DENIED
+                   | ERR NO_NETWORK => ERR NO_NETWORK
+                   | ERR _ => (sleep 30000; attempt ())
+            and wait relay =
+                receive [ hn ("relayReservationLost", r) when r = relay => attempt ()
+                        , hn ("relayReservationLost", _) => wait relay
+                        , hn ("relayReservation", _, _) => wait relay
+                        , hn ("relayDialFailed", _, _, _) => wait relay ]
+        in case relayEvents (auth, self ()) of
+                OK _ => attempt ()
+              | failure => failure
+        end
+in [ ("reserve", reserve)
+   , ("relayEvents", relayEvents)
+   , ("keepReserved", keepReserved)
+   , ("watch", watch)
+   ]
+end

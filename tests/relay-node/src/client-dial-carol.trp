@@ -1,0 +1,24 @@
+(* alice, listed at the relay node: a second process prints the relay messages and exits 0
+   after the third relayDialFailed; the main thread looks up carol's "echo", which the relay
+   node cannot reach because carol holds no reservation. Exits 124 after 60 s. Times are
+   seconds of the UTC day. *)
+import Outcome
+import P2PRelayClient
+let fun at () = "CLIENT: " ^ toString ((getTime () mod 86400000) / 1000) ^ ": "
+    val _ = spawn (fn () => (sleep 60000; print (at () ^ "timeout"); exit (authority, 124)))
+    fun events n =
+      receive [ hn ("relayReservation", r, expiresAt) =>
+                  (print (at () ^ "relayReservation from " ^ r); events n)
+              , hn ("relayReservationLost", r) => (print (at () ^ "relayReservationLost"); events n)
+              , hn ("relayDialFailed", peer, r, status) =>
+                  let val _ = print (at () ^ "relayDialFailed (" ^ (if peer = "@@CAROL@@" then "carol" else peer)
+                                     ^ ", " ^ (if r = "@@RELAY@@" then "relay" else r) ^ ", " ^ status ^ ")")
+                  in if n = 3 then exit (authority, 0) else events (n + 1)
+                  end ]
+    val _ = case P2PRelayClient.relayEvents (authority, spawn (fn () => events 1)) of
+                 OK _ => print (at () ^ "relayEvents OK")
+               | ERR _ => print (at () ^ "relayEvents ERR")
+    val _ = sleep 2000
+    val _ = print (at () ^ "whereis carol echo")
+in whereis ("@carol", "echo")
+end

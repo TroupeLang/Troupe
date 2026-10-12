@@ -1,0 +1,26 @@
+(* A sleeper denies after 2 s; the admin process admits after 3 s, the second call of
+   reply for the same question. The questions are named "deny...", after libp2p's hooks,
+   so `reply true` denies and `reply false` admits: the sleeper's `reply true` is the
+   deny, the admin's `reply false` the admit. *)
+import Outcome
+import P2PRelayControl
+let fun admin () =
+      receive [ hn (peer, reply) =>
+                  (sleep 3000;
+                   reply false;
+                   print "RELAY: admin called reply (admit) after 3 s; it returned";
+                   admin ()) ]
+    val adm = spawn admin
+    val _ = case P2PRelayControl.connectionGater (authority, self ()) of
+                 OK _ => print "RELAY: connectionGater OK"
+               | ERR NOT_RELAY => print "RELAY: connectionGater ERR NOT_RELAY"
+    fun loop () =
+      receive [ hn ("denyInboundRelayReservation", peer, reply) =>
+                  let val _ = spawn (fn () => (sleep 2000;
+                                               reply true;
+                                               print "RELAY: sleeper called reply (deny) after 2 s"))
+                  in send (adm, (peer, reply)); loop ()
+                  end
+              , hn ("denyOutboundRelayedConnection", _, reply) => (reply false; loop ()) ]
+in loop ()
+end

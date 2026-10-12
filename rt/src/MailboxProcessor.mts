@@ -28,6 +28,7 @@ import { Level } from "./Level.mjs";
 import { Thread } from "./Thread.mjs";
 import { Record } from "./Record.mjs";
 import { wrapQuarantineAuth } from "./QuarantineUtils.mjs";
+import { __nodeManager } from "./NodeManager.mjs";
 
 
 function createMessage(msg, fromNodeId, pc, quarantineAuthLVal: LVal | null = null) {
@@ -95,6 +96,17 @@ export class MailboxProcessor implements MailboxInterface {
 
         // unblock the thread if necessary
         __sched.unblockThread(toPid);
+    }
+
+    // Delivery from a Node callback that runs with no current thread, such as
+    // a native module's event listener. addMessage never reads the current
+    // thread: the metadata takes the recipient's creation-time pc and the
+    // presence level is the explicit `level`. The recipient may be dead, or may
+    // stop on an earlier message before it reaches this one; nothing here
+    // reports either.
+    enqueueFromHost(toPid: LVal, message: LVal, level: Level): void {
+        this.addMessage(__nodeManager.getNodeId(), toPid, message, level);
+        this.sched.resumeLoopAsync();
     }
 
     findFrom (theThread: Thread, i : number, j:number, index:number, lowb: Level, highb: Level, kont ) {

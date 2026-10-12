@@ -1,0 +1,24 @@
+(* alice, a stranger to the relay node: registers "echo" and runs P2PRelayClient.watch, whose
+   onRefused prints the round, sends the token "s3cret" to the relay's admission process and
+   waits for the answer. run.sh fills in the relay address. Exits 124 after 120 s. Times are
+   seconds of the UTC day. *)
+import Outcome
+import P2PRelayClient
+let fun at () = "CLIENT: " ^ toString ((getTime () mod 86400000) / 1000) ^ ": "
+    val _ = spawn (fn () => (sleep 120000; print (at () ^ "timeout"); exit (authority, 124)))
+    val relay = "@@RELAYADDR@@"
+    fun serve () =
+      receive [ hn ("ECHO", m, c) =>
+                  (print (at () ^ "echo request " ^ m); send (c, ("REPLY", m)); serve ()) ]
+    val _ = register ("echo", spawn serve, authority)
+    fun onRefused () =
+        let val _ = print (at () ^ "refused; sending the token")
+            val a = whereis ("@relay", "admission")
+            val _ = send (a, ("token", "s3cret", self ()))
+            val answer = receive [ hn "admitted" => "admitted", hn "refused" => "refused" ]
+        in print (at () ^ "answer " ^ answer)
+        end
+    val _ = print (at () ^ "watch")
+    val r = P2PRelayClient.watch (authority, relay, onRefused)
+in print (at () ^ "watch returned")
+end

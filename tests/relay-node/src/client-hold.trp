@@ -1,0 +1,5 @@
+(* A client that only holds its reservation: it starts, waits 70 s and exits. *)
+let val _ = print "CLIENT: up"
+    val _ = sleep 70000
+in exit (authority, 0)
+end

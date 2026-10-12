@@ -57,6 +57,7 @@ export function parseCliArgsFromProcess(): ParsedArgs {
         .option(TroupeCliArg.RSpawn, { type: 'boolean', default: false, describe: 'Allow remote spawning of troupe processes' })
         .option(TroupeCliArg.Relay, { type: 'array', describe: 'Relay server multiaddress(es) for P2P connectivity' })
         .option(TroupeCliArg.RelayOnly, { type: 'boolean', default: false, describe: 'Disable DHT, mDNS, and bootstrap discovery; only use relay for peer connectivity' })
+        .option(TroupeCliArg.StartRelay, { type: 'number', requiresArg: true, describe: 'Run this node as a relay node: the libp2p relay service, with a WebSocket listener on this port; requires --id' })
         .option(TroupeCliArg.NoP2pCircuit, {
             type: 'boolean',
             default: false,
@@ -158,6 +159,7 @@ export function validateRelayOptions(args: ParsedArgs): void {
     const relay = args[TroupeCliArg.Relay];
     const relayOnly = args[TroupeCliArg.RelayOnly];
     const noP2pCircuit = args[TroupeCliArg.NoP2pCircuit];
+    const startRelay = args[TroupeCliArg.StartRelay];
 
     if (disableRelay && relay && (Array.isArray(relay) ? relay.length > 0 : true)) {
         throw new CliValidationError("Inconsistent relay options: --disable-relay cannot be used with --relay");
@@ -167,5 +169,25 @@ export function validateRelayOptions(args: ParsedArgs): void {
     }
     if (relayOnly && noP2pCircuit) {
         throw new CliValidationError("Inconsistent relay options: --relay-only cannot be used with --no-p2p-circuit");
+    }
+    if (startRelay !== undefined) {
+        if (!Number.isInteger(startRelay) || startRelay < 0 || startRelay > 65535) {
+            throw new CliValidationError("--start-relay requires a port number");
+        }
+        if (!args[TroupeCliArg.Id]) {
+            throw new CliValidationError("--start-relay requires --id");
+        }
+        if (relay && (Array.isArray(relay) ? relay.length > 0 : true)) {
+            throw new CliValidationError("Inconsistent relay options: --start-relay cannot be used with --relay");
+        }
+        if (args[TroupeCliArg.LocalOnly]) {
+            throw new CliValidationError("Inconsistent relay options: --start-relay cannot be used with --localonly");
+        }
+        if (disableRelay) {
+            throw new CliValidationError("Inconsistent relay options: --start-relay cannot be used with --disable-relay");
+        }
+        if (noP2pCircuit) {
+            throw new CliValidationError("Inconsistent relay options: --start-relay cannot be used with --no-p2p-circuit");
+        }
     }
 }

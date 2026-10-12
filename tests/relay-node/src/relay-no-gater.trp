@@ -1,0 +1,7 @@
+(* A relay program that never calls connectionGater, so no process answers the questions
+   and the relay node denies every one. A program that does answer follows libp2p's
+   polarity: the questions are named "deny...", so `reply true` denies and `reply false`
+   admits. *)
+let val _ = print "RELAY: up, no connectionGater call"
+in sleep 3600000
+end

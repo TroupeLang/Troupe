@@ -1,0 +1,38 @@
+(* alice, a stranger to the relay node: registers "echo"; a second process prints the relay
+   messages; keepReserved asks for a reservation, and on a refusal sends the token "s3cret" to
+   the relay's admission process and asks again. run.sh fills in the relay address. Exits 0
+   after one echo request from bob, 3 when keepReserved fails, 124 after 60 s. Times are
+   seconds of the UTC day. *)
+import Outcome
+import P2PRelayClient
+let fun at () = "CLIENT: " ^ toString ((getTime () mod 86400000) / 1000) ^ ": "
+    val _ = spawn (fn () => (sleep 60000; print (at () ^ "timeout"); exit (authority, 124)))
+    val relay = "@@RELAYADDR@@"
+    fun events () =
+      receive [ hn ("relayReservation", r, expiresAt) =>
+                  (print (at () ^ "relayReservation, expires in "
+                          ^ toString ((expiresAt - getTime ()) div 1000) ^ " s"); events ())
+              , hn ("relayReservationLost", r) => (print (at () ^ "relayReservationLost"); events ())
+              , hn ("relayDialFailed", peer, r, status) =>
+                  (print (at () ^ "relayDialFailed " ^ status); events ()) ]
+    val ev = spawn events
+    val _ = P2PRelayClient.relayEvents (authority, ev)
+    fun serve () =
+      receive [ hn ("ECHO", m, c) =>
+                  (print (at () ^ "echo request " ^ m); send (c, ("REPLY", m)); sleep 1000;
+                   exit (authority, 0)) ]
+    val _ = register ("echo", spawn serve, authority)
+    fun onRefused () =
+        let val _ = print (at () ^ "refused; sending the token")
+            val a = whereis ("@relay", "admission")
+            val _ = send (a, ("token", "s3cret", self ()))
+            val answer = receive [ hn "admitted" => "admitted", hn "refused" => "refused" ]
+        in print (at () ^ "answer " ^ answer)
+        end
+    val _ = print (at () ^ "keepReserved")
+in case P2PRelayClient.keepReserved (authority, relay, onRefused) of
+        OK r => print (at () ^ "reserved, expiresAt " ^ toString r.expiresAt)
+      | ERR PERMISSION_DENIED => (print (at () ^ "keepReserved: ERR PERMISSION_DENIED");
+                                  exit (authority, 3))
+      | ERR _ => (print (at () ^ "keepReserved: another error"); exit (authority, 3))
+end

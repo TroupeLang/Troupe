@@ -1,0 +1,4 @@
+[
+  {"id": "@@ALICE@@", "level": {"confidentiality": [], "integrity": [["alice"]]}},
+  {"id": "@@BOB@@",   "level": {"confidentiality": [], "integrity": [[]]}}
+]

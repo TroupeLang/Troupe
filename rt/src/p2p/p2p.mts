@@ -79,12 +79,14 @@ import { pushable } from 'it-pushable';
 import p2pconfig, { setCliRelays, getRelays } from './p2pconfig.mjs';
 import { multiaddr } from '@multiformats/multiaddr';
 import { identify } from '@libp2p/identify';
-import { circuitRelayTransport } from '@libp2p/circuit-relay-v2';
+import { circuitRelayTransport, circuitRelayServer, type CircuitRelayService } from '@libp2p/circuit-relay-v2';
 import { ping } from '@libp2p/ping';
 const KEEP_ALIVE = 'KEEP_ALIVE'; // Tag for keeping connections alive
 import { Logger } from '../logger.mjs';
 import {v4 as uuidv4} from 'uuid';
 import { kadDHT } from '@libp2p/kad-dht';
+import { denyInboundRelayReservation, denyOutboundRelayedConnection, setRelayService } from '../ffi/node/p2prelaycontrol.mjs';
+import { relayDialFailed } from '../ffi/node/p2prelayclient.mjs';
 
 // USER-FACING ERRORS
 
@@ -196,6 +198,11 @@ async function startp2p(nodeId, rt: any): Promise<String> {
     setupConnection(connection.remotePeer, stream);
   }, { runOnLimitedConnection: true });
 
+  if (argv[TroupeCliArg.StartRelay] !== undefined) {
+    setRelayService(_node.services.relay as CircuitRelayService);
+    await handleRelayKeepAlive();
+  }
+
   // When a node is discovered, save the address and report it on the debug logger
   _node.addEventListener('peer:discovery', async (evt) => {
     const peerInfo = evt.detail;
@@ -255,6 +262,8 @@ async function createLibp2p(_options) {
   const noP2pCircuit = argv[TroupeCliArg.NoP2pCircuit] || false;
   const disableRelay = argv[TroupeCliArg.DisableRelay] || false;
   const relayFaultTolerance = argv[TroupeCliArg.RelayFaultTolerance] || 'no-fatal';
+  const startRelay = argv[TroupeCliArg.StartRelay];
+  const isRelayNode = startRelay !== undefined;
 
   // Determine fault tolerance setting for transport manager
   const faultTolerance = relayFaultTolerance === 'no-fatal'
@@ -263,6 +272,9 @@ async function createLibp2p(_options) {
 
   // Build listen addresses
   const listenAddrs = [`/ip4/0.0.0.0/tcp/${__port}`];
+  if (isRelayNode) {
+    listenAddrs.push(`/ip4/0.0.0.0/tcp/${startRelay}/ws`);
+  }
 
   // For circuit relay v2, we need to specify the exact relay address to listen on.
   // Using just '/p2p-circuit' triggers relay discovery, but in relay-only mode
@@ -320,9 +332,24 @@ async function createLibp2p(_options) {
     },
   };
 
+  if (isRelayNode) {
+    // The limits of p2p-tools/relay/relay.mts: one hour and 1 GiB per relayed
+    // connection; the duration is in milliseconds.
+    defaults.services.relay = circuitRelayServer({
+      reservations: {
+        defaultDurationLimit: 3_600_000,
+        defaultDataLimit: BigInt(1073741824),
+      }
+    });
+    defaults.connectionGater = {
+      denyInboundRelayReservation,
+      denyOutboundRelayedConnection,
+    };
+  }
+
   // Only enable DHT, mDNS, and bootstrap discovery if not in relay-only mode
-  if (relayOnly) {
-    debug('Relay-only mode: DHT, mDNS, and bootstrap discovery disabled');
+  if (relayOnly || isRelayNode) {
+    debug(`${isRelayNode ? 'Relay node' : 'Relay-only mode'}: DHT, mDNS, and bootstrap discovery disabled`);
     defaults.peerDiscovery = [];
     // No DHT service in relay-only mode
   } else {
@@ -403,6 +430,7 @@ function dial(id: PeerId) {
 
         resolve(stream);
       } catch (err) {
+        relayDialFailed(id, _relayId, err);
         processExpectedNetworkErrors (err, "dial");
 
         // if the error is suppressed we move on to trying 10 times with exponential backoff
@@ -765,6 +793,27 @@ async function inputHandler(id, input) {
 
 // RELAY
 
+/**
+ * On a relay node, log the keep-alive messages that clients send on
+ * `_RELAY_PROTOCOL`, as p2p-tools/relay/relay.mts does.
+ */
+async function handleRelayKeepAlive() {
+  await _node.handle(_RELAY_PROTOCOL, async (stream, connection) => {
+    const src = connection.remotePeer;
+    debug(`initiating keep alive protocol with ${src}`);
+    pipe(
+      stream,
+      (source) => lp.decode(source),
+      (source) => map(source, (buf) => uint8ArrayToString(buf.subarray())),
+      async (source) => {
+        for await (const msg of source) {
+          debug(`keep alive from ${src}: '${msg.toString()}'`);
+        }
+      }
+    );
+  });
+}
+
 let _relayId = null; // The id for the relay
 let _keepAliveCounter = 0; // The number of times "keep-alive" has been sent to the relay
 // To use more than one relay, these should be kept in a table
@@ -793,6 +842,38 @@ async function keepAliveRelay(relayAddr: string) {
 }
 
 /**
+ * Adds the relay's address to the peerStore and tags the relay with "keep alive".
+ */
+export async function addRelayToPeerStore(relayAddr: string, relayId: PeerId): Promise<void> {
+  await _node.peerStore.merge(relayId, {
+    multiaddrs: [
+      multiaddr(`${relayAddr}`)
+    ],
+    tags: {
+      [KEEP_ALIVE]: {}
+    }
+  });
+}
+
+/**
+ * Makes `relayId` the relay of later dials when no relay is set, as dialRelay
+ * does for the --relay one; for P2PRelayClient.reserve.
+ */
+export function useRelayIfUnset(relayId: PeerId): void {
+  if (_relayId === null) {
+    _relayId = relayId.toString();
+  }
+}
+
+/**
+ * The libp2p node, for the native module P2PRelayClient; null on a node
+ * started without the network (--localonly).
+ */
+export function libp2pNode(): Libp2p | null {
+  return _node;
+}
+
+/**
  * Dials the relay at `relayAddr`
  * and returns the pushable for the relay.
  * Also tags the relay with "keep alive" in the peerStore.
@@ -803,16 +884,7 @@ async function dialRelay(relayAddr: string) {
     let id = relayAddr.split('/').pop();
     const relayId: PeerId = peerIdFromString(id);
 
-    // Add the address to the peerStore
-    // Tag the relay with "keep alive"
-    await _node.peerStore.merge(relayId, {
-      multiaddrs: [
-        multiaddr(`${relayAddr}`)
-      ],
-      tags: {
-        [KEEP_ALIVE]: {}
-      }
-    });
+    await addRelayToPeerStore(relayAddr, relayId);
 
     // Dial the relay - in circuit relay v2, we just dial without a specific protocol
     debug(`Added relay address`);

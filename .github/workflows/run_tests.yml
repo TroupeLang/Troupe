@@ -137,6 +137,8 @@ jobs:
         run: make test/prop-rt
       - name: run differential lattice harness
         run: make test/prop-differential
+      - name: check the libp2p internals the runtime relies on
+        run: make test/libp2p-contract
       - name: Upload test logs on failure
         if: failure()
         uses: actions/upload-artifact@v4

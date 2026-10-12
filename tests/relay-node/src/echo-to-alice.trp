@@ -1,0 +1,12 @@
+(* bob: one echo request to alice's "echo" through the relay node; exits 0 on the reply and
+   124 if none arrives within 30 s. Times are seconds of the UTC day. *)
+let fun at () = "BOB: " ^ toString ((getTime () mod 86400000) / 1000) ^ ": "
+    val _ = spawn (fn () => (sleep 30000; print (at () ^ "timeout"); exit (authority, 124)))
+    val _ = print (at () ^ "whereis alice echo")
+    val s = whereis ("@alice", "echo")
+    val _ = print (at () ^ "found alice's echo")
+    val _ = send (s, ("ECHO", "hello", self ()))
+    val r = receive [ hn ("REPLY", x) => x ]
+    val _ = print (at () ^ "reply " ^ r)
+in exit (authority, 0)
+end

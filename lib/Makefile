@@ -9,6 +9,7 @@ build:
 	$(COMPILER) ./ThreadUtil.trp -l
 	$(COMPILER) ./timeout.trp -l
 	$(COMPILER) ./VariantsDemo.trp -l
+	$(COMPILER) ./TestQuestions.trp -l
 
   # Dependency on `Option`
 	$(COMPILER) ./BigInt.trp -l
@@ -18,6 +19,8 @@ build:
   # Dependency on `Outcome`
 	$(COMPILER) ./SimpleFileIO.trp -l
 	$(COMPILER) ./BytesAndZips.trp -l
+	$(COMPILER) ./P2PRelayControl.trp -l
+	$(COMPILER) ./P2PRelayClient.trp -l
 
   # Dependency on `Number`
 	$(COMPILER) ./Duration.trp -l

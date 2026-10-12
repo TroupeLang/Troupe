@@ -1,0 +1,17 @@
+require native TestQuestions
+
+(** TestQuestions - a test fixture for host questions delivered as messages.
+ *
+ *  `ask {name, arg, level, delay}` has a Node timer ask a question after `delay` ms: the process
+ *  set by `setProcess` receives `(name, arg, reply)`, with `arg` labelled at `level`, and answers
+ *  by calling `reply` with a boolean that flows to BOT. `report ()` lists every question since the
+ *  last `clear ()` with its outcome. *)
+let fun setProcess (auth, pid) = TestQuestions.setProcess (auth, pid)
+    fun ask r = TestQuestions.ask r
+    fun report () = TestQuestions.report ()
+    fun clear () = TestQuestions.clear ()
+in [ ("setProcess", setProcess)
+   , ("ask", ask)
+   , ("report", report)
+   , ("clear", clear) ]
+end

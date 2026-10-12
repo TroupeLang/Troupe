@@ -27,6 +27,7 @@ export enum TroupeCliArg {
     RSpawn = 'rspawn',
     Relay = 'relay',
     RelayOnly = 'relay-only',
+    StartRelay = 'start-relay',
     NoP2pCircuit = 'no-p2p-circuit',
     DisableRelay = 'disable-relay',
     RelayFaultTolerance = 'relay-fault-tolerance',
@@ -61,6 +62,7 @@ export interface ParsedArgs {
     [TroupeCliArg.RSpawn]?: boolean;
     [TroupeCliArg.Relay]?: string | string[];
     [TroupeCliArg.RelayOnly]?: boolean;
+    [TroupeCliArg.StartRelay]?: number;
     [TroupeCliArg.NoP2pCircuit]?: boolean;
     [TroupeCliArg.DisableRelay]?: boolean;
     [TroupeCliArg.RelayFaultTolerance]?: string;

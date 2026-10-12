@@ -1,0 +1,27 @@
+import Outcome
+require native P2PRelayControl
+
+(** P2PRelayControl - the connection gater of a relay node (a node started with `--start-relay`).
+ *
+ *  `connectionGater (authority, pid)` makes the local process `pid` the one that answers the
+ *  libp2p relay service's questions, replacing any earlier one. Each question arrives in its
+ *  mailbox as `(name, arg, reply)`:
+ *
+ *    ("denyInboundRelayReservation", peer, reply)          a peer asks for a reservation
+ *    ("denyOutboundRelayedConnection", (src, dst), reply)  a reserved peer dials another
+ *
+ *  `reply true` denies, `reply false` admits; the first call counts and later calls are ignored.
+ *  The answer must flow to BOT: a decision that depends on a peer id, which carries the peer's
+ *  trust level, needs `endorse` and `blockdown` first. Until a process is set, and whenever the
+ *  set process is dead when a question arrives, every question is denied.
+ *
+ *  `ERR NOT_RELAY` on a node started without `--start-relay`. *)
+
+datatype relayControlError = NOT_RELAY
+
+let fun toOutcome {tag = "Ok",  value = v} = OK v
+      | toOutcome {tag = "Err", error = {reason = "NOT_RELAY"}} = ERR NOT_RELAY
+
+    fun connectionGater (auth, pid) = toOutcome (P2PRelayControl.setConnectionGater (auth, pid))
+in [ ("connectionGater", connectionGater) ]
+end

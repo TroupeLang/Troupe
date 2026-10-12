@@ -12,6 +12,7 @@ const actsFor = levels.actsFor;
 
 import { getRuntimeObject } from './SysState.mjs';
 import { __nodeManager } from './NodeManager.mjs';
+import runId from './runId.mjs';
 import { TroupeAggregateRawValue, TroupeRawValue } from './TroupeRawValue.mjs';
 import { ErrorKind } from './TroupeError.mjs';
 // import { LVal } from './Lval';
@@ -274,6 +275,14 @@ export function assertIsProcessId(x: any, source: AssertionSource = AssertionSou
     _thread().raiseBlockingThreadLev(x.tlev);
     if (!(x.val instanceof ProcessID)) {
         err("value " + __stringRep(x) + " is not a process id", source, pos)
+    }
+}
+
+export function assertIsLocalProcessId(x: any, what: string, source: AssertionSource = AssertionSource.AssertInBuiltIn, pos: string | null = null) {
+    assertIsProcessId(x, source, pos);
+    const pid = x.val;
+    if (pid.uuid == null || pid.uuid.toString() !== runId.toString()) {
+        err(`process ${pid.stringRep()} is not local; ${what} can only be delivered to a local process`, source, pos)
     }
 }
 

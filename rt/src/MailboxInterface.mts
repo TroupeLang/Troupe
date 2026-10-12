@@ -1,5 +1,6 @@
 import { Level } from "./Level.mjs";
 import { ReceiveTaintAction } from "./ReceiveTaintAction.mjs";
+import { LVal } from "./Lval.mjs";
 
 export interface MailboxInterface {
     peek(lev: Level, i: number, lowb: Level, highb: Level)
@@ -9,4 +10,5 @@ export interface MailboxInterface {
     // current thread and pass the presence level explicitly.
     addMessage (fromNode: string, toPid: any, message: any, pc: Level,
                 quarantineAuth?: Level | null)
+    enqueueFromHost (toPid: LVal, message: LVal, level: Level): void
 }

@@ -1,0 +1,34 @@
+(* Admits bob, and every peer that the admission process admits. The admission process
+   from the library compares a stranger's token with "s3cret"; on a match it sends
+   ("admit", peer) to the gater below. The questions are named "deny...", after libp2p's
+   hooks, so `reply true` denies and `reply false` admits. Times are seconds of the UTC day. *)
+import List
+import Outcome
+import P2PRelayControl
+let fun at () = "RELAY: " ^ toString ((getTime () mod 86400000) / 1000) ^ ": "
+    fun name p = if p = "@@ALICE@@" then "alice"
+                 else if p = "@@BOB@@" then "bob"
+                 else if p = "@@CAROL@@" then "carol" else p
+    fun gater admitted =
+      receive [ hn ("denyInboundRelayReservation", peer, reply) =>
+                  let val yes = List.elem peer admitted
+                  in print (at () ^ "reservation question from " ^ name peer
+                            ^ ", in the admitted set: " ^ toString yes);
+                     reply (not yes);
+                     gater admitted
+                  end
+              , hn ("denyOutboundRelayedConnection", (src, dst), reply) =>
+                  (print (at () ^ "connection question " ^ name src ^ " to " ^ name dst);
+                   reply false;
+                   gater admitted)
+              , hn ("admit", peer) =>
+                  (print (at () ^ "admission " ^ toString (List.length admitted) ^ ": " ^ name peer);
+                   gater (peer :: admitted)) ]
+    val g = self ()
+    val adm = spawn (fn () => P2PRelayControl.admissionProcess (authority, g, "s3cret"))
+    val _ = register ("admission", adm, authority)
+    val _ = case P2PRelayControl.connectionGater (authority, g) of
+                 OK _ => print (at () ^ "connectionGater OK")
+               | ERR NOT_RELAY => print "RELAY: connectionGater ERR NOT_RELAY"
+in gater ["@@BOB@@"]
+end

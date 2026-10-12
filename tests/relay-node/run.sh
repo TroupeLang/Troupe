@@ -2,8 +2,8 @@
 # run.sh local [CASE...]         the relay node on 127.0.0.1:PORT and the clients here
 # run.sh remote HOST PORT CASE   the clients here; the relay node of CASE runs on HOST
 # run.sh relay CASE PORT         the relay node of CASE in the foreground (to run on HOST)
-# CASE is no-gater, list, time-limit, labels, limits, remove-end, remove-keep or idle. local runs
-# all but idle by default. PORT (default 7560) is the relay node's WebSocket port; the relay
+# CASE is no-gater, list, time-limit, labels, limits, remove-end, remove-keep, idle, token,
+# token-wrong, revoke or dial-failed. local runs all but idle by default. PORT (default 7560) is the relay node's WebSocket port; the relay
 # node's TCP port is PORT+1 and the clients alice, bob and carol listen on PORT+2 to PORT+4.
 # CLIENT_DEBUG (default libp2p:circuit-relay*) is the clients' DEBUG.
 D=$(cd "$(dirname "$0")" && pwd)
@@ -20,7 +20,9 @@ relay_command() { # relay_command CASE PORT: sets CMD to the relay node's comman
   case $1 in
     no-gater|list|time-limit|limits|remove-end|remove-keep) ;;
     labels) trust=trust-mixed.json ;;
-    idle) program=relay-list ;;
+    idle|dial-failed) program=relay-list ;;
+    token|token-wrong) program=relay-token; trust=trust-token-relay.json ;;
+    revoke) trust=trust-token-relay.json ;;
     *) echo "unknown case: $1" >&2; exit 2 ;;
   esac
   CMD=("$W/rt/troupe" "$D/built/$program.js" --id "$D/ids/relay.json" --start-relay "$2"
@@ -31,14 +33,22 @@ relay_command() { # relay_command CASE PORT: sets CMD to the relay node's comman
 start() { # start NAME CMD...: runs CMD in the background; stdout to NAME.out, stderr to NAME.err
   local name=$1; shift
   say "start $name: $*"
-  "$@" > "$LOG/$name.out" 2> "$LOG/$name.err" &
+  { "$@" > "$LOG/$name.out" 2> "$LOG/$name.err"
+    local code=$?; echo "[t=$(stamp)s] $name exit code $code" >> "$LOG/exit-codes"; } &
 }
 
-client() { # client NAME PROGRAM
-  local offset; case $1 in alice) offset=2 ;; bob) offset=3 ;; carol) offset=4 ;; esac
-  start "$1" env "DEBUG=${CLIENT_DEBUG:-libp2p:circuit-relay*}" "$W/rt/troupe" "$D/built/$2.js" \
+client() { # client NAME PROGRAM [TRUSTMAP]; a program naming @@RELAYADDR@@ is compiled with the
+           # relay address filled in, to built/PROGRAM-at-relay.js
+  local offset program=$D/built/$2.js
+  case $1 in alice) offset=2 ;; bob) offset=3 ;; carol) offset=4 ;; esac
+  if grep -q @@RELAYADDR@@ "$D/gen/$2.trp"; then
+    program=$D/built/$2-at-relay.js
+    sed "s|@@RELAYADDR@@|$RELAY_ADDR|" "$D/gen/$2.trp" > "$LOG/$2.trp"
+    (cd "$D/built" && "$W/bin/troupec" -m "$LOG/$2.trp" --output="$program") || exit 1
+  fi
+  start "$1" env "DEBUG=${CLIENT_DEBUG:-libp2p:circuit-relay*}" "$W/rt/troupe" "$program" \
     --id "$D/ids/$1.json" --port $((PORT + offset)) --relay "$RELAY_ADDR" --relay-only \
-    --aliases "$D/gen/aliases.json" --trustmap "$D/gen/trust-bot.json"
+    --aliases "$D/gen/aliases.json" --trustmap "$D/gen/${3:-trust-bot.json}"
 }
 
 running() { pgrep -f -- "--id $D/ids/$1.json" > /dev/null; }
@@ -57,6 +67,14 @@ wait_for() { # wait_for NAME PATTERN SECONDS: waits for PATTERN in NAME's stdout
     sleep 0.25
   done
   say "$1 did not print '$2' within $3 s"
+}
+
+wait_count() { # wait_count NAME PATTERN COUNT SECONDS: waits for COUNT lines matching PATTERN
+  for _ in $(seq 1 $(($4 * 4))); do
+    [ "$(grep -c "$2" "$LOG/$1.out" 2>/dev/null)" -ge "$3" ] && { say "$1 printed '$2' $3 times"; return; }
+    sleep 0.25
+  done
+  say "$1 did not print '$2' $3 times within $4 s"
 }
 
 stop_all() {
@@ -141,6 +159,37 @@ case_idle() {
   sleep 30
 }
 
+case_token() {
+  expect "alice, a stranger to the relay node, is refused at start and by keepReserved's first reserve; onRefused sends the token, the admission process admits alice; the second reserve succeeds and alice's events process prints relayReservation; bob's echo request reaches alice through the relay"
+  client alice client-token trust-token-alice.json
+  wait_for alice "CLIENT: .*reserved, expiresAt" 30
+  client bob echo-to-alice
+  wait_exit alice 40
+  wait_exit bob 5
+}
+
+case_token-wrong() {
+  expect "alice is refused at start; onRefused sends a wrong token and receives refused; keepReserved returns ERR PERMISSION_DENIED after that one round; alice exits 3"
+  client alice client-token-wrong trust-token-alice.json
+  wait_exit alice 30
+}
+
+case_revoke() {
+  expect "the relay node sets a 20 s reservation lifetime; alice, under watch, is admitted through the token and reserves; 5 s later the relay program revokes alice; alice's refresh, 30 s after its reservation, is refused, alice's runtime reports relayReservationLost to watch, and watch sends the token again: a second admission and a second reservation; then bob's echo request reaches alice through the relay"
+  client alice client-watch trust-token-alice.json
+  wait_count alice "CLIENT: .*answer admitted" 1 30
+  wait_count alice "CLIENT: .*answer admitted" 2 70
+  sleep 2
+  client bob echo-to-alice
+  wait_exit bob 40
+}
+
+case_dial-failed() {
+  expect "alice, listed, reserves; its whereis to carol, who holds no reservation, fails through the relay with NO_RESERVATION; alice's events process receives one relayDialFailed (carol, relay, NO_RESERVATION) per failed attempt and exits 0 after the third"
+  client alice client-dial-carol
+  wait_exit alice 60
+}
+
 run_case() { # run_case CASE: the clients of CASE, then the observed lines
   echo; echo "########## case $1 ($MODE)"
   "case_$1"
@@ -149,7 +198,8 @@ run_case() { # run_case CASE: the clients of CASE, then the observed lines
   for n in bob alice carol; do
     [ -f "$LOG/$n.out" ] && show $n $([ "$1" = idle ] && echo all)
   done
-  rm -f "$LOG"/*.out "$LOG"/*.err
+  echo; echo "===== exit codes ====="; cat "$LOG/exit-codes"
+  rm -f "$LOG"/*.out "$LOG"/*.err "$LOG/exit-codes"
 }
 
 MODE=$1
@@ -162,7 +212,8 @@ case $MODE in
     shift; PORT=${PORT:-7560}
     RELAY_ADDR=/ip4/127.0.0.1/tcp/$PORT/ws/p2p/$(node -p "require('$D/gen/aliases.json').relay")
     CASES=("$@")
-    [ ${#CASES[@]} -eq 0 ] && CASES=(no-gater list time-limit labels limits remove-end remove-keep)
+    [ ${#CASES[@]} -eq 0 ] && CASES=(no-gater list time-limit labels limits remove-end remove-keep
+                                     token token-wrong revoke dial-failed)
     for c in "${CASES[@]}"; do
       relay_command "$c" $PORT
       start relay env 'DEBUG=libp2p:circuit-relay:server*' "${CMD[@]}"

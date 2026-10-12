@@ -87,6 +87,83 @@ BOT.
 libp2p internals the module uses against the installed libp2p; `tests/relay-node/` runs relay
 programs with clients over loopback.
 
+### The client side
+
+A node started with `--relay` asks the relay for a reservation once, at startup. Under the default
+`--relay-fault-tolerance no-fatal`, a refused node starts and runs on: it keeps its connection to
+the relay node and can `whereis`, `send` and `receive` with processes there, but no peer reaches
+it through the relay, and nothing in the runtime or in libp2p asks again. The library
+`P2PRelayClient` (native module of the same name, node host only) gives the program the second
+request and the events that tell it when one is needed. Each function takes the root authority:
+
+| Function                                         | Effect                                                                                 |
+|--------------------------------------------------|----------------------------------------------------------------------------------------|
+| `reserve (authority, relayAddr)`                 | asks the relay at `relayAddr` for a reservation; `OK {relay, expiresAt}` or `ERR e`    |
+| `relayEvents (authority, pid)`                   | the local process `pid` receives the relay messages below                              |
+| `keepReserved (authority, relayAddr, onRefused)` | `reserve`; on `ERR PERMISSION_DENIED`, `onRefused ()` and `reserve` once more          |
+| `watch (authority, relayAddr, onRefused)`        | makes the calling process the one of `relayEvents`; `keepReserved`, again on each loss |
+
+`relayAddr` is the relay's multiaddr with `/p2p/<relay id>`, as given to `--relay`. `reserve` blocks
+the calling thread until the relay answers. Its errors are `PERMISSION_DENIED` (the relay's
+connection gater refused), `TIMEOUT` (no answer within 5 s), `DIAL` (the relay could not be
+dialled), `NO_NETWORK` (`--localonly` or `--disable-relay`) and `FAILED message`. A reservation
+already held and not due for a refresh is returned without asking the relay. The pc and the
+arguments must flow to BOT, since the relay sees the request. A node started without `--relay`
+dials later peers through the first relay it reserves on.
+
+The messages to the process of `relayEvents`, labelled at the pc of that call:
+
+| Message                                    | Sent when                                                   |
+|--------------------------------------------|-------------------------------------------------------------|
+| `("relayReservation", relay, expiresAt)`   | a reservation is made or refreshed                          |
+| `("relayReservationLost", relay)`          | a refresh fails or the connection to the relay closes       |
+| `("relayDialFailed", peer, relay, status)` | one attempt of the runtime's dial loop to dial `peer` fails |
+
+`relay` and `peer` are peer ids, `expiresAt` is in ms since the epoch. `status` is the relay's
+status when the relay answered the dial (`NO_RESERVATION`: the peer holds no reservation;
+`PERMISSION_DENIED`: the relay's connection gater refused the connection), and libp2p's error
+name otherwise. The dial loop makes up to twelve attempts, the second two seconds after the
+first and each further one twice as long after the one before, and each failed attempt gives one
+message; the message is sent only while the node has a relay. A relay that removes a reservation does not
+tell the client: the client learns of it at its next refresh, which libp2p makes five minutes
+before the expiry and no sooner than 30 s after the reservation.
+
+`watch` returns only on a refusal that outlasts `onRefused`, or on `ERR NO_NETWORK`; after any
+other error it tries again 30 s later. `spawn (fn () => watch (authority, relayAddr, onRefused))`
+keeps a reservation as the v1 runtime did.
+
+#### Admission by token
+
+A relay can admit a node it does not know when the node presents a token. The node's
+`onRefused` looks up the relay's admission process with `whereis`, sends it `("token", token,
+self ())` and receives `"admitted"` or `"refused"`. On the relay, `P2PRelayControl` provides the
+admission process:
+
+| Function                                      | Effect                                                                                                                    |
+|-----------------------------------------------|---------------------------------------------------------------------------------------------------------------------------|
+| `receiveToken authority`                      | the next `("token", token, pid)` from the mailbox, as `(token, pid)` at BOT                                               |
+| `admissionProcess (authority, gater, secret)` | on a token equal to `secret`, `("admit", peer)` to `gater` and `"admitted"` to the sender; otherwise `"refused"`; repeats |
+
+The connection gater's process keeps the set of admitted peers and adds `peer` on `("admit",
+peer)`; the relay program registers the admission process under a name the clients know.
+
+A message from a node that the relay's trust map leaves out, or maps below `{}`, is quarantined
+on ingress: its labels are rewritten to quarantined labels, which no label written in a program
+bounds from below, so neither `receive` nor `rcvp` takes it. `receiveToken` takes it in five
+steps, each with the root authority:
+
+1. `enableRangedReceive` opens a receive region from BOT to null integrity.
+2. `rcv` over that interval takes the message; its values come out at null integrity.
+3. `disableRangedReceive` closes the region, and `blockdown` lowers the blocking label that the
+   receive raised.
+4. `endorse` lowers the token and the pid to BOT.
+5. `blockdown` lowers the blocking label that the endorse raised; without it, the answers would
+   leave at null integrity.
+
+The answer reaches the client unquarantined when the client's trust map holds the relay at a
+level that covers `{}`. `secret` must be at `{}`; a labelled secret makes the comparison carry
+its label, and the answer to an untrusted node is then refused.
+
 ## Navigating the code base
 
 The main p2p runtime module is in [rt/src/p2p/p2p.mts](../rt/src/p2p/p2p.mts). The relay is a

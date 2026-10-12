@@ -34,7 +34,19 @@ require native P2PRelayControl
  *  reservation without changing it.
  *
  *  `setLimits` and `removeReservation` are seen by the relay's peers: the pc and the arguments
- *  must flow to BOT. *)
+ *  must flow to BOT.
+ *
+ *  `receiveToken authority` takes the next message `("token", token, pid)` from the calling
+ *  process's mailbox and returns `(token, pid)` at BOT. A message from a node that the relay's
+ *  trust map leaves out or maps below `{}` arrives quarantined, and neither `receive` nor `rcvp`
+ *  takes it. The function opens a receive region from BOT to null integrity with the root
+ *  authority, receives, closes the region, lowers the blocking label, endorses the token and
+ *  the pid to BOT, and lowers the blocking label again.
+ *
+ *  `admissionProcess (authority, gater, secret)` loops on `receiveToken`. A token equal to
+ *  `secret` makes it send `("admit", peer)` to `gater`, with `peer` the sender's peer id, and
+ *  `"admitted"` to the sender; any other token gets `"refused"`. `secret` must be at `{}`: the
+ *  answers go to a node trusted at no level. *)
 
 datatype relayControlError = NOT_RELAY
 
@@ -49,9 +61,33 @@ let fun toOutcome {tag = "Ok",  value = v} = OK v
         toOutcome (P2PRelayControl.removeReservation (auth, peer, endCircuits))
 
     fun reservations auth = toOutcome (P2PRelayControl.reservations auth)
+
+    fun receiveToken auth =
+        let val bot = `<#null-confidentiality; #root-integrity>`
+            val nullInt = `<#null-confidentiality; #null-integrity>`
+            val (_, cap) = enableRangedReceive (`<;#root-integrity>`, nullInt, auth)
+            val r = rcv (`{}`, nullInt, [ hn ("token", t, c) => (t, c) ])
+            val _ = disableRangedReceive cap
+            val _ = blockdown auth
+            val (t, c) = endorse (r, auth, bot)
+            val token = endorse (t, auth, bot)
+            val pid = endorse (c, auth, bot)
+            val _ = blockdown auth
+        in (token, pid)
+        end
+
+    fun admissionProcess (auth, gater, secret) =
+        let val (token, pid) = receiveToken auth
+            val _ = if token = secret
+                    then (send (gater, ("admit", node pid)); send (pid, "admitted"))
+                    else send (pid, "refused")
+        in admissionProcess (auth, gater, secret)
+        end
 in [ ("connectionGater", connectionGater)
    , ("setLimits", setLimits)
    , ("removeReservation", removeReservation)
    , ("reservations", reservations)
+   , ("receiveToken", receiveToken)
+   , ("admissionProcess", admissionProcess)
    ]
 end

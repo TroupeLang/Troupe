@@ -86,6 +86,7 @@ import { Logger } from '../logger.mjs';
 import {v4 as uuidv4} from 'uuid';
 import { kadDHT } from '@libp2p/kad-dht';
 import { denyInboundRelayReservation, denyOutboundRelayedConnection, setRelayService } from '../ffi/node/p2prelaycontrol.mjs';
+import { relayDialFailed } from '../ffi/node/p2prelayclient.mjs';
 
 // USER-FACING ERRORS
 
@@ -429,6 +430,7 @@ function dial(id: PeerId) {
 
         resolve(stream);
       } catch (err) {
+        relayDialFailed(id, _relayId, err);
         processExpectedNetworkErrors (err, "dial");
 
         // if the error is suppressed we move on to trying 10 times with exponential backoff
@@ -840,6 +842,38 @@ async function keepAliveRelay(relayAddr: string) {
 }
 
 /**
+ * Adds the relay's address to the peerStore and tags the relay with "keep alive".
+ */
+export async function addRelayToPeerStore(relayAddr: string, relayId: PeerId): Promise<void> {
+  await _node.peerStore.merge(relayId, {
+    multiaddrs: [
+      multiaddr(`${relayAddr}`)
+    ],
+    tags: {
+      [KEEP_ALIVE]: {}
+    }
+  });
+}
+
+/**
+ * Makes `relayId` the relay of later dials when no relay is set, as dialRelay
+ * does for the --relay one; for P2PRelayClient.reserve.
+ */
+export function useRelayIfUnset(relayId: PeerId): void {
+  if (_relayId === null) {
+    _relayId = relayId.toString();
+  }
+}
+
+/**
+ * The libp2p node, for the native module P2PRelayClient; null on a node
+ * started without the network (--localonly).
+ */
+export function libp2pNode(): Libp2p | null {
+  return _node;
+}
+
+/**
  * Dials the relay at `relayAddr`
  * and returns the pushable for the relay.
  * Also tags the relay with "keep alive" in the peerStore.
@@ -850,16 +884,7 @@ async function dialRelay(relayAddr: string) {
     let id = relayAddr.split('/').pop();
     const relayId: PeerId = peerIdFromString(id);
 
-    // Add the address to the peerStore
-    // Tag the relay with "keep alive"
-    await _node.peerStore.merge(relayId, {
-      multiaddrs: [
-        multiaddr(`${relayAddr}`)
-      ],
-      tags: {
-        [KEEP_ALIVE]: {}
-      }
-    });
+    await addRelayToPeerStore(relayAddr, relayId);
 
     // Dial the relay - in circuit relay v2, we just dial without a specific protocol
     debug(`Added relay address`);

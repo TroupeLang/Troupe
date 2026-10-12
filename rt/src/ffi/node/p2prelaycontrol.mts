@@ -63,7 +63,7 @@ function isRelayNode(): boolean {
 // The check of checkChannelEffect (builtins/stdio.mts) against BOT: the effect
 // of the call is seen by the relay's peers. `beforeError` runs before the
 // thread error.
-function checkEffectAtBot(operation: string, operandLevel: Level, beforeError: () => void = () => {}) {
+export function checkEffectAtBot(operation: string, operandLevel: Level, beforeError: () => void = () => {}) {
     const $t = getRuntimeObject().$t;
     $t.raiseCurrentThreadPCToBlockingLev();
     const effectLevel = lub($t.pc, operandLevel);

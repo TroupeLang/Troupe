@@ -20,6 +20,7 @@ build:
 	$(COMPILER) ./SimpleFileIO.trp -l
 	$(COMPILER) ./BytesAndZips.trp -l
 	$(COMPILER) ./P2PRelayControl.trp -l
+	$(COMPILER) ./P2PRelayClient.trp -l
 
   # Dependency on `Number`
 	$(COMPILER) ./Duration.trp -l

@@ -1,6 +1,6 @@
 // The internals of libp2p and @libp2p/circuit-relay-v2 that the Troupe runtime relies on
-// (rt/src/ffi/node/p2prelaycontrol.mts and the client side of relay reservations), asserted
-// by running them: a relay node R (WebSocket on 127.0.0.1:7650) and clients in this process.
+// (rt/src/ffi/node/p2prelaycontrol.mts and p2prelayclient.mts), asserted by running them: a
+// relay node R (WebSocket on 127.0.0.1:7650) and clients in this process.
 // Each failure names the internal; run by `make test/libp2p-contract`, part of `make ci`.
 import { createLibp2p } from 'libp2p'
 import { webSockets } from '@libp2p/websockets'
@@ -91,8 +91,9 @@ check('a denied reservation resolves listen without a reservation (NO_FATAL)',
 // listen on <relay>/p2p-circuit reserves; the transport's reservationStore emits the events.
 hooks.reserve = async () => false
 const B = await client()
-const transport = B.components.transportManager.getTransports()
+const circuitTransport = (n) => n.components.transportManager.getTransports()
   .find((t) => t[Symbol.toStringTag] === '@libp2p/circuit-relay-v2-transport')
+const transport = circuitTransport(B)
 const events = []
 for (const name of ['relay:created-reservation', 'relay:removed']) {
   transport?.reservationStore?.addEventListener(name, (e) => events.push([name, e.detail.relay.toString()]))
@@ -104,6 +105,21 @@ check('transportManager.listen on <relay>/p2p-circuit creates a reservation',
   f.text === null && R.services.relay.reservations.has(B.peerId), `listen gave ${f.text ?? 'resolved, no reservation'}`)
 check('reservationStore emits relay:created-reservation',
   events.some(([n, p]) => n === 'relay:created-reservation' && p === R.peerId.toString()), JSON.stringify(events))
+
+// reservationStore.addRelay asks the relay under NO_FATAL as well: it rejects with the status on a
+// deny and resolves with the reservation on an admit (P2PRelayClient.reserve).
+const Z = await client(FaultTolerance.NO_FATAL)
+await Z.peerStore.merge(R.peerId, { multiaddrs: [multiaddr(relayAddr)] })
+const zStore = circuitTransport(Z)?.reservationStore
+hooks.reserve = async () => true
+f = await failure(zStore.addRelay(R.peerId, 'configured'))
+check('reservationStore.addRelay rejects with PERMISSION_DENIED on a deny (NO_FATAL)',
+  /PERMISSION_DENIED/.test(f.text), `addRelay gave ${f.text ?? 'resolved'}`)
+hooks.reserve = async () => false
+const zr = await zStore.addRelay(R.peerId, 'configured').catch((e) => e)
+check('reservationStore.addRelay resolves with the reservation on an admit',
+  zr?.relay?.equals(R.peerId) && typeof zr?.details?.reservation?.expire === 'bigint' &&
+  R.services.relay.reservations.has(Z.peerId), `addRelay gave ${zr?.message ?? JSON.stringify(Object.keys(zr ?? {}))}`)
 
 // The relay service awaits the connection hook; a deny reaches the dialler as PERMISSION_DENIED.
 const A = await client()

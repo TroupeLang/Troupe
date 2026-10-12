@@ -1,0 +1,8 @@
+(* The line goes to the thread that read it. The spawned thread runs while the
+   reader waits for the line, and is the scheduler's current thread when the line
+   arrives. It prints nothing, so the output does not depend on whether the line
+   is already buffered when the read starts. *)
+let val _ = spawn (fn () => ())
+    val line = freadln stdin
+in printWithLabels line
+end

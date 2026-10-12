@@ -1,4 +1,6 @@
-(* Admits the listed peers, admits every relayed connection. *)
+(* Admits the listed peers and every relayed connection. The questions are named
+   "deny...", after libp2p's hooks, so `reply true` denies and `reply false` admits: a
+   listed peer gets `reply (not (List.elem peer listed))`, which is `reply false`. *)
 import List
 import Outcome
 import P2PRelayControl

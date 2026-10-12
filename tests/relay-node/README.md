@@ -17,6 +17,11 @@ whether it joins the suite is the maintainer's decision.
 | `src/client-idle.trp`        | holds its reservation for 9 s                                 |
 | `src/*.json`                 | aliases and trust maps, with `@@NAME@@` for the peer ids       |
 
+A relay program answers each question by calling `reply` with a boolean, in libp2p's
+polarity: the questions are named after libp2p's connection gater hooks,
+`denyInboundRelayReservation` and `denyOutboundRelayedConnection`, so `reply true`
+denies and `reply false` admits.
+
 `setup.sh` creates `ids/{relay,alice,bob,carol}.json` with `p2p-tools/built/mkid.mjs`
 (an existing id is kept), fills the ids into `src/` to give `gen/`, and compiles the
 programs to `built/`. The three folders are ignored by git. Run it after `make rt`,

@@ -1,5 +1,7 @@
 (* A sleeper denies after 2 s; the admin process admits after 3 s, the second call of
-   reply for the same question. *)
+   reply for the same question. The questions are named "deny...", after libp2p's hooks,
+   so `reply true` denies and `reply false` admits: the sleeper's `reply true` is the
+   deny, the admin's `reply false` the admit. *)
 import Outcome
 import P2PRelayControl
 let fun admin () =

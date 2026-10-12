@@ -1,5 +1,6 @@
 (* Prints the label of each peer id, endorses it and lowers the blocking label before
-   deciding, so that a peer of any trust level can be admitted. *)
+   deciding, so that a peer of any trust level can be admitted. The questions are named
+   "deny...", after libp2p's hooks, so `reply true` denies and `reply false` admits. *)
 import List
 import Outcome
 import P2PRelayControl

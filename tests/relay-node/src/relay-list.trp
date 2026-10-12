@@ -1,0 +1,19 @@
+(* Admits the listed peers, admits every relayed connection. *)
+import List
+import Outcome
+import P2PRelayControl
+let val listed = ["@@ALICE@@", "@@BOB@@"]
+    val _ = case P2PRelayControl.connectionGater (authority, self ()) of
+                 OK _ => print "RELAY: connectionGater OK"
+               | ERR NOT_RELAY => print "RELAY: connectionGater ERR NOT_RELAY"
+    fun loop () =
+      receive [ hn ("denyInboundRelayReservation", peer, reply) =>
+                  (printWithLabels ("RELAY: reservation question", peer);
+                   reply (not (List.elem peer listed));
+                   loop ())
+              , hn ("denyOutboundRelayedConnection", (src, dst), reply) =>
+                  (printWithLabels ("RELAY: connection question", src, dst);
+                   reply false;
+                   loop ()) ]
+in loop ()
+end

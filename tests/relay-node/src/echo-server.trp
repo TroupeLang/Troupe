@@ -1,0 +1,9 @@
+(* bob: registers "echo" and answers every request; exits 124 after 15 minutes. *)
+let val _ = spawn (fn () => (sleep 900000; print "SERVER: timeout"; exit (authority, 124)))
+    val _ = register ("echo", self (), authority)
+    val _ = print "SERVER: registered"
+    fun serve () =
+      receive [ hn ("ECHO", m, c) =>
+                  (print ("SERVER: echo " ^ m); send (c, ("REPLY", m)); serve ()) ]
+in serve ()
+end

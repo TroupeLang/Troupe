@@ -1,0 +1,23 @@
+(* Prints the label of each peer id, endorses it and lowers the blocking label before
+   deciding, so that a peer of any trust level can be admitted. *)
+import List
+import Outcome
+import P2PRelayControl
+let val listed = ["@@ALICE@@", "@@BOB@@", "@@CAROL@@"]
+    val bot = `<#null-confidentiality; #root-integrity>`
+    val _ = case P2PRelayControl.connectionGater (authority, self ()) of
+                 OK _ => print "RELAY: connectionGater OK"
+               | ERR NOT_RELAY => print "RELAY: connectionGater ERR NOT_RELAY"
+    fun decide (peer, reply) =
+        let val _ = printWithLabels ("RELAY: reservation question", peer)
+            val p = endorse (peer, authority, bot)
+            val _ = blockdown authority
+            val _ = reply (not (List.elem p listed))
+        in printWithLabels ("RELAY: reply returned for", p)
+        end
+    fun loop () =
+      receive [ hn ("denyInboundRelayReservation", peer, reply) =>
+                  (spawn (fn () => decide (peer, reply)); loop ())
+              , hn ("denyOutboundRelayedConnection", _, reply) => (reply false; loop ()) ]
+in loop ()
+end

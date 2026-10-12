@@ -1,0 +1,14 @@
+(* alice: holds its reservation idle for 10 minutes, then echoes through the relay node
+   as echo-client.trp does and stays up 2 minutes more; exits 124 if no reply arrives
+   within 30 s of the request. *)
+let val _ = print "CLIENT: up, idle for 600 s"
+    val _ = sleep 600000
+    val _ = spawn (fn () => (sleep 30000; print "CLIENT: timeout"; exit (authority, 124)))
+    val s = whereis ("@bob", "echo")
+    val _ = print "CLIENT: found echo"
+    val _ = send (s, ("ECHO", "hello", self ()))
+    val r = receive [ hn ("REPLY", x) => x ]
+    val _ = print ("CLIENT: reply " ^ r)
+    val _ = sleep 120000
+in exit (authority, 0)
+end

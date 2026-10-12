@@ -1,0 +1,4 @@
+(* A relay program that never calls connectionGater. *)
+let val _ = print "RELAY: up, no connectionGater call"
+in sleep 3600000
+end

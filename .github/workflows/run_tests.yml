@@ -9,7 +9,7 @@ jobs:
         TROUPE: ${{github.workspace}}
         TERM: "xterm-color"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       
       # Install apt packages
       - name: Install apt packages

@@ -38,7 +38,7 @@ import { getCompilerService } from './CompilerService.mjs'
 import { Record } from './Record.mjs';
 import { shouldDrop, extractQuarantineAuth } from './QuarantineUtils.mjs';
 import { DCLabel } from './levels/DCLabels/dclabel.mjs';
-import { implies, CNF_FALSE } from './levels/DCLabels/cnf.mjs';
+import { implies } from './levels/DCLabels/cnf.mjs';
 
 const rt_uuid = runId
 const argv = getCliArgs();
@@ -302,7 +302,7 @@ function sendMessageToRemote(toPid, message, qauth?: Authority) {
       (qauth ? ` | effective trust (with qauth): ${effectiveTrust.stringRep()}\n` : '') +
       ` | the level of the information to send:  ${level.stringRep()}`, false, null, ErrorKind.IFCCheck);
   } else {
-    $t().raiseBlockingThreadLev(new DCLabel(level.confidentiality, CNF_FALSE));
+    $t().raiseBlockingThreadLev(level);
     getNetworkProvider().sendp2p(node, pid, data)
     return $t().returnImmediateLValue(__unit);
   }

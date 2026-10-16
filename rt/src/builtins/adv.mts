@@ -68,6 +68,7 @@ export function BuiltinAdv <TBase extends Constructor<UserRuntimeZero>>(Base: TB
                     ` | block: ${this.runtime.$t.bl.stringRep()}\n` +
                     ` | value: ${x.stringRep()}`, false, null, ErrorKind.IFCCheck)
             }
+            this.runtime.$t.raiseBlockingThreadLev(x.dlev);
             return this.runtime.ret(__unit);
         })
 
@@ -89,6 +90,7 @@ export function BuiltinAdv <TBase extends Constructor<UserRuntimeZero>>(Base: TB
                     ` | block: ${this.runtime.$t.bl.stringRep()}\n` +
                     ` | value: ${x.stringRep()}`, false, null, ErrorKind.IFCCheck)
             }
+            this.runtime.$t.raiseBlockingThreadLev(x.dlev);
             return this.runtime.ret(__unit);            
         })
 
@@ -108,6 +110,7 @@ export function BuiltinAdv <TBase extends Constructor<UserRuntimeZero>>(Base: TB
                     ` | l_adv: ${l_adv.stringRep()} \n` +
                     ` | value: ${value.stringRep()}`, false, null, ErrorKind.IFCCheck)
             }
+            this.runtime.$t.raiseBlockingThreadLev(lub(value.lev, l_adv.lev));
             return this.runtime.ret(__unit);
         })
          

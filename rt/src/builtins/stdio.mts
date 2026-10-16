@@ -109,6 +109,7 @@ export function checkChannelEffect($t, operation: string, ...operandLevels: Leve
             ` | channel level ${stdio_level.stringRep()}`,
             false, null, ErrorKind.IFCCheck);
     }
+    $t.raiseBlockingThreadLev(effectLevel);
 }
 
 export function BuiltinStdIo<TBase extends Constructor<UserRuntimeZero>>(Base: TBase) {

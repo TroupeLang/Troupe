@@ -1,6 +1,15 @@
-2025-06-24T21:28:34.091Z [RTM] info: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+2026-10-16T13:00:41.617Z [RTM] info: Skipping network creation. Observe that all network operations will yield a runtime error.
 [1@{alice}%{}, 2@{bob}%{}, 3@{charlie}%{}]@{}%{}
->>> Main thread finished with value: ()@{}%{}
+Runtime error in thread c7c12646-0435-4109-b3b9-223e311be5cf@{}%{}
+
+  14 | in  adv ()
+     |     ^
+
+>> Illegal flow in adv function:
+ |    pc: {}
+ | block: {alice,bob,charlie}
+ | value: ()@{}%{}
+>> at tests/rt/pos/ifc/mapsp.trp:14:5
 2@{alice}%{}
 3@{bob}%{}
 4@{charlie}%{}

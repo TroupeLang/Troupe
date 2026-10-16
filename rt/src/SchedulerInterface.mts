@@ -1,4 +1,5 @@
 import { Thread } from "./Thread.mjs";
+import { ErrorKind } from "./TroupeError.mjs";
 
 export interface SchedulerInterface {
     // tailToTroupeFun(f: any, arg:any)
@@ -15,6 +16,6 @@ export interface SchedulerInterface {
     unblockThread(toPid: any);
     schedule(fun: any, args: any[], namespace: any);
     __currentThread: Thread;
-    stopThreadWithErrorMessage (t:Thread, s:string)
+    stopThreadWithError (t:Thread, errorKind: ErrorKind)
     
 }

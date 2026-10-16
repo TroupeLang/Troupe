@@ -203,7 +203,7 @@ export abstract class StopThreadError extends ThreadError {
         if (getCliArgs()[TroupeCliArg.Explain] && this.explainstr) {
             console.log(chalk.yellow(this.explainstr));
         }
-        sched.stopThreadWithErrorMessage(this.thread, this.errorMessage);
+        sched.stopThreadWithError(this.thread, this.errorKind);
     }
 }
 

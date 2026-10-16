@@ -1,4 +1,4 @@
-2026-03-09T22:32:59.204Z [RTM] info: Skipping network creation. Observe that all external IO operations will yield a runtime error.
-2026-03-09T22:32:59.206Z [RTM] debug: network not initialized
+2026-10-16T13:00:35.957Z [RTM] info: Skipping network creation. Observe that all network operations will yield a runtime error.
+2026-10-16T13:00:35.958Z [RTM] debug: network not initialized
 ["myarg"]
->>> Main thread finished with value: ()@{}%{}
+>>> Main thread finished with value: ()@{#ROOT}%{#ROOT}

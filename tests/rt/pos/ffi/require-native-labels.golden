@@ -1,5 +1,5 @@
-2026-08-09T11:47:08.085Z [RTM] [32minfo[39m: Skipping network creation. Observe that all network operations will yield a runtime error.
+2026-10-16T13:00:29.690Z [RTM] [32minfo[39m: Skipping network creation. Observe that all network operations will yield a runtime error.
 5@{alice}%{alice}
 "Hello, world!"@{bob}%{bob}
 5@{}%{}
->>> Main thread finished with value: ()@{}%{}
+>>> Main thread finished with value: ()@{alice,bob}%{alice,bob}

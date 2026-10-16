@@ -1,4 +1,12 @@
-2025-06-24T21:28:35.529Z [RTM] info: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+2026-10-16T13:00:48.903Z [RTM] info: Skipping network creation. Observe that all network operations will yield a runtime error.
 52@<alice&bob&charlie;#root-integrity>%<charlie;#root-integrity>
-53@<alice&bob&charlie&dorothy;#root-integrity>%<dorothy;#root-integrity>
->>> Main thread finished with value: ()@<charlie&dorothy;#root-integrity>%<charlie&dorothy;#root-integrity>
+Runtime error in thread 5e33defe-4cd2-4cba-889e-0a45ab4b67b0@{}%{}
+
+  17 |     val _ = adv ()
+     |             ^
+
+>> Illegal flow in adv function:
+ |    pc: {}
+ | block: <alice&bob&charlie;#root-integrity>
+ | value: ()@{}%{}
+>> at tests/rt/pos/ifc/tlev01.trp:17:13

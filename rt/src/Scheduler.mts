@@ -10,7 +10,7 @@ import { RuntimeInterface } from './RuntimeInterface.mjs';
 import { LVal } from './Lval.mjs'
 import {ProcessID} from './process.mjs'
 import SandboxStatus from './SandboxStatus.mjs'
-import  {ThreadError, TroupeError} from './TroupeError.mjs'
+import  {ThreadError, TroupeError, ErrorKind} from './TroupeError.mjs'
 import  {lub} from './Level.mjs'
 import { getCliArgs, TroupeCliArg } from './TroupeCliArgs.mjs';
 import { getResultChannel } from './ResultChannel.mjs';
@@ -104,8 +104,9 @@ export class Scheduler implements SchedulerInterface {
         return null;
     }
     
-    notifyMonitors (status = TerminationStatus.OK, errstr = null) {
+    notifyMonitors (status = TerminationStatus.OK, errorKind: ErrorKind = null) {
         let t = this.__currentThread
+        t.raiseCurrentThreadPCToBlockingLev();
         let ids = Object.keys (t.monitors);
         for ( let i = 0; i < ids.length; i ++ ) {
             let id = ids[i];
@@ -114,7 +115,7 @@ export class Scheduler implements SchedulerInterface {
             let thisPid = t.tid;
             let statusVal = t.mkVal ( status ) ;
             let reason = TerminationStatus.OK == status ? statusVal :
-                t.mkVal (mkTuple ( [statusVal,  t.mkVal (errstr)] ));
+                t.mkVal (mkTuple ( [statusVal,  t.mkVal (ErrorKind[errorKind])] ));
             let message = t.mkVal (mkTuple ([ t.mkVal("DONE"), refUUID, thisPid, reason]))
             this.rtObj.sendMessageNoChecks ( toPid, message , undefined, false) // false flag means no need to return in the process
         }
@@ -240,8 +241,8 @@ export class Scheduler implements SchedulerInterface {
     }
 
 
-    stopThreadWithErrorMessage (t:Thread, s:string ) {
-        this.notifyMonitors(TerminationStatus.ERR, s) ;
+    stopThreadWithError (t:Thread, errorKind: ErrorKind ) {
+        this.notifyMonitors(TerminationStatus.ERR, errorKind) ;
         this.__alive.delete (this.pidKey(t.tid));
     }
 

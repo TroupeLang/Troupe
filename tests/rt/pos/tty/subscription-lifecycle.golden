@@ -1,7 +1,7 @@
-2026-08-09T17:05:27.953Z [RTM] [32minfo[39m: Skipping network creation. Observe that all network operations will yield a runtime error.
+2026-10-16T13:01:10.881Z [RTM] [32minfo[39m: Skipping network creation. Observe that all network operations will yield a runtime error.
 {tag="Ok", value=()}
 {tag="Ok", value=()}
 {tag="Ok", value=()}
 {tag="Ok", value=()}
 {tag="Ok", value=()}
->>> Main thread finished with value: ()@{}%{}
+>>> Main thread finished with value: ()@{#ROOT}%{#ROOT}

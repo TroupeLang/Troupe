@@ -1,5 +1,12 @@
-2026-08-09T17:04:55.482Z [RTM] [32minfo[39m: Skipping network creation. Observe that all network operations will yield a runtime error.
+2026-10-16T13:01:02.420Z [RTM] [32minfo[39m: Skipping network creation. Observe that all network operations will yield a runtime error.
 1
-<#null-confidentiality;alice>
-"public still writes"
->>> Main thread finished with value: ()@{}%{}
+Runtime error in thread 35fd68e0-c06f-4345-b895-bd5ad4a9df1d@{}%{}
+
+  10 |     val _ = print (ttyLevel stdout)
+     |             ^
+
+>> write to stdout above the stdio channel level
+ | effect level  {alice}
+ | pc level      {alice}
+ | channel level <#null-confidentiality;alice>
+>> at tests/rt/pos/stdio/setstdiolevel-lower-confidentiality.trp:10:13

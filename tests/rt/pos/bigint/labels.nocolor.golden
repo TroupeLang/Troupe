@@ -1,7 +1,7 @@
-2026-07-18T22:39:34.451Z [RTM] info: Skipping network creation. Observe that all external IO operations will yield a runtime error.
+2026-10-16T13:00:25.974Z [RTM] info: Skipping network creation. Observe that all network operations will yield a runtime error.
 35n@{alice}%{alice}
 true
 1@{bob}%{bob}
 1n@{bob}%{bob}
 true
->>> Main thread finished with value: ()@{bob}%{bob}
+>>> Main thread finished with value: ()@{alice,bob}%{alice,bob}

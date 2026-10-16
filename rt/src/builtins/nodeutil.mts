@@ -1,5 +1,6 @@
 import { UserRuntimeZero, Constructor, mkBase } from './UserRuntimeZero.mjs'
 import { LVal } from '../Lval.mjs';
+import { lub } from '../Level.mjs';
 import { assertIsProcessId } from '../Asserts.mjs'
 
 /**
@@ -16,7 +17,7 @@ export function BuiltinNodeUtils<TBase extends Constructor<UserRuntimeZero>>(Bas
             if (nodeId == null) {
                 nodeId = "<null>"
             }
-            let v = new LVal(nodeId, arg.lev);
+            let v = new LVal(nodeId, lub(this.runtime.$t.pc, arg.lev));
             return this.runtime.ret(v);
         }, "node")
     }

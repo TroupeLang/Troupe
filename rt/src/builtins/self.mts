@@ -8,7 +8,7 @@ import { UserRuntimeZero, Constructor, mkBase } from './UserRuntimeZero.mjs'
 export function BuiltinSelf<TBase extends Constructor<UserRuntimeZero>>(Base: TBase) {
     return class extends Base {
         self = mkBase((arg) => {
-            return this.runtime.ret(this.runtime.__sched.__currentThread.tid);
+            return this.runtime.ret(this.mkCopy(this.runtime.__sched.__currentThread.tid));
         }, "self");
     }
 }

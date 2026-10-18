@@ -115,7 +115,7 @@ export function downgrader (runtime: RuntimeInterface,
 
             if (ok_to_downgrade_result.kind === "SUCCESS") {
                 // Occurrence-floor result labels (see downgradeResultLabels): the
-                // blocking raise on line 69 already carries toLevV.lev, but the result
+                // blocking raise before the check already carries toLevV.lev, but the result
                 // labels must too, otherwise a secret-chosen declassification target
                 // lands in a value labelled below that secret.
                 const { lev, tlev } = downgradeResultLabels(

@@ -1,0 +1,16 @@
+(* The V1 tagset {p,q} denotes <p&q;p|q>, the join of <p;p> and <q;q>.
+   The compiler folds = on two label literals (CPSOpt, Core.litEq); the
+   folded answer must agree with = on the same labels at run time.
+   Run: ./local.sh <this file> --localonly --stdiolev '{#TOP}'
+   Expected output:
+     ("folded:  {p,q} = <p&q;p|q>", true)
+     ("folded:  {p,q} = <p&q;p&q>", false)
+     ("runtime: {p,q} = <p&q;p|q>", true)
+     ("runtime: {p,q} = <p&q;p&q>", false)
+   Before the fix the two folded lines printed false and true. *)
+let fun lab l = levelOf (0 raisedTo l)
+    val _ = print ("folded:  {p,q} = <p&q;p|q>", `{p,q}` = `<p&q;p|q>`)
+    val _ = print ("folded:  {p,q} = <p&q;p&q>", `{p,q}` = `<p&q;p&q>`)
+    val _ = print ("runtime: {p,q} = <p&q;p|q>", lab `{p,q}` = lab `<p&q;p|q>`)
+    val _ = print ("runtime: {p,q} = <p&q;p&q>", lab `{p,q}` = lab `<p&q;p&q>`)
+in () end

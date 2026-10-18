@@ -224,7 +224,7 @@ instance ToJSON DCLabel where
 -------------------------------------------------------
 -- V1 Label support
 -- V1 labels like "{alice, bob}" are syntactic sugar for
--- DC labels "<alice & bob ; alice & bob>"
+-- DC labels "<alice & bob ; alice | bob>"
 -------------------------------------------------------
 
 -- | Semantic equality for V1 label strings
@@ -256,18 +256,17 @@ v1LabelConst s =
 
 -- | Convert V1 label string to DCLabelExp for cross-syntax comparison
 -- V1 "{}" means IFC_BOT = <True; False> (most public, least trusted)
--- V1 "{alice, bob}" means <alice & bob ; alice & bob>
+-- V1 "{alice, bob}" means <alice & bob ; alice | bob>, the join of
+-- <alice ; alice> and <bob ; bob>, as the runtime's fromV1String reads it
 v1LabelToDCLabelExp :: String -> DCLabelExp
 v1LabelToDCLabelExp s =
     case v1LabelConst s of
       Just dc -> dc
       Nothing ->
-        let tags = normalizeV1Label s
-        in case tags of
-            []  -> DCLabelExp (ConstComponent LabelTrue, ConstComponent LabelFalse)  -- IFC_BOT
-            [t] -> let e = ExprComponent (TagExp t) in DCLabelExp (e, e)
-            ts  -> let e = ExprComponent (foldr1 (\a b -> OpExp Conj a b) (map TagExp ts))
-                   in DCLabelExp (e, e)
+        case map TagExp (normalizeV1Label s) of
+            []   -> DCLabelExp (ConstComponent LabelTrue, ConstComponent LabelFalse)  -- IFC_BOT
+            tags -> DCLabelExp ( ExprComponent (foldr1 (OpExp Conj) tags)
+                               , ExprComponent (foldr1 (OpExp Disj) tags) )
 
 ------------------------------------------------------------
 -- s-expression serialization (see "Sexp")

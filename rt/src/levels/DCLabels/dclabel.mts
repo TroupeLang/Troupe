@@ -128,6 +128,7 @@ export class DCLabel extends AbstractLevel<DCLabel> {
             integrityLabels.map(l => (l as RegularLabel).principal)
         );
 
+        const confidentialityPrincipals: Set<string> = new Set();
         for (let cat of this.confidentiality.categories) {
             const catLabels = cat.getLabels();
             if (catLabels.length == 1) {
@@ -140,9 +141,16 @@ export class DCLabel extends AbstractLevel<DCLabel> {
                 if (!s.has(principal)) {
                     return false;
                 }
+                confidentialityPrincipals.add(principal);
             } else {
                 return false;
             }
+        }
+
+        // The tagset {S} parses as <∧S ; ∨S>, so the confidentiality must
+        // name every principal of the integrity clause, not only some of them.
+        if (confidentialityPrincipals.size !== s.size) {
+            return false;
         }
 
         return s;

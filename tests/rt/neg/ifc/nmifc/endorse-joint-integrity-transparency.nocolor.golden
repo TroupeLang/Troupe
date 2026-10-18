@@ -1,0 +1,12 @@
+2026-10-18T09:51:53.180Z [RTM] info: Skipping network creation. Observe that all network operations will yield a runtime error.
+Runtime error in thread 193c9fb2-a5d7-493e-a42b-d70275d66cce@{}%{}
+
+  9 |     val e = endorse (h < u, a, `<bob;alice>`)
+    |             ^
+
+>> NMIFC transparency violation for endorsement
+ | The confidentiality of the data and PC do not permit this endorsement.
+ | level of the data: {alice,bob} (corrupt: true)
+ | target level: <bob;alice>
+ | PC level: {} (corrupt: false)
+>> at tests/rt/neg/ifc/nmifc/endorse-joint-integrity-transparency.trp:9:13

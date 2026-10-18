@@ -1,0 +1,11 @@
+(* NMIFC transparent endorsement with a joint integrity alice|bob.
+
+   u may have been written by a holder of the joint privilege alice|bob, who is
+   not trusted at the target integrity alice and cannot read bob's secret h.
+   Endorsing h < u to <bob;alice> is refused. *)
+let val h = 5 raisedTo `<bob;#root-integrity>`
+    val u = 3 raisedTo `<#null-confidentiality;alice|bob>`
+    val a = attenuate (authority, `<#null-confidentiality;alice>`)
+    val e = endorse (h < u, a, `<bob;alice>`)
+in printWithLabels "endorse accepted"
+end

@@ -724,7 +724,13 @@ export class DCLevelSystem extends AbstractLevelSystem<DCLabel> {
                  (S_auth ∨ I_from ∨ I_pc) ∧ S_to ⟹ S_from
 
                Transparent endorsement (integrity dimension):
-                 I_from ⟹ I_to ∨ (S_from ∧ S_pc)
+                 (I_from ⟹ I_to) ∨ (I_from ⟹ S_from ∧ S_pc)
+
+               The disjunction is outside the implication: a possible author of
+               the data, such as the holder of a joint privilege alice|bob for
+               I_from = alice ∨ bob, must either vouch for I_to or read the data
+               and the pc; I_from ⟹ I_to ∨ (S_from ∧ S_pc) would let one
+               author be split between the two.
             */
             if (isNMIFC) {
                 // Helper to check robustness (for CONFIDENTIALITY and BOTH)
@@ -742,10 +748,10 @@ export class DCLevelSystem extends AbstractLevelSystem<DCLabel> {
 
                 // Helper to check transparency (for INTEGRITY and BOTH)
                 const checkTransparency = () => {
-                    // Transparent endorsement: I_from ⟹ I_to ∨ (S_from ∧ S_pc)
+                    // Transparent endorsement: (I_from ⟹ I_to) ∨ (I_from ⟹ S_from ∧ S_pc)
                     const s_from_and_s_pc = conjunction(l_from.confidentiality, pc.confidentiality);
-                    const i_to_or_secret = disjunction(l_to.integrity, s_from_and_s_pc);
-                    return implies(l_from.integrity, i_to_or_secret);
+                    return implies(l_from.integrity, l_to.integrity)
+                        || implies(l_from.integrity, s_from_and_s_pc);
                 };
 
                 switch (dimension) {

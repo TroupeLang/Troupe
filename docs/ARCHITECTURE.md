@@ -280,8 +280,9 @@ disabled by `--no-nmifc`. Both are in `okToDowngradeGeneric`
 
 - **Robust declassification** — `(S_auth ∨ I_from ∨ I_pc) ∧ S_to ⟹ S_from`. A release must not be
   influenced by whoever could have written the data.
-- **Transparent endorsement** — `I_from ⟹ I_to ∨ (S_from ∧ S_pc)`. A thread must not endorse what
-  it cannot see.
+- **Transparent endorsement** — `(I_from ⟹ I_to) ∨ (I_from ⟹ S_from ∧ S_pc)`. A thread must not
+  endorse what it cannot see. Each possible author of the data, a holder of a joint privilege such
+  as `alice|bob` included, must either be trusted at `I_to` or read the data and the pc.
 
 A label `<S, I>` is **corrupt** when its integrity does not imply its confidentiality
 (`DCLabel.isCorrupt`) — more secret than it is trusted. Robust declassification refuses to

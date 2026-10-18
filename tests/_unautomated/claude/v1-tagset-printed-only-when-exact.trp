@@ -1,0 +1,22 @@
+(* The V1 tagset {S} denotes <∧S ; ∨S> (the join of <s;s> for s in S).
+   A label whose confidentiality names only some of the principals of its
+   integrity clause is printed in DC form, not as the tagset of the
+   integrity principals.
+   Run: ./local.sh <this file> --localonly --stdiolev '{#TOP}'
+   Expected output:
+     ("<q;p|q>       prints as", <q;p|q>)
+     ("<p&q;p|q>     prints as", {p,q})
+     ("<p;p|q|r>     prints as", <p;p|q|r>)
+     ("<p&r;p|q|r>   prints as", <p&r;p|q|r>)
+     ("<p&q&r;p|q|r> prints as", {p,q,r})
+     ("{p,q}         prints as", {p,q})
+   Before the fix the first, third and fourth lines printed {p,q} and
+   {p,q,r}. *)
+let fun lab l = levelOf (0 raisedTo l)
+    val _ = print ("<q;p|q>       prints as", lab `<q;p|q>`)
+    val _ = print ("<p&q;p|q>     prints as", lab `<p&q;p|q>`)
+    val _ = print ("<p;p|q|r>     prints as", lab `<p;p|q|r>`)
+    val _ = print ("<p&r;p|q|r>   prints as", lab `<p&r;p|q|r>`)
+    val _ = print ("<p&q&r;p|q|r> prints as", lab `<p&q&r;p|q|r>`)
+    val _ = print ("{p,q}         prints as", lab `{p,q}`)
+in () end

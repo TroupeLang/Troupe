@@ -1,4 +1,4 @@
-import { Level } from './Level.mjs';
+import { Level, flowsTo } from './Level.mjs';
 import { DC_INTG_LITERALS, DC_CONF_LITERALS } from './levels/DCLabels/dcl_pp_config.mjs';
 import { DowngradeKind, DowngradeDimension, ValidateDowngradeParams, DowngradeErrorReason } from './DowngradeEnums.mjs';
 import { ImplementationError } from './TroupeError.mjs';
@@ -72,20 +72,29 @@ function fromLevelLabel(kind: DowngradeKind): string {
     }
 }
 
-export function formatRobustnessViolationMsg(operationDescription: string, fromLevel: Level, targetLevel: Level, pcLevel: Level, kind: DowngradeKind): string {
+function operandLevelLine(kind: DowngradeKind, pcLevel: Level, operandLevel?: Level): string {
+    const operands = kind === DowngradeKind.BLOCKING ? "the authority operand" : "the authority and target operands";
+    return operandLevel && !flowsTo(operandLevel, pcLevel)
+        ? `\n | label of ${operands}: ${operandLevel.stringRep()}`
+        : "";
+}
+
+export function formatRobustnessViolationMsg(operationDescription: string, fromLevel: Level, targetLevel: Level, pcLevel: Level, kind: DowngradeKind, operandLevel?: Level): string {
     return `NMIFC robustness violation for ${operationDescription}\n` +
            ` | The integrity of the data and PC do not permit this ${operationDescription}.\n` +
            ` | ${fromLevelLabel(kind)}: ${fromLevel.stringRep()} (corrupt: ${fromLevel.isCorrupt()})\n` +
            ` | target level: ${targetLevel.stringRep()}\n` +
-           ` | PC level: ${pcLevel.stringRep()} (corrupt: ${pcLevel.isCorrupt()})`;
+           ` | PC level: ${pcLevel.stringRep()} (corrupt: ${pcLevel.isCorrupt()})` +
+           operandLevelLine(kind, pcLevel, operandLevel);
 }
 
-export function formatTransparencyViolationMsg(operationDescription: string, fromLevel: Level, targetLevel: Level, pcLevel: Level, kind: DowngradeKind): string {
+export function formatTransparencyViolationMsg(operationDescription: string, fromLevel: Level, targetLevel: Level, pcLevel: Level, kind: DowngradeKind, operandLevel?: Level): string {
     return `NMIFC transparency violation for ${operationDescription}\n` +
            ` | The confidentiality of the data and PC do not permit this endorsement.\n` +
            ` | ${fromLevelLabel(kind)}: ${fromLevel.stringRep()} (corrupt: ${fromLevel.isCorrupt()})\n` +
            ` | target level: ${targetLevel.stringRep()}\n` +
-           ` | PC level: ${pcLevel.stringRep()} (corrupt: ${pcLevel.isCorrupt()})`;
+           ` | PC level: ${pcLevel.stringRep()} (corrupt: ${pcLevel.isCorrupt()})` +
+           operandLevelLine(kind, pcLevel, operandLevel);
 }
 
 // Non-exported helper for BLOCKING kind
@@ -95,7 +104,8 @@ function getBlockDowngradeErrorMessageForReason(
     levFrom: Level,
     levTo: Level,
     authorityLevel: Level,
-    pcLevel?: Level
+    pcLevel?: Level,
+    operandLevel?: Level
 ): string {
     switch (reason) {
         case DowngradeErrorReason.INTEGRITY_MISMATCH: return formatIntegrityMismatchMsg(operationDescription, levFrom, levTo);
@@ -104,10 +114,10 @@ function getBlockDowngradeErrorMessageForReason(
         case DowngradeErrorReason.INSUFFICIENT_AUTHORITY: return formatBlockingInsufficientAuthorityMsg(operationDescription, levFrom, authorityLevel, levTo);
         case DowngradeErrorReason.ROBUSTNESS_VIOLATION:
             if (!pcLevel) throw new ImplementationError("pcLevel required for ROBUSTNESS_VIOLATION");
-            return formatRobustnessViolationMsg(operationDescription, levFrom, levTo, pcLevel, DowngradeKind.BLOCKING);
+            return formatRobustnessViolationMsg(operationDescription, levFrom, levTo, pcLevel, DowngradeKind.BLOCKING, operandLevel);
         case DowngradeErrorReason.TRANSPARENCY_VIOLATION:
             if (!pcLevel) throw new ImplementationError("pcLevel required for TRANSPARENCY_VIOLATION");
-            return formatTransparencyViolationMsg(operationDescription, levFrom, levTo, pcLevel, DowngradeKind.BLOCKING);
+            return formatTransparencyViolationMsg(operationDescription, levFrom, levTo, pcLevel, DowngradeKind.BLOCKING, operandLevel);
         default:
             const _exhaustiveBlockReason: never = reason;
             throw new ImplementationError(`Unexpected reason for BLOCKING: ${_exhaustiveBlockReason}`);
@@ -175,7 +185,7 @@ function getValueDowngradeErrorMessageForReason(
 }
 
 export function getDowngradeErrorMessage(params: ValidateDowngradeParams, reason: DowngradeErrorReason): string {
-    const { levFrom, levTo, authorityLevel, downgradeKind, blockLevel: currentBlockingLevelForCheck, pcLevel } = params;
+    const { levFrom, levTo, authorityLevel, downgradeKind, blockLevel: currentBlockingLevelForCheck, pcLevel, operandLevel } = params;
     let opDesc = params.operationDescription; // Allow opDesc to be potentially modified
 
     switch (downgradeKind) {
@@ -183,7 +193,7 @@ export function getDowngradeErrorMessage(params: ValidateDowngradeParams, reason
             if (typeof opDesc !== 'string') {
                 throw new ImplementationError("operationDescription is required for BLOCKING downgradeKind.");
             }
-            return getBlockDowngradeErrorMessageForReason(reason, opDesc, levFrom, levTo, authorityLevel, pcLevel);
+            return getBlockDowngradeErrorMessageForReason(reason, opDesc, levFrom, levTo, authorityLevel, pcLevel, operandLevel);
         case DowngradeKind.MAILBOX:
             // The caller names the primitive it is refusing; there is no standard
             // description to fall back on now that the mailbox is moved by more

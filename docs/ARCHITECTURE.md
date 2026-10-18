@@ -284,6 +284,12 @@ disabled by `--no-nmifc`. Both are in `okToDowngradeGeneric`
   endorse what it cannot see. Each possible author of the data, a holder of a joint privilege such
   as `alice|bob` included, must either be trusted at `I_to` or read the data and the pc.
 
+In both checks, `pc` is the current pc joined with the labels of the authority and target
+operands (`rt/src/downgrading.mts`). An authority or target that untrusted data could influence
+fails robustness at the downgrade, as an untrusted pc does; a secret one fails transparency, as a
+secret pc does. A blocking-label downgrade joins the label of its authority operand; the label of
+its target operand is already in the blocking label, which is the level it downgrades from.
+
 A label `<S, I>` is **corrupt** when its integrity does not imply its confidentiality
 (`DCLabel.isCorrupt`) — more secret than it is trusted. Robust declassification refuses to
 downgrade from a corrupt label whatever authority is shown, so a corrupt label is one nothing can

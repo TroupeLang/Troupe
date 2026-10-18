@@ -53,4 +53,5 @@ export type ValidateDowngradeParams = {
 	blockLevel?: Level ;
 	operationDescription?: string;
 	pcLevel?: Level;  // PC level for NMIFC error messages
+	operandLevel?: Level;  // label of the authority operand, joined with the pc in the NMIFC check
 };

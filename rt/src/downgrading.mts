@@ -82,10 +82,6 @@ export function downgrader (runtime: RuntimeInterface,
             //   leak to the adversary via the termination channel:
             //   `tests/rt/neg/ifc/declassify_blocking.authority.trp`
             //
-            //   TODO (2026-03-09; SS): Should we instead fail on a tainted authority, similar to
-            //                          the `blockdecl` etc.? In this case, we  don't need to raise
-            //                          the blocking label by `auth.lev`.
-            //
             // - Depending on the given target level. For reference, see the following example of a
             //   leak to the adversary via the termination channel:
             //   `tests/rt/neg/ifc/declassify_blocking.to.trp`
@@ -95,6 +91,12 @@ export function downgrader (runtime: RuntimeInterface,
             //   level. For reference, see:
             //   `tests/rt/neg/ifc/declassify_blocking.value_level.trp`
             let pc = runtime.$t.pc;
+            // The NMIFC checks take the labels of the authority and target operands as part
+            // of the pc: an authority or target that untrusted data could influence makes the
+            // downgrade fail robustness, as an untrusted pc does, and a secret one makes an
+            // endorsement fail transparency, as a secret pc does.
+            const operandLev = lub (auth.lev, toLevV.lev);
+            const checkPc = lub (pc, operandLev);
 
             const levFrom = typeOnly ? data.tlev : data.lev;
             runtime.$t.raiseBlockingThreadLev(lub (auth.lev, toLevV.lev, levFrom));
@@ -109,7 +111,7 @@ export function downgrader (runtime: RuntimeInterface,
                 dimension == DowngradeDimension.INTEGRITY ? okToEndorse :
                 okToCrossDimensionalDowngrade;
             const ok_to_downgrade_result: DowngradeResult =
-                dg_f(levFrom, lev_to, auth.val.authorityLevel, bl, isNMIFC, pc)
+                dg_f(levFrom, lev_to, auth.val.authorityLevel, bl, isNMIFC, checkPc)
 
             if (ok_to_downgrade_result.kind === "SUCCESS") {
                 // Occurrence-floor result labels (see downgradeResultLabels): the
@@ -136,10 +138,10 @@ export function downgrader (runtime: RuntimeInterface,
                         errorMessage = formatValueInsufficientAuthorityMsg(downgradeKindString, levFrom, auth.val.authorityLevel, lev_to);
                         break;
                     case DowngradeErrorReason.ROBUSTNESS_VIOLATION:
-                        errorMessage = formatRobustnessViolationMsg(downgradeKindString, levFrom, lev_to, pc, DowngradeKind.VALUE);
+                        errorMessage = formatRobustnessViolationMsg(downgradeKindString, levFrom, lev_to, pc, DowngradeKind.VALUE, operandLev);
                         break;
                     case DowngradeErrorReason.TRANSPARENCY_VIOLATION:
-                        errorMessage = formatTransparencyViolationMsg(downgradeKindString, levFrom, lev_to, pc, DowngradeKind.VALUE);
+                        errorMessage = formatTransparencyViolationMsg(downgradeKindString, levFrom, lev_to, pc, DowngradeKind.VALUE, operandLev);
                         break;
                     default:
                         const _exhaustiveCheck: never = ok_to_downgrade_result.reason;

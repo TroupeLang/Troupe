@@ -428,7 +428,7 @@ export class Thread {
     exportState ()  {
         let __state = {            
             pc             : this.pc,
-            bl             : this.pc,
+            bl             : this.bl,
             sp             : this._sp,
             next           : this.next,            
             callStack      : this.callStack,

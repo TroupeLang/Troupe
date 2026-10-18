@@ -1,0 +1,10 @@
+(* A sandbox restores its caller's blocking label. Whether the thread survives the branch
+   depends on the secret, so the branch raises the blocking label to {secret}; the empty
+   sandbox after it must leave the blocking label at {secret}.
+
+   Expected: the print is refused, as it is without the sandbox. *)
+import List
+let val h = 42 raisedTo `{secret}`
+    val _ = if h > 10 then () else head []
+    val _ = sandbox (100, fn () => ())
+in print "OBS:done" end

@@ -1,6 +1,9 @@
-2026-10-16T13:00:40.949Z [RTM] [32minfo[39m: Skipping network creation. Observe that all network operations will yield a runtime error.
+2026-10-20T00:13:26.731Z [RTM] [32minfo[39m: Skipping network creation. Observe that all network operations will yield a runtime error.
+2@{alice}%{}
+3@{bob}%{}
+4@{charlie}%{}
 [1@{alice}%{}, 2@{bob}%{}, 3@{charlie}%{}]@{}%{}
-Runtime error in thread ac62c26a-f2d5-469c-bcb6-615a861e1dae@{}%{}
+Runtime error in thread db04006c-486e-49d8-ae3d-8fef5b824789@{}%{}
 
   14 | in  adv ()
      |     ^
@@ -10,6 +13,3 @@ Runtime error in thread ac62c26a-f2d5-469c-bcb6-615a861e1dae@{}%{}
  | block: {alice,bob,charlie}
  | value: ()@{}%{}
 >> at tests/rt/pos/ifc/mapsp.trp:14:5
-2@{alice}%{}
-3@{bob}%{}
-4@{charlie}%{}

@@ -45,12 +45,15 @@ export class Scheduler implements SchedulerInterface {
     __node: any;
     __stopWhenAllThreadsAreDone: boolean;
     __stopRuntime: () => void;
+    // A call of loop() is queued with setImmediate and has not started.
+    __loopQueued: boolean;
     constructor(rtObj:RuntimeInterface) {
         this.rt_uuid = runId;
         this.rtObj = rtObj
         this.__funloop = new FifoQueue()
         this.__blocked = new Map()
         this.__alive = new Map()
+        this.__loopQueued = false
         
         this.__currentThread = null; // current thread object
 
@@ -169,7 +172,14 @@ export class Scheduler implements SchedulerInterface {
     }
 
     resumeLoopAsync() {
-        setImmediate(() => {this.loop()});
+        if (this.__loopQueued) {
+            return;
+        }
+        this.__loopQueued = true;
+        setImmediate(() => {
+            this.__loopQueued = false;
+            this.loop()
+        });
     }
 
     

@@ -274,7 +274,9 @@ export class Scheduler implements SchedulerInterface {
 
 
     loop()  {
-        const $$LOOPBOUND = 500000;
+        // A batch of 50 slices of 30 steps: a timer or an input that arrives while
+        // threads run waits for the end of the batch (2026-10-20).
+        const $$LOOPBOUND = 50;
         let _FUNLOOP = this.__funloop
         let _curThread: Thread;
         let dest;
@@ -283,7 +285,7 @@ export class Scheduler implements SchedulerInterface {
                 _curThread = _FUNLOOP.dequeue();
                 this.__currentThread = _curThread;
                 dest = _curThread.next 
-                let ttl = 1000;  // magic constant; 2021-04-29
+                let ttl = 30;
                 while (dest && ttl -- ) {
                     dest = dest ()
                 }

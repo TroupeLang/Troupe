@@ -30,7 +30,7 @@ export function BuiltinBlockingLabel <TBase extends Constructor<UserRuntimeZero>
             assertIsAuthority(arg.val[0])
             assertIsLevel(arg.val[1]);
             this.runtime.$t.raiseBlockingThreadLev (arg.val[1].lev);
-            return this.runtime.$t.blockEndorseTo(arg.val[0], arg.val[1].val)
+            return this.runtime.$t.blockEndorseTo(arg.val[0], arg.val[1].val, arg.val[1].lev)
         })
 
         // Cross-dimensional blocking level downgrade to current PC
@@ -45,7 +45,7 @@ export function BuiltinBlockingLabel <TBase extends Constructor<UserRuntimeZero>
             assertIsAuthority(arg.val[0])
             assertIsLevel(arg.val[1]);
             this.runtime.$t.raiseBlockingThreadLev (arg.val[1].lev);
-            return this.runtime.$t.blockDowngradeTo(arg.val[0], arg.val[1].val)
+            return this.runtime.$t.blockDowngradeTo(arg.val[0], arg.val[1].val, arg.val[1].lev)
         })
 
     }

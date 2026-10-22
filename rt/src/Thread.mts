@@ -668,11 +668,12 @@ export class Thread {
     }
 
     private _validateDowngradeOrThrow(
-        params: ValidateDowngradeParams
+        params: ValidateDowngradeParams & { operandLevel: Level }
     ): void {
         const downgradeCheckResult: DowngradeResult =
             levels.okToDowngrade(params.downgradeKind, params.downgradeDimension)
-                 (params.levFrom, params.levTo, params.authorityLevel, params.blockLevel as Level, this.isNmifcMode, this.pc);
+                 (params.levFrom, params.levTo, params.authorityLevel, params.blockLevel as Level, this.isNmifcMode,
+                  lub (this.pc, params.operandLevel));
 
         if (downgradeCheckResult.kind === "FAILURE") {
             try {
@@ -846,7 +847,7 @@ export class Thread {
         return uuidval;  
     }  
 
-    blockEndorseTo (auth, bl_to = this.pc) {
+    blockEndorseTo (auth, bl_to = this.pc, levOperandLabel = null) {
         // 2025-05-30; AA
         // These are copy paste from declassify
         // we should recheck
@@ -874,10 +875,14 @@ export class Thread {
             downgradeDimension: DowngradeDimension.INTEGRITY,
             blockLevel: current_bl,
             operationDescription: "blocking level integrity",
-            pcLevel: this.pc
+            pcLevel: this.pc,
+            operandLevel: levOperandLabel === null ? auth.lev : lub (auth.lev, levOperandLabel)
         });
 
-        this.bl = bl_to; // the actual downgrade
+        // The target level operand's label stays in the blocking label, as the label
+        // of endorse's target stays in its result: an untrusted choice of target
+        // leaves the blocking label untrusted.
+        this.bl = levOperandLabel === null ? bl_to : lub (bl_to, levOperandLabel); // the actual downgrade
         return this.returnImmediateLValue (__unit);
 
     }
@@ -919,7 +924,8 @@ export class Thread {
             downgradeDimension: DowngradeDimension.CONFIDENTIALITY,
             blockLevel: current_bl,
             operationDescription: "blocking level declassification",
-            pcLevel: this.pc
+            pcLevel: this.pc,
+            operandLevel: levOperandLabel === null ? auth.lev : lub (auth.lev, levOperandLabel)
         });
 
         this.bl = bl_to; // the actual downgrade
@@ -927,7 +933,7 @@ export class Thread {
     }
 
     // Cross-dimensional blocking level downgrade: changes both confidentiality and integrity
-    blockDowngradeTo (auth, bl_to = this.pc) {
+    blockDowngradeTo (auth, bl_to = this.pc, levOperandLabel = null) {
         if (! flowsTo (this.pc, bl_to)) {
             // TODO: 2026-03-10; AA -- change phrasing to use
             //   'does not flow to' instead of 'lower'
@@ -954,10 +960,12 @@ export class Thread {
             downgradeDimension: DowngradeDimension.BOTH,
             blockLevel: current_bl,
             operationDescription: "blocking level downgrade",
-            pcLevel: this.pc
+            pcLevel: this.pc,
+            operandLevel: levOperandLabel === null ? auth.lev : lub (auth.lev, levOperandLabel)
         });
 
-        this.bl = bl_to; // the actual downgrade
+        // As in blockEndorseTo: the target level operand's label stays in the blocking label.
+        this.bl = levOperandLabel === null ? bl_to : lub (bl_to, levOperandLabel); // the actual downgrade
         this.invalidateSparseBit ()
         return this.returnImmediateLValue (__unit);
     }

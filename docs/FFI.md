@@ -203,3 +203,4 @@ Every message below is the compiler's or runtime's actual output.
 | Demonstration module                                | `rt/src/ffi/ffidemo.mts`                       |
 | Whole-file I/O module (`SimpleFiles`)               | `rt/src/ffi/node/simplefiles.mts`              |
 | Terminal module (`Tty`)                             | `rt/src/ffi/node/tty.mts`                      |
+| Outbound HTTP module (`Http`)                       | `rt/src/ffi/node/http.mts`                     |

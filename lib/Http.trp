@@ -1,0 +1,17 @@
+import Outcome
+require native Http
+
+let
+    val rawPost = post
+    val rawPostBearer = postBearer
+
+    fun toOutcome {tag = "Ok",  value = v} = OK v
+      | toOutcome {tag = "Err", error = e} = ERR e
+
+    fun post (auth, url, body) = toOutcome (rawPost (auth, url, body))
+
+    fun postBearer (auth, url, body, token) =
+        toOutcome (rawPostBearer (auth, url, body, token))
+
+in [ ("post", post), ("postBearer", postBearer) ]
+end

@@ -1,6 +1,7 @@
 'use strict'
 import * as nativeModules from '../registry.mjs'
 import { ffiDemoExports } from '../ffidemo.mjs'
+import { httpExports } from './http.mjs'
 import { simpleFilesExports } from './simplefiles.mjs'
 import { ttyExports, ttyRestore } from './tty.mjs'
 
@@ -10,6 +11,7 @@ import { ttyExports, ttyRestore } from './tty.mjs'
 // importing this module must not decide what is registered.
 export function registerNodeNatives(): void {
     nativeModules.register('FFIDemo', ffiDemoExports)
+    nativeModules.register('Http', httpExports)
     nativeModules.register('SimpleFiles', simpleFilesExports)
     nativeModules.register('Tty', ttyExports)
     // The terminal restore runs for every program on every termination route

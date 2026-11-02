@@ -1,0 +1,8 @@
+import Outcome
+import { post, postBearer } Http
+
+let fun show (OK v) = "OK " ^ v
+      | show (ERR {reason, url}) = "ERR " ^ url ^ ": " ^ reason
+in print (show (post (authority, "not-a-url", "{}")));
+   print (show (postBearer (authority, "not-a-url", "{}", "token")))
+end

@@ -23,6 +23,7 @@ const EXCLUDED_DIRS = {
     'tests/rt/pos/ffi': 'SimpleFiles and Tty are native modules of the Node host',
     'tests/rt/neg/ffi': 'SimpleFiles and Tty are native modules of the Node host',
     'tests/rt/neg/simplefileio': 'SimpleFiles is a native module of the Node host',
+    'tests/rt/neg/http': 'Http is a native module of the Node host',
     'tests/rt/pos/signals': 'no signals',
     'tests/rt/pos/tty': 'Tty is a native module of the Node host',
 };

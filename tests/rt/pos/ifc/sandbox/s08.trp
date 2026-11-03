@@ -1,0 +1,6 @@
+let val secret = 1 raisedTo `{secret}`
+    fun busy n = if secret > 0 andalso n > 0 then (sleep 50; busy (n - 1)) else ()
+    val _ = spawn (fn () => busy 10)
+    val x = sandbox (300, fn () => 42)
+in printWithLabels x
+end

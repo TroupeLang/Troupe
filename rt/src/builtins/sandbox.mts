@@ -62,7 +62,7 @@ function setupSandbox($r:RuntimeInterface, delay, resumeState = null) {
 
     function ok(x, l) {
         debug (`calling ok ${x.stringRep()}`)
-        let statusOk = $r.$t.mkValWithLev(0, l);
+        let statusOk = theThread.mkValWithLev(0, l);
         let y = rt_raisedToLev(x, l);
         return mk_tupleVal([statusOk, y]);
     }
@@ -71,16 +71,16 @@ function setupSandbox($r:RuntimeInterface, delay, resumeState = null) {
     setTimeout(() => {
         let sandboxState = theThread.exportState()     
         theThread.handlerState = new SandboxStatus.NORMAL();
-        let resultLabel = $r.$t.bl;
+        let resultLabel = theThread.bl;
         // Restore the state back to what it was before starting the sandboxing
         theThread.importState(threadState);
         function bad(x, l) {
-            let statusBad = $r.$t.mkValWithLev(1, l);
+            let statusBad = theThread.mkValWithLev(1, l);
             let y = rt_raisedToLev(x, l);
             return mk_tupleVal([statusBad, y])
         }
         function resumeKont(sleepTimeout = null) {
-            let statusBad = $r.$t.mkValWithLev(2, resultLabel);
+            let statusBad = theThread.mkValWithLev(2, resultLabel);
             // console.log (sandboxState.callStack[sandboxState.callStack.length - 3].toString(), sandboxState.next.toString())
             let f = () => {
                 let thread = $r.$t;

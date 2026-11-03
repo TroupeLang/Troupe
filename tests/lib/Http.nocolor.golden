@@ -1,0 +1,4 @@
+2026-11-02T13:24:21.111Z [RTM] info: Skipping network creation. Observe that all network operations will yield a runtime error.
+"ERR not-a-url: Failed to parse URL from not-a-url"
+"ERR not-a-url: Failed to parse URL from not-a-url"
+>>> Main thread finished with value: ()@{#ROOT}%{#ROOT}

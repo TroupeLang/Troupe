@@ -1,0 +1,9 @@
+2026-11-02T13:40:56.911Z [RTM] [32minfo[39m: Skipping network creation. Observe that all network operations will yield a runtime error.
+Runtime error in thread 55f7d429-f72c-48a5-98a2-f28a17aeb14c@{}%{}
+
+  3 | print (post (attenuate (authority, `{}`), "http://127.0.0.1:1/", "{}"))
+    |        ^
+
+>> Provided authority is not ROOT
+ | level of the provided authority: {}
+>> at tests/rt/neg/http/post-non-root-authority.trp:3:8

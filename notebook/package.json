@@ -14,7 +14,7 @@
     "@codemirror/view": "^6.39.16",
     "codemirror": "^6.0.2",
     "dompurify": "^3.2.4",
-    "express": "^4.21.0",
+    "express": "^4.22.3",
     "marked": "^17.0.3",
     "ws": "^8.18.0"
   },
